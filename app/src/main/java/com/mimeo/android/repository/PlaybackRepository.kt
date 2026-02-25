@@ -3,12 +3,15 @@ package com.mimeo.android.repository
 import android.content.Context
 import com.mimeo.android.data.ApiClient
 import com.mimeo.android.data.AppDatabase
+import com.mimeo.android.data.entities.NowPlayingEntity
 import com.mimeo.android.data.entities.CachedItemEntity
 import com.mimeo.android.data.entities.PendingProgressEntity
 import com.mimeo.android.model.ItemTextResponse
+import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.work.WorkScheduler
 import java.io.IOException
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
@@ -26,6 +29,36 @@ data class FlushProgressResult(
     val flushedCount: Int,
     val retryableFailures: Int,
     val pendingCount: Int,
+)
+
+data class NowPlayingSessionItem(
+    val itemId: Int,
+    val title: String?,
+    val url: String,
+    val host: String?,
+    val status: String?,
+    val activeContentVersionId: Int?,
+    val lastReadPercent: Int?,
+)
+
+data class NowPlayingSession(
+    val items: List<NowPlayingSessionItem>,
+    val currentIndex: Int,
+    val updatedAt: Long,
+) {
+    val currentItem: NowPlayingSessionItem?
+        get() = items.getOrNull(currentIndex)
+}
+
+@Serializable
+private data class StoredNowPlayingItem(
+    val itemId: Int,
+    val title: String? = null,
+    val url: String,
+    val host: String? = null,
+    val status: String? = null,
+    val activeContentVersionId: Int? = null,
+    val lastReadPercent: Int? = null,
 )
 
 class PlaybackRepository(
@@ -133,6 +166,61 @@ class PlaybackRepository(
         return database.pendingProgressDao().countPending()
     }
 
+    suspend fun startSession(queueItems: List<PlaybackQueueItem>, startItemId: Int): NowPlayingSession {
+        if (queueItems.isEmpty()) {
+            throw IllegalArgumentException("Cannot start now playing session from empty queue")
+        }
+        val stored = queueItems.map { item ->
+            StoredNowPlayingItem(
+                itemId = item.itemId,
+                title = item.title,
+                url = item.url,
+                host = item.host,
+                status = item.status,
+                activeContentVersionId = item.activeContentVersionId,
+                lastReadPercent = item.lastReadPercent,
+            )
+        }
+        val currentIndex = queueItems.indexOfFirst { it.itemId == startItemId }.let { if (it >= 0) it else 0 }
+        val updatedAt = System.currentTimeMillis()
+        val row = NowPlayingEntity(
+            id = 1,
+            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            currentIndex = currentIndex,
+            updatedAt = updatedAt,
+        )
+        database.nowPlayingDao().upsert(row)
+        return row.toSession(stored)
+    }
+
+    suspend fun getSession(): NowPlayingSession? {
+        val row = database.nowPlayingDao().getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson)
+        if (stored.isEmpty()) {
+            database.nowPlayingDao().clear()
+            return null
+        }
+        return row.toSession(stored)
+    }
+
+    suspend fun setCurrentIndex(currentIndex: Int): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson)
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        val normalized = currentIndex.coerceIn(0, stored.lastIndex)
+        val updatedAt = System.currentTimeMillis()
+        dao.updateCurrentIndex(currentIndex = normalized, updatedAt = updatedAt)
+        return row.copy(currentIndex = normalized, updatedAt = updatedAt).toSession(stored)
+    }
+
+    suspend fun clearSession() {
+        database.nowPlayingDao().clear()
+    }
+
     private suspend fun enqueuePendingProgress(itemId: Int, percent: Int) {
         database.pendingProgressDao().upsert(
             PendingProgressEntity(
@@ -192,5 +280,30 @@ class PlaybackRepository(
         val clean = message?.trim().orEmpty()
         if (clean.isBlank()) return null
         return clean.take(MAX_ERROR_CHARS)
+    }
+
+    private fun parseStoredNowPlaying(queueJson: String): List<StoredNowPlayingItem> {
+        return runCatching {
+            json.decodeFromString(ListSerializer(StoredNowPlayingItem.serializer()), queueJson)
+        }.getOrElse { emptyList() }
+    }
+
+    private fun NowPlayingEntity.toSession(stored: List<StoredNowPlayingItem>): NowPlayingSession {
+        val safeIndex = if (stored.isEmpty()) 0 else currentIndex.coerceIn(0, stored.lastIndex)
+        return NowPlayingSession(
+            items = stored.map { item ->
+                NowPlayingSessionItem(
+                    itemId = item.itemId,
+                    title = item.title,
+                    url = item.url,
+                    host = item.host,
+                    status = item.status,
+                    activeContentVersionId = item.activeContentVersionId,
+                    lastReadPercent = item.lastReadPercent,
+                )
+            },
+            currentIndex = safeIndex,
+            updatedAt = updatedAt,
+        )
     }
 }

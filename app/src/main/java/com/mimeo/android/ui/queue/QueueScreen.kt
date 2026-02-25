@@ -25,6 +25,7 @@ fun QueueScreen(vm: AppViewModel, onOpenPlayer: (Int) -> Unit) {
     val loading by vm.queueLoading.collectAsState()
     val offline by vm.queueOffline.collectAsState()
     val pendingCount by vm.pendingProgressCount.collectAsState()
+    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
 
     LaunchedEffect(Unit) {
         vm.loadQueue()
@@ -35,6 +36,18 @@ fun QueueScreen(vm: AppViewModel, onOpenPlayer: (Int) -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { vm.loadQueue() }) { Text("Refresh queue") }
             Button(onClick = { vm.flushPendingProgress() }) { Text("Sync") }
+        }
+        nowPlayingSession?.let { session ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        vm.currentNowPlayingItemId()?.let { itemId -> onOpenPlayer(itemId) }
+                    },
+                ) {
+                    Text("Resume Now Playing")
+                }
+                Text("Item ${session.currentIndex + 1}/${session.items.size}")
+            }
         }
         if (offline) {
             Text("Offline")
@@ -50,7 +63,10 @@ fun QueueScreen(vm: AppViewModel, onOpenPlayer: (Int) -> Unit) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onOpenPlayer(item.itemId) }
+                        .clickable {
+                            vm.startNowPlayingSession(item.itemId)
+                            onOpenPlayer(item.itemId)
+                        }
                         .padding(8.dp),
                 ) {
                     Text(text = title)
