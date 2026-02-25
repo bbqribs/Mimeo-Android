@@ -8,6 +8,7 @@
 - [x] Progress sync via `/items/{id}/progress` (periodic while speaking + done=100).
 - [x] Segment-based playback using `paragraphs[]` (with text fallback), prev/next segment controls, and segment-index progress sync.
 - [x] Offline caching + retry queue: cached text/paragraphs (Room), offline player fallback, queued progress sync with retry.
+- [x] WorkManager auto-flush for queued progress when network returns (no manual sync required).
 
 ## Next
 1. [ ] Persist last segment index per item in DataStore for cross-process resume.

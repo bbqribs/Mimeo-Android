@@ -1,11 +1,13 @@
 package com.mimeo.android.repository
 
+import android.content.Context
 import com.mimeo.android.data.ApiClient
 import com.mimeo.android.data.AppDatabase
 import com.mimeo.android.data.entities.CachedItemEntity
 import com.mimeo.android.data.entities.PendingProgressEntity
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.PlaybackQueueResponse
+import com.mimeo.android.work.WorkScheduler
 import java.io.IOException
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -20,9 +22,16 @@ data class ProgressPostResult(
     val queued: Boolean,
 )
 
+data class FlushProgressResult(
+    val flushedCount: Int,
+    val retryableFailures: Int,
+    val pendingCount: Int,
+)
+
 class PlaybackRepository(
     private val apiClient: ApiClient,
     private val database: AppDatabase,
+    private val appContext: Context,
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) {
     companion object {
@@ -76,10 +85,11 @@ class PlaybackRepository(
         }
     }
 
-    suspend fun flushPendingProgress(baseUrl: String, token: String): Int {
+    suspend fun flushPendingProgress(baseUrl: String, token: String): FlushProgressResult {
         val dao = database.pendingProgressDao()
         val pending = dao.listPending()
-        var flushed = 0
+        var flushedCount = 0
+        var retryableFailures = 0
 
         for (entry in pending) {
             if (entry.attemptCount >= MAX_ATTEMPTS) {
@@ -89,10 +99,10 @@ class PlaybackRepository(
             try {
                 apiClient.postProgress(baseUrl, token, entry.itemId, entry.percent.coerceIn(0, 100))
                 dao.deleteById(entry.id)
-                flushed += 1
+                flushedCount += 1
             } catch (error: Exception) {
+                val nextAttempt = entry.attemptCount + 1
                 if (!isRetryableProgressFailure(error)) {
-                    val nextAttempt = entry.attemptCount + 1
                     dao.recordAttempt(
                         id = entry.id,
                         attemptCount = nextAttempt,
@@ -101,7 +111,7 @@ class PlaybackRepository(
                     )
                     continue
                 }
-                val nextAttempt = entry.attemptCount + 1
+                retryableFailures += 1
                 dao.recordAttempt(
                     id = entry.id,
                     attemptCount = nextAttempt,
@@ -111,7 +121,12 @@ class PlaybackRepository(
             }
         }
 
-        return flushed
+        val pendingCount = dao.countPending()
+        return FlushProgressResult(
+            flushedCount = flushedCount,
+            retryableFailures = retryableFailures,
+            pendingCount = pendingCount,
+        )
     }
 
     suspend fun countPendingProgress(): Int {
@@ -129,6 +144,7 @@ class PlaybackRepository(
                 lastError = null,
             ),
         )
+        WorkScheduler.enqueueProgressSync(appContext)
     }
 
     private suspend fun cacheItem(payload: ItemTextResponse) {
