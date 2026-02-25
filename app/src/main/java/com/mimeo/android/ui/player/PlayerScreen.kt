@@ -37,6 +37,7 @@ private const val SEGMENT_MAX_CHARS = 700
 fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit) {
     var currentItemId by rememberSaveable { mutableIntStateOf(initialItemId) }
     var textPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
+    var usingCachedText by remember { mutableStateOf(false) }
     var segments by remember { mutableStateOf<List<String>>(emptyList()) }
     var uiMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
@@ -86,6 +87,14 @@ fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit
             .toInt()
             .coerceIn(0, 100)
         vm.postProgress(currentItemId, percent)
+            .onSuccess {
+                if (it.queued) {
+                    uiMessage = "Offline: progress queued"
+                }
+            }
+            .onFailure {
+                uiMessage = it.message ?: "Progress sync failed"
+            }
         lastProgressSyncAtMs = now
     }
 
@@ -107,10 +116,13 @@ fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit
         isLoading = true
         uiMessage = null
         textPayload = null
+        usingCachedText = false
         segments = emptyList()
         val result = vm.fetchItemText(currentItemId)
-        result.onSuccess { payload ->
+        result.onSuccess { loaded ->
+            val payload = loaded.payload
             textPayload = payload
+            usingCachedText = loaded.usingCache
             val builtSegments = buildSegments(payload)
             segments = builtSegments
             val savedIndex = vm.getSegmentIndex(currentItemId)
@@ -174,6 +186,9 @@ fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit
         }
         if (currentSegmentText.isNotBlank()) {
             Text(text = currentSegmentText)
+        }
+        if (usingCachedText) {
+            Text(text = "Using cached text")
         }
         uiMessage?.let { Text(text = it) }
 
@@ -249,7 +264,9 @@ fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit
             onClick = {
                 scope.launch {
                     vm.postProgress(currentItemId, 100)
-                        .onSuccess { uiMessage = "Marked done" }
+                        .onSuccess {
+                            uiMessage = if (it.queued) "Done queued for sync" else "Marked done"
+                        }
                         .onFailure { uiMessage = it.message ?: "Progress update failed" }
                 }
             },

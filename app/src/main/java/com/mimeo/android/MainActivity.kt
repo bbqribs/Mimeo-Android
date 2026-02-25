@@ -5,25 +5,20 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,11 +37,16 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mimeo.android.data.ApiClient
 import com.mimeo.android.data.ApiException
+import com.mimeo.android.data.AppDatabase
 import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
-import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.repository.ItemTextResult
+import com.mimeo.android.repository.PlaybackRepository
+import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.player.PlayerScreen
+import com.mimeo.android.ui.queue.QueueScreen
+import java.io.IOException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -72,6 +72,10 @@ class MainActivity : ComponentActivity() {
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsStore = SettingsStore(application.applicationContext)
     private val apiClient = ApiClient()
+    private val repository = PlaybackRepository(
+        apiClient = apiClient,
+        database = AppDatabase.getInstance(application.applicationContext),
+    )
 
     private val _settings = MutableStateFlow(AppSettings())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
@@ -82,6 +86,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _queueLoading = MutableStateFlow(false)
     val queueLoading: StateFlow<Boolean> = _queueLoading.asStateFlow()
 
+    private val _queueOffline = MutableStateFlow(false)
+    val queueOffline: StateFlow<Boolean> = _queueOffline.asStateFlow()
+
+    private val _pendingProgressCount = MutableStateFlow(0)
+    val pendingProgressCount: StateFlow<Int> = _pendingProgressCount.asStateFlow()
+
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
 
@@ -91,6 +101,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             settingsStore.settingsFlow.collect { _settings.value = it }
+        }
+        viewModelScope.launch {
+            refreshPendingCount()
+            flushPendingProgress()
         }
     }
 
@@ -111,6 +125,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val version = apiClient.getDebugVersion(current.baseUrl, current.apiToken)
                 _statusMessage.value = "Connected git_sha=${version.gitSha ?: "unknown"}"
+                _queueOffline.value = false
             } catch (e: ApiException) {
                 _statusMessage.value = if (e.statusCode == 401) "Unauthorized-check token" else e.message
             } catch (e: Exception) {
@@ -128,30 +143,67 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _queueLoading.value = true
             try {
-                val queue = apiClient.getQueue(current.baseUrl, current.apiToken)
+                val queue = repository.loadQueueAndPrefetch(current.baseUrl, current.apiToken)
                 _queueItems.value = queue.items
+                _queueOffline.value = false
                 _statusMessage.value = "Queue loaded (${queue.count})"
+                flushPendingProgress()
             } catch (e: ApiException) {
+                _queueOffline.value = false
                 _statusMessage.value = if (e.statusCode == 401) "Unauthorized-check token" else e.message
             } catch (e: Exception) {
-                _statusMessage.value = e.message
+                _queueOffline.value = isNetworkError(e)
+                _statusMessage.value = e.message ?: "Failed to load queue"
             } finally {
                 _queueLoading.value = false
+                refreshPendingCount()
             }
         }
     }
 
-    suspend fun fetchItemText(itemId: Int): Result<ItemTextResponse> {
+    fun flushPendingProgress() {
         val current = settings.value
-        return runCatching {
-            apiClient.getItemText(current.baseUrl, current.apiToken, itemId)
+        if (current.apiToken.isBlank()) return
+        viewModelScope.launch {
+            try {
+                val synced = repository.flushPendingProgress(current.baseUrl, current.apiToken)
+                if (synced > 0) {
+                    _statusMessage.value = "Synced $synced queued updates"
+                }
+                _queueOffline.value = false
+            } catch (e: Exception) {
+                if (isNetworkError(e)) {
+                    _queueOffline.value = true
+                }
+            } finally {
+                refreshPendingCount()
+            }
         }
     }
 
-    suspend fun postProgress(itemId: Int, percent: Int): Result<Unit> {
+    suspend fun fetchItemText(itemId: Int): Result<ItemTextResult> {
+        val current = settings.value
+        val expectedVersion = queueItems.value.firstOrNull { it.itemId == itemId }?.activeContentVersionId
+        return runCatching {
+            val loaded = repository.getItemText(current.baseUrl, current.apiToken, itemId, expectedVersion)
+            if (loaded.usingCache) {
+                _queueOffline.value = true
+            } else {
+                _queueOffline.value = false
+            }
+            loaded
+        }
+    }
+
+    suspend fun postProgress(itemId: Int, percent: Int): Result<ProgressPostResult> {
         val current = settings.value
         return runCatching {
-            apiClient.postProgress(current.baseUrl, current.apiToken, itemId, percent.coerceIn(0, 100))
+            val result = repository.postProgress(current.baseUrl, current.apiToken, itemId, percent.coerceIn(0, 100))
+            if (result.queued) {
+                _queueOffline.value = true
+            }
+            refreshPendingCount()
+            result
         }
     }
 
@@ -169,6 +221,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             previous + (itemId to clamped)
         }
     }
+
+    private suspend fun refreshPendingCount() {
+        _pendingProgressCount.value = repository.countPendingProgress()
+    }
+
+    private fun isNetworkError(error: Exception): Boolean = error is IOException
 }
 
 @Composable
@@ -243,37 +301,5 @@ private fun SettingsScreen(vm: AppViewModel) {
             }) { Text("Test connection") }
         }
         Text("Emulator default: http://10.0.2.2:8000")
-    }
-}
-
-@Composable
-private fun QueueScreen(vm: AppViewModel, onOpenPlayer: (Int) -> Unit) {
-    val items by vm.queueItems.collectAsState()
-    val loading by vm.queueLoading.collectAsState()
-
-    LaunchedEffect(Unit) {
-        vm.loadQueue()
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = { vm.loadQueue() }) { Text("Refresh queue") }
-        if (loading) {
-            CircularProgressIndicator()
-        }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(items) { item ->
-                val title = item.title?.ifBlank { null } ?: item.url
-                val progress = item.lastReadPercent ?: 0
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onOpenPlayer(item.itemId) }
-                        .padding(8.dp),
-                ) {
-                    Text(text = title)
-                    Text(text = "${item.host ?: ""} progress=$progress%")
-                }
-            }
-        }
     }
 }
