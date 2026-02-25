@@ -1,6 +1,7 @@
 ﻿# Mimeo-Android
 
 Mimeo-Android is a minimal Android MVP for read-it-later playback: queue -> segmented play -> progress -> done.
+v0.2 adds offline resilience: local text cache + queued progress retry.
 
 ## Endpoints used
 - `GET /debug/version` (settings connectivity check)
@@ -8,6 +9,9 @@ Mimeo-Android is a minimal Android MVP for read-it-later playback: queue -> segm
 - `GET /items/{id}/text` (TTS text payload)
 - `POST /items/{id}/progress` (progress and done sync)
 - Progress sync is segment-based (`segment_index / total_segments`) and posted on segment changes.
+- Queue prefetch caches text for the next items (default first 5).
+- If `/items/{id}/text` fails, player falls back to cached text when the active content version matches.
+- Offline/timeout progress posts are queued locally and retried on app start, queue open, or manual sync.
 
 ## Open in Android Studio
 1. Open this repo folder in Android Studio.
@@ -28,3 +32,7 @@ Mimeo-Android is a minimal Android MVP for read-it-later playback: queue -> segm
 6. Use Play, Prev Seg, Next Seg.
 7. Tap Next Item to advance queue playback.
 8. Tap Done to send progress 100.
+9. Offline smoke:
+   - disable network, open a previously cached item, confirm "Using cached text".
+   - interact with playback and confirm pending sync count increases.
+   - re-enable network and tap **Sync** on queue; pending count should drop.
