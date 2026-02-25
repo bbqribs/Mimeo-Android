@@ -42,6 +42,7 @@ import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.repository.ItemTextResult
+import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.PlaybackRepository
 import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.player.PlayerScreen
@@ -100,6 +101,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _segmentIndexByItem = MutableStateFlow<Map<Int, Int>>(emptyMap())
     val segmentIndexByItem: StateFlow<Map<Int, Int>> = _segmentIndexByItem.asStateFlow()
 
+    private val _nowPlayingSession = MutableStateFlow<NowPlayingSession?>(null)
+    val nowPlayingSession: StateFlow<NowPlayingSession?> = _nowPlayingSession.asStateFlow()
+
     init {
         viewModelScope.launch {
             settingsStore.settingsFlow.collect { _settings.value = it }
@@ -108,6 +112,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             refreshPendingCount()
             flushPendingProgress()
+        }
+        viewModelScope.launch {
+            _nowPlayingSession.value = repository.getSession()
         }
     }
 
@@ -189,7 +196,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun fetchItemText(itemId: Int): Result<ItemTextResult> {
         val current = settings.value
-        val expectedVersion = queueItems.value.firstOrNull { it.itemId == itemId }?.activeContentVersionId
+        val expectedVersion = expectedActiveVersionFor(itemId)
         return runCatching {
             val loaded = repository.getItemText(current.baseUrl, current.apiToken, itemId, expectedVersion)
             if (loaded.usingCache) {
@@ -213,10 +220,67 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun nextItemId(currentId: Int): Int? {
-        val idx = queueItems.value.indexOfFirst { it.itemId == currentId }
-        if (idx < 0) return queueItems.value.firstOrNull()?.itemId
-        return queueItems.value.getOrNull(idx + 1)?.itemId
+    suspend fun resolveInitialPlayerItemId(fallbackItemId: Int): Int {
+        val existing = nowPlayingSession.value
+        val existingItem = existing?.currentItem
+        if (existingItem != null) {
+            return existingItem.itemId
+        }
+        val queue = queueItems.value
+        if (queue.isNotEmpty()) {
+            val session = repository.startSession(queue, fallbackItemId)
+            _nowPlayingSession.value = session
+            return session.currentItem?.itemId ?: fallbackItemId
+        }
+        return fallbackItemId
+    }
+
+    fun startNowPlayingSession(startItemId: Int) {
+        val queue = queueItems.value
+        if (queue.isEmpty()) {
+            return
+        }
+        viewModelScope.launch {
+            _nowPlayingSession.value = repository.startSession(queue, startItemId)
+        }
+    }
+
+    fun currentNowPlayingItemId(): Int? = nowPlayingSession.value?.currentItem?.itemId
+
+    suspend fun setNowPlayingCurrentItem(itemId: Int) {
+        val session = nowPlayingSession.value ?: return
+        val idx = session.items.indexOfFirst { it.itemId == itemId }
+        if (idx < 0) return
+        _nowPlayingSession.value = repository.setCurrentIndex(idx) ?: session.copy(currentIndex = idx)
+    }
+
+    suspend fun nextSessionItemId(currentId: Int): Int? {
+        val session = getOrCreateNowPlayingSession(currentId) ?: return null
+        val idx = session.items.indexOfFirst { it.itemId == currentId }.let { if (it >= 0) it else session.currentIndex }
+        if (idx >= session.items.lastIndex) return null
+        val nextIndex = idx + 1
+        val updated = repository.setCurrentIndex(nextIndex) ?: session.copy(currentIndex = nextIndex)
+        _nowPlayingSession.value = updated
+        return updated.currentItem?.itemId
+    }
+
+    suspend fun prevSessionItemId(currentId: Int): Int? {
+        val session = getOrCreateNowPlayingSession(currentId) ?: return null
+        val idx = session.items.indexOfFirst { it.itemId == currentId }.let { if (it >= 0) it else session.currentIndex }
+        if (idx <= 0) return null
+        val prevIndex = idx - 1
+        val updated = repository.setCurrentIndex(prevIndex) ?: session.copy(currentIndex = prevIndex)
+        _nowPlayingSession.value = updated
+        return updated.currentItem?.itemId
+    }
+
+    private suspend fun getOrCreateNowPlayingSession(currentId: Int): NowPlayingSession? {
+        nowPlayingSession.value?.let { return it }
+        val queue = queueItems.value
+        if (queue.isEmpty()) return null
+        val session = repository.startSession(queue, currentId)
+        _nowPlayingSession.value = session
+        return session
     }
 
     fun getSegmentIndex(itemId: Int): Int = segmentIndexByItem.value[itemId] ?: 0
@@ -230,6 +294,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun refreshPendingCount() {
         _pendingProgressCount.value = repository.countPendingProgress()
+    }
+
+    private fun expectedActiveVersionFor(itemId: Int): Int? {
+        val fromSession = nowPlayingSession.value?.items?.firstOrNull { it.itemId == itemId }?.activeContentVersionId
+        if (fromSession != null) return fromSession
+        return queueItems.value.firstOrNull { it.itemId == itemId }?.activeContentVersionId
     }
 
     private fun isNetworkError(error: Exception): Boolean = error is IOException

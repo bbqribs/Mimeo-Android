@@ -3,6 +3,7 @@
 Mimeo-Android is a minimal Android MVP for read-it-later playback: queue -> segmented play -> progress -> done.
 v0.2 adds offline resilience: local text cache + queued progress retry.
 v0.2.1 adds WorkManager auto-flush, so queued progress sync runs automatically when network returns.
+v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stable mid-session and resume works cleanly.
 
 ## Endpoints used
 - `GET /debug/version` (settings connectivity check)
@@ -14,6 +15,9 @@ v0.2.1 adds WorkManager auto-flush, so queued progress sync runs automatically w
 - If `/items/{id}/text` fails, player falls back to cached text when the active content version matches.
 - Offline/timeout progress posts are queued locally and retried on app start, queue open, or manual sync.
 - WorkManager schedules unique network-constrained `progress-sync` work on app start and when progress is queued.
+- Tapping a queue item creates a persisted "Now Playing" session snapshot (fixed item order + current index).
+- Next/Prev Item navigation uses the session snapshot instead of a freshly refetched queue.
+- Queue shows a "Resume Now Playing" action after restart when a session exists.
 
 ## Open in Android Studio
 1. Open this repo folder in Android Studio.
@@ -32,7 +36,7 @@ v0.2.1 adds WorkManager auto-flush, so queued progress sync runs automatically w
 4. Open Queue and refresh.
 5. Tap an item -> Player -> verify `Segment X / Y` appears.
 6. Use Play, Prev Seg, Next Seg.
-7. Tap Next Item to advance queue playback.
+7. Tap Next Item / Prev Item to navigate session order.
 8. Tap Done to send progress 100.
 9. Offline smoke:
    - disable network, open a previously cached item, confirm "Using cached text".

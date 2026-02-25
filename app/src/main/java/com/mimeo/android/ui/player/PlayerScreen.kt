@@ -36,6 +36,7 @@ private const val SEGMENT_MAX_CHARS = 700
 @Composable
 fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit) {
     var currentItemId by rememberSaveable { mutableIntStateOf(initialItemId) }
+    var resolvedInitial by rememberSaveable { mutableStateOf(false) }
     var textPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
     var usingCachedText by remember { mutableStateOf(false) }
     var segments by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -111,8 +112,17 @@ fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit
         isAutoPlaying = false
     }
 
-    LaunchedEffect(currentItemId) {
+    LaunchedEffect(initialItemId) {
+        if (resolvedInitial) return@LaunchedEffect
+        val resolvedId = vm.resolveInitialPlayerItemId(initialItemId)
+        currentItemId = resolvedId
+        resolvedInitial = true
+    }
+
+    LaunchedEffect(currentItemId, resolvedInitial) {
+        if (!resolvedInitial) return@LaunchedEffect
         stopSpeaking()
+        vm.setNowPlayingCurrentItem(currentItemId)
         isLoading = true
         uiMessage = null
         textPayload = null
@@ -243,18 +253,37 @@ fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit
             }
             Button(
                 onClick = {
-                    val nextId = vm.nextItemId(currentItemId)
-                    if (nextId == null) {
-                        uiMessage = "No next item"
-                    } else {
-                        stopSpeaking()
-                        currentItemId = nextId
-                        vm.setSegmentIndex(nextId, 0)
-                        autoPlayAfterLoad = true
-                        onOpenItem(nextId)
+                    scope.launch {
+                        val prevId = vm.prevSessionItemId(currentItemId)
+                        if (prevId == null) {
+                            uiMessage = "No previous item"
+                        } else {
+                            stopSpeaking()
+                            currentItemId = prevId
+                            vm.setSegmentIndex(prevId, 0)
+                            autoPlayAfterLoad = true
+                            onOpenItem(prevId)
+                        }
                     }
                 },
-                enabled = vm.queueItems.value.isNotEmpty(),
+            ) {
+                Text("Prev Item")
+            }
+            Button(
+                onClick = {
+                    scope.launch {
+                        val nextId = vm.nextSessionItemId(currentItemId)
+                        if (nextId == null) {
+                            uiMessage = "No next item"
+                        } else {
+                            stopSpeaking()
+                            currentItemId = nextId
+                            vm.setSegmentIndex(nextId, 0)
+                            autoPlayAfterLoad = true
+                            onOpenItem(nextId)
+                        }
+                    }
+                },
             ) {
                 Text("Next Item")
             }
