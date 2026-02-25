@@ -28,6 +28,28 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 - Android emulator -> host machine backend: `http://10.0.2.2:8000`
 - Physical device -> use host LAN IP (for example `http://192.168.x.y:8000`)
 - `127.0.0.1` on Android points to the device itself, not your host backend.
+- If your PC IP is `192.168.68.124`, set app base URL to `http://192.168.68.124:8000`.
+
+## Device connectivity quick fix (Windows + physical phone)
+1. Start backend on LAN bind (not localhost-only):
+   ```powershell
+   cd C:\Users\brend\documents\Coding\Mimeo\backend
+   .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+   ```
+2. Allow inbound TCP 8000 on Private profile (run PowerShell as Administrator):
+   ```powershell
+   New-NetFirewallRule -DisplayName "Mimeo API 8000 (Private)" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8000 -Profile Private
+   ```
+3. In Android app Settings:
+   - Base URL: `http://<your-pc-ip>:8000`
+   - API token: your `API_TOKEN` (or a per-device token)
+4. Tap **Test connection**.
+
+## Why cleartext setting was needed
+- Android blocks plain HTTP by default on many builds.
+- This app currently talks to local dev HTTP endpoints, so manifest now sets:
+  - `android:usesCleartextTraffic="true"`
+- Long term, prefer HTTPS for non-local hosting.
 
 ## MVP smoke steps
 1. Start backend (`Mimeo` repo) and ensure `/debug/version` is reachable.

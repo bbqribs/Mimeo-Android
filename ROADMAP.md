@@ -15,8 +15,12 @@
 1. [ ] Persist last segment index per item in DataStore for cross-process resume.
 2. [ ] Add explicit session actions (restart from top, clear session, optional repeat mode).
 3. [ ] Add queue filters/sorting controls from playback API query params.
+4. [ ] Connection UX pass: guided setup for emulator vs physical device base URL (with inline examples and validation).
+5. [ ] Add one-tap connectivity diagnostics in app (reachability + auth + backend git_sha) mirroring extension diagnostics.
+6. [ ] Add Windows helper automation docs/scripts for LAN bind + firewall rule creation/removal.
 
 ## Later
 - [ ] Named playlists and queue management.
 - [ ] Audio focus/media session polish.
 - [ ] Better conflict handling for stale cached versions during long offline sessions.
+- [ ] Replace dev cleartext dependence with HTTPS-friendly transport story for hosted/mobile use.
