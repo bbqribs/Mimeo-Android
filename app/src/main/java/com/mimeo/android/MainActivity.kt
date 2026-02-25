@@ -46,6 +46,7 @@ import com.mimeo.android.repository.PlaybackRepository
 import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.player.PlayerScreen
 import com.mimeo.android.ui.queue.QueueScreen
+import com.mimeo.android.work.WorkScheduler
 import java.io.IOException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -75,6 +76,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = PlaybackRepository(
         apiClient = apiClient,
         database = AppDatabase.getInstance(application.applicationContext),
+        appContext = application.applicationContext,
     )
 
     private val _settings = MutableStateFlow(AppSettings())
@@ -102,6 +104,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsStore.settingsFlow.collect { _settings.value = it }
         }
+        WorkScheduler.enqueueProgressSync(application.applicationContext)
         viewModelScope.launch {
             refreshPendingCount()
             flushPendingProgress()
@@ -166,11 +169,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (current.apiToken.isBlank()) return
         viewModelScope.launch {
             try {
-                val synced = repository.flushPendingProgress(current.baseUrl, current.apiToken)
-                if (synced > 0) {
-                    _statusMessage.value = "Synced $synced queued updates"
+                val syncResult = repository.flushPendingProgress(current.baseUrl, current.apiToken)
+                if (syncResult.flushedCount > 0) {
+                    _statusMessage.value = "Synced ${syncResult.flushedCount} queued updates"
                 }
                 _queueOffline.value = false
+                if (syncResult.retryableFailures > 0 && syncResult.pendingCount > 0) {
+                    WorkScheduler.enqueueProgressSync(getApplication<Application>().applicationContext)
+                }
             } catch (e: Exception) {
                 if (isNetworkError(e)) {
                     _queueOffline.value = true
