@@ -42,6 +42,7 @@ data class ItemTextResponse(
     @SerialName("strategy_used") val strategyUsed: String? = null,
     @SerialName("word_count") val wordCount: Int? = null,
     val text: String,
+    val paragraphs: List<String>? = null,
 )
 
 @Serializable

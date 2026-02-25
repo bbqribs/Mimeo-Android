@@ -6,11 +6,12 @@
 - [x] Queue screen using `/playback/queue`.
 - [x] Player screen using `/items/{id}/text` with TTS play/pause/next.
 - [x] Progress sync via `/items/{id}/progress` (periodic while speaking + done=100).
+- [x] Segment-based playback using `paragraphs[]` (with text fallback), prev/next segment controls, and segment-index progress sync.
 
 ## Next
-1. [ ] Improve progress estimation using richer TTS callbacks across engines.
+1. [ ] Persist last segment index per item in DataStore for cross-process resume.
 2. [ ] Add queue filters/sorting controls from playback API query params.
-3. [ ] Add robust lifecycle state restore for active playback item.
+3. [ ] Improve progress estimation across non-standard TTS engines.
 
 ## Later
 - [ ] Offline cache for text payloads.

@@ -1,12 +1,13 @@
 ﻿# Mimeo-Android
 
-Mimeo-Android is a minimal Android MVP for read-it-later playback: queue -> play -> progress -> done.
+Mimeo-Android is a minimal Android MVP for read-it-later playback: queue -> segmented play -> progress -> done.
 
 ## Endpoints used
 - `GET /debug/version` (settings connectivity check)
 - `GET /playback/queue` (playlist candidates)
 - `GET /items/{id}/text` (TTS text payload)
 - `POST /items/{id}/progress` (progress and done sync)
+- Progress sync is segment-based (`segment_index / total_segments`) and posted on segment changes.
 
 ## Open in Android Studio
 1. Open this repo folder in Android Studio.
@@ -23,5 +24,7 @@ Mimeo-Android is a minimal Android MVP for read-it-later playback: queue -> play
 2. In app Settings, set base URL + API token.
 3. Tap **Test connection** and confirm git SHA appears.
 4. Open Queue and refresh.
-5. Tap an item -> Player -> Play.
-6. Tap Done to send progress 100.
+5. Tap an item -> Player -> verify `Segment X / Y` appears.
+6. Use Play, Prev Seg, Next Seg.
+7. Tap Next Item to advance queue playback.
+8. Tap Done to send progress 100.

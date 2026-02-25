@@ -2,10 +2,6 @@ package com.mimeo.android
 
 import android.app.Application
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -27,15 +23,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -54,12 +46,12 @@ import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.PlaybackQueueItem
-import kotlinx.coroutines.delay
+import com.mimeo.android.ui.player.PlayerScreen
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -92,6 +84,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
+
+    private val _segmentIndexByItem = MutableStateFlow<Map<Int, Int>>(emptyMap())
+    val segmentIndexByItem: StateFlow<Map<Int, Int>> = _segmentIndexByItem.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -164,6 +159,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val idx = queueItems.value.indexOfFirst { it.itemId == currentId }
         if (idx < 0) return queueItems.value.firstOrNull()?.itemId
         return queueItems.value.getOrNull(idx + 1)?.itemId
+    }
+
+    fun getSegmentIndex(itemId: Int): Int = segmentIndexByItem.value[itemId] ?: 0
+
+    fun setSegmentIndex(itemId: Int, segmentIndex: Int) {
+        val clamped = segmentIndex.coerceAtLeast(0)
+        _segmentIndexByItem.update { previous ->
+            previous + (itemId to clamped)
+        }
     }
 }
 
@@ -270,150 +274,6 @@ private fun QueueScreen(vm: AppViewModel, onOpenPlayer: (Int) -> Unit) {
                     Text(text = "${item.host ?: ""} progress=$progress%")
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit) {
-    var currentItemId by rememberSaveable { mutableIntStateOf(initialItemId) }
-    var textPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
-    var uiMessage by remember { mutableStateOf<String?>(null) }
-    var isSpeaking by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
-    var charIndex by remember { mutableIntStateOf(0) }
-    var fallbackPercent by remember { mutableIntStateOf(0) }
-    var autoPlayAfterLoad by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    val mainHandler = remember { Handler(Looper.getMainLooper()) }
-
-    val tts = remember { mutableStateOf<TextToSpeech?>(null) }
-
-    DisposableEffect(Unit) {
-        val engine = TextToSpeech(vm.getApplication(), null).apply {
-            language = Locale.US
-        }
-        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
-                mainHandler.post { isSpeaking = true }
-            }
-
-            override fun onDone(utteranceId: String?) {
-                mainHandler.post { isSpeaking = false }
-            }
-
-            override fun onError(utteranceId: String?) {
-                mainHandler.post {
-                    isSpeaking = false
-                    uiMessage = "TTS error"
-                }
-            }
-
-            override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
-                mainHandler.post { charIndex = end }
-            }
-        })
-        tts.value = engine
-        onDispose {
-            engine.stop()
-            engine.shutdown()
-            tts.value = null
-        }
-    }
-
-    fun estimatePercent(): Int {
-        val textLength = textPayload?.text?.length ?: 0
-        if (textLength > 0 && charIndex > 0) {
-            return ((charIndex.toFloat() / textLength.toFloat()) * 100f).toInt().coerceIn(0, 95)
-        }
-        // Fallback when engine range callbacks are unavailable.
-        fallbackPercent = (fallbackPercent + 5).coerceAtMost(95)
-        return fallbackPercent
-    }
-
-    fun startSpeaking() {
-        val payload = textPayload ?: return
-        val engine = tts.value ?: return
-        val utteranceId = "mimeo-${payload.itemId}"
-        val params = Bundle().apply {
-            putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
-        }
-        engine.speak(payload.text, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
-    }
-
-    fun stopSpeaking() {
-        tts.value?.stop()
-        isSpeaking = false
-    }
-
-    LaunchedEffect(currentItemId) {
-        stopSpeaking()
-        isLoading = true
-        uiMessage = null
-        charIndex = 0
-        fallbackPercent = 0
-        textPayload = null
-        val result = vm.fetchItemText(currentItemId)
-        result.onSuccess {
-            textPayload = it
-            if (autoPlayAfterLoad) {
-                autoPlayAfterLoad = false
-                startSpeaking()
-            }
-        }.onFailure { err ->
-            uiMessage = if (err is ApiException && err.statusCode == 401) {
-                "Unauthorized-check token"
-            } else {
-                err.message ?: "Failed to load text"
-            }
-        }
-        isLoading = false
-    }
-
-    LaunchedEffect(isSpeaking, currentItemId, textPayload?.text) {
-        if (!isSpeaking || textPayload == null) return@LaunchedEffect
-        vm.postProgress(currentItemId, estimatePercent())
-        while (isSpeaking) {
-            delay(30_000)
-            if (!isSpeaking) break
-            vm.postProgress(currentItemId, estimatePercent())
-        }
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(text = "Item $currentItemId")
-        if (isLoading) {
-            CircularProgressIndicator()
-        }
-        textPayload?.let { payload ->
-            Text(text = payload.title?.ifBlank { null } ?: payload.url)
-            Text(text = payload.text.take(400))
-        }
-        uiMessage?.let { Text(text = it) }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { startSpeaking() }, enabled = textPayload != null) { Text("Play") }
-            Button(onClick = { stopSpeaking() }, enabled = textPayload != null) { Text("Pause/Stop") }
-            Button(onClick = {
-                val nextId = vm.nextItemId(currentItemId)
-                if (nextId == null) {
-                    uiMessage = "No next item"
-                } else {
-                    currentItemId = nextId
-                    autoPlayAfterLoad = true
-                    onOpenItem(nextId)
-                }
-            }, enabled = vm.queueItems.value.isNotEmpty()) { Text("Next") }
-        }
-
-        Button(onClick = {
-            scope.launch {
-                vm.postProgress(currentItemId, 100)
-                    .onSuccess { uiMessage = "Marked done" }
-                    .onFailure { uiMessage = it.message ?: "Progress update failed" }
-            }
-        }, enabled = textPayload != null) {
-            Text("Done")
         }
     }
 }
