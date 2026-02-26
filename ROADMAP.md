@@ -14,11 +14,17 @@
 - [x] Progress model v1: canonical chunk/char-offset percent wiring, monotonic server updates, and near-end auto-done alignment.
 
 ## Next
-1. [ ] Persist last segment index per item in DataStore for cross-process resume.
-2. [ ] Add explicit session actions (restart from top, clear session, optional repeat mode).
-3. [ ] Add queue filters/sorting controls from playback API query params.
-4. [ ] Connection UX pass: guided setup for emulator vs physical device base URL (with inline examples and validation).
-5. [ ] Add Windows helper automation docs/scripts for LAN bind + firewall rule creation/removal.
+1. [ ] Android MVP playback end-to-end polish.
+2. [ ] Text segmentation/chunking improvements.
+3. [ ] Start listening here + highlight + optional auto-scroll.
+   - Start listening from current reading position (tap/long-press).
+   - Highlight current chunk being spoken (subtle violet).
+   - Optional auto-scroll toggle.
+4. [ ] Persist last segment index per item in DataStore for cross-process resume.
+5. [ ] Add explicit session actions (restart from top, clear session, optional repeat mode).
+6. [ ] Add queue filters/sorting controls from playback API query params.
+7. [ ] Connection UX pass: guided setup for emulator vs physical device base URL (with inline examples and validation).
+8. [ ] Add Windows helper automation docs/scripts for LAN bind + firewall rule creation/removal.
 
 ## Later
 - [ ] Named playlists and queue management.
