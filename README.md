@@ -64,3 +64,14 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
    - disable network, open a previously cached item, confirm "Using cached text".
    - interact with playback and confirm pending sync count increases.
    - re-enable network; pending sync should drain automatically (tap **Sync** only as optional manual trigger).
+
+## In-app connectivity diagnostics
+- Open **Settings** -> **Diagnostics** -> **Run diagnostics**.
+- The screen shows:
+  - configured base URL and token present/missing state
+  - `GET /health` result
+  - `GET /debug/version` (`git_sha`)
+  - `GET /debug/python` (`sys_prefix`)
+- On common failures it shows actionable hints:
+  - LAN/device URL mismatch (`127.0.0.1` or `10.0.2.2` on physical device)
+  - backend down / timeout (`verify-mimeo.ps1`, firewall check)

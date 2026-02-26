@@ -3,6 +3,21 @@
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+enum class ConnectivityDiagnosticOutcome {
+    PASS,
+    FAIL,
+    INFO,
+}
+
+data class ConnectivityDiagnosticRow(
+    val name: String,
+    val url: String,
+    val outcome: ConnectivityDiagnosticOutcome,
+    val detail: String,
+    val hint: String? = null,
+    val checkedAt: String,
+)
+
 @Serializable
 data class DebugVersionResponse(
     @SerialName("git_sha") val gitSha: String? = null,
@@ -52,4 +67,16 @@ data class ProgressPayload(val percent: Int)
 data class AppSettings(
     val baseUrl: String = "http://10.0.2.2:8000",
     val apiToken: String = "",
+)
+
+@Serializable
+data class DebugPythonResponse(
+    @SerialName("sys_prefix") val sysPrefix: String? = null,
+    @SerialName("sys_executable") val sysExecutable: String? = null,
+    @SerialName("sys_base_prefix") val sysBasePrefix: String? = null,
+)
+
+data class RawHttpResponse(
+    val statusCode: Int,
+    val body: String,
 )
