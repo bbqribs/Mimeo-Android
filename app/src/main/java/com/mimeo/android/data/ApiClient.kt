@@ -4,11 +4,13 @@ import com.mimeo.android.model.DebugVersionResponse
 import com.mimeo.android.model.DebugPythonResponse
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.PlaylistSummary
+import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.model.ProgressPayload
 import com.mimeo.android.model.RawHttpResponse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
@@ -23,6 +25,9 @@ class ApiException(val statusCode: Int, message: String) : Exception(message)
 
 @Serializable
 private data class PlaylistNamePayload(val name: String)
+
+@Serializable
+private data class PlaylistItemPayload(@SerialName("item_id") val itemId: Int)
 
 class ApiClient(
     private val okHttpClient: OkHttpClient = OkHttpClient(),
@@ -81,6 +86,36 @@ class ApiClient(
     suspend fun deletePlaylist(baseUrl: String, token: String, playlistId: Int) = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(resolveUrl(baseUrl, "/playlists/$playlistId"))
+            .header("Authorization", "Bearer $token")
+            .delete()
+            .build()
+        executeNoBody(request)
+    }
+
+    suspend fun getPlaylistItems(baseUrl: String, token: String, playlistId: Int): List<PlaybackQueueItem> = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/playlists/$playlistId/items"))
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        executeJson(request) { payload ->
+            json.decodeFromString(ListSerializer(PlaybackQueueItem.serializer()), payload)
+        }
+    }
+
+    suspend fun addItemToPlaylist(baseUrl: String, token: String, playlistId: Int, itemId: Int) = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(PlaylistItemPayload(itemId)).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/playlists/$playlistId/items"))
+            .header("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+        executeNoBody(request)
+    }
+
+    suspend fun removeItemFromPlaylist(baseUrl: String, token: String, playlistId: Int, itemId: Int) = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/playlists/$playlistId/items/$itemId"))
             .header("Authorization", "Bearer $token")
             .delete()
             .build()

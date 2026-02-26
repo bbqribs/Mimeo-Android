@@ -41,6 +41,7 @@ import com.mimeo.android.model.positionFromAbsoluteOffset
 import com.mimeo.android.player.TtsChunkDoneEvent
 import com.mimeo.android.player.TtsChunkProgressEvent
 import com.mimeo.android.player.TtsController
+import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import com.mimeo.android.ui.reader.ReaderScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -81,6 +82,9 @@ fun PlayerScreen(
     var autoPlayAfterLoad by remember { mutableStateOf(false) }
     var showReaderView by rememberSaveable { mutableStateOf(false) }
     var showClearSessionDialog by remember { mutableStateOf(false) }
+    var showPlaylistDialog by remember { mutableStateOf(false) }
+    var pendingPlaylistId by remember { mutableIntStateOf(-1) }
+    var playlistActionMessage by remember { mutableStateOf<String?>(null) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
@@ -91,6 +95,7 @@ fun PlayerScreen(
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
     val settings by vm.settings.collectAsState()
+    val playlists by vm.playlists.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val currentPosition = playbackPositionByItem[currentItemId] ?: PlaybackPosition()
     val actionScope = rememberCoroutineScope()
@@ -501,6 +506,7 @@ fun PlayerScreen(
         if (isLoading) CircularProgressIndicator()
         if (currentChunkText.isNotBlank()) Text(text = currentChunkText)
         uiMessage?.let { Text(text = it) }
+        playlistActionMessage?.let { Text(text = it) }
         if (showDiagnosticsHint) {
             Text(text = requireNotNull(baseUrlHint))
         }
@@ -706,6 +712,18 @@ fun PlayerScreen(
             ) {
                 Text(if (showReaderView) "Hide text" else "View text")
             }
+            Button(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
+                onClick = {
+                    vm.refreshPlaylists()
+                    showPlaylistDialog = true
+                },
+                enabled = textPayload != null,
+            ) {
+                Text("Add to playlist…")
+            }
         }
         if (showReaderView && chunks.isNotEmpty()) {
             ReaderScreen(
@@ -728,6 +746,39 @@ fun PlayerScreen(
             )
         }
         Spacer(modifier = Modifier.height(2.dp))
+    }
+
+    if (showPlaylistDialog) {
+        PlaylistPickerDialog(
+            title = "Add to playlist…",
+            itemId = currentItemId,
+            playlists = playlists,
+            pendingPlaylistId = pendingPlaylistId.takeIf { it > 0 },
+            membershipFor = vm::knownPlaylistMembership,
+            onToggle = { playlist ->
+                actionScope.launch {
+                    pendingPlaylistId = playlist.id
+                    vm.toggleItemMembershipForPlaylist(
+                        playlistId = playlist.id,
+                        itemId = currentItemId,
+                    ).onSuccess { isMember ->
+                        playlistActionMessage = if (isMember) {
+                            "Added to ${playlist.name}"
+                        } else {
+                            "Removed from ${playlist.name}"
+                        }
+                    }.onFailure { error ->
+                        playlistActionMessage = error.message ?: "Playlist update failed. Open Diagnostics."
+                    }
+                    pendingPlaylistId = -1
+                }
+            },
+            onDismiss = {
+                if (pendingPlaylistId <= 0) {
+                    showPlaylistDialog = false
+                }
+            },
+        )
     }
 
     if (showClearSessionDialog) {
