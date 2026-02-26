@@ -2,6 +2,7 @@ package com.mimeo.android.ui.queue
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,6 +13,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,8 +37,11 @@ fun QueueScreen(
     vm: AppViewModel,
     focusItemId: Int? = null,
     onOpenPlayer: (Int) -> Unit,
+    onOpenPlaylists: () -> Unit,
 ) {
     val items by vm.queueItems.collectAsState()
+    val playlists by vm.playlists.collectAsState()
+    val settings by vm.settings.collectAsState()
     val loading by vm.queueLoading.collectAsState()
     val offline by vm.queueOffline.collectAsState()
     val pendingCount by vm.pendingProgressCount.collectAsState()
@@ -46,8 +52,10 @@ fun QueueScreen(
     var showClearSessionDialog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     var pendingFocusId by remember { mutableIntStateOf(-1) }
+    var playlistMenuExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
+        vm.refreshPlaylists()
         vm.loadQueue()
         vm.flushPendingProgress()
     }
@@ -67,11 +75,41 @@ fun QueueScreen(
 
     val resumeSummary = vm.nowPlayingSummaryText()
     val resumeItemId = vm.currentNowPlayingItemId()
+    val selectedPlaylistName = settings.selectedPlaylistId?.let { id ->
+        playlists.firstOrNull { it.id == id }?.name
+    } ?: "Smart queue"
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { vm.loadQueue() }) { Text("Refresh queue") }
             Button(onClick = { vm.flushPendingProgress() }) { Text("Sync") }
+            Button(onClick = onOpenPlaylists) { Text("Playlists") }
+        }
+        Box {
+            Button(onClick = { playlistMenuExpanded = true }) {
+                Text("Queue: $selectedPlaylistName")
+            }
+            DropdownMenu(
+                expanded = playlistMenuExpanded,
+                onDismissRequest = { playlistMenuExpanded = false },
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Smart queue") },
+                    onClick = {
+                        playlistMenuExpanded = false
+                        vm.selectPlaylist(null)
+                    },
+                )
+                playlists.forEach { playlist ->
+                    DropdownMenuItem(
+                        text = { Text(playlist.name) },
+                        onClick = {
+                            playlistMenuExpanded = false
+                            vm.selectPlaylist(playlist.id)
+                        },
+                    )
+                }
+            }
         }
         sessionIssueMessage?.let {
             Text(it)
@@ -114,6 +152,9 @@ fun QueueScreen(
         Text("Pending sync: $pendingCount")
         if (loading) {
             CircularProgressIndicator()
+        }
+        if (items.isEmpty() && settings.selectedPlaylistId != null && !loading) {
+            Text("No items yet in this playlist.")
         }
         LazyColumn(
             state = listState,

@@ -3,6 +3,7 @@
 import com.mimeo.android.model.DebugVersionResponse
 import com.mimeo.android.model.DebugPythonResponse
 import com.mimeo.android.model.ItemTextResponse
+import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.model.ProgressPayload
 import com.mimeo.android.model.RawHttpResponse
@@ -15,8 +16,13 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 
 class ApiException(val statusCode: Int, message: String) : Exception(message)
+
+@Serializable
+private data class PlaylistNamePayload(val name: String)
 
 class ApiClient(
     private val okHttpClient: OkHttpClient = OkHttpClient(),
@@ -31,13 +37,54 @@ class ApiClient(
         executeJson(request) { payload -> json.decodeFromString<DebugVersionResponse>(payload) }
     }
 
-    suspend fun getQueue(baseUrl: String, token: String): PlaybackQueueResponse = withContext(Dispatchers.IO) {
+    suspend fun getQueue(baseUrl: String, token: String, playlistId: Int? = null): PlaybackQueueResponse = withContext(Dispatchers.IO) {
+        val playlistParam = playlistId?.let { "&playlist_id=$it" } ?: ""
         val request = Request.Builder()
-            .url(resolveUrl(baseUrl, "/playback/queue?include_done=true&limit=50"))
+            .url(resolveUrl(baseUrl, "/playback/queue?include_done=true&limit=50$playlistParam"))
             .header("Authorization", "Bearer $token")
             .get()
             .build()
         executeJson(request) { payload -> json.decodeFromString<PlaybackQueueResponse>(payload) }
+    }
+
+    suspend fun getPlaylists(baseUrl: String, token: String): List<PlaylistSummary> = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/playlists"))
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        executeJson(request) { payload ->
+            json.decodeFromString(ListSerializer(PlaylistSummary.serializer()), payload)
+        }
+    }
+
+    suspend fun createPlaylist(baseUrl: String, token: String, name: String): PlaylistSummary = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(PlaylistNamePayload(name)).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/playlists"))
+            .header("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<PlaylistSummary>(payload) }
+    }
+
+    suspend fun renamePlaylist(baseUrl: String, token: String, playlistId: Int, name: String): PlaylistSummary = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(PlaylistNamePayload(name)).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/playlists/$playlistId"))
+            .header("Authorization", "Bearer $token")
+            .patch(body)
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<PlaylistSummary>(payload) }
+    }
+
+    suspend fun deletePlaylist(baseUrl: String, token: String, playlistId: Int) = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/playlists/$playlistId"))
+            .header("Authorization", "Bearer $token")
+            .delete()
+            .build()
+        executeNoBody(request)
     }
 
     suspend fun getDebugPython(baseUrl: String, token: String): DebugPythonResponse = withContext(Dispatchers.IO) {

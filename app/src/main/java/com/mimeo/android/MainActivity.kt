@@ -45,6 +45,7 @@ import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
+import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.ProgressSyncBadgeState
@@ -54,6 +55,7 @@ import com.mimeo.android.repository.PlaybackRepository
 import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
 import com.mimeo.android.ui.player.PlayerScreen
+import com.mimeo.android.ui.playlists.PlaylistsScreen
 import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.work.WorkScheduler
 import java.io.IOException
@@ -103,6 +105,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _queueItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
     val queueItems: StateFlow<List<PlaybackQueueItem>> = _queueItems.asStateFlow()
+    private val _playlists = MutableStateFlow<List<PlaylistSummary>>(emptyList())
+    val playlists: StateFlow<List<PlaylistSummary>> = _playlists.asStateFlow()
 
     private val _queueLoading = MutableStateFlow(false)
     val queueLoading: StateFlow<Boolean> = _queueLoading.asStateFlow()
@@ -176,7 +180,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         autoScrollWhileListening: Boolean,
     ) {
         viewModelScope.launch {
-            settingsStore.save(baseUrl, token, autoAdvanceOnCompletion, autoScrollWhileListening)
+            settingsStore.save(
+                baseUrl = baseUrl,
+                apiToken = token,
+                autoAdvanceOnCompletion = autoAdvanceOnCompletion,
+                autoScrollWhileListening = autoScrollWhileListening,
+                selectedPlaylistId = settings.value.selectedPlaylistId,
+            )
             _statusMessage.value = "Settings saved"
         }
     }
@@ -210,7 +220,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _queueLoading.value = true
             try {
-                val queue = repository.loadQueueAndPrefetch(current.baseUrl, current.apiToken)
+                runCatching {
+                    repository.listPlaylists(current.baseUrl, current.apiToken)
+                }.getOrNull()?.let { loaded ->
+                    _playlists.value = loaded
+                }
+                val queue = repository.loadQueueAndPrefetch(
+                    current.baseUrl,
+                    current.apiToken,
+                    playlistId = current.selectedPlaylistId,
+                )
                 _queueItems.value = queue.items
                 _cachedItemIds.value = repository.getCachedItemIds(queue.items.map { it.itemId })
                 _queueOffline.value = false
@@ -227,6 +246,87 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } finally {
                 _queueLoading.value = false
                 refreshPendingCount()
+            }
+        }
+    }
+
+    fun refreshPlaylists() {
+        val current = settings.value
+        if (current.apiToken.isBlank()) return
+        viewModelScope.launch {
+            try {
+                val loaded = repository.listPlaylists(current.baseUrl, current.apiToken)
+                _playlists.value = loaded
+                val selected = current.selectedPlaylistId
+                if (selected != null && loaded.none { it.id == selected }) {
+                    settingsStore.saveSelectedPlaylistId(null)
+                    _statusMessage.value = "Selected playlist removed; switched to Smart queue"
+                }
+            } catch (_: Exception) {
+                // Keep prior value; queue still works with Smart mode fallback.
+            }
+        }
+    }
+
+    fun selectPlaylist(playlistId: Int?) {
+        viewModelScope.launch {
+            _settings.update { current -> current.copy(selectedPlaylistId = playlistId) }
+            settingsStore.saveSelectedPlaylistId(playlistId)
+            loadQueue()
+        }
+    }
+
+    fun createPlaylist(name: String) {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            _statusMessage.value = "Token required"
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val created = repository.createPlaylist(current.baseUrl, current.apiToken, name.trim())
+                _playlists.update { listOf(created) + it.filterNot { existing -> existing.id == created.id } }
+                _statusMessage.value = "Playlist created"
+            } catch (e: Exception) {
+                _statusMessage.value = e.message ?: "Create playlist failed"
+            }
+        }
+    }
+
+    fun renamePlaylist(playlistId: Int, name: String) {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            _statusMessage.value = "Token required"
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val updated = repository.renamePlaylist(current.baseUrl, current.apiToken, playlistId, name.trim())
+                _playlists.update { rows -> rows.map { if (it.id == playlistId) updated else it } }
+                _statusMessage.value = "Playlist renamed"
+            } catch (e: Exception) {
+                _statusMessage.value = e.message ?: "Rename playlist failed"
+            }
+        }
+    }
+
+    fun deletePlaylist(playlistId: Int) {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            _statusMessage.value = "Token required"
+            return
+        }
+        viewModelScope.launch {
+            try {
+                repository.deletePlaylist(current.baseUrl, current.apiToken, playlistId)
+                _playlists.update { rows -> rows.filterNot { it.id == playlistId } }
+                if (settings.value.selectedPlaylistId == playlistId) {
+                    settingsStore.saveSelectedPlaylistId(null)
+                }
+                _statusMessage.value = "Playlist deleted"
+                loadQueue()
+            } catch (e: Exception) {
+                _statusMessage.value = e.message ?: "Delete playlist failed"
             }
         }
     }
@@ -686,7 +786,7 @@ private fun MimeoApp(vm: AppViewModel) {
             Spacer(modifier = Modifier.height(8.dp))
             NavHost(navController = nav, startDestination = "queue", modifier = Modifier.fillMaxSize()) {
                 composable("playlists") {
-                    PlaylistsPlaceholderScreen()
+                    PlaylistsScreen(vm = vm)
                 }
                 composable("settings") {
                     SettingsScreen(vm = vm, onOpenDiagnostics = { nav.navigate("settings/diagnostics") })
@@ -708,6 +808,7 @@ private fun MimeoApp(vm: AppViewModel) {
                         vm = vm,
                         focusItemId = focusItemId,
                         onOpenPlayer = { itemId -> nav.navigate("player/$itemId") },
+                        onOpenPlaylists = { nav.navigate("playlists") },
                     )
                 }
                 composable(
@@ -731,14 +832,6 @@ private fun MimeoApp(vm: AppViewModel) {
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun PlaylistsPlaceholderScreen() {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Playlists are coming next.")
-        Text("Named playlists will let you choose a saved list and load a playlist-scoped queue.")
     }
 }
 

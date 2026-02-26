@@ -7,6 +7,7 @@ import com.mimeo.android.data.entities.NowPlayingEntity
 import com.mimeo.android.data.entities.CachedItemEntity
 import com.mimeo.android.data.entities.PendingProgressEntity
 import com.mimeo.android.model.ItemTextResponse
+import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.work.WorkScheduler
@@ -84,14 +85,35 @@ class PlaybackRepository(
         private const val MAX_ERROR_CHARS = 240
     }
 
-    suspend fun loadQueueAndPrefetch(baseUrl: String, token: String, prefetchCount: Int = PREFETCH_DEFAULT): PlaybackQueueResponse {
-        val queue = apiClient.getQueue(baseUrl, token)
+    suspend fun loadQueueAndPrefetch(
+        baseUrl: String,
+        token: String,
+        playlistId: Int? = null,
+        prefetchCount: Int = PREFETCH_DEFAULT,
+    ): PlaybackQueueResponse {
+        val queue = apiClient.getQueue(baseUrl, token, playlistId = playlistId)
         val targets = queue.items.take(prefetchCount.coerceIn(1, PREFETCH_MAX))
         for (item in targets) {
             runCatching { apiClient.getItemText(baseUrl, token, item.itemId) }
                 .onSuccess { payload -> cacheItem(payload) }
         }
         return queue
+    }
+
+    suspend fun listPlaylists(baseUrl: String, token: String): List<PlaylistSummary> {
+        return apiClient.getPlaylists(baseUrl, token)
+    }
+
+    suspend fun createPlaylist(baseUrl: String, token: String, name: String): PlaylistSummary {
+        return apiClient.createPlaylist(baseUrl, token, name)
+    }
+
+    suspend fun renamePlaylist(baseUrl: String, token: String, playlistId: Int, name: String): PlaylistSummary {
+        return apiClient.renamePlaylist(baseUrl, token, playlistId, name)
+    }
+
+    suspend fun deletePlaylist(baseUrl: String, token: String, playlistId: Int) {
+        apiClient.deletePlaylist(baseUrl, token, playlistId)
     }
 
     suspend fun getItemText(baseUrl: String, token: String, itemId: Int, expectedActiveVersionId: Int?): ItemTextResult {
