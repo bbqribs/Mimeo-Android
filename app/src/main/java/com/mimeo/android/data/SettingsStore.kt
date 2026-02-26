@@ -17,20 +17,29 @@ class SettingsStore(private val context: Context) {
     private val tokenKey: Preferences.Key<String> = stringPreferencesKey("api_token")
     private val autoAdvanceOnCompletionKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("auto_advance_on_completion")
+    private val autoScrollWhileListeningKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("auto_scroll_while_listening")
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->
         AppSettings(
             baseUrl = prefs[baseUrlKey] ?: "http://10.0.2.2:8000",
             apiToken = prefs[tokenKey] ?: "",
             autoAdvanceOnCompletion = prefs[autoAdvanceOnCompletionKey] ?: false,
+            autoScrollWhileListening = prefs[autoScrollWhileListeningKey] ?: true,
         )
     }
 
-    suspend fun save(baseUrl: String, apiToken: String, autoAdvanceOnCompletion: Boolean) {
+    suspend fun save(
+        baseUrl: String,
+        apiToken: String,
+        autoAdvanceOnCompletion: Boolean,
+        autoScrollWhileListening: Boolean,
+    ) {
         context.dataStore.edit { prefs ->
             prefs[baseUrlKey] = baseUrl.trim()
             prefs[tokenKey] = apiToken.trim()
             prefs[autoAdvanceOnCompletionKey] = autoAdvanceOnCompletion
+            prefs[autoScrollWhileListeningKey] = autoScrollWhileListening
         }
     }
 }

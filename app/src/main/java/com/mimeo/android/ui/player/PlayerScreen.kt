@@ -35,9 +35,11 @@ import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.model.absoluteCharOffset
 import com.mimeo.android.model.calculateCanonicalPercent
+import com.mimeo.android.model.positionFromAbsoluteOffset
 import com.mimeo.android.player.TtsChunkDoneEvent
 import com.mimeo.android.player.TtsChunkProgressEvent
 import com.mimeo.android.player.TtsController
+import com.mimeo.android.ui.reader.ReaderScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -74,6 +76,7 @@ fun PlayerScreen(
     var pendingDoneEvent by remember { mutableStateOf<PlaybackDoneEvent?>(null) }
     var lastHandledDoneUtteranceId by remember { mutableStateOf<String?>(null) }
     var autoPlayAfterLoad by remember { mutableStateOf(false) }
+    var showReaderView by rememberSaveable { mutableStateOf(false) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
@@ -83,6 +86,7 @@ fun PlayerScreen(
     val queueOffline by vm.queueOffline.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
+    val settings by vm.settings.collectAsState()
     val currentPosition = playbackPositionByItem[currentItemId] ?: PlaybackPosition()
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -176,6 +180,15 @@ fun PlayerScreen(
         val safeOffset = offsetInChunkChars.coerceIn(0, chunks[safeIndex].length)
         debugLog("setPosition item=$currentItemId chunk=$safeIndex offset=$safeOffset")
         vm.setPlaybackPosition(currentItemId, safeIndex, safeOffset)
+    }
+
+    fun setPlaybackPositionFromAbsoluteOffset(absoluteOffset: Int) {
+        val mapped = positionFromAbsoluteOffset(
+            totalChars = totalCharsForPercent(),
+            chunks = chunks,
+            absoluteOffset = absoluteOffset,
+        )
+        setPlaybackPosition(mapped.chunkIndex, mapped.offsetInChunkChars)
     }
 
     fun playChunk(chunkIndex: Int, offsetInChunkChars: Int) {
@@ -644,6 +657,40 @@ fun PlayerScreen(
             ) {
                 Text("Done")
             }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Button(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
+                onClick = { showReaderView = !showReaderView },
+                enabled = chunks.isNotEmpty(),
+            ) {
+                Text(if (showReaderView) "Hide text" else "View text")
+            }
+        }
+        if (showReaderView && chunks.isNotEmpty()) {
+            ReaderScreen(
+                chunks = chunks,
+                currentChunkIndex = safePosition.chunkIndex,
+                autoScrollWhileListening = settings.autoScrollWhileListening,
+                onSelectChunk = { index ->
+                    val safeIndex = index.coerceIn(0, chunks.lastIndex)
+                    setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
+                    uiMessage = "Selected chunk ${safeIndex + 1}"
+                },
+                onPlayFromChunk = { index ->
+                    val safeIndex = index.coerceIn(0, chunks.lastIndex)
+                    setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
+                    isAutoPlaying = true
+                    playChunk(safeIndex, 0)
+                    uiMessage = "Starting from chunk ${safeIndex + 1}"
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
         Spacer(modifier = Modifier.height(2.dp))
     }
