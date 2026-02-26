@@ -104,4 +104,4 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 ## Smart queue vs named playlists
 - `Smart queue`: existing backend queue logic (default, no playlist filter).
 - Named playlist: select a playlist in Queue picker or in Playlists screen.
-- Playlists MVP supports create, rename, delete, and selection. Item membership can be managed via backend playlist item endpoints during v1.
+- Playlists MVP supports create, rename, delete, selection, and item membership toggles from Queue and Player via **Add to playlist…**.

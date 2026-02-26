@@ -116,6 +116,19 @@ class PlaybackRepository(
         apiClient.deletePlaylist(baseUrl, token, playlistId)
     }
 
+    suspend fun isItemInPlaylist(baseUrl: String, token: String, playlistId: Int, itemId: Int): Boolean {
+        val items = apiClient.getPlaylistItems(baseUrl, token, playlistId)
+        return items.any { it.itemId == itemId }
+    }
+
+    suspend fun addItemToPlaylist(baseUrl: String, token: String, playlistId: Int, itemId: Int) {
+        apiClient.addItemToPlaylist(baseUrl, token, playlistId, itemId)
+    }
+
+    suspend fun removeItemFromPlaylist(baseUrl: String, token: String, playlistId: Int, itemId: Int) {
+        apiClient.removeItemFromPlaylist(baseUrl, token, playlistId, itemId)
+    }
+
     suspend fun getItemText(baseUrl: String, token: String, itemId: Int, expectedActiveVersionId: Int?): ItemTextResult {
         return try {
             val payload = apiClient.getItemText(baseUrl, token, itemId)

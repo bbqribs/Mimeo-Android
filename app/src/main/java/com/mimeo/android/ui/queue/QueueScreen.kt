@@ -24,11 +24,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
+import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.ProgressSyncBadgeState
+import com.mimeo.android.ui.playlists.PlaylistPickerDialog
+import kotlinx.coroutines.launch
 
 private const val DONE_PERCENT_THRESHOLD = 98
 
@@ -53,6 +57,11 @@ fun QueueScreen(
     val listState = rememberLazyListState()
     var pendingFocusId by remember { mutableIntStateOf(-1) }
     var playlistMenuExpanded by remember { mutableStateOf(false) }
+    var rowMenuItemId by remember { mutableIntStateOf(-1) }
+    var playlistTargetItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
+    var pendingPlaylistId by remember { mutableIntStateOf(-1) }
+    var playlistActionMessage by remember { mutableStateOf<String?>(null) }
+    val actionScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         vm.refreshPlaylists()
@@ -150,6 +159,7 @@ fun QueueScreen(
         }
         Text("Sync: $syncLabel")
         Text("Pending sync: $pendingCount")
+        playlistActionMessage?.let { Text(it) }
         if (loading) {
             CircularProgressIndicator()
         }
@@ -172,7 +182,33 @@ fun QueueScreen(
                         }
                         .padding(8.dp),
                 ) {
-                    Text(text = title)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            modifier = Modifier.weight(1f),
+                            text = title,
+                        )
+                        Box {
+                            TextButton(onClick = { rowMenuItemId = item.itemId }) {
+                                Text("⋮")
+                            }
+                            DropdownMenu(
+                                expanded = rowMenuItemId == item.itemId,
+                                onDismissRequest = { rowMenuItemId = -1 },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Add to playlist…") },
+                                    onClick = {
+                                        rowMenuItemId = -1
+                                        vm.refreshPlaylists()
+                                        playlistTargetItem = item
+                                    },
+                                )
+                            }
+                        }
+                    }
                     val doneMarker = if (progress >= DONE_PERCENT_THRESHOLD) " done" else ""
                     val cachedMarker = if (cachedItemIds.contains(item.itemId)) {
                         " offline-ready"
@@ -183,6 +219,39 @@ fun QueueScreen(
                 }
             }
         }
+    }
+
+    playlistTargetItem?.let { target ->
+        PlaylistPickerDialog(
+            title = "Add to playlist…",
+            itemId = target.itemId,
+            playlists = playlists,
+            pendingPlaylistId = pendingPlaylistId.takeIf { it > 0 },
+            membershipFor = vm::knownPlaylistMembership,
+            onToggle = { playlist ->
+                actionScope.launch {
+                    pendingPlaylistId = playlist.id
+                    vm.toggleItemMembershipForPlaylist(
+                        playlistId = playlist.id,
+                        itemId = target.itemId,
+                    ).onSuccess { isMember ->
+                        playlistActionMessage = if (isMember) {
+                            "Added to ${playlist.name}"
+                        } else {
+                            "Removed from ${playlist.name}"
+                        }
+                    }.onFailure { error ->
+                        playlistActionMessage = error.message ?: "Playlist update failed. Open Diagnostics."
+                    }
+                    pendingPlaylistId = -1
+                }
+            },
+            onDismiss = {
+                if (pendingPlaylistId <= 0) {
+                    playlistTargetItem = null
+                }
+            },
+        )
     }
 
     if (showClearSessionDialog) {

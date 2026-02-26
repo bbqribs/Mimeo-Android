@@ -5,10 +5,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -170,4 +172,56 @@ fun PlaylistsScreen(vm: AppViewModel) {
             },
         )
     }
+}
+
+@Composable
+fun PlaylistPickerDialog(
+    title: String,
+    itemId: Int,
+    playlists: List<PlaylistSummary>,
+    pendingPlaylistId: Int?,
+    membershipFor: (playlistId: Int, itemId: Int) -> Boolean?,
+    onToggle: (PlaylistSummary) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (playlists.isEmpty()) {
+                    Text("No playlists yet. Create one in Playlists.")
+                } else {
+                    playlists.forEach { playlist ->
+                        val member = membershipFor(playlist.id, itemId)
+                        val labelSuffix = when (member) {
+                            true -> " (in playlist)"
+                            else -> ""
+                        }
+                        val isPending = pendingPlaylistId == playlist.id
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { onToggle(playlist) },
+                            enabled = !isPending,
+                        ) {
+                            Text("${playlist.name}$labelSuffix")
+                            if (isPending) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier
+                                        .padding(start = 8.dp)
+                                        .size(16.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        },
+    )
 }

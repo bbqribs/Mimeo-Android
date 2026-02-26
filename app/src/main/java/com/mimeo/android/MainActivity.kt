@@ -45,6 +45,7 @@ import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
+import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
@@ -107,6 +108,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val queueItems: StateFlow<List<PlaybackQueueItem>> = _queueItems.asStateFlow()
     private val _playlists = MutableStateFlow<List<PlaylistSummary>>(emptyList())
     val playlists: StateFlow<List<PlaylistSummary>> = _playlists.asStateFlow()
+    private val _playlistMembershipOverrides = MutableStateFlow<Map<String, Boolean>>(emptyMap())
 
     private val _queueLoading = MutableStateFlow(false)
     val queueLoading: StateFlow<Boolean> = _queueLoading.asStateFlow()
@@ -328,6 +330,52 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 _statusMessage.value = e.message ?: "Delete playlist failed"
             }
+        }
+    }
+
+    fun knownPlaylistMembership(playlistId: Int, itemId: Int): Boolean? {
+        val key = membershipKey(playlistId, itemId)
+        _playlistMembershipOverrides.value[key]?.let { return it }
+        val playlist = playlists.value.firstOrNull { it.id == playlistId } ?: return null
+        if (playlist.entries.isEmpty()) return null
+        return playlist.entries.any { it.articleId == itemId }
+    }
+
+    suspend fun toggleItemMembershipForPlaylist(playlistId: Int, itemId: Int): Result<Boolean> {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        return try {
+            val known = knownPlaylistMembership(playlistId, itemId)
+            val isMember = known ?: repository.isItemInPlaylist(current.baseUrl, current.apiToken, playlistId, itemId)
+            val nowMember = togglePlaylistMembership(
+                current = current,
+                playlistId = playlistId,
+                itemId = itemId,
+                isMember = isMember,
+            )
+            rememberPlaylistMembership(playlistId = playlistId, itemId = itemId, isMember = nowMember)
+            if (current.selectedPlaylistId == playlistId) {
+                loadQueue()
+            }
+            updateSyncBadgeState()
+            Result.success(nowMember)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: ApiException) {
+            val message = when (error.statusCode) {
+                401, 403 -> "Unauthorized-check token"
+                else -> error.message ?: "Playlist update failed"
+            }
+            Result.failure(IllegalStateException(message, error))
+        } catch (error: Exception) {
+            val message = if (isNetworkError(error)) {
+                "Playlist update failed. Open Diagnostics."
+            } else {
+                error.message ?: "Playlist update failed"
+            }
+            Result.failure(IllegalStateException(message, error))
         }
     }
 
@@ -665,6 +713,67 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val fromSession = nowPlayingSession.value?.items?.firstOrNull { it.itemId == itemId }?.activeContentVersionId
         if (fromSession != null) return fromSession
         return queueItems.value.firstOrNull { it.itemId == itemId }?.activeContentVersionId
+    }
+
+    private fun membershipKey(playlistId: Int, itemId: Int): String = "$playlistId:$itemId"
+
+    private suspend fun togglePlaylistMembership(
+        current: AppSettings,
+        playlistId: Int,
+        itemId: Int,
+        isMember: Boolean,
+    ): Boolean {
+        if (isMember) {
+            return try {
+                repository.removeItemFromPlaylist(current.baseUrl, current.apiToken, playlistId, itemId)
+                false
+            } catch (error: ApiException) {
+                if (error.statusCode != 404) {
+                    throw error
+                }
+                repository.addItemToPlaylist(current.baseUrl, current.apiToken, playlistId, itemId)
+                true
+            }
+        }
+
+        return try {
+            repository.addItemToPlaylist(current.baseUrl, current.apiToken, playlistId, itemId)
+            true
+        } catch (error: ApiException) {
+            if (error.statusCode != 409) {
+                throw error
+            }
+            repository.removeItemFromPlaylist(current.baseUrl, current.apiToken, playlistId, itemId)
+            false
+        }
+    }
+
+    private fun rememberPlaylistMembership(playlistId: Int, itemId: Int, isMember: Boolean) {
+        val key = membershipKey(playlistId, itemId)
+        _playlistMembershipOverrides.update { previous -> previous + (key to isMember) }
+        _playlists.update { rows ->
+            rows.map { playlist ->
+                if (playlist.id != playlistId) {
+                    playlist
+                } else {
+                    playlist.withMembership(itemId = itemId, isMember = isMember)
+                }
+            }
+        }
+    }
+
+    private fun PlaylistSummary.withMembership(itemId: Int, isMember: Boolean): PlaylistSummary {
+        val filtered = entries.filterNot { it.articleId == itemId }
+        val nextEntries = if (isMember) {
+            filtered + PlaylistEntrySummary(
+                id = itemId,
+                articleId = itemId,
+                position = null,
+            )
+        } else {
+            filtered
+        }
+        return copy(entries = nextEntries)
     }
 
     private fun updateSyncBadgeState(pendingCount: Int = _pendingProgressCount.value) {
