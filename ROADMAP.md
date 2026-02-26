@@ -17,11 +17,11 @@
 - [x] Start listening here + highlight + optional auto-scroll: player `View text` supports long-press start-from-chunk, current chunk highlighting, and auto-scroll toggle with temporary manual-scroll suppression.
 
 ## Next
-1. [ ] Persist last segment index per item in DataStore for cross-process resume.
-2. [ ] Add explicit session actions (restart from top, clear session, optional repeat mode).
-3. [ ] Add queue filters/sorting controls from playback API query params.
-4. [ ] Connection UX pass: guided setup for emulator vs physical device base URL (with inline examples and validation).
-5. [ ] Add Windows helper automation docs/scripts for LAN bind + firewall rule creation/removal.
+1. [ ] Now-playing/session UX refinements + playlist entry point.
+2. [ ] Named playlists v1 integration (select playlist and load playlist-scoped queue).
+3. [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.
+4. [ ] Persist last segment index per item in DataStore for cross-process resume.
+5. [ ] Add queue filters/sorting controls from playback API query params.
 
 ## Later
 - [ ] Named playlists and queue management.
