@@ -53,6 +53,9 @@ fun SettingsScreen(vm: AppViewModel, onOpenDiagnostics: () -> Unit) {
     LaunchedEffect(statusMessage, testRequested) {
         if (!testRequested) return@LaunchedEffect
         val message = statusMessage.orEmpty()
+        if (message.equals("Settings saved", ignoreCase = true)) {
+            return@LaunchedEffect
+        }
         if (message.startsWith("Connected")) {
             testRequested = false
             snackbarHostState.showSnackbar("Connected", duration = SnackbarDuration.Short)

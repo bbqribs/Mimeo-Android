@@ -2,7 +2,6 @@ package com.mimeo.android.ui.player
 
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -606,38 +605,6 @@ fun PlayerScreen(
                     ) {
                         Icon(Icons.Filled.ArrowForward, contentDescription = "Next item")
                     }
-                    Box {
-                        IconButton(onClick = { overflowExpanded = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "More actions")
-                        }
-                        DropdownMenu(
-                            expanded = overflowExpanded,
-                            onDismissRequest = { overflowExpanded = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(if (showReaderView) "Hide text" else "View text") },
-                                onClick = {
-                                    overflowExpanded = false
-                                    showReaderView = !showReaderView
-                                },
-                                leadingIcon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Back to queue") },
-                                onClick = {
-                                    overflowExpanded = false
-                                    onBackToQueue(currentItemId)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Clear session") },
-                                onClick = {
-                                    overflowExpanded = false
-                                    showClearSessionDialog = true
-                                },
-                            )
-                        }
-                    }
                 }
             }
         },
@@ -648,11 +615,67 @@ fun PlayerScreen(
                 .padding(innerPadding),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(
-                text = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    modifier = Modifier.weight(1f),
+                    text = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                IconButton(onClick = { overflowExpanded = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "More actions")
+                }
+                DropdownMenu(
+                    expanded = overflowExpanded,
+                    onDismissRequest = { overflowExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(if (showReaderView) "Hide text" else "View text") },
+                        onClick = {
+                            overflowExpanded = false
+                            showReaderView = !showReaderView
+                        },
+                        leadingIcon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Back to queue") },
+                        onClick = {
+                            overflowExpanded = false
+                            onBackToQueue(currentItemId)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Restart session") },
+                        onClick = {
+                            overflowExpanded = false
+                            actionScope.launch {
+                                vm.restartNowPlayingSession()
+                                vm.currentNowPlayingItemId()?.let { resumedId ->
+                                    currentItemId = resumedId
+                                    onOpenItem(resumedId)
+                                }
+                            }
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Clear session") },
+                        onClick = {
+                            overflowExpanded = false
+                            showClearSessionDialog = true
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Diagnostics") },
+                        onClick = {
+                            overflowExpanded = false
+                            onOpenDiagnostics()
+                        },
+                    )
+                }
+            }
             if (sessionItemCount > 0) {
                 Text(
                     text = "Session ${sessionIndex + 1}/$sessionItemCount",
