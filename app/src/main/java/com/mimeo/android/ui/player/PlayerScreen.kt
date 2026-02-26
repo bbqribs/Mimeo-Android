@@ -2,17 +2,31 @@ package com.mimeo.android.ui.player
 
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -28,6 +42,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
@@ -81,7 +97,6 @@ fun PlayerScreen(
     var pendingDoneEvent by remember { mutableStateOf<PlaybackDoneEvent?>(null) }
     var lastHandledDoneUtteranceId by remember { mutableStateOf<String?>(null) }
     var autoPlayAfterLoad by remember { mutableStateOf(false) }
-    var showReaderView by rememberSaveable { mutableStateOf(false) }
     var showClearSessionDialog by remember { mutableStateOf(false) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
@@ -394,11 +409,6 @@ fun PlayerScreen(
     val totalChars = totalCharsForPercent()
     val currentPercent = calculateCanonicalPercent(totalChars, chunks, safePosition)
     val currentTitle = textPayload?.title?.ifBlank { null } ?: textPayload?.url.orEmpty()
-    val currentChunkText = if (chunks.isNotEmpty()) {
-        chunks[safePosition.chunkIndex].text.take(400)
-    } else {
-        textPayload?.text?.take(400).orEmpty()
-    }
     val chunkLabel = if (chunks.isEmpty()) {
         "Chunk 0 / 0"
     } else {
@@ -451,226 +461,258 @@ fun PlayerScreen(
         val resolved = if (found >= 0) found else session.currentIndex
         resolved.coerceIn(0, (session.items.size - 1).coerceAtLeast(0))
     } ?: 0
+    var overflowExpanded by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(
-            text = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (sessionItemCount > 0) {
+    Scaffold(
+        bottomBar = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    LabeledIconControl(
+                        onClick = {
+                            if (chunks.isNotEmpty() && safePosition.chunkIndex > 0) {
+                                val target = safePosition.chunkIndex - 1
+                                setPlaybackPosition(target, 0)
+                                if (isSpeaking || isAutoPlaying) {
+                                    isAutoPlaying = true
+                                    playChunk(target, 0)
+                                }
+                            }
+                        },
+                        enabled = chunks.size > 1,
+                        icon = Icons.Filled.ArrowBack,
+                        contentDescription = "Previous segment",
+                    )
+                    LabeledIconControl(
+                        onClick = {
+                            if (isSpeaking || isAutoPlaying) {
+                                stopSpeaking(forceSync = true)
+                            } else if (chunks.isNotEmpty()) {
+                                val restartFromStart = showCompleted ||
+                                    (safePosition.chunkIndex == chunks.lastIndex &&
+                                        safePosition.offsetInChunkChars >= chunks.last().length)
+                                if (restartFromStart) {
+                                    setPlaybackPosition(0, 0)
+                                    nearEndForcedForItemId = -1
+                                    lastObservedPercent = 0
+                                }
+                                isAutoPlaying = true
+                                val positionToPlay = if (restartFromStart) {
+                                    PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
+                                } else {
+                                    safePosition
+                                }
+                                playChunk(positionToPlay.chunkIndex, positionToPlay.offsetInChunkChars)
+                            }
+                        },
+                        enabled = chunks.isNotEmpty(),
+                        icon = Icons.Filled.PlayArrow,
+                        contentDescription = if (isSpeaking || isAutoPlaying) "Pause playback" else "Play",
+                        iconWhenEnabledAlt = if (isSpeaking || isAutoPlaying) Icons.Filled.CheckCircle else null,
+                    )
+                    LabeledIconControl(
+                        onClick = {
+                            if (chunks.isNotEmpty() && safePosition.chunkIndex < chunks.lastIndex) {
+                                val target = safePosition.chunkIndex + 1
+                                setPlaybackPosition(target, 0)
+                                if (isSpeaking || isAutoPlaying) {
+                                    isAutoPlaying = true
+                                    playChunk(target, 0)
+                                }
+                            }
+                        },
+                        enabled = chunks.size > 1,
+                        icon = Icons.Filled.ArrowForward,
+                        contentDescription = "Next segment",
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    LabeledIconControl(
+                        onClick = {
+                            actionScope.launch {
+                                val prevId = vm.prevSessionItemId(currentItemId)
+                                if (prevId == null) {
+                                    uiMessage = "No previous item"
+                                } else {
+                                    stopSpeaking(forceSync = true)
+                                    currentItemId = prevId
+                                    vm.setPlaybackPosition(prevId, 0, 0)
+                                    autoPlayAfterLoad = true
+                                    onOpenItem(prevId)
+                                }
+                            }
+                        },
+                        enabled = true,
+                        icon = Icons.Filled.ArrowBack,
+                        contentDescription = "Previous item",
+                    )
+                    LabeledIconControl(
+                        onClick = {
+                            actionScope.launch {
+                                vm.postProgress(currentItemId, 100)
+                                    .onSuccess {
+                                        uiMessage = if (it.queued) "Done queued for sync" else "Marked done"
+                                        if (chunks.isNotEmpty()) {
+                                            val last = chunks.last()
+                                            vm.setPlaybackPosition(currentItemId, chunks.lastIndex, last.length)
+                                        }
+                                    }
+                                    .onFailure { error ->
+                                        if (error is CancellationException) return@onFailure
+                                        uiMessage = error.message ?: "Progress update failed"
+                                }
+                            }
+                        },
+                        enabled = textPayload != null,
+                        icon = Icons.Filled.CheckCircle,
+                        contentDescription = "Mark done",
+                    )
+                    LabeledIconControl(
+                        onClick = {
+                            actionScope.launch {
+                                val nextId = vm.nextSessionItemId(currentItemId)
+                                if (nextId == null) {
+                                    uiMessage = "No next item"
+                                } else {
+                                    stopSpeaking(forceSync = true)
+                                    currentItemId = nextId
+                                    vm.setPlaybackPosition(nextId, 0, 0)
+                                    autoPlayAfterLoad = true
+                                    onOpenItem(nextId)
+                                }
+                            }
+                        },
+                        enabled = true,
+                        icon = Icons.Filled.ArrowForward,
+                        contentDescription = "Next item",
+                    )
+                }
+            }
+        },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(innerPadding),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
                     modifier = Modifier.weight(1f),
+                    text = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Box(contentAlignment = Alignment.TopEnd) {
+                    IconButton(onClick = { overflowExpanded = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "More actions")
+                    }
+                    DropdownMenu(
+                        expanded = overflowExpanded,
+                        onDismissRequest = { overflowExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Back to queue") },
+                            onClick = {
+                                overflowExpanded = false
+                                onBackToQueue(currentItemId)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Restart session") },
+                            onClick = {
+                                overflowExpanded = false
+                                actionScope.launch {
+                                    vm.restartNowPlayingSession()
+                                    vm.currentNowPlayingItemId()?.let { resumedId ->
+                                        currentItemId = resumedId
+                                        onOpenItem(resumedId)
+                                    }
+                                }
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Clear session") },
+                            onClick = {
+                                overflowExpanded = false
+                                showClearSessionDialog = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Diagnostics") },
+                            onClick = {
+                                overflowExpanded = false
+                                onOpenDiagnostics()
+                            },
+                        )
+                    }
+                }
+            }
+            if (sessionItemCount > 0) {
+                Text(
                     text = "Session ${sessionIndex + 1}/$sessionItemCount",
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                TextButton(onClick = { onBackToQueue(currentItemId) }) { Text("Queue") }
-                TextButton(onClick = { showClearSessionDialog = true }) { Text("Clear") }
             }
-        }
-        Text(
-            text = "Progress $currentPercent%  -  Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability${if (showCompleted) "  -  Done" else ""}",
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (isLoading) CircularProgressIndicator()
-        if (currentChunkText.isNotBlank()) {
             Text(
-                text = currentChunkText,
-                maxLines = 6,
+                text = "Progress $currentPercent%  -  Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability${if (showCompleted) "  -  Done" else ""}",
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-        if (uiMessage != null || showDiagnosticsHint) {
-            StatusBanner(
-                stateLabel = if (queueOffline) "Offline" else "Status",
-                summary = uiMessage ?: "Network guidance",
-                detail = if (showDiagnosticsHint) "${uiMessage.orEmpty()}\n${baseUrlHint.orEmpty()}" else uiMessage,
-                onRetry = {
-                    uiMessage = null
-                    if (textPayload == null) {
-                        reloadNonce += 1
-                    } else if (chunks.isNotEmpty()) {
-                        isAutoPlaying = true
-                        playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
-                    }
-                },
-                onDiagnostics = if (showRecoveryActions || showDiagnosticsHint) onOpenDiagnostics else null,
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Button(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
-                onClick = {
-                    if (chunks.isNotEmpty() && safePosition.chunkIndex > 0) {
-                        val target = safePosition.chunkIndex - 1
-                        setPlaybackPosition(target, 0)
-                        if (isSpeaking || isAutoPlaying) {
+            if (isLoading) CircularProgressIndicator()
+            if (uiMessage != null || showDiagnosticsHint) {
+                StatusBanner(
+                    stateLabel = if (queueOffline) "Offline" else "Status",
+                    summary = uiMessage ?: "Network guidance",
+                    detail = if (showDiagnosticsHint) "${uiMessage.orEmpty()}\n${baseUrlHint.orEmpty()}" else uiMessage,
+                    onRetry = {
+                        uiMessage = null
+                        if (textPayload == null) {
+                            reloadNonce += 1
+                        } else if (chunks.isNotEmpty()) {
                             isAutoPlaying = true
-                            playChunk(target, 0)
+                            playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
                         }
-                    }
-                },
-                enabled = chunks.size > 1,
-            ) { Text("Prev Seg") }
-            Button(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
-                onClick = {
-                    if (chunks.isNotEmpty()) {
-                        val restartFromStart = showCompleted ||
-                            (safePosition.chunkIndex == chunks.lastIndex &&
-                                safePosition.offsetInChunkChars >= chunks.last().length)
-                        if (restartFromStart) {
-                            setPlaybackPosition(0, 0)
-                            nearEndForcedForItemId = -1
-                            lastObservedPercent = 0
-                        }
+                    },
+                    onDiagnostics = if (showRecoveryActions || showDiagnosticsHint) onOpenDiagnostics else null,
+                )
+            }
+            if (chunks.isNotEmpty()) {
+                ReaderScreen(
+                    chunks = chunks,
+                    currentChunkIndex = safePosition.chunkIndex,
+                    autoScrollWhileListening = settings.autoScrollWhileListening,
+                    onSelectChunk = { index ->
+                        val safeIndex = index.coerceIn(0, chunks.lastIndex)
+                        setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
+                        uiMessage = "Selected chunk ${safeIndex + 1}"
+                    },
+                    onPlayFromChunk = { index ->
+                        val safeIndex = index.coerceIn(0, chunks.lastIndex)
+                        setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
                         isAutoPlaying = true
-                        val positionToPlay = if (restartFromStart) {
-                            PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
-                        } else {
-                            safePosition
-                        }
-                        playChunk(positionToPlay.chunkIndex, positionToPlay.offsetInChunkChars)
-                    }
-                },
-                enabled = chunks.isNotEmpty(),
-            ) { Text("Play") }
-            Button(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
-                onClick = { stopSpeaking(forceSync = true) },
-                enabled = chunks.isNotEmpty(),
-            ) { Text("Pause") }
-            Button(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
-                onClick = {
-                    if (chunks.isNotEmpty() && safePosition.chunkIndex < chunks.lastIndex) {
-                        val target = safePosition.chunkIndex + 1
-                        setPlaybackPosition(target, 0)
-                        if (isSpeaking || isAutoPlaying) {
-                            isAutoPlaying = true
-                            playChunk(target, 0)
-                        }
-                    }
-                },
-                enabled = chunks.size > 1,
-            ) { Text("Next Seg") }
+                        playChunk(safeIndex, 0)
+                        uiMessage = "Starting from chunk ${safeIndex + 1}"
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            Spacer(modifier = Modifier.height(2.dp))
         }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Button(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
-                onClick = {
-                    actionScope.launch {
-                        val prevId = vm.prevSessionItemId(currentItemId)
-                        if (prevId == null) {
-                            uiMessage = "No previous item"
-                        } else {
-                            stopSpeaking(forceSync = true)
-                            currentItemId = prevId
-                            vm.setPlaybackPosition(prevId, 0, 0)
-                            autoPlayAfterLoad = true
-                            onOpenItem(prevId)
-                        }
-                    }
-                },
-            ) { Text("Prev Item") }
-            Button(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
-                onClick = {
-                    actionScope.launch {
-                        val nextId = vm.nextSessionItemId(currentItemId)
-                        if (nextId == null) {
-                            uiMessage = "No next item"
-                        } else {
-                            stopSpeaking(forceSync = true)
-                            currentItemId = nextId
-                            vm.setPlaybackPosition(nextId, 0, 0)
-                            autoPlayAfterLoad = true
-                            onOpenItem(nextId)
-                        }
-                    }
-                },
-            ) { Text("Next Item") }
-            Button(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
-                onClick = {
-                    actionScope.launch {
-                        vm.postProgress(currentItemId, 100)
-                            .onSuccess {
-                                uiMessage = if (it.queued) "Done queued for sync" else "Marked done"
-                                if (chunks.isNotEmpty()) {
-                                    val last = chunks.last()
-                                    vm.setPlaybackPosition(currentItemId, chunks.lastIndex, last.length)
-                                }
-                            }
-                            .onFailure { error ->
-                                if (error is CancellationException) return@onFailure
-                                uiMessage = error.message ?: "Progress update failed"
-                            }
-                    }
-                },
-                enabled = textPayload != null,
-            ) { Text("Done") }
-            Button(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
-                onClick = { showReaderView = !showReaderView },
-                enabled = chunks.isNotEmpty(),
-            ) { Text(if (showReaderView) "Hide Text" else "View Text") }
-        }
-
-        if (showReaderView && chunks.isNotEmpty()) {
-            ReaderScreen(
-                chunks = chunks,
-                currentChunkIndex = safePosition.chunkIndex,
-                autoScrollWhileListening = settings.autoScrollWhileListening,
-                onSelectChunk = { index ->
-                    val safeIndex = index.coerceIn(0, chunks.lastIndex)
-                    setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
-                    uiMessage = "Selected chunk ${safeIndex + 1}"
-                },
-                onPlayFromChunk = { index ->
-                    val safeIndex = index.coerceIn(0, chunks.lastIndex)
-                    setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
-                    isAutoPlaying = true
-                    playChunk(safeIndex, 0)
-                    uiMessage = "Starting from chunk ${safeIndex + 1}"
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        Spacer(modifier = Modifier.height(2.dp))
     }
 
     if (showClearSessionDialog) {
@@ -698,6 +740,29 @@ fun PlayerScreen(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun LabeledIconControl(
+    onClick: () -> Unit,
+    enabled: Boolean,
+    icon: ImageVector,
+    contentDescription: String,
+    iconWhenEnabledAlt: ImageVector? = null,
+) {
+    Column(
+        modifier = Modifier.heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        IconButton(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = Modifier.size(48.dp),
+        ) {
+            Icon(iconWhenEnabledAlt ?: icon, contentDescription = contentDescription)
+        }
     }
 }
 
