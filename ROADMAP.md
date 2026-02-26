@@ -10,14 +10,14 @@
 - [x] Offline caching + retry queue: cached text/paragraphs (Room), offline player fallback, queued progress sync with retry.
 - [x] WorkManager auto-flush for queued progress when network returns (no manual sync required).
 - [x] v0.3 now-playing session snapshot: persisted queue order + current index, queue resume action, and next/prev item navigation tied to session state.
+- [x] In-app connectivity diagnostics screen: `/health`, `/debug/version`, `/debug/python` checks with device-aware hints and timestamps.
 
 ## Next
 1. [ ] Persist last segment index per item in DataStore for cross-process resume.
 2. [ ] Add explicit session actions (restart from top, clear session, optional repeat mode).
 3. [ ] Add queue filters/sorting controls from playback API query params.
 4. [ ] Connection UX pass: guided setup for emulator vs physical device base URL (with inline examples and validation).
-5. [ ] Add one-tap connectivity diagnostics in app (reachability + auth + backend git_sha) mirroring extension diagnostics.
-6. [ ] Add Windows helper automation docs/scripts for LAN bind + firewall rule creation/removal.
+5. [ ] Add Windows helper automation docs/scripts for LAN bind + firewall rule creation/removal.
 
 ## Later
 - [ ] Named playlists and queue management.

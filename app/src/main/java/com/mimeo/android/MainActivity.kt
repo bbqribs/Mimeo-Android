@@ -40,20 +40,30 @@ import com.mimeo.android.data.ApiException
 import com.mimeo.android.data.AppDatabase
 import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
+import com.mimeo.android.model.ConnectivityDiagnosticOutcome
+import com.mimeo.android.model.ConnectivityDiagnosticRow
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.repository.ItemTextResult
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.PlaybackRepository
 import com.mimeo.android.repository.ProgressPostResult
+import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
 import com.mimeo.android.ui.player.PlayerScreen
 import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.work.WorkScheduler
 import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -97,6 +107,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
+
+    private val _diagnosticsRows = MutableStateFlow<List<ConnectivityDiagnosticRow>>(emptyList())
+    val diagnosticsRows: StateFlow<List<ConnectivityDiagnosticRow>> = _diagnosticsRows.asStateFlow()
+
+    private val _diagnosticsRunning = MutableStateFlow(false)
+    val diagnosticsRunning: StateFlow<Boolean> = _diagnosticsRunning.asStateFlow()
+
+    private val _diagnosticsLastError = MutableStateFlow<String?>(null)
+    val diagnosticsLastError: StateFlow<String?> = _diagnosticsLastError.asStateFlow()
 
     private val _segmentIndexByItem = MutableStateFlow<Map<Int, Int>>(emptyMap())
     val segmentIndexByItem: StateFlow<Map<Int, Int>> = _segmentIndexByItem.asStateFlow()
@@ -167,6 +186,87 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } finally {
                 _queueLoading.value = false
                 refreshPendingCount()
+            }
+        }
+    }
+
+    fun runConnectivityDiagnostics(isPhysicalDevice: Boolean) {
+        val current = settings.value
+        val baseUrl = current.baseUrl.trim().trimEnd('/')
+        val token = current.apiToken.trim()
+        val rows = mutableListOf<ConnectivityDiagnosticRow>()
+        _diagnosticsRunning.value = true
+        _diagnosticsLastError.value = null
+
+        val baseHint = baseUrlHint(baseUrl, isPhysicalDevice)
+        if (baseHint != null) {
+            rows += diagnosticRow(
+                name = "base_url",
+                url = baseUrl.ifBlank { "(unset)" },
+                outcome = ConnectivityDiagnosticOutcome.INFO,
+                detail = "base URL check",
+                hint = baseHint,
+            )
+        }
+
+        if (token.isBlank()) {
+            rows += diagnosticRow(
+                name = "auth",
+                url = baseUrl.ifBlank { "(unset)" },
+                outcome = ConnectivityDiagnosticOutcome.FAIL,
+                detail = "token missing",
+                hint = "add API token in Settings",
+            )
+            _diagnosticsRows.value = rows
+            _diagnosticsLastError.value = "Token missing"
+            _diagnosticsRunning.value = false
+            return
+        }
+
+        viewModelScope.launch {
+            var lastError: String? = null
+            try {
+                val health = runRawCheck(baseUrl, token, "/health", "health")
+                rows += health
+                if (health.outcome != ConnectivityDiagnosticOutcome.PASS && health.hint != null) {
+                    lastError = health.hint
+                }
+
+                val debugVersion = runRawCheck(baseUrl, token, "/debug/version", "debug/version")
+                rows += if (debugVersion.outcome == ConnectivityDiagnosticOutcome.PASS) {
+                    val gitSha = extractJsonField(debugVersion.detail, "git_sha") ?: "unknown"
+                    debugVersion.copy(detail = "git_sha=$gitSha")
+                } else {
+                    debugVersion
+                }
+                if (debugVersion.outcome == ConnectivityDiagnosticOutcome.FAIL && debugVersion.hint != null) {
+                    lastError = debugVersion.hint
+                }
+
+                val debugPython = runRawCheck(baseUrl, token, "/debug/python", "debug/python")
+                rows += if (debugPython.outcome == ConnectivityDiagnosticOutcome.PASS) {
+                    val sysPrefix = extractJsonField(debugPython.detail, "sys_prefix") ?: "unknown"
+                    debugPython.copy(detail = "sys_prefix=$sysPrefix")
+                } else {
+                    debugPython
+                }
+                if (debugPython.outcome == ConnectivityDiagnosticOutcome.FAIL && debugPython.hint != null) {
+                    lastError = debugPython.hint
+                }
+            } catch (e: Exception) {
+                val message = e.message ?: "diagnostics failed"
+                rows += diagnosticRow(
+                    name = "diagnostics",
+                    url = baseUrl,
+                    outcome = ConnectivityDiagnosticOutcome.FAIL,
+                    detail = "error=$message",
+                    hint = classifyNetworkHint(message),
+                )
+                lastError = message
+            } finally {
+                _diagnosticsRows.value = rows
+                _diagnosticsLastError.value = lastError
+                _diagnosticsRunning.value = false
             }
         }
     }
@@ -303,6 +403,89 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun isNetworkError(error: Exception): Boolean = error is IOException
+
+    private suspend fun runRawCheck(baseUrl: String, token: String, path: String, name: String): ConnectivityDiagnosticRow {
+        val url = "$baseUrl$path"
+        return try {
+            val response = apiClient.getRawEndpoint(baseUrl, token, path)
+            if (response.statusCode in 200..299) {
+                diagnosticRow(
+                    name = name,
+                    url = url,
+                    outcome = ConnectivityDiagnosticOutcome.PASS,
+                    detail = response.body.take(200).ifBlank { "status=${response.statusCode}" },
+                )
+            } else {
+                diagnosticRow(
+                    name = name,
+                    url = url,
+                    outcome = ConnectivityDiagnosticOutcome.FAIL,
+                    detail = "status=${response.statusCode}",
+                    hint = classifyHttpHint(path, response.statusCode),
+                )
+            }
+        } catch (e: Exception) {
+            val message = e.message ?: "request failed"
+            diagnosticRow(
+                name = name,
+                url = url,
+                outcome = ConnectivityDiagnosticOutcome.FAIL,
+                detail = "error=$message",
+                hint = classifyNetworkHint(message),
+            )
+        }
+    }
+
+    private fun diagnosticRow(
+        name: String,
+        url: String,
+        outcome: ConnectivityDiagnosticOutcome,
+        detail: String,
+        hint: String? = null,
+    ): ConnectivityDiagnosticRow = ConnectivityDiagnosticRow(
+        name = name,
+        url = url,
+        outcome = outcome,
+        detail = detail,
+        hint = hint,
+        checkedAt = timestampNow(),
+    )
+
+    private fun timestampNow(): String = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
+
+    private fun extractJsonField(body: String, field: String): String? = runCatching {
+        Json.parseToJsonElement(body).jsonObject[field]?.jsonPrimitive?.contentOrNull
+    }.getOrNull()
+
+    private fun classifyHttpHint(path: String, status: Int): String {
+        if (status == 401 || status == 403) return "check API token/auth"
+        if (status >= 500) return "backend error; check logs"
+        if (status == 404 && (path == "/debug/version" || path == "/debug/python")) {
+            return "backend stale; run verify-mimeo.ps1 then hard refresh"
+        }
+        return "check backend endpoint and settings"
+    }
+
+    private fun classifyNetworkHint(message: String): String {
+        val lower = message.lowercase(Locale.US)
+        return if (lower.contains("timeout") || lower.contains("failed to connect") || lower.contains("connection")) {
+            "start backend (verify-mimeo.ps1) and check firewall rule"
+        } else {
+            "check backend reachability and logs"
+        }
+    }
+
+    private fun baseUrlHint(baseUrl: String, isPhysicalDevice: Boolean): String? {
+        if (!isPhysicalDevice) return null
+        val lower = baseUrl.lowercase(Locale.US)
+        return when {
+            lower.contains("127.0.0.1") || lower.contains("localhost") ->
+                "127.0.0.1/localhost points to phone; use http://<PC_LAN_IP>:8000"
+            lower.contains("10.0.2.2") ->
+                "10.0.2.2 is emulator-only; use http://<PC_LAN_IP>:8000 on phone"
+            else -> null
+        }
+    }
 }
 
 @Composable
@@ -328,7 +511,10 @@ private fun MimeoApp(vm: AppViewModel) {
             Spacer(modifier = Modifier.height(8.dp))
             NavHost(navController = nav, startDestination = "queue", modifier = Modifier.fillMaxSize()) {
                 composable("settings") {
-                    SettingsScreen(vm = vm)
+                    SettingsScreen(vm = vm, onOpenDiagnostics = { nav.navigate("settings/diagnostics") })
+                }
+                composable("settings/diagnostics") {
+                    ConnectivityDiagnosticsScreen(vm = vm)
                 }
                 composable("queue") {
                     QueueScreen(vm = vm, onOpenPlayer = { itemId -> nav.navigate("player/$itemId") })
@@ -350,7 +536,7 @@ private fun MimeoApp(vm: AppViewModel) {
 }
 
 @Composable
-private fun SettingsScreen(vm: AppViewModel) {
+private fun SettingsScreen(vm: AppViewModel, onOpenDiagnostics: () -> Unit) {
     val settings by vm.settings.collectAsState()
     var baseUrl by remember(settings.baseUrl) { mutableStateOf(settings.baseUrl) }
     var token by remember(settings.apiToken) { mutableStateOf(settings.apiToken) }
@@ -375,6 +561,7 @@ private fun SettingsScreen(vm: AppViewModel) {
                 vm.saveSettings(baseUrl, token)
                 vm.testConnection()
             }) { Text("Test connection") }
+            Button(onClick = onOpenDiagnostics) { Text("Diagnostics") }
         }
         Text("Emulator default: http://10.0.2.2:8000")
     }

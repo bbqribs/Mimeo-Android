@@ -1,9 +1,11 @@
 ﻿package com.mimeo.android.data
 
 import com.mimeo.android.model.DebugVersionResponse
+import com.mimeo.android.model.DebugPythonResponse
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.model.ProgressPayload
+import com.mimeo.android.model.RawHttpResponse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -12,6 +14,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.concurrent.TimeUnit
 
 class ApiException(val statusCode: Int, message: String) : Exception(message)
 
@@ -36,6 +39,32 @@ class ApiClient(
             .build()
         executeJson(request) { payload -> json.decodeFromString<PlaybackQueueResponse>(payload) }
     }
+
+    suspend fun getDebugPython(baseUrl: String, token: String): DebugPythonResponse = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/debug/python"))
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<DebugPythonResponse>(payload) }
+    }
+
+    suspend fun getRawEndpoint(baseUrl: String, token: String, path: String, timeoutMs: Long = 4000): RawHttpResponse =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url(resolveUrl(baseUrl, path))
+                .header("Authorization", "Bearer $token")
+                .get()
+                .build()
+            val client = okHttpClient.newBuilder()
+                .callTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                .connectTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                .readTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                .build()
+            client.newCall(request).execute().use { response ->
+                RawHttpResponse(statusCode = response.code, body = response.body?.string().orEmpty())
+            }
+        }
 
     suspend fun getItemText(baseUrl: String, token: String, itemId: Int): ItemTextResponse = withContext(Dispatchers.IO) {
         val request = Request.Builder()
