@@ -11,6 +11,7 @@ import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.work.WorkScheduler
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -39,6 +40,8 @@ data class NowPlayingSessionItem(
     val status: String?,
     val activeContentVersionId: Int?,
     val lastReadPercent: Int?,
+    val chunkIndex: Int,
+    val offsetInChunkChars: Int,
 )
 
 data class NowPlayingSession(
@@ -59,6 +62,8 @@ private data class StoredNowPlayingItem(
     val status: String? = null,
     val activeContentVersionId: Int? = null,
     val lastReadPercent: Int? = null,
+    val chunkIndex: Int = 0,
+    val offsetInChunkChars: Int = 0,
 )
 
 class PlaybackRepository(
@@ -89,6 +94,8 @@ class PlaybackRepository(
             val payload = apiClient.getItemText(baseUrl, token, itemId)
             cacheItem(payload)
             ItemTextResult(payload = payload, usingCache = false)
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             val cached = database.cachedItemDao().findByItemId(itemId)
             if (cached == null) {
@@ -106,8 +113,10 @@ class PlaybackRepository(
     suspend fun postProgress(baseUrl: String, token: String, itemId: Int, percent: Int): ProgressPostResult {
         val clamped = percent.coerceIn(0, 100)
         return try {
-            apiClient.postProgress(baseUrl, token, itemId, clamped)
+            apiClient.postProgress(baseUrl, token, itemId, clamped, source = "playback")
             ProgressPostResult(queued = false)
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             if (isRetryableProgressFailure(error)) {
                 enqueuePendingProgress(itemId = itemId, percent = clamped)
@@ -130,9 +139,17 @@ class PlaybackRepository(
             }
 
             try {
-                apiClient.postProgress(baseUrl, token, entry.itemId, entry.percent.coerceIn(0, 100))
+                apiClient.postProgress(
+                    baseUrl,
+                    token,
+                    entry.itemId,
+                    entry.percent.coerceIn(0, 100),
+                    source = "playback",
+                )
                 dao.deleteById(entry.id)
                 flushedCount += 1
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Exception) {
                 val nextAttempt = entry.attemptCount + 1
                 if (!isRetryableProgressFailure(error)) {
@@ -179,6 +196,8 @@ class PlaybackRepository(
                 status = item.status,
                 activeContentVersionId = item.activeContentVersionId,
                 lastReadPercent = item.lastReadPercent,
+                chunkIndex = 0,
+                offsetInChunkChars = 0,
             )
         }
         val currentIndex = queueItems.indexOfFirst { it.itemId == startItemId }.let { if (it >= 0) it else 0 }
@@ -215,6 +234,57 @@ class PlaybackRepository(
         val updatedAt = System.currentTimeMillis()
         dao.updateCurrentIndex(currentIndex = normalized, updatedAt = updatedAt)
         return row.copy(currentIndex = normalized, updatedAt = updatedAt).toSession(stored)
+    }
+
+    suspend fun setCurrentPlaybackPosition(itemId: Int, chunkIndex: Int, offsetInChunkChars: Int): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson).toMutableList()
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        val idx = stored.indexOfFirst { it.itemId == itemId }
+        if (idx < 0) {
+            return row.toSession(stored)
+        }
+
+        stored[idx] = stored[idx].copy(
+            chunkIndex = chunkIndex.coerceAtLeast(0),
+            offsetInChunkChars = offsetInChunkChars.coerceAtLeast(0),
+        )
+        val updatedAt = System.currentTimeMillis()
+        val updatedRow = row.copy(
+            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(stored)
+    }
+
+    suspend fun setNowPlayingItemProgress(itemId: Int, percent: Int): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson).toMutableList()
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        val idx = stored.indexOfFirst { it.itemId == itemId }
+        if (idx < 0) {
+            return row.toSession(stored)
+        }
+
+        val clamped = percent.coerceIn(0, 100)
+        val merged = maxOf(stored[idx].lastReadPercent ?: 0, clamped)
+        stored[idx] = stored[idx].copy(lastReadPercent = merged)
+        val updatedAt = System.currentTimeMillis()
+        val updatedRow = row.copy(
+            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(stored)
     }
 
     suspend fun clearSession() {
@@ -300,6 +370,8 @@ class PlaybackRepository(
                     status = item.status,
                     activeContentVersionId = item.activeContentVersionId,
                     lastReadPercent = item.lastReadPercent,
+                    chunkIndex = item.chunkIndex,
+                    offsetInChunkChars = item.offsetInChunkChars,
                 )
             },
             currentIndex = safeIndex,

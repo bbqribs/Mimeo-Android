@@ -42,6 +42,7 @@ import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
+import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.repository.ItemTextResult
 import com.mimeo.android.repository.NowPlayingSession
@@ -59,11 +60,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+
+private const val DONE_PERCENT_THRESHOLD = 98
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -117,8 +121,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _diagnosticsLastError = MutableStateFlow<String?>(null)
     val diagnosticsLastError: StateFlow<String?> = _diagnosticsLastError.asStateFlow()
 
-    private val _segmentIndexByItem = MutableStateFlow<Map<Int, Int>>(emptyMap())
-    val segmentIndexByItem: StateFlow<Map<Int, Int>> = _segmentIndexByItem.asStateFlow()
+    private val _playbackPositionByItem = MutableStateFlow<Map<Int, PlaybackPosition>>(emptyMap())
+    val playbackPositionByItem: StateFlow<Map<Int, PlaybackPosition>> = _playbackPositionByItem.asStateFlow()
 
     private val _nowPlayingSession = MutableStateFlow<NowPlayingSession?>(null)
     val nowPlayingSession: StateFlow<NowPlayingSession?> = _nowPlayingSession.asStateFlow()
@@ -133,7 +137,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             flushPendingProgress()
         }
         viewModelScope.launch {
-            _nowPlayingSession.value = repository.getSession()
+            val session = repository.getSession()
+            _nowPlayingSession.value = session
+            if (session != null) {
+                _playbackPositionByItem.value = session.items.associate { item ->
+                    item.itemId to PlaybackPosition(
+                        chunkIndex = item.chunkIndex.coerceAtLeast(0),
+                        offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
+                    )
+                }
+            }
         }
     }
 
@@ -297,26 +310,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun fetchItemText(itemId: Int): Result<ItemTextResult> {
         val current = settings.value
         val expectedVersion = expectedActiveVersionFor(itemId)
-        return runCatching {
+        return try {
             val loaded = repository.getItemText(current.baseUrl, current.apiToken, itemId, expectedVersion)
             if (loaded.usingCache) {
                 _queueOffline.value = true
             } else {
                 _queueOffline.value = false
             }
-            loaded
+            Result.success(loaded)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
         }
     }
 
     suspend fun postProgress(itemId: Int, percent: Int): Result<ProgressPostResult> {
         val current = settings.value
-        return runCatching {
-            val result = repository.postProgress(current.baseUrl, current.apiToken, itemId, percent.coerceIn(0, 100))
+        val clamped = percent.coerceIn(0, 100)
+        return try {
+            val result = repository.postProgress(current.baseUrl, current.apiToken, itemId, clamped)
+            applyLocalProgress(itemId = itemId, percent = clamped)
             if (result.queued) {
                 _queueOffline.value = true
             }
             refreshPendingCount()
-            result
+            Result.success(result)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
         }
     }
 
@@ -341,11 +364,38 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
-            _nowPlayingSession.value = repository.startSession(queue, startItemId)
+            val session = repository.startSession(queue, startItemId)
+            _nowPlayingSession.value = session
+            _playbackPositionByItem.value = session.items.associate { item ->
+                item.itemId to PlaybackPosition(
+                    chunkIndex = item.chunkIndex.coerceAtLeast(0),
+                    offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
+                )
+            }
         }
     }
 
     fun currentNowPlayingItemId(): Int? = nowPlayingSession.value?.currentItem?.itemId
+
+    fun nowPlayingSummaryText(): String? {
+        val session = nowPlayingSession.value ?: return null
+        val current = session.currentItem ?: session.items.firstOrNull() ?: return null
+        val title = current.title?.takeIf { it.isNotBlank() }
+            ?: current.url.takeIf { it.isNotBlank() }
+            ?: "Item ${current.itemId}"
+        val progress = knownProgressForItem(current.itemId)
+        val doneSuffix = if (progress >= DONE_PERCENT_THRESHOLD) " (Done)" else ""
+        return "$title$doneSuffix"
+    }
+
+    fun knownProgressForItem(itemId: Int): Int {
+        val queueProgress = queueItems.value.firstOrNull { it.itemId == itemId }?.lastReadPercent ?: 0
+        val sessionProgress = nowPlayingSession.value
+            ?.items
+            ?.firstOrNull { it.itemId == itemId }
+            ?.lastReadPercent ?: 0
+        return maxOf(queueProgress, sessionProgress)
+    }
 
     suspend fun setNowPlayingCurrentItem(itemId: Int) {
         val session = nowPlayingSession.value ?: return
@@ -383,17 +433,47 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return session
     }
 
-    fun getSegmentIndex(itemId: Int): Int = segmentIndexByItem.value[itemId] ?: 0
+    fun getPlaybackPosition(itemId: Int): PlaybackPosition {
+        return playbackPositionByItem.value[itemId] ?: PlaybackPosition()
+    }
 
-    fun setSegmentIndex(itemId: Int, segmentIndex: Int) {
-        val clamped = segmentIndex.coerceAtLeast(0)
-        _segmentIndexByItem.update { previous ->
-            previous + (itemId to clamped)
+    fun setPlaybackPosition(itemId: Int, chunkIndex: Int, offsetInChunkChars: Int) {
+        val normalized = PlaybackPosition(
+            chunkIndex = chunkIndex.coerceAtLeast(0),
+            offsetInChunkChars = offsetInChunkChars.coerceAtLeast(0),
+        )
+        _playbackPositionByItem.update { previous -> previous + (itemId to normalized) }
+        viewModelScope.launch {
+            val updated = repository.setCurrentPlaybackPosition(
+                itemId = itemId,
+                chunkIndex = normalized.chunkIndex,
+                offsetInChunkChars = normalized.offsetInChunkChars,
+            )
+            if (updated != null) {
+                _nowPlayingSession.value = updated
+            }
         }
     }
 
     private suspend fun refreshPendingCount() {
         _pendingProgressCount.value = repository.countPendingProgress()
+    }
+
+    private suspend fun applyLocalProgress(itemId: Int, percent: Int) {
+        val clamped = percent.coerceIn(0, 100)
+        _queueItems.update { existing ->
+            existing.map { item ->
+                if (item.itemId != itemId) {
+                    item
+                } else {
+                    val merged = maxOf(item.lastReadPercent ?: 0, clamped)
+                    item.copy(lastReadPercent = merged)
+                }
+            }
+        }
+        repository.setNowPlayingItemProgress(itemId, clamped)?.let { updated ->
+            _nowPlayingSession.value = updated
+        }
     }
 
     private fun expectedActiveVersionFor(itemId: Int): Int? {

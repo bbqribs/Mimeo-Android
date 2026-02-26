@@ -58,10 +58,24 @@ data class ItemTextResponse(
     @SerialName("word_count") val wordCount: Int? = null,
     val text: String,
     val paragraphs: List<String>? = null,
+    @SerialName("total_chars") val totalChars: Int? = null,
+    val chunks: List<ItemTextChunk>? = null,
 )
 
 @Serializable
-data class ProgressPayload(val percent: Int)
+data class ItemTextChunk(
+    val index: Int,
+    @SerialName("start_char") val startChar: Int,
+    @SerialName("end_char") val endChar: Int,
+    val text: String,
+)
+
+@Serializable
+data class ProgressPayload(
+    val percent: Int,
+    val source: String? = null,
+    @SerialName("client_timestamp") val clientTimestamp: String? = null,
+)
 
 @Serializable
 data class AppSettings(
