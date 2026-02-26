@@ -161,9 +161,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun saveSettings(baseUrl: String, token: String, autoAdvanceOnCompletion: Boolean) {
+    fun saveSettings(
+        baseUrl: String,
+        token: String,
+        autoAdvanceOnCompletion: Boolean,
+        autoScrollWhileListening: Boolean,
+    ) {
         viewModelScope.launch {
-            settingsStore.save(baseUrl, token, autoAdvanceOnCompletion)
+            settingsStore.save(baseUrl, token, autoAdvanceOnCompletion, autoScrollWhileListening)
             _statusMessage.value = "Settings saved"
         }
     }
@@ -411,6 +416,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun isItemCached(itemId: Int): Boolean = cachedItemIds.value.contains(itemId)
 
     fun shouldAutoAdvanceAfterCompletion(): Boolean = settings.value.autoAdvanceOnCompletion
+    fun shouldAutoScrollWhileListening(): Boolean = settings.value.autoScrollWhileListening
 
     fun baseUrlHintForDevice(isPhysicalDevice: Boolean): String? =
         baseUrlHint(settings.value.baseUrl.trim().trimEnd('/'), isPhysicalDevice)
@@ -673,6 +679,9 @@ private fun SettingsScreen(vm: AppViewModel, onOpenDiagnostics: () -> Unit) {
     var autoAdvance by remember(settings.autoAdvanceOnCompletion) {
         mutableStateOf(settings.autoAdvanceOnCompletion)
     }
+    var autoScrollWhileListening by remember(settings.autoScrollWhileListening) {
+        mutableStateOf(settings.autoScrollWhileListening)
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
@@ -699,10 +708,25 @@ private fun SettingsScreen(vm: AppViewModel, onOpenDiagnostics: () -> Unit) {
                 onCheckedChange = { autoAdvance = it },
             )
         }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("Auto-scroll while listening")
+            Switch(
+                checked = autoScrollWhileListening,
+                onCheckedChange = { autoScrollWhileListening = it },
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { vm.saveSettings(baseUrl, token, autoAdvance) }) { Text("Save") }
+            Button(
+                onClick = {
+                    vm.saveSettings(baseUrl, token, autoAdvance, autoScrollWhileListening)
+                },
+            ) { Text("Save") }
             Button(onClick = {
-                vm.saveSettings(baseUrl, token, autoAdvance)
+                vm.saveSettings(baseUrl, token, autoAdvance, autoScrollWhileListening)
                 vm.testConnection()
             }) { Text("Test connection") }
             Button(onClick = onOpenDiagnostics) { Text("Diagnostics") }

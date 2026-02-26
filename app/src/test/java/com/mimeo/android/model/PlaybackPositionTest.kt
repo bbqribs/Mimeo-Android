@@ -73,4 +73,33 @@ class PlaybackPositionTest {
             }
         }
     }
+
+    @Test
+    fun absoluteOffsetMapsToExpectedChunkAndOffset() {
+        val position = positionFromAbsoluteOffset(
+            totalChars = 260,
+            chunks = chunks,
+            absoluteOffset = 145,
+        )
+        assertEquals(1, position.chunkIndex)
+        assertEquals(45, position.offsetInChunkChars)
+    }
+
+    @Test
+    fun absoluteOffsetClampsToBounds() {
+        val beforeStart = positionFromAbsoluteOffset(
+            totalChars = 260,
+            chunks = chunks,
+            absoluteOffset = -100,
+        )
+        val afterEnd = positionFromAbsoluteOffset(
+            totalChars = 260,
+            chunks = chunks,
+            absoluteOffset = 9_999,
+        )
+        assertEquals(0, beforeStart.chunkIndex)
+        assertEquals(0, beforeStart.offsetInChunkChars)
+        assertEquals(2, afterEnd.chunkIndex)
+        assertEquals(60, afterEnd.offsetInChunkChars)
+    }
 }

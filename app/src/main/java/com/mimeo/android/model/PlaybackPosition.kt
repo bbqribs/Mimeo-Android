@@ -43,3 +43,16 @@ fun absoluteCharOffset(
     val safeOffset = min(max(position.offsetInChunkChars, 0), chunk.length)
     return min(totalChars, max(0, chunk.startChar + safeOffset))
 }
+
+fun positionFromAbsoluteOffset(
+    totalChars: Int,
+    chunks: List<PlaybackChunk>,
+    absoluteOffset: Int,
+): PlaybackPosition {
+    if (totalChars <= 0 || chunks.isEmpty()) return PlaybackPosition()
+    val safeAbsolute = min(totalChars, max(0, absoluteOffset))
+    val chunkIndex = chunks.indexOfFirst { safeAbsolute <= it.endChar }.let { if (it >= 0) it else chunks.lastIndex }
+    val chunk = chunks[chunkIndex]
+    val offsetInChunk = min(max(0, safeAbsolute - chunk.startChar), chunk.length)
+    return PlaybackPosition(chunkIndex = chunkIndex, offsetInChunkChars = offsetInChunk)
+}

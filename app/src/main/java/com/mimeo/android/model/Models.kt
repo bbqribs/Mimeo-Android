@@ -88,6 +88,7 @@ data class AppSettings(
     val baseUrl: String = "http://10.0.2.2:8000",
     val apiToken: String = "",
     val autoAdvanceOnCompletion: Boolean = false,
+    val autoScrollWhileListening: Boolean = true,
 )
 
 @Serializable

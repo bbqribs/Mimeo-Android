@@ -33,6 +33,11 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 - Completion behavior is explicit:
   - default is **no auto-advance**
   - optional toggle in Settings: **Auto-advance after completion**
+- Start-listening reader tools:
+  - `View text` in Player opens the chunked reader list
+  - long-press a chunk to start listening from that exact point
+  - current chunk is highlighted while playback advances
+  - optional Settings toggle: **Auto-scroll while listening**
 
 ## Open in Android Studio
 1. Open this repo folder in Android Studio.
