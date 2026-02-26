@@ -765,6 +765,7 @@ private fun MimeoApp(vm: AppViewModel) {
     val navBackStack by nav.currentBackStackEntryAsState()
     val currentRoute = navBackStack?.destination?.route.orEmpty()
     val selectedTab = when {
+        currentRoute.startsWith("player") -> "player"
         currentRoute.startsWith("playlists") -> "playlists"
         currentRoute.startsWith("settings") -> "settings"
         else -> "queue"
@@ -777,6 +778,12 @@ private fun MimeoApp(vm: AppViewModel) {
                     selected = selectedTab == "queue",
                     onClick = { nav.navigate("queue") { launchSingleTop = true } },
                     label = { Text("Queue") },
+                    icon = {},
+                )
+                NavigationBarItem(
+                    selected = selectedTab == "player",
+                    onClick = { nav.navigate("player") { launchSingleTop = true } },
+                    label = { Text("Player") },
                     icon = {},
                 )
                 NavigationBarItem(
@@ -810,6 +817,26 @@ private fun MimeoApp(vm: AppViewModel) {
             }
             composable("settings/diagnostics") {
                 ConnectivityDiagnosticsScreen(vm = vm)
+            }
+            composable("player") {
+                val nowPlayingId = vm.currentNowPlayingItemId()
+                if (nowPlayingId == null) {
+                    NoNowPlayingScreen(onGoQueue = { nav.navigate("queue") })
+                } else {
+                    PlayerScreen(
+                        vm = vm,
+                        initialItemId = nowPlayingId,
+                        onOpenItem = { nextId -> nav.navigate("player/$nextId") },
+                        onBackToQueue = { focusId ->
+                            if (focusId == null) {
+                                nav.navigate("queue")
+                            } else {
+                                nav.navigate("queue?focusItemId=$focusId")
+                            }
+                        },
+                        onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
+                    )
+                }
             }
             composable(
                 route = "queue?focusItemId={focusItemId}",
@@ -847,6 +874,19 @@ private fun MimeoApp(vm: AppViewModel) {
                     onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun NoNowPlayingScreen(onGoQueue: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("No Now Playing session")
+        Button(onClick = onGoQueue) {
+            Text("Go to Queue")
         }
     }
 }
