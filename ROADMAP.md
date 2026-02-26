@@ -11,6 +11,7 @@
 - [x] WorkManager auto-flush for queued progress when network returns (no manual sync required).
 - [x] v0.3 now-playing session snapshot: persisted queue order + current index, queue resume action, and next/prev item navigation tied to session state.
 - [x] In-app connectivity diagnostics screen: `/health`, `/debug/version`, `/debug/python` checks with device-aware hints and timestamps.
+- [x] Progress model v1: canonical chunk/char-offset percent wiring, monotonic server updates, and near-end auto-done alignment.
 
 ## Next
 1. [ ] Persist last segment index per item in DataStore for cross-process resume.

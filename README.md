@@ -10,7 +10,8 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 - `GET /playback/queue` (playlist candidates)
 - `GET /items/{id}/text` (TTS text payload)
 - `POST /items/{id}/progress` (progress and done sync)
-- Progress sync is segment-based (`segment_index / total_segments`) and posted on segment changes.
+- Progress sync uses canonical text-consumed percent from chunk boundaries + in-chunk char offset.
+- Player consumes backend `/items/{id}/text` chunks when available, with deterministic local fallback chunking.
 - Queue prefetch caches text for the next items (default first 5).
 - If `/items/{id}/text` fails, player falls back to cached text when the active content version matches.
 - Offline/timeout progress posts are queued locally and retried on app start, queue open, or manual sync.
@@ -18,6 +19,7 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 - Tapping a queue item creates a persisted "Now Playing" session snapshot (fixed item order + current index).
 - Next/Prev Item navigation uses the session snapshot instead of a freshly refetched queue.
 - Queue shows a "Resume Now Playing" action after restart when a session exists.
+- Now Playing resume restores chunk index + in-chunk char offset for each item.
 
 ## Open in Android Studio
 1. Open this repo folder in Android Studio.

@@ -42,6 +42,7 @@ import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
+import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.repository.ItemTextResult
 import com.mimeo.android.repository.NowPlayingSession
@@ -117,8 +118,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _diagnosticsLastError = MutableStateFlow<String?>(null)
     val diagnosticsLastError: StateFlow<String?> = _diagnosticsLastError.asStateFlow()
 
-    private val _segmentIndexByItem = MutableStateFlow<Map<Int, Int>>(emptyMap())
-    val segmentIndexByItem: StateFlow<Map<Int, Int>> = _segmentIndexByItem.asStateFlow()
+    private val _playbackPositionByItem = MutableStateFlow<Map<Int, PlaybackPosition>>(emptyMap())
+    val playbackPositionByItem: StateFlow<Map<Int, PlaybackPosition>> = _playbackPositionByItem.asStateFlow()
 
     private val _nowPlayingSession = MutableStateFlow<NowPlayingSession?>(null)
     val nowPlayingSession: StateFlow<NowPlayingSession?> = _nowPlayingSession.asStateFlow()
@@ -133,7 +134,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             flushPendingProgress()
         }
         viewModelScope.launch {
-            _nowPlayingSession.value = repository.getSession()
+            val session = repository.getSession()
+            _nowPlayingSession.value = session
+            if (session != null) {
+                _playbackPositionByItem.value = session.items.associate { item ->
+                    item.itemId to PlaybackPosition(
+                        chunkIndex = item.chunkIndex.coerceAtLeast(0),
+                        offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
+                    )
+                }
+            }
         }
     }
 
@@ -341,7 +351,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
-            _nowPlayingSession.value = repository.startSession(queue, startItemId)
+            val session = repository.startSession(queue, startItemId)
+            _nowPlayingSession.value = session
+            _playbackPositionByItem.value = session.items.associate { item ->
+                item.itemId to PlaybackPosition(
+                    chunkIndex = item.chunkIndex.coerceAtLeast(0),
+                    offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
+                )
+            }
         }
     }
 
@@ -383,12 +400,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return session
     }
 
-    fun getSegmentIndex(itemId: Int): Int = segmentIndexByItem.value[itemId] ?: 0
+    fun getPlaybackPosition(itemId: Int): PlaybackPosition {
+        return playbackPositionByItem.value[itemId] ?: PlaybackPosition()
+    }
 
-    fun setSegmentIndex(itemId: Int, segmentIndex: Int) {
-        val clamped = segmentIndex.coerceAtLeast(0)
-        _segmentIndexByItem.update { previous ->
-            previous + (itemId to clamped)
+    fun setPlaybackPosition(itemId: Int, chunkIndex: Int, offsetInChunkChars: Int) {
+        val normalized = PlaybackPosition(
+            chunkIndex = chunkIndex.coerceAtLeast(0),
+            offsetInChunkChars = offsetInChunkChars.coerceAtLeast(0),
+        )
+        _playbackPositionByItem.update { previous -> previous + (itemId to normalized) }
+        viewModelScope.launch {
+            val updated = repository.setCurrentPlaybackPosition(
+                itemId = itemId,
+                chunkIndex = normalized.chunkIndex,
+                offsetInChunkChars = normalized.offsetInChunkChars,
+            )
+            if (updated != null) {
+                _nowPlayingSession.value = updated
+            }
         }
     }
 

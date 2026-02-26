@@ -75,8 +75,21 @@ class ApiClient(
         executeJson(request) { payload -> json.decodeFromString<ItemTextResponse>(payload) }
     }
 
-    suspend fun postProgress(baseUrl: String, token: String, itemId: Int, percent: Int) = withContext(Dispatchers.IO) {
-        val body = json.encodeToString(ProgressPayload(percent)).toRequestBody("application/json".toMediaType())
+    suspend fun postProgress(
+        baseUrl: String,
+        token: String,
+        itemId: Int,
+        percent: Int,
+        source: String? = null,
+        clientTimestamp: String? = null,
+    ) = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(
+            ProgressPayload(
+                percent = percent,
+                source = source,
+                clientTimestamp = clientTimestamp,
+            )
+        ).toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
             .url(resolveUrl(baseUrl, "/items/$itemId/progress"))
             .header("Authorization", "Bearer $token")
