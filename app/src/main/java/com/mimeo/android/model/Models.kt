@@ -9,6 +9,12 @@ enum class ConnectivityDiagnosticOutcome {
     INFO,
 }
 
+enum class ProgressSyncBadgeState {
+    SYNCED,
+    QUEUED,
+    OFFLINE,
+}
+
 data class ConnectivityDiagnosticRow(
     val name: String,
     val url: String,
@@ -81,6 +87,7 @@ data class ProgressPayload(
 data class AppSettings(
     val baseUrl: String = "http://10.0.2.2:8000",
     val apiToken: String = "",
+    val autoAdvanceOnCompletion: Boolean = false,
 )
 
 @Serializable

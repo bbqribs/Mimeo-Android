@@ -12,19 +12,19 @@
 - [x] v0.3 now-playing session snapshot: persisted queue order + current index, queue resume action, and next/prev item navigation tied to session state.
 - [x] In-app connectivity diagnostics screen: `/health`, `/debug/version`, `/debug/python` checks with device-aware hints and timestamps.
 - [x] Progress model v1: canonical chunk/char-offset percent wiring, monotonic server updates, and near-end auto-done alignment.
+- [x] Android MVP playback end-to-end polish: Now Playing status header, offline/cache badges, retry+diagnostics recovery actions, and configurable completion auto-advance.
 
 ## Next
-1. [ ] Android MVP playback end-to-end polish.
-2. [ ] Text segmentation/chunking improvements.
-3. [ ] Start listening here + highlight + optional auto-scroll.
+1. [ ] Text segmentation/chunking improvements.
+2. [ ] Start listening here + highlight + optional auto-scroll.
    - Start listening from current reading position (tap/long-press).
    - Highlight current chunk being spoken (subtle violet).
    - Optional auto-scroll toggle.
-4. [ ] Persist last segment index per item in DataStore for cross-process resume.
-5. [ ] Add explicit session actions (restart from top, clear session, optional repeat mode).
-6. [ ] Add queue filters/sorting controls from playback API query params.
-7. [ ] Connection UX pass: guided setup for emulator vs physical device base URL (with inline examples and validation).
-8. [ ] Add Windows helper automation docs/scripts for LAN bind + firewall rule creation/removal.
+3. [ ] Persist last segment index per item in DataStore for cross-process resume.
+4. [ ] Add explicit session actions (restart from top, clear session, optional repeat mode).
+5. [ ] Add queue filters/sorting controls from playback API query params.
+6. [ ] Connection UX pass: guided setup for emulator vs physical device base URL (with inline examples and validation).
+7. [ ] Add Windows helper automation docs/scripts for LAN bind + firewall rule creation/removal.
 
 ## Later
 - [ ] Named playlists and queue management.
