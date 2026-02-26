@@ -28,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.data.ApiException
@@ -41,6 +42,7 @@ import com.mimeo.android.model.positionFromAbsoluteOffset
 import com.mimeo.android.player.TtsChunkDoneEvent
 import com.mimeo.android.player.TtsChunkProgressEvent
 import com.mimeo.android.player.TtsController
+import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.reader.ReaderScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -452,93 +454,62 @@ fun PlayerScreen(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        if (currentTitle.isNotBlank()) {
-            Text(text = currentTitle)
-        } else {
-            Text(text = "Item $currentItemId")
-        }
+        Text(
+            text = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         if (sessionItemCount > 0) {
-            Text("Session ${sessionIndex + 1} of $sessionItemCount")
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Button(
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
-                    onClick = { onBackToQueue(currentItemId) },
-                ) {
-                    Text("Back to queue")
-                }
-                Button(
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
-                    onClick = { showClearSessionDialog = true },
-                ) {
-                    Text("Clear Session")
-                }
+                Text(
+                    modifier = Modifier.weight(1f),
+                    text = "Session ${sessionIndex + 1}/$sessionItemCount",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                TextButton(onClick = { onBackToQueue(currentItemId) }) { Text("Queue") }
+                TextButton(onClick = { showClearSessionDialog = true }) { Text("Clear") }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(text = "Progress: $currentPercent%")
-            Text(text = "Sync: $syncBadgeText")
-            if (showCompleted) {
-                Text(text = "Done")
-            }
-        }
-        Text(text = offlineAvailability)
-        if (usingCachedText) {
-            Text(text = "Using cached text")
-        }
-        if (queueOffline && syncBadgeState == ProgressSyncBadgeState.OFFLINE) {
-            Text(text = "Offline mode active")
-        }
-        Text(text = chunkLabel)
+        Text(
+            text = "Progress $currentPercent%  -  Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability${if (showCompleted) "  -  Done" else ""}",
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
         if (isLoading) CircularProgressIndicator()
-        if (currentChunkText.isNotBlank()) Text(text = currentChunkText)
-        uiMessage?.let { Text(text = it) }
-        if (showDiagnosticsHint) {
-            Text(text = requireNotNull(baseUrlHint))
+        if (currentChunkText.isNotBlank()) {
+            Text(
+                text = currentChunkText,
+                maxLines = 6,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
-        if (showRecoveryActions) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
-                    onClick = {
-                        uiMessage = null
-                        if (textPayload == null) {
-                            reloadNonce += 1
-                        } else if (chunks.isNotEmpty()) {
-                            isAutoPlaying = true
-                            playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
-                        }
-                    },
-                ) {
-                    Text("Retry")
-                }
-                Button(
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
-                    onClick = onOpenDiagnostics,
-                ) {
-                    Text("Open Diagnostics")
-                }
-            }
+        if (uiMessage != null || showDiagnosticsHint) {
+            StatusBanner(
+                stateLabel = if (queueOffline) "Offline" else "Status",
+                summary = uiMessage ?: "Network guidance",
+                detail = if (showDiagnosticsHint) "${uiMessage.orEmpty()}\n${baseUrlHint.orEmpty()}" else uiMessage,
+                onRetry = {
+                    uiMessage = null
+                    if (textPayload == null) {
+                        reloadNonce += 1
+                    } else if (chunks.isNotEmpty()) {
+                        isAutoPlaying = true
+                        playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
+                    }
+                },
+                onDiagnostics = if (showRecoveryActions || showDiagnosticsHint) onOpenDiagnostics else null,
+            )
         }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Button(
                 modifier = Modifier
@@ -555,33 +526,7 @@ fun PlayerScreen(
                     }
                 },
                 enabled = chunks.size > 1,
-            ) {
-                Text("Prev Seg")
-            }
-            Button(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
-                onClick = {
-                    if (chunks.isNotEmpty() && safePosition.chunkIndex < chunks.lastIndex) {
-                        val target = safePosition.chunkIndex + 1
-                        setPlaybackPosition(target, 0)
-                        if (isSpeaking || isAutoPlaying) {
-                            isAutoPlaying = true
-                            playChunk(target, 0)
-                        }
-                    }
-                },
-                enabled = chunks.size > 1,
-            ) {
-                Text("Next Seg")
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+            ) { Text("Prev Seg") }
             Button(
                 modifier = Modifier
                     .weight(1f)
@@ -606,23 +551,35 @@ fun PlayerScreen(
                     }
                 },
                 enabled = chunks.isNotEmpty(),
-            ) {
-                Text("Play")
-            }
+            ) { Text("Play") }
             Button(
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
                 onClick = { stopSpeaking(forceSync = true) },
                 enabled = chunks.isNotEmpty(),
-            ) {
-                Text("Pause")
-            }
+            ) { Text("Pause") }
+            Button(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
+                onClick = {
+                    if (chunks.isNotEmpty() && safePosition.chunkIndex < chunks.lastIndex) {
+                        val target = safePosition.chunkIndex + 1
+                        setPlaybackPosition(target, 0)
+                        if (isSpeaking || isAutoPlaying) {
+                            isAutoPlaying = true
+                            playChunk(target, 0)
+                        }
+                    }
+                },
+                enabled = chunks.size > 1,
+            ) { Text("Next Seg") }
         }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Button(
                 modifier = Modifier
@@ -642,9 +599,7 @@ fun PlayerScreen(
                         }
                     }
                 },
-            ) {
-                Text("Prev Item")
-            }
+            ) { Text("Prev Item") }
             Button(
                 modifier = Modifier
                     .weight(1f)
@@ -663,9 +618,7 @@ fun PlayerScreen(
                         }
                     }
                 },
-            ) {
-                Text("Next Item")
-            }
+            ) { Text("Next Item") }
             Button(
                 modifier = Modifier
                     .weight(1f)
@@ -681,32 +634,22 @@ fun PlayerScreen(
                                 }
                             }
                             .onFailure { error ->
-                                if (error is CancellationException) {
-                                    return@onFailure
-                                }
+                                if (error is CancellationException) return@onFailure
                                 uiMessage = error.message ?: "Progress update failed"
                             }
                     }
                 },
                 enabled = textPayload != null,
-            ) {
-                Text("Done")
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+            ) { Text("Done") }
             Button(
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
                 onClick = { showReaderView = !showReaderView },
                 enabled = chunks.isNotEmpty(),
-            ) {
-                Text(if (showReaderView) "Hide text" else "View text")
-            }
+            ) { Text(if (showReaderView) "Hide Text" else "View Text") }
         }
+
         if (showReaderView && chunks.isNotEmpty()) {
             ReaderScreen(
                 chunks = chunks,

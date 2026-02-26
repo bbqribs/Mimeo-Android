@@ -15,20 +15,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -36,6 +31,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mimeo.android.data.ApiClient
@@ -54,6 +50,7 @@ import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.PlaybackRepository
 import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
+import com.mimeo.android.ui.settings.SettingsScreen
 import com.mimeo.android.ui.player.PlayerScreen
 import com.mimeo.android.ui.playlists.PlaylistsScreen
 import com.mimeo.android.ui.queue.QueueScreen
@@ -765,136 +762,91 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 @Composable
 private fun MimeoApp(vm: AppViewModel) {
     val nav = rememberNavController()
-    val status by vm.statusMessage.collectAsState()
+    val navBackStack by nav.currentBackStackEntryAsState()
+    val currentRoute = navBackStack?.destination?.route.orEmpty()
+    val selectedTab = when {
+        currentRoute.startsWith("playlists") -> "playlists"
+        currentRoute.startsWith("settings") -> "settings"
+        else -> "queue"
+    }
 
-    Scaffold { innerPadding ->
-        Column(
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = selectedTab == "queue",
+                    onClick = { nav.navigate("queue") { launchSingleTop = true } },
+                    label = { Text("Queue") },
+                    icon = {},
+                )
+                NavigationBarItem(
+                    selected = selectedTab == "playlists",
+                    onClick = { nav.navigate("playlists") { launchSingleTop = true } },
+                    label = { Text("Playlists") },
+                    icon = {},
+                )
+                NavigationBarItem(
+                    selected = selectedTab == "settings",
+                    onClick = { nav.navigate("settings") { launchSingleTop = true } },
+                    label = { Text("Settings") },
+                    icon = {},
+                )
+            }
+        },
+    ) { innerPadding ->
+        NavHost(
+            navController = nav,
+            startDestination = "queue",
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(12.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { nav.navigate("queue") }) { Text("Queue") }
-                Button(onClick = { nav.navigate("playlists") }) { Text("Playlists") }
-                Button(onClick = { nav.navigate("settings") }) { Text("Settings") }
+            composable("playlists") {
+                PlaylistsScreen(vm = vm)
             }
-            status?.let {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(text = it)
+            composable("settings") {
+                SettingsScreen(vm = vm, onOpenDiagnostics = { nav.navigate("settings/diagnostics") })
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            NavHost(navController = nav, startDestination = "queue", modifier = Modifier.fillMaxSize()) {
-                composable("playlists") {
-                    PlaylistsScreen(vm = vm)
-                }
-                composable("settings") {
-                    SettingsScreen(vm = vm, onOpenDiagnostics = { nav.navigate("settings/diagnostics") })
-                }
-                composable("settings/diagnostics") {
-                    ConnectivityDiagnosticsScreen(vm = vm)
-                }
-                composable(
-                    route = "queue?focusItemId={focusItemId}",
-                    arguments = listOf(
-                        navArgument("focusItemId") {
-                            type = NavType.IntType
-                            defaultValue = -1
-                        },
-                    ),
-                ) { backStack ->
-                    val focusItemId = backStack.arguments?.getInt("focusItemId")?.takeIf { it > 0 }
-                    QueueScreen(
-                        vm = vm,
-                        focusItemId = focusItemId,
-                        onOpenPlayer = { itemId -> nav.navigate("player/$itemId") },
-                        onOpenPlaylists = { nav.navigate("playlists") },
-                    )
-                }
-                composable(
-                    "player/{itemId}",
-                    arguments = listOf(navArgument("itemId") { type = NavType.IntType }),
-                ) { backStack ->
-                    val itemId = backStack.arguments?.getInt("itemId") ?: return@composable
-                    PlayerScreen(
-                        vm = vm,
-                        initialItemId = itemId,
-                        onOpenItem = { nextId -> nav.navigate("player/$nextId") },
-                        onBackToQueue = { focusId ->
-                            if (focusId == null) {
-                                nav.navigate("queue")
-                            } else {
-                                nav.navigate("queue?focusItemId=$focusId")
-                            }
-                        },
-                        onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
-                    )
-                }
+            composable("settings/diagnostics") {
+                ConnectivityDiagnosticsScreen(vm = vm)
+            }
+            composable(
+                route = "queue?focusItemId={focusItemId}",
+                arguments = listOf(
+                    navArgument("focusItemId") {
+                        type = NavType.IntType
+                        defaultValue = -1
+                    },
+                ),
+            ) { backStack ->
+                val focusItemId = backStack.arguments?.getInt("focusItemId")?.takeIf { it > 0 }
+                QueueScreen(
+                    vm = vm,
+                    focusItemId = focusItemId,
+                    onOpenPlayer = { itemId -> nav.navigate("player/$itemId") },
+                    onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
+                )
+            }
+            composable(
+                "player/{itemId}",
+                arguments = listOf(navArgument("itemId") { type = NavType.IntType }),
+            ) { backStack ->
+                val itemId = backStack.arguments?.getInt("itemId") ?: return@composable
+                PlayerScreen(
+                    vm = vm,
+                    initialItemId = itemId,
+                    onOpenItem = { nextId -> nav.navigate("player/$nextId") },
+                    onBackToQueue = { focusId ->
+                        if (focusId == null) {
+                            nav.navigate("queue")
+                        } else {
+                            nav.navigate("queue?focusItemId=$focusId")
+                        }
+                    },
+                    onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
+                )
             }
         }
-    }
-}
-
-@Composable
-private fun SettingsScreen(vm: AppViewModel, onOpenDiagnostics: () -> Unit) {
-    val settings by vm.settings.collectAsState()
-    var baseUrl by remember(settings.baseUrl) { mutableStateOf(settings.baseUrl) }
-    var token by remember(settings.apiToken) { mutableStateOf(settings.apiToken) }
-    var autoAdvance by remember(settings.autoAdvanceOnCompletion) {
-        mutableStateOf(settings.autoAdvanceOnCompletion)
-    }
-    var autoScrollWhileListening by remember(settings.autoScrollWhileListening) {
-        mutableStateOf(settings.autoScrollWhileListening)
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
-            value = baseUrl,
-            onValueChange = { baseUrl = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Base URL") },
-        )
-        OutlinedTextField(
-            value = token,
-            onValueChange = { token = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("API Token") },
-            visualTransformation = PasswordVisualTransformation(),
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text("Auto-advance after completion")
-            Switch(
-                checked = autoAdvance,
-                onCheckedChange = { autoAdvance = it },
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text("Auto-scroll while listening")
-            Switch(
-                checked = autoScrollWhileListening,
-                onCheckedChange = { autoScrollWhileListening = it },
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = {
-                    vm.saveSettings(baseUrl, token, autoAdvance, autoScrollWhileListening)
-                },
-            ) { Text("Save") }
-            Button(onClick = {
-                vm.saveSettings(baseUrl, token, autoAdvance, autoScrollWhileListening)
-                vm.testConnection()
-            }) { Text("Test connection") }
-            Button(onClick = onOpenDiagnostics) { Text("Diagnostics") }
-        }
-        Text("Emulator default: http://10.0.2.2:8000")
     }
 }

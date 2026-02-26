@@ -17,6 +17,7 @@
 - [x] Start listening here + highlight + optional auto-scroll: player `View text` supports long-press start-from-chunk, current chunk highlighting, and auto-scroll toggle with temporary manual-scroll suppression.
 - [x] Now Playing/session UX refinements + playlists entry point stub: queue session banner with resume/restart/clear controls, player session header/back-to-queue action, and a top-level playlists placeholder screen.
 - [x] Named playlists v1 integration: playlist CRUD + selection UI, Smart queue fallback, and playlist-scoped queue loading.
+- [x] UI compression pass: compact nav, dense queue/player/playlists/settings layouts, and collapsible status banner for offline/LAN issues.
 
 ## Next
 1. [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.
