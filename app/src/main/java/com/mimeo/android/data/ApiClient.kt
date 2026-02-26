@@ -33,7 +33,7 @@ class ApiClient(
 
     suspend fun getQueue(baseUrl: String, token: String): PlaybackQueueResponse = withContext(Dispatchers.IO) {
         val request = Request.Builder()
-            .url(resolveUrl(baseUrl, "/playback/queue"))
+            .url(resolveUrl(baseUrl, "/playback/queue?include_done=true&limit=50"))
             .header("Authorization", "Bearer $token")
             .get()
             .build()

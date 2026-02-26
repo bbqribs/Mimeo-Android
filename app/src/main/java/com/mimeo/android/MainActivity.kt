@@ -60,11 +60,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+
+private const val DONE_PERCENT_THRESHOLD = 98
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -307,26 +310,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun fetchItemText(itemId: Int): Result<ItemTextResult> {
         val current = settings.value
         val expectedVersion = expectedActiveVersionFor(itemId)
-        return runCatching {
+        return try {
             val loaded = repository.getItemText(current.baseUrl, current.apiToken, itemId, expectedVersion)
             if (loaded.usingCache) {
                 _queueOffline.value = true
             } else {
                 _queueOffline.value = false
             }
-            loaded
+            Result.success(loaded)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
         }
     }
 
     suspend fun postProgress(itemId: Int, percent: Int): Result<ProgressPostResult> {
         val current = settings.value
-        return runCatching {
-            val result = repository.postProgress(current.baseUrl, current.apiToken, itemId, percent.coerceIn(0, 100))
+        val clamped = percent.coerceIn(0, 100)
+        return try {
+            val result = repository.postProgress(current.baseUrl, current.apiToken, itemId, clamped)
+            applyLocalProgress(itemId = itemId, percent = clamped)
             if (result.queued) {
                 _queueOffline.value = true
             }
             refreshPendingCount()
-            result
+            Result.success(result)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
         }
     }
 
@@ -363,6 +376,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun currentNowPlayingItemId(): Int? = nowPlayingSession.value?.currentItem?.itemId
+
+    fun nowPlayingSummaryText(): String? {
+        val session = nowPlayingSession.value ?: return null
+        val current = session.currentItem ?: session.items.firstOrNull() ?: return null
+        val title = current.title?.takeIf { it.isNotBlank() }
+            ?: current.url.takeIf { it.isNotBlank() }
+            ?: "Item ${current.itemId}"
+        val progress = knownProgressForItem(current.itemId)
+        val doneSuffix = if (progress >= DONE_PERCENT_THRESHOLD) " (Done)" else ""
+        return "$title$doneSuffix"
+    }
+
+    fun knownProgressForItem(itemId: Int): Int {
+        val queueProgress = queueItems.value.firstOrNull { it.itemId == itemId }?.lastReadPercent ?: 0
+        val sessionProgress = nowPlayingSession.value
+            ?.items
+            ?.firstOrNull { it.itemId == itemId }
+            ?.lastReadPercent ?: 0
+        return maxOf(queueProgress, sessionProgress)
+    }
 
     suspend fun setNowPlayingCurrentItem(itemId: Int) {
         val session = nowPlayingSession.value ?: return
@@ -424,6 +457,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun refreshPendingCount() {
         _pendingProgressCount.value = repository.countPendingProgress()
+    }
+
+    private suspend fun applyLocalProgress(itemId: Int, percent: Int) {
+        val clamped = percent.coerceIn(0, 100)
+        _queueItems.update { existing ->
+            existing.map { item ->
+                if (item.itemId != itemId) {
+                    item
+                } else {
+                    val merged = maxOf(item.lastReadPercent ?: 0, clamped)
+                    item.copy(lastReadPercent = merged)
+                }
+            }
+        }
+        repository.setNowPlayingItemProgress(itemId, clamped)?.let { updated ->
+            _nowPlayingSession.value = updated
+        }
     }
 
     private fun expectedActiveVersionFor(itemId: Int): Int? {

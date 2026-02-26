@@ -19,6 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
 
+private const val DONE_PERCENT_THRESHOLD = 98
+
 @Composable
 fun QueueScreen(vm: AppViewModel, onOpenPlayer: (Int) -> Unit) {
     val items by vm.queueItems.collectAsState()
@@ -32,6 +34,9 @@ fun QueueScreen(vm: AppViewModel, onOpenPlayer: (Int) -> Unit) {
         vm.flushPendingProgress()
     }
 
+    val resumeSummary = vm.nowPlayingSummaryText()
+    val resumeItemId = vm.currentNowPlayingItemId()
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { vm.loadQueue() }) { Text("Refresh queue") }
@@ -40,13 +45,16 @@ fun QueueScreen(vm: AppViewModel, onOpenPlayer: (Int) -> Unit) {
         nowPlayingSession?.let { session ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
-                    onClick = {
-                        vm.currentNowPlayingItemId()?.let { itemId -> onOpenPlayer(itemId) }
-                    },
+                    onClick = { resumeItemId?.let { onOpenPlayer(it) } },
+                    enabled = resumeItemId != null,
                 ) {
                     Text("Resume Now Playing")
                 }
                 Text("Item ${session.currentIndex + 1}/${session.items.size}")
+            }
+            resumeSummary?.let { Text("Now Playing: $it") }
+            if (resumeItemId != null && items.none { it.itemId == resumeItemId }) {
+                Text("Current now-playing item is hidden from queue filters; Resume still works.")
             }
         }
         if (offline) {
@@ -70,7 +78,8 @@ fun QueueScreen(vm: AppViewModel, onOpenPlayer: (Int) -> Unit) {
                         .padding(8.dp),
                 ) {
                     Text(text = title)
-                    Text(text = "${item.host ?: ""} progress=$progress%")
+                    val doneMarker = if (progress >= DONE_PERCENT_THRESHOLD) " done" else ""
+                    Text(text = "${item.host ?: ""} progress=$progress%$doneMarker")
                 }
             }
         }
