@@ -38,6 +38,20 @@ data class PlaybackQueueResponse(
 )
 
 @Serializable
+data class PlaylistSummary(
+    val id: Int,
+    val name: String,
+    val entries: List<PlaylistEntrySummary> = emptyList(),
+)
+
+@Serializable
+data class PlaylistEntrySummary(
+    val id: Int,
+    @SerialName("article_id") val articleId: Int,
+    val position: Double? = null,
+)
+
+@Serializable
 data class PlaybackQueueItem(
     @SerialName("item_id") val itemId: Int,
     val title: String? = null,
@@ -89,6 +103,7 @@ data class AppSettings(
     val apiToken: String = "",
     val autoAdvanceOnCompletion: Boolean = false,
     val autoScrollWhileListening: Boolean = true,
+    val selectedPlaylistId: Int? = null,
 )
 
 @Serializable

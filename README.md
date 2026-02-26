@@ -41,6 +41,8 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
   - current chunk is highlighted while playback advances
   - optional Settings toggle: **Auto-scroll while listening**
 - Top navigation includes a `Playlists` placeholder entry for the upcoming named-playlists work.
+- Top navigation now includes `Playlists` for named playlist management (create/rename/delete/select).
+- Queue picker supports `Smart queue` (default) or a selected named playlist.
 
 ## Open in Android Studio
 1. Open this repo folder in Android Studio.
@@ -98,3 +100,8 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 - On common failures it shows actionable hints:
   - LAN/device URL mismatch (`127.0.0.1` or `10.0.2.2` on physical device)
   - backend down / timeout (`verify-mimeo.ps1`, firewall check)
+
+## Smart queue vs named playlists
+- `Smart queue`: existing backend queue logic (default, no playlist filter).
+- Named playlist: select a playlist in Queue picker or in Playlists screen.
+- Playlists MVP supports create, rename, delete, and selection. Item membership can be managed via backend playlist item endpoints during v1.
