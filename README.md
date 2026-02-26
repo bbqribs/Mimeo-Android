@@ -12,6 +12,7 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 - `POST /items/{id}/progress` (progress and done sync)
 - Progress sync uses canonical text-consumed percent from chunk boundaries + in-chunk char offset.
 - Player consumes backend `/items/{id}/text` chunks when available, with deterministic local fallback chunking.
+- Backend chunking now favors paragraph/sentence boundaries with deterministic soft sizing (roughly 600-1200 chars) for smoother TTS transitions.
 - Queue prefetch caches text for the next items (default first 5).
 - If `/items/{id}/text` fails, player falls back to cached text when the active content version matches.
 - Offline/timeout progress posts are queued locally and retried on app start, queue open, or manual sync.

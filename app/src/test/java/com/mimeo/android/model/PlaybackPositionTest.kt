@@ -45,4 +45,32 @@ class PlaybackPositionTest {
         )
         assertEquals(215, absolute)
     }
+
+    @Test
+    fun percentStaysMonotonicAcrossVaryingChunkSizes() {
+        val variableChunks = listOf(
+            PlaybackChunk(index = 0, startChar = 0, endChar = 640, text = "a".repeat(640)),
+            PlaybackChunk(index = 1, startChar = 640, endChar = 1710, text = "b".repeat(1070)),
+            PlaybackChunk(index = 2, startChar = 1710, endChar = 2330, text = "c".repeat(620)),
+            PlaybackChunk(index = 3, startChar = 2330, endChar = 3010, text = "d".repeat(680)),
+        )
+        val totalChars = 3010
+        var lastPercent = -1
+
+        for (chunk in variableChunks) {
+            val chunkLength = chunk.endChar - chunk.startChar
+            var offset = 0
+            while (offset <= chunkLength) {
+                val percent = calculateCanonicalPercent(
+                    totalChars = totalChars,
+                    chunks = variableChunks,
+                    position = PlaybackPosition(chunkIndex = chunk.index, offsetInChunkChars = offset),
+                )
+                assert(percent in 0..100)
+                assert(percent >= lastPercent)
+                lastPercent = percent
+                offset += 137
+            }
+        }
+    }
 }
