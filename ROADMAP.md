@@ -15,13 +15,13 @@
 - [x] Android MVP playback end-to-end polish: Now Playing status header, offline/cache badges, retry+diagnostics recovery actions, and configurable completion auto-advance.
 - [x] Text segmentation/chunking improvements: backend now emits more natural paragraph/sentence chunk boundaries with deterministic sizing, and Android percent math remains monotonic across varied chunk lengths.
 - [x] Start listening here + highlight + optional auto-scroll: player `View text` supports long-press start-from-chunk, current chunk highlighting, and auto-scroll toggle with temporary manual-scroll suppression.
+- [x] Now Playing/session UX refinements + playlists entry point stub: queue session banner with resume/restart/clear controls, player session header/back-to-queue action, and a top-level playlists placeholder screen.
 
 ## Next
-1. [ ] Now-playing/session UX refinements + playlist entry point.
-2. [ ] Named playlists v1 integration (select playlist and load playlist-scoped queue).
-3. [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.
-4. [ ] Persist last segment index per item in DataStore for cross-process resume.
-5. [ ] Add queue filters/sorting controls from playback API query params.
+1. [ ] Named playlists v1 integration (select playlist and load playlist-scoped queue).
+2. [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.
+3. [ ] Persist last segment index per item in DataStore for cross-process resume.
+4. [ ] Add queue filters/sorting controls from playback API query params.
 
 ## Later
 - [ ] Named playlists and queue management.

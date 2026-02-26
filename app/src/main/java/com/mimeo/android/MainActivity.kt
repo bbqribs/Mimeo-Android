@@ -136,6 +136,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _nowPlayingSession = MutableStateFlow<NowPlayingSession?>(null)
     val nowPlayingSession: StateFlow<NowPlayingSession?> = _nowPlayingSession.asStateFlow()
+    private val _sessionIssueMessage = MutableStateFlow<String?>(null)
+    val sessionIssueMessage: StateFlow<String?> = _sessionIssueMessage.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -147,8 +149,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             flushPendingProgress()
         }
         viewModelScope.launch {
-            val session = repository.getSession()
+            val loadResult = repository.getSessionLoadResult()
+            val session = loadResult.session
             _nowPlayingSession.value = session
+            _sessionIssueMessage.value = if (loadResult.wasCorrupt) {
+                "Saved Now Playing session was invalid. Clear session metadata if this repeats."
+            } else {
+                null
+            }
             if (session != null) {
                 _playbackPositionByItem.value = session.items.associate { item ->
                     item.itemId to PlaybackPosition(
@@ -388,7 +396,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val queue = queueItems.value
         if (queue.isNotEmpty()) {
             val session = repository.startSession(queue, fallbackItemId)
-            _nowPlayingSession.value = session
+            applySessionSnapshot(session)
             return session.currentItem?.itemId ?: fallbackItemId
         }
         return fallbackItemId
@@ -401,14 +409,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             val session = repository.startSession(queue, startItemId)
-            _nowPlayingSession.value = session
-            _playbackPositionByItem.value = session.items.associate { item ->
-                item.itemId to PlaybackPosition(
-                    chunkIndex = item.chunkIndex.coerceAtLeast(0),
-                    offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
-                )
-            }
+            applySessionSnapshot(session)
         }
+    }
+
+    fun restartNowPlayingSession() {
+        viewModelScope.launch {
+            val restarted = repository.restartSession()
+            if (restarted == null) {
+                _sessionIssueMessage.value = "No active session to restart."
+                return@launch
+            }
+            applySessionSnapshot(restarted)
+            _statusMessage.value = "Now Playing session restarted."
+        }
+    }
+
+    fun clearNowPlayingSession() {
+        viewModelScope.launch {
+            clearNowPlayingSessionNow()
+        }
+    }
+
+    suspend fun clearNowPlayingSessionNow() {
+        repository.clearSession()
+        _nowPlayingSession.value = null
+        _playbackPositionByItem.value = emptyMap()
+        _sessionIssueMessage.value = null
+        _statusMessage.value = "Now Playing session cleared."
     }
 
     fun currentNowPlayingItemId(): Int? = nowPlayingSession.value?.currentItem?.itemId
@@ -473,7 +501,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val queue = queueItems.value
         if (queue.isEmpty()) return null
         val session = repository.startSession(queue, currentId)
-        _nowPlayingSession.value = session
+        applySessionSnapshot(session)
         return session
     }
 
@@ -520,6 +548,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         repository.setNowPlayingItemProgress(itemId, clamped)?.let { updated ->
             _nowPlayingSession.value = updated
         }
+    }
+
+    private fun applySessionSnapshot(session: NowPlayingSession) {
+        _nowPlayingSession.value = session
+        _playbackPositionByItem.value = session.items.associate { item ->
+            item.itemId to PlaybackPosition(
+                chunkIndex = item.chunkIndex.coerceAtLeast(0),
+                offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
+            )
+        }
+        _sessionIssueMessage.value = null
     }
 
     private fun expectedActiveVersionFor(itemId: Int): Int? {
@@ -637,6 +676,7 @@ private fun MimeoApp(vm: AppViewModel) {
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { nav.navigate("queue") }) { Text("Queue") }
+                Button(onClick = { nav.navigate("playlists") }) { Text("Playlists") }
                 Button(onClick = { nav.navigate("settings") }) { Text("Settings") }
             }
             status?.let {
@@ -645,14 +685,30 @@ private fun MimeoApp(vm: AppViewModel) {
             }
             Spacer(modifier = Modifier.height(8.dp))
             NavHost(navController = nav, startDestination = "queue", modifier = Modifier.fillMaxSize()) {
+                composable("playlists") {
+                    PlaylistsPlaceholderScreen()
+                }
                 composable("settings") {
                     SettingsScreen(vm = vm, onOpenDiagnostics = { nav.navigate("settings/diagnostics") })
                 }
                 composable("settings/diagnostics") {
                     ConnectivityDiagnosticsScreen(vm = vm)
                 }
-                composable("queue") {
-                    QueueScreen(vm = vm, onOpenPlayer = { itemId -> nav.navigate("player/$itemId") })
+                composable(
+                    route = "queue?focusItemId={focusItemId}",
+                    arguments = listOf(
+                        navArgument("focusItemId") {
+                            type = NavType.IntType
+                            defaultValue = -1
+                        },
+                    ),
+                ) { backStack ->
+                    val focusItemId = backStack.arguments?.getInt("focusItemId")?.takeIf { it > 0 }
+                    QueueScreen(
+                        vm = vm,
+                        focusItemId = focusItemId,
+                        onOpenPlayer = { itemId -> nav.navigate("player/$itemId") },
+                    )
                 }
                 composable(
                     "player/{itemId}",
@@ -663,11 +719,26 @@ private fun MimeoApp(vm: AppViewModel) {
                         vm = vm,
                         initialItemId = itemId,
                         onOpenItem = { nextId -> nav.navigate("player/$nextId") },
+                        onBackToQueue = { focusId ->
+                            if (focusId == null) {
+                                nav.navigate("queue")
+                            } else {
+                                nav.navigate("queue?focusItemId=$focusId")
+                            }
+                        },
                         onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PlaylistsPlaceholderScreen() {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Playlists are coming next.")
+        Text("Named playlists will let you choose a saved list and load a playlist-scoped queue.")
     }
 }
 
