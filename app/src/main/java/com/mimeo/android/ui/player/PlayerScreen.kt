@@ -8,9 +8,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -61,6 +63,7 @@ fun PlayerScreen(
     vm: AppViewModel,
     initialItemId: Int,
     onOpenItem: (Int) -> Unit,
+    onBackToQueue: (Int?) -> Unit,
     onOpenDiagnostics: () -> Unit,
 ) {
     var currentItemId by rememberSaveable { mutableIntStateOf(initialItemId) }
@@ -77,6 +80,7 @@ fun PlayerScreen(
     var lastHandledDoneUtteranceId by remember { mutableStateOf<String?>(null) }
     var autoPlayAfterLoad by remember { mutableStateOf(false) }
     var showReaderView by rememberSaveable { mutableStateOf(false) }
+    var showClearSessionDialog by remember { mutableStateOf(false) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
@@ -87,6 +91,7 @@ fun PlayerScreen(
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
     val settings by vm.settings.collectAsState()
+    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val currentPosition = playbackPositionByItem[currentItemId] ?: PlaybackPosition()
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -438,6 +443,12 @@ fun PlayerScreen(
     val isRecoverableNetworkError = isNetworkErrorMessage(uiMessage.orEmpty())
     val showRecoveryActions = uiMessage != null && (isRecoverableNetworkError || textPayload == null)
     val showDiagnosticsHint = showRecoveryActions && baseUrlHint != null
+    val sessionItemCount = nowPlayingSession?.items?.size ?: 0
+    val sessionIndex = nowPlayingSession?.let { session ->
+        val found = session.items.indexOfFirst { it.itemId == currentItemId }
+        val resolved = if (found >= 0) found else session.currentIndex
+        resolved.coerceIn(0, (session.items.size - 1).coerceAtLeast(0))
+    } ?: 0
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -447,6 +458,30 @@ fun PlayerScreen(
             Text(text = currentTitle)
         } else {
             Text(text = "Item $currentItemId")
+        }
+        if (sessionItemCount > 0) {
+            Text("Session ${sessionIndex + 1} of $sessionItemCount")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
+                    onClick = { onBackToQueue(currentItemId) },
+                ) {
+                    Text("Back to queue")
+                }
+                Button(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
+                    onClick = { showClearSessionDialog = true },
+                ) {
+                    Text("Clear Session")
+                }
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(text = "Progress: $currentPercent%")
@@ -693,6 +728,33 @@ fun PlayerScreen(
             )
         }
         Spacer(modifier = Modifier.height(2.dp))
+    }
+
+    if (showClearSessionDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearSessionDialog = false },
+            title = { Text("Clear session?") },
+            text = { Text("This removes the persisted Now Playing snapshot and returns to queue.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearSessionDialog = false
+                        actionScope.launch {
+                            stopSpeaking(forceSync = true)
+                            vm.clearNowPlayingSessionNow()
+                            onBackToQueue(null)
+                        }
+                    },
+                ) {
+                    Text("Clear")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearSessionDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 

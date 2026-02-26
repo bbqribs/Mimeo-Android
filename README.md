@@ -27,6 +27,8 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
   - sync badge (`Synced`, `Queued`, `Offline`)
   - offline availability (`Available offline` vs `Needs network`)
   - completion chip (`Done`) near end / after completion
+- Queue now shows a Now Playing session banner with `Resume`, `Restart Session`, and `Clear` controls.
+- Player now shows `Session X of Y` plus a `Back to queue` action tied to the persisted session.
 - On network failures during player load/playback, use:
   - `Retry` to re-attempt
   - `Open Diagnostics` to jump to Settings diagnostics
@@ -38,6 +40,7 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
   - long-press a chunk to start listening from that exact point
   - current chunk is highlighted while playback advances
   - optional Settings toggle: **Auto-scroll while listening**
+- Top navigation includes a `Playlists` placeholder entry for the upcoming named-playlists work.
 
 ## Open in Android Studio
 1. Open this repo folder in Android Studio.

@@ -53,6 +53,11 @@ data class NowPlayingSession(
         get() = items.getOrNull(currentIndex)
 }
 
+data class SessionLoadResult(
+    val session: NowPlayingSession?,
+    val wasCorrupt: Boolean,
+)
+
 @Serializable
 private data class StoredNowPlayingItem(
     val itemId: Int,
@@ -222,13 +227,45 @@ class PlaybackRepository(
     }
 
     suspend fun getSession(): NowPlayingSession? {
-        val row = database.nowPlayingDao().getSession() ?: return null
+        return getSessionLoadResult().session
+    }
+
+    suspend fun getSessionLoadResult(): SessionLoadResult {
+        val row = database.nowPlayingDao().getSession() ?: return SessionLoadResult(
+            session = null,
+            wasCorrupt = false,
+        )
         val stored = parseStoredNowPlaying(row.queueJson)
         if (stored.isEmpty()) {
             database.nowPlayingDao().clear()
+            return SessionLoadResult(session = null, wasCorrupt = true)
+        }
+        return SessionLoadResult(session = row.toSession(stored), wasCorrupt = false)
+    }
+
+    suspend fun restartSession(): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson).toMutableList()
+        if (stored.isEmpty()) {
+            dao.clear()
             return null
         }
-        return row.toSession(stored)
+
+        val restarted = stored.map {
+            it.copy(
+                chunkIndex = 0,
+                offsetInChunkChars = 0,
+            )
+        }
+        val updatedAt = System.currentTimeMillis()
+        val updatedRow = row.copy(
+            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), restarted),
+            currentIndex = 0,
+            updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(restarted)
     }
 
     suspend fun setCurrentIndex(currentIndex: Int): NowPlayingSession? {
