@@ -1,6 +1,7 @@
 package com.mimeo.android.ui.playlists
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,7 +9,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -16,10 +19,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.PlaylistSummary
@@ -32,24 +37,25 @@ fun PlaylistsScreen(vm: AppViewModel) {
     var renameTarget by remember { mutableStateOf<PlaylistSummary?>(null) }
     var deleteTarget by remember { mutableStateOf<PlaylistSummary?>(null) }
     var renameText by remember { mutableStateOf("") }
+    var menuForPlaylistId by remember { mutableIntStateOf(-1) }
 
     LaunchedEffect(Unit) {
         vm.refreshPlaylists()
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Playlists")
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             OutlinedTextField(
                 value = newName,
                 onValueChange = { newName = it },
                 label = { Text("New playlist") },
                 modifier = Modifier.weight(1f),
+                singleLine = true,
             )
-            Button(
+            TextButton(
                 onClick = {
                     val trimmed = newName.trim()
                     if (trimmed.isNotEmpty()) {
@@ -58,56 +64,68 @@ fun PlaylistsScreen(vm: AppViewModel) {
                     }
                 },
             ) {
-                Text("Create")
+                Text("Add")
             }
+            TextButton(onClick = { vm.refreshPlaylists() }) { Text("Refresh") }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = { vm.selectPlaylist(null) },
-                enabled = settings.selectedPlaylistId != null,
-            ) {
-                Text("Use Smart queue")
-            }
-            Button(onClick = { vm.refreshPlaylists() }) {
-                Text("Refresh")
-            }
+        TextButton(
+            onClick = { vm.selectPlaylist(null) },
+            enabled = settings.selectedPlaylistId != null,
+        ) {
+            Text("Use Smart queue")
         }
 
         if (playlists.isEmpty()) {
             Text("No playlists yet.")
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 items(playlists, key = { it.id }) { playlist ->
                     val isSelected = settings.selectedPlaylistId == playlist.id
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(
-                            text = if (isSelected) "${playlist.name} (selected)" else playlist.name,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = { vm.selectPlaylist(playlist.id) },
-                                enabled = !isSelected,
-                            ) {
-                                Text("Use")
-                            }
-                            Button(
-                                onClick = {
-                                    renameTarget = playlist
-                                    renameText = playlist.name
-                                },
-                            ) {
-                                Text("Rename")
-                            }
-                            Button(
-                                onClick = { deleteTarget = playlist },
-                            ) {
-                                Text("Delete")
+                    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                modifier = Modifier.weight(1f),
+                                text = if (isSelected) "${playlist.name} (selected)" else playlist.name,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Box {
+                                TextButton(onClick = { menuForPlaylistId = playlist.id }) {
+                                    Text("Menu")
+                                }
+                                DropdownMenu(
+                                    expanded = menuForPlaylistId == playlist.id,
+                                    onDismissRequest = { menuForPlaylistId = -1 },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Use") },
+                                        onClick = {
+                                            menuForPlaylistId = -1
+                                            vm.selectPlaylist(playlist.id)
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Rename") },
+                                        onClick = {
+                                            menuForPlaylistId = -1
+                                            renameTarget = playlist
+                                            renameText = playlist.name
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Delete") },
+                                        onClick = {
+                                            menuForPlaylistId = -1
+                                            deleteTarget = playlist
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -125,6 +143,7 @@ fun PlaylistsScreen(vm: AppViewModel) {
                     value = renameText,
                     onValueChange = { renameText = it },
                     label = { Text("Name") },
+                    singleLine = true,
                 )
             },
             confirmButton = {
