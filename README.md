@@ -21,6 +21,18 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 - Queue shows a "Resume Now Playing" action after restart when a session exists.
 - Now Playing resume restores chunk index + in-chunk char offset for each item.
 
+## Playback UX (v0.3 polish)
+- Player header now shows:
+  - sync badge (`Synced`, `Queued`, `Offline`)
+  - offline availability (`Available offline` vs `Needs network`)
+  - completion chip (`Done`) near end / after completion
+- On network failures during player load/playback, use:
+  - `Retry` to re-attempt
+  - `Open Diagnostics` to jump to Settings diagnostics
+- Completion behavior is explicit:
+  - default is **no auto-advance**
+  - optional toggle in Settings: **Auto-advance after completion**
+
 ## Open in Android Studio
 1. Open this repo folder in Android Studio.
 2. Let Gradle sync.

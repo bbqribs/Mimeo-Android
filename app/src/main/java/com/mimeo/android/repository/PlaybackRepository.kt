@@ -183,6 +183,15 @@ class PlaybackRepository(
         return database.pendingProgressDao().countPending()
     }
 
+    suspend fun getCachedItemIds(itemIds: List<Int>): Set<Int> {
+        if (itemIds.isEmpty()) return emptySet()
+        return database.cachedItemDao().findCachedIds(itemIds.distinct()).toSet()
+    }
+
+    suspend fun isItemCached(itemId: Int): Boolean {
+        return database.cachedItemDao().findByItemId(itemId) != null
+    }
+
     suspend fun startSession(queueItems: List<PlaybackQueueItem>, startItemId: Int): NowPlayingSession {
         if (queueItems.isEmpty()) {
             throw IllegalArgumentException("Cannot start now playing session from empty queue")

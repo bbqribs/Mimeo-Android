@@ -17,7 +17,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -25,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
@@ -44,6 +47,7 @@ import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
 import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.repository.ItemTextResult
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.PlaybackRepository
@@ -78,7 +82,7 @@ class MainActivity : ComponentActivity() {
             ViewModelProvider.AndroidViewModelFactory.getInstance(application),
         )[AppViewModel::class.java]
         setContent {
-            MaterialTheme {
+            MaterialTheme(colorScheme = darkColorScheme()) {
                 MimeoApp(vm)
             }
         }
@@ -108,6 +112,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _pendingProgressCount = MutableStateFlow(0)
     val pendingProgressCount: StateFlow<Int> = _pendingProgressCount.asStateFlow()
+
+    private val _cachedItemIds = MutableStateFlow<Set<Int>>(emptySet())
+    val cachedItemIds: StateFlow<Set<Int>> = _cachedItemIds.asStateFlow()
+
+    private val _progressSyncBadgeState = MutableStateFlow(ProgressSyncBadgeState.SYNCED)
+    val progressSyncBadgeState: StateFlow<ProgressSyncBadgeState> = _progressSyncBadgeState.asStateFlow()
 
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
@@ -146,13 +156,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
                     )
                 }
+                _cachedItemIds.value = repository.getCachedItemIds(session.items.map { it.itemId })
             }
         }
     }
 
-    fun saveSettings(baseUrl: String, token: String) {
+    fun saveSettings(baseUrl: String, token: String, autoAdvanceOnCompletion: Boolean) {
         viewModelScope.launch {
-            settingsStore.save(baseUrl, token)
+            settingsStore.save(baseUrl, token, autoAdvanceOnCompletion)
             _statusMessage.value = "Settings saved"
         }
     }
@@ -168,6 +179,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val version = apiClient.getDebugVersion(current.baseUrl, current.apiToken)
                 _statusMessage.value = "Connected git_sha=${version.gitSha ?: "unknown"}"
                 _queueOffline.value = false
+                updateSyncBadgeState()
             } catch (e: ApiException) {
                 _statusMessage.value = if (e.statusCode == 401) "Unauthorized-check token" else e.message
             } catch (e: Exception) {
@@ -187,15 +199,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val queue = repository.loadQueueAndPrefetch(current.baseUrl, current.apiToken)
                 _queueItems.value = queue.items
+                _cachedItemIds.value = repository.getCachedItemIds(queue.items.map { it.itemId })
                 _queueOffline.value = false
                 _statusMessage.value = "Queue loaded (${queue.count})"
                 flushPendingProgress()
             } catch (e: ApiException) {
                 _queueOffline.value = false
                 _statusMessage.value = if (e.statusCode == 401) "Unauthorized-check token" else e.message
+                updateSyncBadgeState()
             } catch (e: Exception) {
                 _queueOffline.value = isNetworkError(e)
                 _statusMessage.value = e.message ?: "Failed to load queue"
+                updateSyncBadgeState()
             } finally {
                 _queueLoading.value = false
                 refreshPendingCount()
@@ -297,10 +312,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 if (syncResult.retryableFailures > 0 && syncResult.pendingCount > 0) {
                     WorkScheduler.enqueueProgressSync(getApplication<Application>().applicationContext)
                 }
+                updateSyncBadgeState(syncResult.pendingCount)
             } catch (e: Exception) {
                 if (isNetworkError(e)) {
                     _queueOffline.value = true
                 }
+                updateSyncBadgeState()
             } finally {
                 refreshPendingCount()
             }
@@ -316,11 +333,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _queueOffline.value = true
             } else {
                 _queueOffline.value = false
+                _cachedItemIds.update { previous -> previous + itemId }
             }
+            updateSyncBadgeState()
             Result.success(loaded)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                updateSyncBadgeState()
+            }
             Result.failure(error)
         }
     }
@@ -333,12 +356,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             applyLocalProgress(itemId = itemId, percent = clamped)
             if (result.queued) {
                 _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.QUEUED
+            } else {
+                _queueOffline.value = false
             }
-            refreshPendingCount()
+            val pending = refreshPendingCount()
+            updateSyncBadgeState(pending)
             Result.success(result)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+            }
             Result.failure(error)
         }
     }
@@ -376,6 +407,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun currentNowPlayingItemId(): Int? = nowPlayingSession.value?.currentItem?.itemId
+
+    fun isItemCached(itemId: Int): Boolean = cachedItemIds.value.contains(itemId)
+
+    fun shouldAutoAdvanceAfterCompletion(): Boolean = settings.value.autoAdvanceOnCompletion
+
+    fun baseUrlHintForDevice(isPhysicalDevice: Boolean): String? =
+        baseUrlHint(settings.value.baseUrl.trim().trimEnd('/'), isPhysicalDevice)
 
     fun nowPlayingSummaryText(): String? {
         val session = nowPlayingSession.value ?: return null
@@ -455,8 +493,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun refreshPendingCount() {
-        _pendingProgressCount.value = repository.countPendingProgress()
+    private suspend fun refreshPendingCount(): Int {
+        val pending = repository.countPendingProgress()
+        _pendingProgressCount.value = pending
+        return pending
     }
 
     private suspend fun applyLocalProgress(itemId: Int, percent: Int) {
@@ -480,6 +520,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val fromSession = nowPlayingSession.value?.items?.firstOrNull { it.itemId == itemId }?.activeContentVersionId
         if (fromSession != null) return fromSession
         return queueItems.value.firstOrNull { it.itemId == itemId }?.activeContentVersionId
+    }
+
+    private fun updateSyncBadgeState(pendingCount: Int = _pendingProgressCount.value) {
+        _progressSyncBadgeState.value = when {
+            _queueOffline.value && pendingCount > 0 -> ProgressSyncBadgeState.OFFLINE
+            _queueOffline.value -> ProgressSyncBadgeState.OFFLINE
+            pendingCount > 0 -> ProgressSyncBadgeState.QUEUED
+            else -> ProgressSyncBadgeState.SYNCED
+        }
     }
 
     private fun isNetworkError(error: Exception): Boolean = error is IOException
@@ -608,6 +657,7 @@ private fun MimeoApp(vm: AppViewModel) {
                         vm = vm,
                         initialItemId = itemId,
                         onOpenItem = { nextId -> nav.navigate("player/$nextId") },
+                        onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
                     )
                 }
             }
@@ -620,6 +670,9 @@ private fun SettingsScreen(vm: AppViewModel, onOpenDiagnostics: () -> Unit) {
     val settings by vm.settings.collectAsState()
     var baseUrl by remember(settings.baseUrl) { mutableStateOf(settings.baseUrl) }
     var token by remember(settings.apiToken) { mutableStateOf(settings.apiToken) }
+    var autoAdvance by remember(settings.autoAdvanceOnCompletion) {
+        mutableStateOf(settings.autoAdvanceOnCompletion)
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
@@ -635,10 +688,21 @@ private fun SettingsScreen(vm: AppViewModel, onOpenDiagnostics: () -> Unit) {
             label = { Text("API Token") },
             visualTransformation = PasswordVisualTransformation(),
         )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("Auto-advance after completion")
+            Switch(
+                checked = autoAdvance,
+                onCheckedChange = { autoAdvance = it },
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { vm.saveSettings(baseUrl, token) }) { Text("Save") }
+            Button(onClick = { vm.saveSettings(baseUrl, token, autoAdvance) }) { Text("Save") }
             Button(onClick = {
-                vm.saveSettings(baseUrl, token)
+                vm.saveSettings(baseUrl, token, autoAdvance)
                 vm.testConnection()
             }) { Text("Test connection") }
             Button(onClick = onOpenDiagnostics) { Text("Diagnostics") }

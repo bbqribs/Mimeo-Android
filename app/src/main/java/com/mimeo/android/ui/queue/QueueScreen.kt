@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
+import com.mimeo.android.model.ProgressSyncBadgeState
 
 private const val DONE_PERCENT_THRESHOLD = 98
 
@@ -28,6 +29,8 @@ fun QueueScreen(vm: AppViewModel, onOpenPlayer: (Int) -> Unit) {
     val offline by vm.queueOffline.collectAsState()
     val pendingCount by vm.pendingProgressCount.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
+    val cachedItemIds by vm.cachedItemIds.collectAsState()
+    val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
 
     LaunchedEffect(Unit) {
         vm.loadQueue()
@@ -60,6 +63,12 @@ fun QueueScreen(vm: AppViewModel, onOpenPlayer: (Int) -> Unit) {
         if (offline) {
             Text("Offline")
         }
+        val syncLabel = when (syncBadgeState) {
+            ProgressSyncBadgeState.SYNCED -> "Synced"
+            ProgressSyncBadgeState.QUEUED -> "Queued"
+            ProgressSyncBadgeState.OFFLINE -> "Offline"
+        }
+        Text("Sync: $syncLabel")
         Text("Pending sync: $pendingCount")
         if (loading) {
             CircularProgressIndicator()
@@ -79,7 +88,12 @@ fun QueueScreen(vm: AppViewModel, onOpenPlayer: (Int) -> Unit) {
                 ) {
                     Text(text = title)
                     val doneMarker = if (progress >= DONE_PERCENT_THRESHOLD) " done" else ""
-                    Text(text = "${item.host ?: ""} progress=$progress%$doneMarker")
+                    val cachedMarker = if (cachedItemIds.contains(item.itemId)) {
+                        " offline-ready"
+                    } else {
+                        " needs-network"
+                    }
+                    Text(text = "${item.host ?: ""} progress=$progress%$doneMarker$cachedMarker")
                 }
             }
         }

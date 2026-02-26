@@ -1,5 +1,6 @@
 package com.mimeo.android.ui.player
 
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +32,7 @@ import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.PlaybackPosition
+import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.model.absoluteCharOffset
 import com.mimeo.android.model.calculateCanonicalPercent
 import com.mimeo.android.player.TtsChunkDoneEvent
@@ -53,9 +55,15 @@ private fun debugLog(message: String) {
 }
 
 @Composable
-fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit) {
+fun PlayerScreen(
+    vm: AppViewModel,
+    initialItemId: Int,
+    onOpenItem: (Int) -> Unit,
+    onOpenDiagnostics: () -> Unit,
+) {
     var currentItemId by rememberSaveable { mutableIntStateOf(initialItemId) }
     var resolvedInitial by rememberSaveable { mutableStateOf(false) }
+    var reloadNonce by rememberSaveable { mutableIntStateOf(0) }
     var textPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
     var usingCachedText by remember { mutableStateOf(false) }
     var chunks by remember { mutableStateOf<List<PlaybackChunk>>(emptyList()) }
@@ -72,9 +80,14 @@ fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit
     var lastObservedPercent by remember { mutableIntStateOf(-1) }
     var nearEndForcedForItemId by remember { mutableIntStateOf(-1) }
     val playbackPositionByItem by vm.playbackPositionByItem.collectAsState()
+    val queueOffline by vm.queueOffline.collectAsState()
+    val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
+    val cachedItemIds by vm.cachedItemIds.collectAsState()
     val currentPosition = playbackPositionByItem[currentItemId] ?: PlaybackPosition()
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
+    val isPhysicalDevice = remember { isLikelyPhysicalDevice() }
+    val baseUrlHint = vm.baseUrlHintForDevice(isPhysicalDevice)
 
     val latestChunks by rememberUpdatedState(chunks)
     val latestItemId by rememberUpdatedState(currentItemId)
@@ -116,6 +129,7 @@ fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit
             onError = {
                 isSpeaking = false
                 isAutoPlaying = false
+                uiMessage = "TTS unavailable. Retry playback."
             },
         )
     }
@@ -139,6 +153,18 @@ fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit
         if (declared > 0) return declared
         if (chunkMax > 0) return chunkMax
         return textPayload?.text?.length ?: 0
+    }
+
+    fun positionForPercent(percent: Int): PlaybackPosition {
+        if (chunks.isEmpty()) return PlaybackPosition()
+        val boundedPercent = percent.coerceIn(0, 100)
+        if (boundedPercent <= 0) return PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
+        val total = totalCharsForPercent().coerceAtLeast(1)
+        val targetAbsolute = ((total.toLong() * boundedPercent) / 100L).toInt().coerceIn(0, total)
+        val idx = chunks.indexOfFirst { targetAbsolute <= it.endChar }.let { if (it >= 0) it else chunks.lastIndex }
+        val chunk = chunks[idx]
+        val offset = (targetAbsolute - chunk.startChar).coerceIn(0, chunk.length)
+        return PlaybackPosition(chunkIndex = idx, offsetInChunkChars = offset)
     }
 
     fun setPlaybackPosition(chunkIndex: Int, offsetInChunkChars: Int) {
@@ -227,7 +253,7 @@ fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit
         resolvedInitial = true
     }
 
-    LaunchedEffect(currentItemId, resolvedInitial) {
+    LaunchedEffect(currentItemId, resolvedInitial, reloadNonce) {
         if (!resolvedInitial) return@LaunchedEffect
         stopSpeaking(forceSync = false)
         vm.setNowPlayingCurrentItem(currentItemId)
@@ -252,7 +278,18 @@ fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit
                 chunks = buildChunks(payload)
 
                 val saved = vm.getPlaybackPosition(currentItemId)
-                val safe = normalizedPosition(saved)
+                val knownProgress = vm.knownProgressForItem(currentItemId)
+                val seeded = if (
+                    saved.chunkIndex == 0 &&
+                    saved.offsetInChunkChars == 0 &&
+                    knownProgress > 0 &&
+                    chunks.isNotEmpty()
+                ) {
+                    positionForPercent(knownProgress)
+                } else {
+                    saved
+                }
+                val safe = normalizedPosition(seeded)
                 vm.setPlaybackPosition(currentItemId, safe.chunkIndex, safe.offsetInChunkChars)
 
                 if (autoPlayAfterLoad && chunks.isNotEmpty()) {
@@ -267,6 +304,8 @@ fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit
                 }
                 uiMessage = if (err is ApiException && err.statusCode == 401) {
                     "Unauthorized-check token"
+                } else if (isNetworkError(err)) {
+                    "Network error loading item text"
                 } else {
                     err.message ?: "Failed to load text"
                 }
@@ -311,6 +350,23 @@ fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit
             isSpeaking = false
             isAutoPlaying = false
             syncProgress(force = true)
+            val shouldAutoAdvance = vm.shouldAutoAdvanceAfterCompletion()
+            if (shouldAutoAdvance) {
+                actionScope.launch {
+                    val nextId = vm.nextSessionItemId(currentItemId)
+                    if (nextId == null) {
+                        uiMessage = "Completed"
+                    } else {
+                        stopSpeaking(forceSync = true)
+                        currentItemId = nextId
+                        vm.setPlaybackPosition(nextId, 0, 0)
+                        autoPlayAfterLoad = true
+                        onOpenItem(nextId)
+                    }
+                }
+            } else {
+                uiMessage = "Completed"
+            }
         }
     }
 
@@ -327,6 +383,16 @@ fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit
         "Chunk 0 / 0"
     } else {
         "Chunk ${safePosition.chunkIndex + 1} / ${chunks.size}"
+    }
+    val syncBadgeText = when (syncBadgeState) {
+        ProgressSyncBadgeState.SYNCED -> "Synced"
+        ProgressSyncBadgeState.QUEUED -> "Queued"
+        ProgressSyncBadgeState.OFFLINE -> "Offline"
+    }
+    val offlineAvailability = if (cachedItemIds.contains(currentItemId) || usingCachedText || vm.isItemCached(currentItemId)) {
+        "Available offline"
+    } else {
+        "Needs network"
     }
     val isDoneLocal = currentPercent >= DONE_PERCENT_THRESHOLD
     val knownProgress = vm.knownProgressForItem(currentItemId)
@@ -356,21 +422,71 @@ fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit
                 uiMessage = error.message ?: "Near-end completion sync failed"
             }
     }
+    val isRecoverableNetworkError = isNetworkErrorMessage(uiMessage.orEmpty())
+    val showRecoveryActions = uiMessage != null && (isRecoverableNetworkError || textPayload == null)
+    val showDiagnosticsHint = showRecoveryActions && baseUrlHint != null
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(text = "Item $currentItemId")
-        Text(text = "Progress: $currentPercent%")
-        if (showCompleted) {
-            Text(text = "Completed")
+        if (currentTitle.isNotBlank()) {
+            Text(text = currentTitle)
+        } else {
+            Text(text = "Item $currentItemId")
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(text = "Progress: $currentPercent%")
+            Text(text = "Sync: $syncBadgeText")
+            if (showCompleted) {
+                Text(text = "Done")
+            }
+        }
+        Text(text = offlineAvailability)
+        if (usingCachedText) {
+            Text(text = "Using cached text")
+        }
+        if (queueOffline && syncBadgeState == ProgressSyncBadgeState.OFFLINE) {
+            Text(text = "Offline mode active")
         }
         Text(text = chunkLabel)
         if (isLoading) CircularProgressIndicator()
-        if (currentTitle.isNotBlank()) Text(text = currentTitle)
         if (currentChunkText.isNotBlank()) Text(text = currentChunkText)
-        if (usingCachedText) Text(text = "Using cached text")
         uiMessage?.let { Text(text = it) }
+        if (showDiagnosticsHint) {
+            Text(text = requireNotNull(baseUrlHint))
+        }
+        if (showRecoveryActions) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
+                    onClick = {
+                        uiMessage = null
+                        if (textPayload == null) {
+                            reloadNonce += 1
+                        } else if (chunks.isNotEmpty()) {
+                            isAutoPlaying = true
+                            playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
+                        }
+                    },
+                ) {
+                    Text("Retry")
+                }
+                Button(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
+                    onClick = onOpenDiagnostics,
+                ) {
+                    Text("Open Diagnostics")
+                }
+            }
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -424,8 +540,21 @@ fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit
                     .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
                 onClick = {
                     if (chunks.isNotEmpty()) {
+                        val restartFromStart = showCompleted ||
+                            (safePosition.chunkIndex == chunks.lastIndex &&
+                                safePosition.offsetInChunkChars >= chunks.last().length)
+                        if (restartFromStart) {
+                            setPlaybackPosition(0, 0)
+                            nearEndForcedForItemId = -1
+                            lastObservedPercent = 0
+                        }
                         isAutoPlaying = true
-                        playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
+                        val positionToPlay = if (restartFromStart) {
+                            PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
+                        } else {
+                            safePosition
+                        }
+                        playChunk(positionToPlay.chunkIndex, positionToPlay.offsetInChunkChars)
                     }
                 },
                 enabled = chunks.isNotEmpty(),
@@ -516,7 +645,7 @@ fun PlayerScreen(vm: AppViewModel, initialItemId: Int, onOpenItem: (Int) -> Unit
                 Text("Done")
             }
         }
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(2.dp))
     }
 }
 
@@ -607,4 +736,27 @@ private fun splitByLength(value: String, maxChars: Int): List<String> {
         result += sb.toString().trim()
     }
     return result
+}
+
+private fun isNetworkError(error: Throwable): Boolean {
+    return error is java.io.IOException
+}
+
+private fun isNetworkErrorMessage(message: String): Boolean {
+    val lower = message.lowercase()
+    return lower.contains("network") ||
+        lower.contains("timeout") ||
+        lower.contains("failed to connect") ||
+        lower.contains("connection refused")
+}
+
+private fun isLikelyPhysicalDevice(): Boolean {
+    val fingerprint = Build.FINGERPRINT.lowercase()
+    val model = Build.MODEL.lowercase()
+    val brand = Build.BRAND.lowercase()
+    return !(fingerprint.contains("generic") ||
+        fingerprint.contains("emulator") ||
+        model.contains("sdk") ||
+        model.contains("emulator") ||
+        brand.startsWith("generic"))
 }
