@@ -8,23 +8,35 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
+import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(vm: AppViewModel, onOpenDiagnostics: () -> Unit) {
+fun SettingsScreen(
+    vm: AppViewModel,
+    snackbarHostState: SnackbarHostState,
+    onOpenDiagnostics: () -> Unit,
+) {
     val settings by vm.settings.collectAsState()
+    val statusMessage by vm.statusMessage.collectAsState()
+    val testingConnection by vm.testingConnection.collectAsState()
     var baseUrl by remember(settings.baseUrl) { mutableStateOf(settings.baseUrl) }
     var token by remember(settings.apiToken) { mutableStateOf(settings.apiToken) }
     var autoAdvance by remember(settings.autoAdvanceOnCompletion) {
@@ -33,8 +45,41 @@ fun SettingsScreen(vm: AppViewModel, onOpenDiagnostics: () -> Unit) {
     var autoScrollWhileListening by remember(settings.autoScrollWhileListening) {
         mutableStateOf(settings.autoScrollWhileListening)
     }
+    val scope = rememberCoroutineScope()
+    var testRequested by remember { mutableStateOf(false) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    fun saveCurrent() {
+        vm.saveSettings(baseUrl, token, autoAdvance, autoScrollWhileListening)
+    }
+
+    LaunchedEffect(testRequested, testingConnection, statusMessage) {
+        if (!testRequested || testingConnection) return@LaunchedEffect
+        val message = statusMessage.orEmpty()
+        if (message.equals("Settings saved", ignoreCase = true)) return@LaunchedEffect
+        testRequested = false
+        when {
+            message.startsWith("Connected") -> {
+                snackbarHostState.showSnackbar("Connected", duration = SnackbarDuration.Short)
+            }
+            message.contains("Token required", ignoreCase = true) -> {
+                snackbarHostState.showSnackbar("Token required", duration = SnackbarDuration.Short)
+            }
+            else -> {
+                val result = snackbarHostState.showSnackbar(
+                    message = "Can't reach server",
+                    actionLabel = "Diagnostics",
+                    duration = SnackbarDuration.Short,
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    onOpenDiagnostics()
+                }
+            }
+        }
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier
@@ -59,13 +104,22 @@ fun SettingsScreen(vm: AppViewModel, onOpenDiagnostics: () -> Unit) {
                     singleLine = true,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        vm.saveSettings(baseUrl, token, autoAdvance, autoScrollWhileListening)
-                    }) { Text("Save") }
-                    Button(onClick = {
-                        vm.saveSettings(baseUrl, token, autoAdvance, autoScrollWhileListening)
-                        vm.testConnection()
-                    }) { Text("Test") }
+                    Button(onClick = { saveCurrent() }) { Text("Save") }
+                    Button(
+                        enabled = !testingConnection,
+                        onClick = {
+                            saveCurrent()
+                            if (token.isBlank()) {
+                                testRequested = false
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Token required", duration = SnackbarDuration.Short)
+                                }
+                            } else {
+                                testRequested = true
+                                vm.testConnection()
+                            }
+                        },
+                    ) { Text(if (testingConnection) "Testing..." else "Test") }
                     Button(onClick = onOpenDiagnostics) { Text("Diagnostics") }
                 }
             }

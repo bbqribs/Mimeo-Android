@@ -18,11 +18,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
@@ -122,6 +125,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
+    private val _testingConnection = MutableStateFlow(false)
+    val testingConnection: StateFlow<Boolean> = _testingConnection.asStateFlow()
 
     private val _diagnosticsRows = MutableStateFlow<List<ConnectivityDiagnosticRow>>(emptyList())
     val diagnosticsRows: StateFlow<List<ConnectivityDiagnosticRow>> = _diagnosticsRows.asStateFlow()
@@ -195,6 +200,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
+            _testingConnection.value = true
             try {
                 val version = apiClient.getDebugVersion(current.baseUrl, current.apiToken)
                 _statusMessage.value = "Connected git_sha=${version.gitSha ?: "unknown"}"
@@ -204,6 +210,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _statusMessage.value = if (e.statusCode == 401) "Unauthorized-check token" else e.message
             } catch (e: Exception) {
                 _statusMessage.value = e.message
+            } finally {
+                _testingConnection.value = false
             }
         }
     }
@@ -763,20 +771,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 private fun MimeoApp(vm: AppViewModel) {
     val nav = rememberNavController()
     val navBackStack by nav.currentBackStackEntryAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
     val currentRoute = navBackStack?.destination?.route.orEmpty()
     val selectedTab = when {
+        currentRoute.startsWith("player") -> "player"
         currentRoute.startsWith("playlists") -> "playlists"
         currentRoute.startsWith("settings") -> "settings"
         else -> "queue"
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
                     selected = selectedTab == "queue",
                     onClick = { nav.navigate("queue") { launchSingleTop = true } },
                     label = { Text("Queue") },
+                    icon = {},
+                )
+                NavigationBarItem(
+                    selected = selectedTab == "player",
+                    onClick = { nav.navigate("player") { launchSingleTop = true } },
+                    label = { Text("Player") },
                     icon = {},
                 )
                 NavigationBarItem(
@@ -806,10 +823,34 @@ private fun MimeoApp(vm: AppViewModel) {
                 PlaylistsScreen(vm = vm)
             }
             composable("settings") {
-                SettingsScreen(vm = vm, onOpenDiagnostics = { nav.navigate("settings/diagnostics") })
+                SettingsScreen(
+                    vm = vm,
+                    snackbarHostState = snackbarHostState,
+                    onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
+                )
             }
             composable("settings/diagnostics") {
                 ConnectivityDiagnosticsScreen(vm = vm)
+            }
+            composable("player") {
+                val nowPlayingId = vm.currentNowPlayingItemId()
+                if (nowPlayingId == null) {
+                    NoNowPlayingScreen(onGoQueue = { nav.navigate("queue") })
+                } else {
+                    PlayerScreen(
+                        vm = vm,
+                        initialItemId = nowPlayingId,
+                        onOpenItem = { nextId -> nav.navigate("player/$nextId") },
+                        onBackToQueue = { focusId ->
+                            if (focusId == null) {
+                                nav.navigate("queue")
+                            } else {
+                                nav.navigate("queue?focusItemId=$focusId")
+                            }
+                        },
+                        onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
+                    )
+                }
             }
             composable(
                 route = "queue?focusItemId={focusItemId}",
@@ -847,6 +888,19 @@ private fun MimeoApp(vm: AppViewModel) {
                     onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun NoNowPlayingScreen(onGoQueue: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("No Now Playing session")
+        Button(onClick = onGoQueue) {
+            Text("Go to Queue")
         }
     }
 }
