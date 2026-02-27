@@ -207,7 +207,7 @@ fun PlaylistPickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add to playlist…") },
+        title = { Text("Playlists...") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
@@ -216,7 +216,7 @@ fun PlaylistPickerDialog(
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (isLoading) {
-                    Text("Loading playlists…")
+                    Text("Loading playlists...")
                 } else if (playlistChoices.isEmpty()) {
                     Text("No named playlists yet. Create one in Playlists first.")
                 } else {
