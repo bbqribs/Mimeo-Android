@@ -43,6 +43,7 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 - Top navigation includes a `Playlists` placeholder entry for the upcoming named-playlists work.
 - Top navigation now includes `Playlists` for named playlist management (create/rename/delete/select).
 - Queue picker supports `Smart queue` (default) or a selected named playlist.
+- Queue item overflow and Player overflow now include `Add to playlist…` for quick membership toggles against existing named playlists.
 - UI compression pass:
   - Queue/Player/Playlists/Settings use denser layouts and compact action rows.
   - Queue network issues are shown as a collapsible status banner (not a full-screen error block).

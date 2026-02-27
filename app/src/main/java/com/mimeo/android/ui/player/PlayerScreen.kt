@@ -1,6 +1,7 @@
 package com.mimeo.android.ui.player
 
 import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +52,8 @@ import com.mimeo.android.player.TtsChunkDoneEvent
 import com.mimeo.android.player.TtsChunkProgressEvent
 import com.mimeo.android.player.TtsController
 import com.mimeo.android.ui.components.StatusBanner
+import com.mimeo.android.ui.playlists.PlaylistPickerChoice
+import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import com.mimeo.android.ui.reader.ReaderScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -89,6 +92,8 @@ fun PlayerScreen(
     var lastHandledDoneUtteranceId by remember { mutableStateOf<String?>(null) }
     var autoPlayAfterLoad by remember { mutableStateOf(false) }
     var showClearSessionDialog by remember { mutableStateOf(false) }
+    var showPlaylistPicker by remember { mutableStateOf(false) }
+    var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
@@ -99,6 +104,7 @@ fun PlayerScreen(
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
     val settings by vm.settings.collectAsState()
+    val playlists by vm.playlists.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val currentPosition = playbackPositionByItem[currentItemId] ?: PlaybackPosition()
     val actionScope = rememberCoroutineScope()
@@ -458,6 +464,13 @@ fun PlayerScreen(
         resolved.coerceIn(0, (session.items.size - 1).coerceAtLeast(0))
     } ?: 0
     var overflowExpanded by remember { mutableStateOf(false) }
+    val playlistChoices = playlists.map { playlist ->
+        PlaylistPickerChoice(
+            playlistId = playlist.id,
+            playlistName = playlist.name,
+            isMember = vm.isItemInPlaylist(currentItemId, playlist.id),
+        )
+    }
 
     Scaffold(
         bottomBar = {
@@ -619,6 +632,15 @@ fun PlayerScreen(
                 .padding(innerPadding),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            playlistMutationMessage?.let { message ->
+                StatusBanner(
+                    stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
+                    summary = message,
+                    detail = null,
+                    onRetry = { playlistMutationMessage = null },
+                    onDiagnostics = onOpenDiagnostics,
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -640,6 +662,14 @@ fun PlayerScreen(
                         expanded = overflowExpanded,
                         onDismissRequest = { overflowExpanded = false },
                     ) {
+                        DropdownMenuItem(
+                            text = { Text("Add to playlist…") },
+                            onClick = {
+                                overflowExpanded = false
+                                vm.refreshPlaylists()
+                                showPlaylistPicker = true
+                            },
+                        )
                         DropdownMenuItem(
                             text = { Text("Back to queue") },
                             onClick = {
@@ -722,6 +752,28 @@ fun PlayerScreen(
                 )
             }
         }
+    }
+
+    if (showPlaylistPicker) {
+        PlaylistPickerDialog(
+            itemTitle = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
+            playlistChoices = playlistChoices,
+            isLoading = false,
+            onDismiss = { showPlaylistPicker = false },
+            onTogglePlaylist = { choice ->
+                actionScope.launch {
+                    vm.togglePlaylistMembership(currentItemId, choice.playlistId)
+                        .onSuccess { result ->
+                            val verb = if (result.added) "Added to" else "Removed from"
+                            Toast.makeText(context, "$verb ${choice.playlistName}", Toast.LENGTH_SHORT).show()
+                            playlistMutationMessage = null
+                        }
+                        .onFailure { error ->
+                            playlistMutationMessage = friendlyPlaylistError(error)
+                        }
+                }
+            },
+        )
     }
 
     if (showClearSessionDialog) {
@@ -851,6 +903,18 @@ private fun isNetworkErrorMessage(message: String): Boolean {
         lower.contains("timeout") ||
         lower.contains("failed to connect") ||
         lower.contains("connection refused")
+}
+
+private fun friendlyPlaylistError(error: Throwable): String {
+    return when (error) {
+        is ApiException -> {
+            when (error.statusCode) {
+                401, 403 -> "Unauthorized. Check token, then open Diagnostics."
+                else -> "Could not update playlist. Open Diagnostics and retry."
+            }
+        }
+        else -> "Couldn't update playlist. Check connection, then open Diagnostics."
+    }
 }
 
 private fun isLikelyPhysicalDevice(): Boolean {

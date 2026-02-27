@@ -45,11 +45,13 @@ import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
 import com.mimeo.android.model.PlaylistSummary
+import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.repository.ItemTextResult
 import com.mimeo.android.repository.NowPlayingSession
+import com.mimeo.android.repository.PlaylistMembershipToggleResult
 import com.mimeo.android.repository.PlaybackRepository
 import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
@@ -333,6 +335,44 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 _statusMessage.value = e.message ?: "Delete playlist failed"
             }
+        }
+    }
+
+    fun isItemInPlaylist(itemId: Int, playlistId: Int): Boolean {
+        return playlists.value
+            .firstOrNull { it.id == playlistId }
+            ?.entries
+            ?.any { it.articleId == itemId } == true
+    }
+
+    suspend fun togglePlaylistMembership(itemId: Int, playlistId: Int): Result<PlaylistMembershipToggleResult> {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            return Result.failure(IllegalStateException("Token required"))
+        }
+
+        val currentMembership = isItemInPlaylist(itemId, playlistId)
+        return try {
+            val result = repository.togglePlaylistMembership(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                playlistId = playlistId,
+                itemId = itemId,
+                isCurrentlyMember = currentMembership,
+            )
+            updatePlaylistEntriesLocally(
+                playlistId = playlistId,
+                itemId = itemId,
+                added = result.added,
+            )
+            if (settings.value.selectedPlaylistId == playlistId) {
+                loadQueue()
+            }
+            Result.success(result)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
         }
     }
 
@@ -682,6 +722,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun isNetworkError(error: Exception): Boolean = error is IOException
+
+    private fun updatePlaylistEntriesLocally(playlistId: Int, itemId: Int, added: Boolean) {
+        _playlists.update { rows ->
+            rows.map { playlist ->
+                if (playlist.id != playlistId) {
+                    playlist
+                } else {
+                    val hasEntry = playlist.entries.any { it.articleId == itemId }
+                    val nextEntries = when {
+                        added && !hasEntry -> playlist.entries + PlaylistEntrySummary(id = 0, articleId = itemId)
+                        !added && hasEntry -> playlist.entries.filterNot { it.articleId == itemId }
+                        else -> playlist.entries
+                    }
+                    playlist.copy(entries = nextEntries)
+                }
+            }
+        }
+    }
 
     private suspend fun runRawCheck(baseUrl: String, token: String, path: String, name: String): ConnectivityDiagnosticRow {
         val url = "$baseUrl$path"
