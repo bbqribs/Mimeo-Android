@@ -4,12 +4,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,32 +34,49 @@ fun StatusBanner(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 32.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                AssistChip(onClick = {}, label = { Text(stateLabel) })
+                AssistChip(
+                    onClick = {},
+                    label = { Text(stateLabel, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    modifier = Modifier.heightIn(min = 28.dp),
+                )
                 Text(
                     modifier = Modifier.weight(1f),
                     text = summary,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (onRetry != null) {
-                    TextButton(onClick = onRetry) { Text("Retry") }
+                    IconButton(
+                        onClick = onRetry,
+                        modifier = Modifier.heightIn(min = 32.dp),
+                    ) {
+                        Text("R", style = MaterialTheme.typography.labelSmall)
+                    }
                 }
                 if (onDiagnostics != null) {
-                    TextButton(onClick = onDiagnostics) { Text("Diagnostics") }
+                    IconButton(
+                        onClick = onDiagnostics,
+                        modifier = Modifier.heightIn(min = 32.dp),
+                    ) {
+                        Text("i", style = MaterialTheme.typography.labelSmall)
+                    }
                 }
                 if (!detail.isNullOrBlank()) {
-                    TextButton(onClick = { expanded = !expanded }) {
-                        Text(if (expanded) "Hide details" else "Details")
+                    IconButton(
+                        onClick = { expanded = !expanded },
+                        modifier = Modifier.heightIn(min = 32.dp),
+                    ) {
+                        Text(if (expanded) "^" else "v", style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
