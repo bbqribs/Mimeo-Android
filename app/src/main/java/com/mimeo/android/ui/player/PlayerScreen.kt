@@ -663,7 +663,7 @@ fun PlayerScreen(
                         onDismissRequest = { overflowExpanded = false },
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Add to playlist…") },
+                            text = { Text("Playlists...") },
                             onClick = {
                                 overflowExpanded = false
                                 vm.refreshPlaylists()
@@ -765,10 +765,12 @@ fun PlayerScreen(
                     vm.togglePlaylistMembership(currentItemId, choice.playlistId)
                         .onSuccess { result ->
                             val verb = if (result.added) "Added to" else "Removed from"
+                            showPlaylistPicker = false
                             Toast.makeText(context, "$verb ${choice.playlistName}", Toast.LENGTH_SHORT).show()
                             playlistMutationMessage = null
                         }
                         .onFailure { error ->
+                            showPlaylistPicker = false
                             playlistMutationMessage = friendlyPlaylistError(error)
                         }
                 }

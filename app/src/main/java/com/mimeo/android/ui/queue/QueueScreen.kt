@@ -286,10 +286,12 @@ fun QueueScreen(
                     vm.togglePlaylistMembership(target.itemId, choice.playlistId)
                         .onSuccess { result ->
                             val verb = if (result.added) "Added to" else "Removed from"
+                            playlistPickerItem = null
                             Toast.makeText(context, "$verb ${choice.playlistName}", Toast.LENGTH_SHORT).show()
                             playlistMutationMessage = null
                         }
                         .onFailure { error ->
+                            playlistPickerItem = null
                             playlistMutationMessage = friendlyPlaylistError(error)
                         }
                 }
@@ -369,7 +371,7 @@ private fun QueueItemCard(
                         onDismissRequest = onDismissMenu,
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Add to playlist…") },
+                            text = { Text("Playlists...") },
                             onClick = {
                                 onDismissMenu()
                                 onOpenPlaylistPicker()
