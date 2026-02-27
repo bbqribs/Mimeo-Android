@@ -7,10 +7,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,9 +29,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
+import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.PlaybackChunk
@@ -51,7 +54,6 @@ private const val DEBUG_PLAYBACK = false
 private const val PROGRESS_SYNC_DEBOUNCE_MS = 2_000L
 private const val PROGRESS_CHAR_STEP = 120
 private const val FALLBACK_CHUNK_MAX_CHARS = 900
-private const val BUTTON_MIN_HEIGHT_DP = 48
 private const val DONE_PERCENT_THRESHOLD = 98
 
 private fun debugLog(message: String) {
@@ -81,7 +83,6 @@ fun PlayerScreen(
     var pendingDoneEvent by remember { mutableStateOf<PlaybackDoneEvent?>(null) }
     var lastHandledDoneUtteranceId by remember { mutableStateOf<String?>(null) }
     var autoPlayAfterLoad by remember { mutableStateOf(false) }
-    var showReaderView by rememberSaveable { mutableStateOf(false) }
     var showClearSessionDialog by remember { mutableStateOf(false) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
@@ -509,12 +510,9 @@ fun PlayerScreen(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            Button(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
+            IconButton(
                 onClick = {
                     if (chunks.isNotEmpty() && safePosition.chunkIndex > 0) {
                         val target = safePosition.chunkIndex - 1
@@ -526,13 +524,17 @@ fun PlayerScreen(
                     }
                 },
                 enabled = chunks.size > 1,
-            ) { Text("Prev Seg") }
-            Button(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_fast_rewind_24),
+                    contentDescription = "Previous segment",
+                )
+            }
+            IconButton(
                 onClick = {
-                    if (chunks.isNotEmpty()) {
+                    if (isSpeaking || isAutoPlaying) {
+                        stopSpeaking(forceSync = true)
+                    } else if (chunks.isNotEmpty()) {
                         val restartFromStart = showCompleted ||
                             (safePosition.chunkIndex == chunks.lastIndex &&
                                 safePosition.offsetInChunkChars >= chunks.last().length)
@@ -551,18 +553,15 @@ fun PlayerScreen(
                     }
                 },
                 enabled = chunks.isNotEmpty(),
-            ) { Text("Play") }
-            Button(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
-                onClick = { stopSpeaking(forceSync = true) },
-                enabled = chunks.isNotEmpty(),
-            ) { Text("Pause") }
-            Button(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
+            ) {
+                Icon(
+                    painter = painterResource(
+                        id = if (isSpeaking || isAutoPlaying) R.drawable.msr_pause_24 else R.drawable.msr_play_arrow_24,
+                    ),
+                    contentDescription = if (isSpeaking || isAutoPlaying) "Pause playback" else "Play",
+                )
+            }
+            IconButton(
                 onClick = {
                     if (chunks.isNotEmpty() && safePosition.chunkIndex < chunks.lastIndex) {
                         val target = safePosition.chunkIndex + 1
@@ -574,17 +573,19 @@ fun PlayerScreen(
                     }
                 },
                 enabled = chunks.size > 1,
-            ) { Text("Next Seg") }
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_fast_forward_24),
+                    contentDescription = "Next segment",
+                )
+            }
         }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            Button(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
+            IconButton(
                 onClick = {
                     actionScope.launch {
                         val prevId = vm.prevSessionItemId(currentItemId)
@@ -599,30 +600,13 @@ fun PlayerScreen(
                         }
                     }
                 },
-            ) { Text("Prev Item") }
-            Button(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
-                onClick = {
-                    actionScope.launch {
-                        val nextId = vm.nextSessionItemId(currentItemId)
-                        if (nextId == null) {
-                            uiMessage = "No next item"
-                        } else {
-                            stopSpeaking(forceSync = true)
-                            currentItemId = nextId
-                            vm.setPlaybackPosition(nextId, 0, 0)
-                            autoPlayAfterLoad = true
-                            onOpenItem(nextId)
-                        }
-                    }
-                },
-            ) { Text("Next Item") }
-            Button(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_skip_previous_24),
+                    contentDescription = "Previous item",
+                )
+            }
+            IconButton(
                 onClick = {
                     actionScope.launch {
                         vm.postProgress(currentItemId, 100)
@@ -640,17 +624,36 @@ fun PlayerScreen(
                     }
                 },
                 enabled = textPayload != null,
-            ) { Text("Done") }
-            Button(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = BUTTON_MIN_HEIGHT_DP.dp),
-                onClick = { showReaderView = !showReaderView },
-                enabled = chunks.isNotEmpty(),
-            ) { Text(if (showReaderView) "Hide Text" else "View Text") }
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_check_circle_24),
+                    contentDescription = "Mark done",
+                )
+            }
+            IconButton(
+                onClick = {
+                    actionScope.launch {
+                        val nextId = vm.nextSessionItemId(currentItemId)
+                        if (nextId == null) {
+                            uiMessage = "No next item"
+                        } else {
+                            stopSpeaking(forceSync = true)
+                            currentItemId = nextId
+                            vm.setPlaybackPosition(nextId, 0, 0)
+                            autoPlayAfterLoad = true
+                            onOpenItem(nextId)
+                        }
+                    }
+                },
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_skip_next_24),
+                    contentDescription = "Next item",
+                )
+            }
         }
 
-        if (showReaderView && chunks.isNotEmpty()) {
+        if (chunks.isNotEmpty()) {
             ReaderScreen(
                 chunks = chunks,
                 currentChunkIndex = safePosition.chunkIndex,
