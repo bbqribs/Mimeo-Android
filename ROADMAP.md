@@ -19,6 +19,11 @@
 - [x] Named playlists v1 integration: playlist CRUD + selection UI, Smart queue fallback, and playlist-scoped queue loading.
 - [x] UI compression pass: compact nav, dense queue/player/playlists/settings layouts, and collapsible status banner for offline/LAN issues.
 
+## Follow-ups (known issues)
+- [ ] Snackbar not showing on Settings `Test` (offline + online): investigate Scaffold/SnackbarHost wiring.
+- [ ] Player StatusBanner: increase visible summary text; align placement with Queue (top of screen) or document intended placement.
+- [ ] Player control bar: further height reduction (tighten padding/spacing) while keeping 48dp touch targets.
+
 ## Next
 1. [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.
 2. [ ] Persist last segment index per item in DataStore for cross-process resume.
