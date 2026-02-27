@@ -29,6 +29,12 @@ import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.PlaylistSummary
 
+data class PlaylistPickerChoice(
+    val playlistId: Int,
+    val playlistName: String,
+    val isMember: Boolean,
+)
+
 @Composable
 fun PlaylistsScreen(vm: AppViewModel) {
     val playlists by vm.playlists.collectAsState()
@@ -189,4 +195,51 @@ fun PlaylistsScreen(vm: AppViewModel) {
             },
         )
     }
+}
+
+@Composable
+fun PlaylistPickerDialog(
+    itemTitle: String,
+    playlistChoices: List<PlaylistPickerChoice>,
+    isLoading: Boolean,
+    onDismiss: () -> Unit,
+    onTogglePlaylist: (PlaylistPickerChoice) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add to playlist…") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = itemTitle,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (isLoading) {
+                    Text("Loading playlists…")
+                } else if (playlistChoices.isEmpty()) {
+                    Text("No named playlists yet. Create one in Playlists first.")
+                } else {
+                    playlistChoices.forEach { playlist ->
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { onTogglePlaylist(playlist) },
+                        ) {
+                            val action = if (playlist.isMember) "Remove from" else "Add to"
+                            Text(
+                                text = "$action ${playlist.playlistName}",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        },
+    )
 }

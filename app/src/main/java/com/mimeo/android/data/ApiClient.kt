@@ -24,6 +24,11 @@ class ApiException(val statusCode: Int, message: String) : Exception(message)
 @Serializable
 private data class PlaylistNamePayload(val name: String)
 
+@Serializable
+private data class PlaylistItemPayload(
+    @kotlinx.serialization.SerialName("item_id") val itemId: Int,
+)
+
 class ApiClient(
     private val okHttpClient: OkHttpClient = OkHttpClient(),
     private val json: Json = Json { ignoreUnknownKeys = true },
@@ -81,6 +86,25 @@ class ApiClient(
     suspend fun deletePlaylist(baseUrl: String, token: String, playlistId: Int) = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(resolveUrl(baseUrl, "/playlists/$playlistId"))
+            .header("Authorization", "Bearer $token")
+            .delete()
+            .build()
+        executeNoBody(request)
+    }
+
+    suspend fun addItemToPlaylist(baseUrl: String, token: String, playlistId: Int, itemId: Int) = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(PlaylistItemPayload(itemId)).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/playlists/$playlistId/items"))
+            .header("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+        executeNoBody(request)
+    }
+
+    suspend fun removeItemFromPlaylist(baseUrl: String, token: String, playlistId: Int, itemId: Int) = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/playlists/$playlistId/items/$itemId"))
             .header("Authorization", "Bearer $token")
             .delete()
             .build()

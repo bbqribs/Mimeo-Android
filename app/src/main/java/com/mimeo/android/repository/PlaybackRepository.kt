@@ -59,6 +59,10 @@ data class SessionLoadResult(
     val wasCorrupt: Boolean,
 )
 
+data class PlaylistMembershipToggleResult(
+    val added: Boolean,
+)
+
 @Serializable
 private data class StoredNowPlayingItem(
     val itemId: Int,
@@ -114,6 +118,22 @@ class PlaybackRepository(
 
     suspend fun deletePlaylist(baseUrl: String, token: String, playlistId: Int) {
         apiClient.deletePlaylist(baseUrl, token, playlistId)
+    }
+
+    suspend fun togglePlaylistMembership(
+        baseUrl: String,
+        token: String,
+        playlistId: Int,
+        itemId: Int,
+        isCurrentlyMember: Boolean,
+    ): PlaylistMembershipToggleResult {
+        if (isCurrentlyMember) {
+            apiClient.removeItemFromPlaylist(baseUrl, token, playlistId, itemId)
+            return PlaylistMembershipToggleResult(added = false)
+        }
+
+        apiClient.addItemToPlaylist(baseUrl, token, playlistId, itemId)
+        return PlaylistMembershipToggleResult(added = true)
     }
 
     suspend fun getItemText(baseUrl: String, token: String, itemId: Int, expectedActiveVersionId: Int?): ItemTextResult {
