@@ -457,6 +457,7 @@ fun PlayerScreen(
     val isRecoverableNetworkError = isNetworkErrorMessage(uiMessage.orEmpty())
     val showRecoveryActions = uiMessage != null && (isRecoverableNetworkError || textPayload == null)
     val showDiagnosticsHint = showRecoveryActions && baseUrlHint != null
+    val showLocalPlayerBanner = uiMessage != null && !showRecoveryActions && !showDiagnosticsHint
     val sessionItemCount = nowPlayingSession?.items?.size ?: 0
     val sessionIndex = nowPlayingSession?.let { session ->
         val found = session.items.indexOfFirst { it.itemId == currentItemId }
@@ -560,11 +561,11 @@ fun PlayerScreen(
                 onDiagnostics = onOpenDiagnostics,
             )
         }
-        if (uiMessage != null || showDiagnosticsHint) {
+        if (showLocalPlayerBanner) {
             StatusBanner(
-                stateLabel = if (queueOffline) "Offline" else "Status",
-                summary = uiMessage ?: "Network guidance",
-                detail = if (showDiagnosticsHint) "${uiMessage.orEmpty()}\n${baseUrlHint.orEmpty()}" else uiMessage,
+                stateLabel = "Status",
+                summary = uiMessage ?: "Player status",
+                detail = null,
                 onRetry = {
                     uiMessage = null
                     if (textPayload == null) {
@@ -574,7 +575,7 @@ fun PlayerScreen(
                         playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
                     }
                 },
-                onDiagnostics = if (showRecoveryActions || showDiagnosticsHint) onOpenDiagnostics else null,
+                onDiagnostics = null,
             )
         }
         if (isLoading) {
