@@ -9,6 +9,7 @@
 - **No history rewrites**: No rebases or force-pushes by agents. Additive commits only.
 - **Contract-change flag**: Any PR that changes backend/API semantics must be labeled "CONTRACT CHANGE" and coordinated; dependent client work must not assume the new contract until merged.
 - **Local safety**: If agents share a machine, do not share a working directory; avoid stash-based workflows; tracked local modifications => STOP.
+- **Precedence**: CLAUDE.md is authoritative for Claude behavior; CODEX_PROMPTS.md is authoritative for Codex behavior.
 
 ## Project context
 
