@@ -50,13 +50,17 @@ fun StatusBanner(
                     label = { Text(stateLabel, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     modifier = Modifier.heightIn(min = 28.dp),
                 )
-                Text(
-                    modifier = Modifier.weight(1f),
-                    text = summary,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                if (summary.isNotBlank()) {
+                    Text(
+                        modifier = Modifier.weight(1f),
+                        text = summary,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                } else {
+                    Row(modifier = Modifier.weight(1f)) {}
+                }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -74,7 +78,7 @@ fun StatusBanner(
                             onClick = onDiagnostics,
                             modifier = Modifier.heightIn(min = 28.dp),
                         ) {
-                            Text("Diag", style = MaterialTheme.typography.labelSmall)
+                            Text("Diagnostics", style = MaterialTheme.typography.labelSmall)
                         }
                     }
                     if (!detail.isNullOrBlank()) {
