@@ -8,9 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,19 +16,16 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
-import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
     vm: AppViewModel,
-    snackbarHostState: SnackbarHostState,
     onOpenDiagnostics: () -> Unit,
 ) {
     val settings by vm.settings.collectAsState()
@@ -45,7 +39,6 @@ fun SettingsScreen(
     var autoScrollWhileListening by remember(settings.autoScrollWhileListening) {
         mutableStateOf(settings.autoScrollWhileListening)
     }
-    val scope = rememberCoroutineScope()
     var testRequested by remember { mutableStateOf(false) }
 
     fun saveCurrent() {
@@ -59,20 +52,17 @@ fun SettingsScreen(
         testRequested = false
         when {
             message.startsWith("Connected") -> {
-                snackbarHostState.showSnackbar("Connected", duration = SnackbarDuration.Short)
+                vm.showSnackbar("Connected")
             }
             message.contains("Token required", ignoreCase = true) -> {
-                snackbarHostState.showSnackbar("Token required", duration = SnackbarDuration.Short)
+                vm.showSnackbar("Token required")
             }
             else -> {
-                val result = snackbarHostState.showSnackbar(
+                vm.showSnackbar(
                     message = "Can't reach server",
                     actionLabel = "Diagnostics",
-                    duration = SnackbarDuration.Short,
+                    actionKey = "open_diagnostics",
                 )
-                if (result == SnackbarResult.ActionPerformed) {
-                    onOpenDiagnostics()
-                }
             }
         }
     }
@@ -111,9 +101,7 @@ fun SettingsScreen(
                             saveCurrent()
                             if (token.isBlank()) {
                                 testRequested = false
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Token required", duration = SnackbarDuration.Short)
-                                }
+                                vm.showSnackbar("Token required")
                             } else {
                                 testRequested = true
                                 vm.testConnection()

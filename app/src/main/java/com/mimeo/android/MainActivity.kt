@@ -2,6 +2,7 @@ package com.mimeo.android
 
 import android.app.Application
 import android.os.Bundle
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -9,20 +10,27 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -54,6 +62,7 @@ import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.PlaylistMembershipToggleResult
 import com.mimeo.android.repository.PlaybackRepository
 import com.mimeo.android.repository.ProgressPostResult
+import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
 import com.mimeo.android.ui.settings.SettingsScreen
 import com.mimeo.android.ui.player.PlayerScreen
@@ -64,11 +73,14 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
@@ -76,6 +88,24 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 private const val DONE_PERCENT_THRESHOLD = 98
+
+data class UiSnackbarMessage(
+    val message: String,
+    val actionLabel: String? = null,
+    val actionKey: String? = null,
+    val duration: SnackbarDuration = SnackbarDuration.Short,
+)
+
+private fun isLikelyPhysicalDevice(): Boolean {
+    val fingerprint = Build.FINGERPRINT.lowercase()
+    val model = Build.MODEL.lowercase()
+    val brand = Build.BRAND.lowercase()
+    return !(fingerprint.contains("generic") ||
+        fingerprint.contains("emulator") ||
+        model.contains("sdk") ||
+        model.contains("emulator") ||
+        brand.startsWith("generic"))
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -127,6 +157,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
+    private val _snackbarMessages = MutableSharedFlow<UiSnackbarMessage>(extraBufferCapacity = 8)
+    val snackbarMessages: SharedFlow<UiSnackbarMessage> = _snackbarMessages.asSharedFlow()
     private val _testingConnection = MutableStateFlow(false)
     val testingConnection: StateFlow<Boolean> = _testingConnection.asStateFlow()
 
@@ -193,6 +225,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
             _statusMessage.value = "Settings saved"
         }
+    }
+
+    fun showSnackbar(
+        message: String,
+        actionLabel: String? = null,
+        actionKey: String? = null,
+        duration: SnackbarDuration = SnackbarDuration.Short,
+    ) {
+        _snackbarMessages.tryEmit(
+            UiSnackbarMessage(
+                message = message,
+                actionLabel = actionLabel,
+                actionKey = actionKey,
+                duration = duration,
+            ),
+        )
     }
 
     fun testConnection() {
@@ -831,15 +879,69 @@ private fun MimeoApp(vm: AppViewModel) {
     val navBackStack by nav.currentBackStackEntryAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val currentRoute = navBackStack?.destination?.route.orEmpty()
+    val settings by vm.settings.collectAsState()
+    val queueOffline by vm.queueOffline.collectAsState()
+    val statusMessage by vm.statusMessage.collectAsState()
     val selectedTab = when {
         currentRoute.startsWith("player") -> "player"
         currentRoute.startsWith("playlists") -> "playlists"
         currentRoute.startsWith("settings") -> "settings"
         else -> "queue"
     }
+    val baseUrlHint = vm.baseUrlHintForDevice(isLikelyPhysicalDevice())
+    val baseAddress = settings.baseUrl.trim().removePrefix("http://").removePrefix("https://")
+    val statusLooksError = statusMessage?.let { message ->
+        val lower = message.lowercase()
+        lower.contains("failed") ||
+            lower.contains("error") ||
+            lower.contains("unauthorized") ||
+            lower.contains("forbidden") ||
+            lower.contains("timeout")
+    } ?: false
+    val bannerStateLabel = when {
+        queueOffline -> "Offline"
+        baseUrlHint != null -> "LAN mismatch"
+        else -> "Status"
+    }
+    val bannerSummary = when {
+        queueOffline -> ""
+        baseUrlHint != null -> "Connection guidance"
+        statusLooksError -> "Request failed"
+        else -> ""
+    }
+    val bannerDetail = when {
+        queueOffline && !statusMessage.isNullOrBlank() -> "Cannot reach server at $baseAddress\n$statusMessage"
+        queueOffline -> "Cannot reach server at $baseAddress"
+        baseUrlHint != null && !statusMessage.isNullOrBlank() -> "$baseUrlHint\n$statusMessage"
+        baseUrlHint != null -> baseUrlHint
+        statusLooksError -> statusMessage
+        else -> null
+    }
+    val showGlobalBanner = queueOffline || baseUrlHint != null || statusLooksError
+
+    LaunchedEffect(vm, snackbarHostState) {
+        vm.snackbarMessages.collect { message ->
+            val result = snackbarHostState.showSnackbar(
+                message = message.message,
+                actionLabel = message.actionLabel,
+                duration = message.duration,
+            )
+            if (
+                result == SnackbarResult.ActionPerformed &&
+                message.actionKey == "open_diagnostics"
+            ) {
+                nav.navigate("settings/diagnostics") { launchSingleTop = true }
+            }
+        }
+    }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        snackbarHost = {
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.windowInsetsPadding(WindowInsets.ime),
+            )
+        },
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
@@ -869,35 +971,94 @@ private fun MimeoApp(vm: AppViewModel) {
             }
         },
     ) { innerPadding ->
-        NavHost(
-            navController = nav,
-            startDestination = "queue",
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .statusBarsPadding()
                 .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            composable("playlists") {
-                PlaylistsScreen(vm = vm)
-            }
-            composable("settings") {
-                SettingsScreen(
-                    vm = vm,
-                    snackbarHostState = snackbarHostState,
-                    onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
+            if (showGlobalBanner) {
+                StatusBanner(
+                    stateLabel = bannerStateLabel,
+                    summary = bannerSummary,
+                    detail = bannerDetail,
+                    onRetry = { vm.loadQueue() },
+                    onDiagnostics = { nav.navigate("settings/diagnostics") },
                 )
             }
-            composable("settings/diagnostics") {
-                ConnectivityDiagnosticsScreen(vm = vm)
-            }
-            composable("player") {
-                val nowPlayingId = vm.currentNowPlayingItemId()
-                if (nowPlayingId == null) {
-                    NoNowPlayingScreen(onGoQueue = { nav.navigate("queue") })
-                } else {
+            NavHost(
+                navController = nav,
+                startDestination = "queue",
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                composable("playlists") {
+                    PlaylistsScreen(vm = vm)
+                }
+                composable("settings") {
+                    SettingsScreen(
+                        vm = vm,
+                        onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
+                    )
+                }
+                composable("settings/diagnostics") {
+                    ConnectivityDiagnosticsScreen(vm = vm)
+                }
+                composable("player") {
+                    val nowPlayingId = vm.currentNowPlayingItemId()
+                    if (nowPlayingId == null) {
+                        NoNowPlayingScreen(onGoQueue = { nav.navigate("queue") })
+                    } else {
+                        PlayerScreen(
+                            vm = vm,
+                            onShowSnackbar = { message, actionLabel, actionKey ->
+                                vm.showSnackbar(message, actionLabel, actionKey)
+                            },
+                            initialItemId = nowPlayingId,
+                            onOpenItem = { nextId -> nav.navigate("player/$nextId") },
+                            onBackToQueue = { focusId ->
+                                if (focusId == null) {
+                                    nav.navigate("queue")
+                                } else {
+                                    nav.navigate("queue?focusItemId=$focusId")
+                                }
+                            },
+                            onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
+                        )
+                    }
+                }
+                composable(
+                    route = "queue?focusItemId={focusItemId}",
+                    arguments = listOf(
+                        navArgument("focusItemId") {
+                            type = NavType.IntType
+                            defaultValue = -1
+                        },
+                    ),
+                ) { backStack ->
+                    val focusItemId = backStack.arguments?.getInt("focusItemId")?.takeIf { it > 0 }
+                    QueueScreen(
+                        vm = vm,
+                        onShowSnackbar = { message, actionLabel, actionKey ->
+                            vm.showSnackbar(message, actionLabel, actionKey)
+                        },
+                        focusItemId = focusItemId,
+                        onOpenPlayer = { itemId -> nav.navigate("player/$itemId") },
+                        onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
+                    )
+                }
+                composable(
+                    "player/{itemId}",
+                    arguments = listOf(navArgument("itemId") { type = NavType.IntType }),
+                ) { backStack ->
+                    val itemId = backStack.arguments?.getInt("itemId") ?: return@composable
                     PlayerScreen(
                         vm = vm,
-                        initialItemId = nowPlayingId,
+                        onShowSnackbar = { message, actionLabel, actionKey ->
+                            vm.showSnackbar(message, actionLabel, actionKey)
+                        },
+                        initialItemId = itemId,
                         onOpenItem = { nextId -> nav.navigate("player/$nextId") },
                         onBackToQueue = { focusId ->
                             if (focusId == null) {
@@ -909,42 +1070,6 @@ private fun MimeoApp(vm: AppViewModel) {
                         onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
                     )
                 }
-            }
-            composable(
-                route = "queue?focusItemId={focusItemId}",
-                arguments = listOf(
-                    navArgument("focusItemId") {
-                        type = NavType.IntType
-                        defaultValue = -1
-                    },
-                ),
-            ) { backStack ->
-                val focusItemId = backStack.arguments?.getInt("focusItemId")?.takeIf { it > 0 }
-                QueueScreen(
-                    vm = vm,
-                    focusItemId = focusItemId,
-                    onOpenPlayer = { itemId -> nav.navigate("player/$itemId") },
-                    onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
-                )
-            }
-            composable(
-                "player/{itemId}",
-                arguments = listOf(navArgument("itemId") { type = NavType.IntType }),
-            ) { backStack ->
-                val itemId = backStack.arguments?.getInt("itemId") ?: return@composable
-                PlayerScreen(
-                    vm = vm,
-                    initialItemId = itemId,
-                    onOpenItem = { nextId -> nav.navigate("player/$nextId") },
-                    onBackToQueue = { focusId ->
-                        if (focusId == null) {
-                            nav.navigate("queue")
-                        } else {
-                            nav.navigate("queue?focusItemId=$focusId")
-                        }
-                    },
-                    onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
-                )
             }
         }
     }
