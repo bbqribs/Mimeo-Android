@@ -904,10 +904,18 @@ private fun MimeoApp(vm: AppViewModel) {
         else -> "Status"
     }
     val bannerSummary = when {
-        queueOffline -> "Cannot reach server at $baseAddress"
-        baseUrlHint != null -> baseUrlHint
-        statusLooksError -> statusMessage.orEmpty()
+        queueOffline -> "Can't reach server"
+        baseUrlHint != null -> "Connection guidance"
+        statusLooksError -> "Request failed"
         else -> ""
+    }
+    val bannerDetail = when {
+        queueOffline && !statusMessage.isNullOrBlank() -> "Cannot reach server at $baseAddress\n$statusMessage"
+        queueOffline -> "Cannot reach server at $baseAddress"
+        baseUrlHint != null && !statusMessage.isNullOrBlank() -> "$baseUrlHint\n$statusMessage"
+        baseUrlHint != null -> baseUrlHint
+        statusLooksError -> statusMessage
+        else -> null
     }
     val showGlobalBanner = queueOffline || baseUrlHint != null || statusLooksError
 
@@ -975,7 +983,7 @@ private fun MimeoApp(vm: AppViewModel) {
                 StatusBanner(
                     stateLabel = bannerStateLabel,
                     summary = bannerSummary,
-                    detail = if (statusLooksError) statusMessage else baseUrlHint,
+                    detail = bannerDetail,
                     onRetry = { vm.loadQueue() },
                     onDiagnostics = { nav.navigate("settings/diagnostics") },
                 )
