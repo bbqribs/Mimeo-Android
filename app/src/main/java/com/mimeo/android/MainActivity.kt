@@ -904,7 +904,7 @@ private fun MimeoApp(vm: AppViewModel) {
         else -> "Status"
     }
     val bannerSummary = when {
-        queueOffline -> "Can't reach server"
+        queueOffline -> "Connection issue"
         baseUrlHint != null -> "Connection guidance"
         statusLooksError -> "Request failed"
         else -> ""
