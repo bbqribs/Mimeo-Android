@@ -1,12 +1,12 @@
 package com.mimeo.android.ui.player
 
 import android.os.Build
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -17,7 +17,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -73,6 +72,7 @@ private fun debugLog(message: String) {
 @Composable
 fun PlayerScreen(
     vm: AppViewModel,
+    onShowSnackbar: (String, String?, String?) -> Unit,
     initialItemId: Int,
     onOpenItem: (Int) -> Unit,
     onBackToQueue: (Int?) -> Unit,
@@ -472,265 +472,119 @@ fun PlayerScreen(
         )
     }
 
-    Scaffold(
-        bottomBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 0.dp),
-                verticalArrangement = Arrangement.spacedBy(0.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                ) {
-                    IconButton(
-                        onClick = {
-                            if (chunks.isNotEmpty() && safePosition.chunkIndex > 0) {
-                                val target = safePosition.chunkIndex - 1
-                                setPlaybackPosition(target, 0)
-                                if (isSpeaking || isAutoPlaying) {
-                                    isAutoPlaying = true
-                                    playChunk(target, 0)
-                                }
-                            }
-                        },
-                        enabled = chunks.size > 1,
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.msr_fast_rewind_24),
-                            contentDescription = "Previous segment",
-                        )
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        playlistMutationMessage?.let { message ->
+            StatusBanner(
+                stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
+                summary = message,
+                detail = null,
+                onRetry = { playlistMutationMessage = null },
+                onDiagnostics = onOpenDiagnostics,
+            )
+        }
+        if (uiMessage != null || showDiagnosticsHint) {
+            StatusBanner(
+                stateLabel = if (queueOffline) "Offline" else "Status",
+                summary = uiMessage ?: "Network guidance",
+                detail = if (showDiagnosticsHint) "${uiMessage.orEmpty()}\n${baseUrlHint.orEmpty()}" else uiMessage,
+                onRetry = {
+                    uiMessage = null
+                    if (textPayload == null) {
+                        reloadNonce += 1
+                    } else if (chunks.isNotEmpty()) {
+                        isAutoPlaying = true
+                        playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
                     }
-                    IconButton(
-                        onClick = {
-                            if (isSpeaking || isAutoPlaying) {
-                                stopSpeaking(forceSync = true)
-                            } else if (chunks.isNotEmpty()) {
-                                val restartFromStart = showCompleted ||
-                                    (safePosition.chunkIndex == chunks.lastIndex &&
-                                        safePosition.offsetInChunkChars >= chunks.last().length)
-                                if (restartFromStart) {
-                                    setPlaybackPosition(0, 0)
-                                    nearEndForcedForItemId = -1
-                                    lastObservedPercent = 0
-                                }
-                                isAutoPlaying = true
-                                val positionToPlay = if (restartFromStart) {
-                                    PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
-                                } else {
-                                    safePosition
-                                }
-                                playChunk(positionToPlay.chunkIndex, positionToPlay.offsetInChunkChars)
-                            }
-                        },
-                        enabled = chunks.isNotEmpty(),
-                    ) {
-                        Icon(
-                            painter = painterResource(
-                                id = if (isSpeaking || isAutoPlaying) R.drawable.msr_pause_24 else R.drawable.msr_play_arrow_24,
-                            ),
-                            contentDescription = if (isSpeaking || isAutoPlaying) "Pause playback" else "Play",
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            if (chunks.isNotEmpty() && safePosition.chunkIndex < chunks.lastIndex) {
-                                val target = safePosition.chunkIndex + 1
-                                setPlaybackPosition(target, 0)
-                                if (isSpeaking || isAutoPlaying) {
-                                    isAutoPlaying = true
-                                    playChunk(target, 0)
-                                }
-                            }
-                        },
-                        enabled = chunks.size > 1,
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.msr_fast_forward_24),
-                            contentDescription = "Next segment",
-                        )
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                ) {
-                    IconButton(
-                        onClick = {
-                            actionScope.launch {
-                                val prevId = vm.prevSessionItemId(currentItemId)
-                                if (prevId == null) {
-                                    uiMessage = "No previous item"
-                                } else {
-                                    stopSpeaking(forceSync = true)
-                                    currentItemId = prevId
-                                    vm.setPlaybackPosition(prevId, 0, 0)
-                                    autoPlayAfterLoad = true
-                                    onOpenItem(prevId)
-                                }
-                            }
-                        },
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.msr_skip_previous_24),
-                            contentDescription = "Previous item",
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            actionScope.launch {
-                                vm.postProgress(currentItemId, 100)
-                                    .onSuccess {
-                                        uiMessage = if (it.queued) "Done queued for sync" else "Marked done"
-                                        if (chunks.isNotEmpty()) {
-                                            val last = chunks.last()
-                                            vm.setPlaybackPosition(currentItemId, chunks.lastIndex, last.length)
-                                        }
-                                    }
-                                    .onFailure { error ->
-                                        if (error is CancellationException) return@onFailure
-                                        uiMessage = error.message ?: "Progress update failed"
-                                    }
-                            }
-                        },
-                        enabled = textPayload != null,
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.msr_check_circle_24),
-                            contentDescription = "Mark done",
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            actionScope.launch {
-                                val nextId = vm.nextSessionItemId(currentItemId)
-                                if (nextId == null) {
-                                    uiMessage = "No next item"
-                                } else {
-                                    stopSpeaking(forceSync = true)
-                                    currentItemId = nextId
-                                    vm.setPlaybackPosition(nextId, 0, 0)
-                                    autoPlayAfterLoad = true
-                                    onOpenItem(nextId)
-                                }
-                            }
-                        },
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.msr_skip_next_24),
-                            contentDescription = "Next item",
-                        )
-                    }
-                }
-            }
-        },
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(innerPadding),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                },
+                onDiagnostics = if (showRecoveryActions || showDiagnosticsHint) onOpenDiagnostics else null,
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            playlistMutationMessage?.let { message ->
-                StatusBanner(
-                    stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
-                    summary = message,
-                    detail = null,
-                    onRetry = { playlistMutationMessage = null },
-                    onDiagnostics = onOpenDiagnostics,
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    modifier = Modifier.weight(1f),
-                    text = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Box {
-                    IconButton(onClick = { overflowExpanded = true }) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.msr_more_vert_24),
-                            contentDescription = "More actions",
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = overflowExpanded,
-                        onDismissRequest = { overflowExpanded = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Playlists...") },
-                            onClick = {
-                                overflowExpanded = false
-                                vm.refreshPlaylists()
-                                showPlaylistPicker = true
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Back to queue") },
-                            onClick = {
-                                overflowExpanded = false
-                                onBackToQueue(currentItemId)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Restart session") },
-                            onClick = {
-                                overflowExpanded = false
-                                actionScope.launch { vm.restartNowPlayingSession() }
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Clear session") },
-                            onClick = {
-                                overflowExpanded = false
-                                showClearSessionDialog = true
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Diagnostics") },
-                            onClick = {
-                                overflowExpanded = false
-                                onOpenDiagnostics()
-                            },
-                        )
-                    }
-                }
-            }
-            if (sessionItemCount > 0) {
-                Text(
-                    text = "Session ${sessionIndex + 1}/$sessionItemCount",
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
             Text(
-                text = "Progress $currentPercent%  -  Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability${if (showCompleted) "  -  Done" else ""}",
-                maxLines = 2,
+                modifier = Modifier.weight(1f),
+                text = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (isLoading) CircularProgressIndicator()
-            if (uiMessage != null || showDiagnosticsHint) {
-                StatusBanner(
-                    stateLabel = if (queueOffline) "Offline" else "Status",
-                    summary = uiMessage ?: "Network guidance",
-                    detail = if (showDiagnosticsHint) "${uiMessage.orEmpty()}\n${baseUrlHint.orEmpty()}" else uiMessage,
-                    onRetry = {
-                        uiMessage = null
-                        if (textPayload == null) {
-                            reloadNonce += 1
-                        } else if (chunks.isNotEmpty()) {
-                            isAutoPlaying = true
-                            playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
-                        }
-                    },
-                    onDiagnostics = if (showRecoveryActions || showDiagnosticsHint) onOpenDiagnostics else null,
-                )
+            Box {
+                IconButton(onClick = { overflowExpanded = true }) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.msr_more_vert_24),
+                        contentDescription = "More actions",
+                    )
+                }
+                DropdownMenu(
+                    expanded = overflowExpanded,
+                    onDismissRequest = { overflowExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Playlists...") },
+                        onClick = {
+                            overflowExpanded = false
+                            vm.refreshPlaylists()
+                            showPlaylistPicker = true
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Back to queue") },
+                        onClick = {
+                            overflowExpanded = false
+                            onBackToQueue(currentItemId)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Restart session") },
+                        onClick = {
+                            overflowExpanded = false
+                            actionScope.launch {
+                                vm.restartNowPlayingSession()
+                                onShowSnackbar("Now Playing session restarted.", null, null)
+                            }
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Clear session") },
+                        onClick = {
+                            overflowExpanded = false
+                            showClearSessionDialog = true
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Diagnostics") },
+                        onClick = {
+                            overflowExpanded = false
+                            onOpenDiagnostics()
+                        },
+                    )
+                }
             }
+        }
+        if (sessionItemCount > 0) {
+            Text(
+                text = "Session ${sessionIndex + 1}/$sessionItemCount",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Text(
+            text = "Progress $currentPercent%  -  Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability${if (showCompleted) "  -  Done" else ""}",
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (isLoading) {
+            CircularProgressIndicator()
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = true),
+        ) {
             if (chunks.isNotEmpty()) {
                 ReaderScreen(
                     chunks = chunks,
@@ -748,10 +602,104 @@ fun PlayerScreen(
                         playChunk(safeIndex, 0)
                         uiMessage = "Starting from chunk ${safeIndex + 1}"
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
         }
+        PlayerControlBar(
+            canMoveBackward = chunks.size > 1 && safePosition.chunkIndex > 0,
+            canMoveForward = chunks.size > 1 && safePosition.chunkIndex < chunks.lastIndex,
+            canPlay = chunks.isNotEmpty(),
+            canMarkDone = textPayload != null,
+            isPlaying = isSpeaking || isAutoPlaying,
+            onPreviousSegment = {
+                if (chunks.isNotEmpty() && safePosition.chunkIndex > 0) {
+                    val target = safePosition.chunkIndex - 1
+                    setPlaybackPosition(target, 0)
+                    if (isSpeaking || isAutoPlaying) {
+                        isAutoPlaying = true
+                        playChunk(target, 0)
+                    }
+                }
+            },
+            onPlayPause = {
+                if (isSpeaking || isAutoPlaying) {
+                    stopSpeaking(forceSync = true)
+                } else if (chunks.isNotEmpty()) {
+                    val restartFromStart = showCompleted ||
+                        (safePosition.chunkIndex == chunks.lastIndex &&
+                            safePosition.offsetInChunkChars >= chunks.last().length)
+                    if (restartFromStart) {
+                        setPlaybackPosition(0, 0)
+                        nearEndForcedForItemId = -1
+                        lastObservedPercent = 0
+                    }
+                    isAutoPlaying = true
+                    val positionToPlay = if (restartFromStart) {
+                        PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
+                    } else {
+                        safePosition
+                    }
+                    playChunk(positionToPlay.chunkIndex, positionToPlay.offsetInChunkChars)
+                }
+            },
+            onNextSegment = {
+                if (chunks.isNotEmpty() && safePosition.chunkIndex < chunks.lastIndex) {
+                    val target = safePosition.chunkIndex + 1
+                    setPlaybackPosition(target, 0)
+                    if (isSpeaking || isAutoPlaying) {
+                        isAutoPlaying = true
+                        playChunk(target, 0)
+                    }
+                }
+            },
+            onPreviousItem = {
+                actionScope.launch {
+                    val prevId = vm.prevSessionItemId(currentItemId)
+                    if (prevId == null) {
+                        uiMessage = "No previous item"
+                    } else {
+                        stopSpeaking(forceSync = true)
+                        currentItemId = prevId
+                        vm.setPlaybackPosition(prevId, 0, 0)
+                        autoPlayAfterLoad = true
+                        onOpenItem(prevId)
+                    }
+                }
+            },
+            onMarkDone = {
+                actionScope.launch {
+                    vm.postProgress(currentItemId, 100)
+                        .onSuccess {
+                            uiMessage = if (it.queued) "Done queued for sync" else "Marked done"
+                            onShowSnackbar(uiMessage.orEmpty(), null, null)
+                            if (chunks.isNotEmpty()) {
+                                val last = chunks.last()
+                                vm.setPlaybackPosition(currentItemId, chunks.lastIndex, last.length)
+                            }
+                        }
+                        .onFailure { error ->
+                            if (error is CancellationException) return@onFailure
+                            uiMessage = error.message ?: "Progress update failed"
+                            onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
+                        }
+                }
+            },
+            onNextItem = {
+                actionScope.launch {
+                    val nextId = vm.nextSessionItemId(currentItemId)
+                    if (nextId == null) {
+                        uiMessage = "No next item"
+                    } else {
+                        stopSpeaking(forceSync = true)
+                        currentItemId = nextId
+                        vm.setPlaybackPosition(nextId, 0, 0)
+                        autoPlayAfterLoad = true
+                        onOpenItem(nextId)
+                    }
+                }
+            },
+        )
     }
 
     if (showPlaylistPicker) {
@@ -766,12 +714,17 @@ fun PlayerScreen(
                         .onSuccess { result ->
                             val verb = if (result.added) "Added to" else "Removed from"
                             showPlaylistPicker = false
-                            Toast.makeText(context, "$verb ${choice.playlistName}", Toast.LENGTH_SHORT).show()
+                            onShowSnackbar("$verb ${choice.playlistName}", null, null)
                             playlistMutationMessage = null
                         }
                         .onFailure { error ->
                             showPlaylistPicker = false
                             playlistMutationMessage = friendlyPlaylistError(error)
+                            onShowSnackbar(
+                                friendlyPlaylistError(error),
+                                "Diagnostics",
+                                "open_diagnostics",
+                            )
                         }
                 }
             },
@@ -790,6 +743,7 @@ fun PlayerScreen(
                         actionScope.launch {
                             stopSpeaking(forceSync = true)
                             vm.clearNowPlayingSessionNow()
+                            onShowSnackbar("Now Playing session cleared.", null, null)
                             onBackToQueue(null)
                         }
                     },
@@ -803,6 +757,77 @@ fun PlayerScreen(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun PlayerControlBar(
+    canMoveBackward: Boolean,
+    canMoveForward: Boolean,
+    canPlay: Boolean,
+    canMarkDone: Boolean,
+    isPlaying: Boolean,
+    onPreviousSegment: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNextSegment: () -> Unit,
+    onPreviousItem: () -> Unit,
+    onMarkDone: () -> Unit,
+    onNextItem: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 2.dp, bottom = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            IconButton(onClick = onPreviousSegment, enabled = canMoveBackward) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_fast_rewind_24),
+                    contentDescription = "Previous segment",
+                )
+            }
+            IconButton(onClick = onPlayPause, enabled = canPlay) {
+                Icon(
+                    painter = painterResource(
+                        id = if (isPlaying) R.drawable.msr_pause_24 else R.drawable.msr_play_arrow_24,
+                    ),
+                    contentDescription = if (isPlaying) "Pause playback" else "Play",
+                )
+            }
+            IconButton(onClick = onNextSegment, enabled = canMoveForward) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_fast_forward_24),
+                    contentDescription = "Next segment",
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            IconButton(onClick = onPreviousItem) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_skip_previous_24),
+                    contentDescription = "Previous item",
+                )
+            }
+            IconButton(onClick = onMarkDone, enabled = canMarkDone) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_check_circle_24),
+                    contentDescription = "Mark done",
+                )
+            }
+            IconButton(onClick = onNextItem) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_skip_next_24),
+                    contentDescription = "Next item",
+                )
+            }
+        }
     }
 }
 

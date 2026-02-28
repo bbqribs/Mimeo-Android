@@ -1,7 +1,6 @@
 package com.mimeo.android.ui.queue
 
 import android.os.Build
-import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,7 +31,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -51,6 +49,7 @@ private const val DONE_PERCENT_THRESHOLD = 98
 @Composable
 fun QueueScreen(
     vm: AppViewModel,
+    onShowSnackbar: (String, String?, String?) -> Unit,
     focusItemId: Int? = null,
     onOpenPlayer: (Int) -> Unit,
     onOpenDiagnostics: () -> Unit,
@@ -66,7 +65,6 @@ fun QueueScreen(
     val cachedItemIds by vm.cachedItemIds.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
-    val context = LocalContext.current
     val actionScope = rememberCoroutineScope()
 
     var showClearSessionDialog by remember { mutableStateOf(false) }
@@ -222,7 +220,12 @@ fun QueueScreen(
                             onClick = { resumeItemId?.let { onOpenPlayer(it) } },
                             enabled = resumeItemId != null,
                         ) { Text("Resume") }
-                        TextButton(onClick = { vm.restartNowPlayingSession() }) { Text("Restart") }
+                        TextButton(
+                            onClick = {
+                                vm.restartNowPlayingSession()
+                                onShowSnackbar("Now Playing session restarted.", null, null)
+                            },
+                        ) { Text("Restart") }
                         TextButton(onClick = { showClearSessionDialog = true }) { Text("Clear") }
                     }
                     if (resumeSummary != null && resumeItemId != null && items.none { it.itemId == resumeItemId }) {
@@ -287,12 +290,17 @@ fun QueueScreen(
                         .onSuccess { result ->
                             val verb = if (result.added) "Added to" else "Removed from"
                             playlistPickerItem = null
-                            Toast.makeText(context, "$verb ${choice.playlistName}", Toast.LENGTH_SHORT).show()
+                            onShowSnackbar("$verb ${choice.playlistName}", null, null)
                             playlistMutationMessage = null
                         }
                         .onFailure { error ->
                             playlistPickerItem = null
                             playlistMutationMessage = friendlyPlaylistError(error)
+                            onShowSnackbar(
+                                friendlyPlaylistError(error),
+                                "Diagnostics",
+                                "open_diagnostics",
+                            )
                         }
                 }
             },
@@ -308,6 +316,7 @@ fun QueueScreen(
                 TextButton(
                     onClick = {
                         vm.clearNowPlayingSession()
+                        onShowSnackbar("Now Playing session cleared.", null, null)
                         showClearSessionDialog = false
                     },
                 ) {
