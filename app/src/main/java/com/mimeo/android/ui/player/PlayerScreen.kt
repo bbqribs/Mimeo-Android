@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -473,35 +474,11 @@ fun PlayerScreen(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        playlistMutationMessage?.let { message ->
-            StatusBanner(
-                stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
-                summary = message,
-                detail = null,
-                onRetry = { playlistMutationMessage = null },
-                onDiagnostics = onOpenDiagnostics,
-            )
-        }
-        if (uiMessage != null || showDiagnosticsHint) {
-            StatusBanner(
-                stateLabel = if (queueOffline) "Offline" else "Status",
-                summary = uiMessage ?: "Network guidance",
-                detail = if (showDiagnosticsHint) "${uiMessage.orEmpty()}\n${baseUrlHint.orEmpty()}" else uiMessage,
-                onRetry = {
-                    uiMessage = null
-                    if (textPayload == null) {
-                        reloadNonce += 1
-                    } else if (chunks.isNotEmpty()) {
-                        isAutoPlaying = true
-                        playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
-                    }
-                },
-                onDiagnostics = if (showRecoveryActions || showDiagnosticsHint) onOpenDiagnostics else null,
-            )
-        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -577,6 +554,32 @@ fun PlayerScreen(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
+        playlistMutationMessage?.let { message ->
+            StatusBanner(
+                stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
+                summary = message,
+                detail = null,
+                onRetry = { playlistMutationMessage = null },
+                onDiagnostics = onOpenDiagnostics,
+            )
+        }
+        if (uiMessage != null || showDiagnosticsHint) {
+            StatusBanner(
+                stateLabel = if (queueOffline) "Offline" else "Status",
+                summary = uiMessage ?: "Network guidance",
+                detail = if (showDiagnosticsHint) "${uiMessage.orEmpty()}\n${baseUrlHint.orEmpty()}" else uiMessage,
+                onRetry = {
+                    uiMessage = null
+                    if (textPayload == null) {
+                        reloadNonce += 1
+                    } else if (chunks.isNotEmpty()) {
+                        isAutoPlaying = true
+                        playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
+                    }
+                },
+                onDiagnostics = if (showRecoveryActions || showDiagnosticsHint) onOpenDiagnostics else null,
+            )
+        }
         if (isLoading) {
             CircularProgressIndicator()
         }
@@ -774,59 +777,49 @@ private fun PlayerControlBar(
     onMarkDone: () -> Unit,
     onNextItem: () -> Unit,
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 2.dp, bottom = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(0.dp),
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-        ) {
-            IconButton(onClick = onPreviousSegment, enabled = canMoveBackward) {
-                Icon(
-                    painter = painterResource(id = R.drawable.msr_fast_rewind_24),
-                    contentDescription = "Previous segment",
-                )
-            }
-            IconButton(onClick = onPlayPause, enabled = canPlay) {
-                Icon(
-                    painter = painterResource(
-                        id = if (isPlaying) R.drawable.msr_pause_24 else R.drawable.msr_play_arrow_24,
-                    ),
-                    contentDescription = if (isPlaying) "Pause playback" else "Play",
-                )
-            }
-            IconButton(onClick = onNextSegment, enabled = canMoveForward) {
-                Icon(
-                    painter = painterResource(id = R.drawable.msr_fast_forward_24),
-                    contentDescription = "Next segment",
-                )
-            }
+        IconButton(onClick = onPreviousItem) {
+            Icon(
+                painter = painterResource(id = R.drawable.msr_skip_previous_24),
+                contentDescription = "Previous item",
+            )
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-        ) {
-            IconButton(onClick = onPreviousItem) {
-                Icon(
-                    painter = painterResource(id = R.drawable.msr_skip_previous_24),
-                    contentDescription = "Previous item",
-                )
-            }
-            IconButton(onClick = onMarkDone, enabled = canMarkDone) {
-                Icon(
-                    painter = painterResource(id = R.drawable.msr_check_circle_24),
-                    contentDescription = "Mark done",
-                )
-            }
-            IconButton(onClick = onNextItem) {
-                Icon(
-                    painter = painterResource(id = R.drawable.msr_skip_next_24),
-                    contentDescription = "Next item",
-                )
-            }
+        IconButton(onClick = onPreviousSegment, enabled = canMoveBackward) {
+            Icon(
+                painter = painterResource(id = R.drawable.msr_fast_rewind_24),
+                contentDescription = "Previous segment",
+            )
+        }
+        IconButton(onClick = onPlayPause, enabled = canPlay) {
+            Icon(
+                painter = painterResource(
+                    id = if (isPlaying) R.drawable.msr_pause_24 else R.drawable.msr_play_arrow_24,
+                ),
+                contentDescription = if (isPlaying) "Pause playback" else "Play",
+            )
+        }
+        IconButton(onClick = onNextSegment, enabled = canMoveForward) {
+            Icon(
+                painter = painterResource(id = R.drawable.msr_fast_forward_24),
+                contentDescription = "Next segment",
+            )
+        }
+        IconButton(onClick = onMarkDone, enabled = canMarkDone) {
+            Icon(
+                painter = painterResource(id = R.drawable.msr_check_circle_24),
+                contentDescription = "Mark done",
+            )
+        }
+        IconButton(onClick = onNextItem) {
+            Icon(
+                painter = painterResource(id = R.drawable.msr_skip_next_24),
+                contentDescription = "Next item",
+            )
         }
     }
 }

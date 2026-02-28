@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.IconButton
@@ -17,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -41,6 +43,7 @@ fun StatusBanner(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 32.dp),
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 AssistChip(
@@ -55,28 +58,33 @@ fun StatusBanner(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (onRetry != null) {
-                    IconButton(
-                        onClick = onRetry,
-                        modifier = Modifier.heightIn(min = 32.dp),
-                    ) {
-                        Text("R", style = MaterialTheme.typography.labelSmall)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(0.dp),
+                ) {
+                    if (onRetry != null) {
+                        IconButton(
+                            onClick = onRetry,
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Text("R", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
-                }
-                if (onDiagnostics != null) {
-                    IconButton(
-                        onClick = onDiagnostics,
-                        modifier = Modifier.heightIn(min = 32.dp),
-                    ) {
-                        Text("i", style = MaterialTheme.typography.labelSmall)
+                    if (onDiagnostics != null) {
+                        IconButton(
+                            onClick = onDiagnostics,
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Text("i", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
-                }
-                if (!detail.isNullOrBlank()) {
-                    IconButton(
-                        onClick = { expanded = !expanded },
-                        modifier = Modifier.heightIn(min = 32.dp),
-                    ) {
-                        Text(if (expanded) "^" else "v", style = MaterialTheme.typography.labelSmall)
+                    if (!detail.isNullOrBlank()) {
+                        IconButton(
+                            onClick = { expanded = !expanded },
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Text(if (expanded) "^" else "v", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
             }
