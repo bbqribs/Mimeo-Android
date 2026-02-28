@@ -6,12 +6,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,30 +59,30 @@ fun StatusBanner(
                 )
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(0.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     if (onRetry != null) {
-                        IconButton(
+                        TextButton(
                             onClick = onRetry,
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.heightIn(min = 28.dp),
                         ) {
-                            Text("R", style = MaterialTheme.typography.labelSmall)
+                            Text("Retry", style = MaterialTheme.typography.labelSmall)
                         }
                     }
                     if (onDiagnostics != null) {
-                        IconButton(
+                        TextButton(
                             onClick = onDiagnostics,
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.heightIn(min = 28.dp),
                         ) {
-                            Text("i", style = MaterialTheme.typography.labelSmall)
+                            Text("Diag", style = MaterialTheme.typography.labelSmall)
                         }
                     }
                     if (!detail.isNullOrBlank()) {
-                        IconButton(
+                        TextButton(
                             onClick = { expanded = !expanded },
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.heightIn(min = 28.dp),
                         ) {
-                            Text(if (expanded) "^" else "v", style = MaterialTheme.typography.labelSmall)
+                            Text(if (expanded) "Less" else "More", style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }

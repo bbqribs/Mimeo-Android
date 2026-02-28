@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -474,9 +473,7 @@ fun PlayerScreen(
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
+        modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Row(
@@ -783,6 +780,12 @@ private fun PlayerControlBar(
             .padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
+        IconButton(onClick = onMarkDone, enabled = canMarkDone) {
+            Icon(
+                painter = painterResource(id = R.drawable.msr_check_circle_24),
+                contentDescription = "Mark done",
+            )
+        }
         IconButton(onClick = onPreviousItem) {
             Icon(
                 painter = painterResource(id = R.drawable.msr_skip_previous_24),
@@ -807,12 +810,6 @@ private fun PlayerControlBar(
             Icon(
                 painter = painterResource(id = R.drawable.msr_fast_forward_24),
                 contentDescription = "Next segment",
-            )
-        }
-        IconButton(onClick = onMarkDone, enabled = canMarkDone) {
-            Icon(
-                painter = painterResource(id = R.drawable.msr_check_circle_24),
-                contentDescription = "Mark done",
             )
         }
         IconButton(onClick = onNextItem) {

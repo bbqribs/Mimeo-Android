@@ -97,28 +97,6 @@ fun QueueScreen(
     val selectedPlaylistName = settings.selectedPlaylistId?.let { id ->
         playlists.firstOrNull { it.id == id }?.name
     } ?: "Smart queue"
-    val baseUrlHint = vm.baseUrlHintForDevice(isLikelyPhysicalDevice())
-    val baseAddress = settings.baseUrl.trim().removePrefix("http://").removePrefix("https://")
-    val statusLooksError = statusMessage?.let { message ->
-        val lower = message.lowercase()
-        lower.contains("failed") ||
-            lower.contains("error") ||
-            lower.contains("unauthorized") ||
-            lower.contains("forbidden") ||
-            lower.contains("timeout")
-    } ?: false
-    val bannerStateLabel = when {
-        offline -> "Offline"
-        baseUrlHint != null -> "LAN mismatch"
-        else -> "Online"
-    }
-    val bannerSummary = when {
-        offline -> "Cannot reach server at $baseAddress"
-        baseUrlHint != null -> baseUrlHint
-        !statusMessage.isNullOrBlank() -> statusMessage.orEmpty()
-        else -> "Connected"
-    }
-    val showBanner = offline || baseUrlHint != null || statusLooksError
     val syncLabel = when (syncBadgeState) {
         ProgressSyncBadgeState.SYNCED -> "Synced"
         ProgressSyncBadgeState.QUEUED -> "Queued"
@@ -146,17 +124,6 @@ fun QueueScreen(
                 onDiagnostics = onOpenDiagnostics,
             )
         }
-
-        if (showBanner) {
-            StatusBanner(
-                stateLabel = bannerStateLabel,
-                summary = bannerSummary,
-                detail = if (statusLooksError) statusMessage else baseUrlHint,
-                onRetry = { vm.loadQueue() },
-                onDiagnostics = onOpenDiagnostics,
-            )
-        }
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),

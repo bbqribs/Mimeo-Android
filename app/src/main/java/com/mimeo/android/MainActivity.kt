@@ -2,6 +2,7 @@ package com.mimeo.android
 
 import android.app.Application
 import android.os.Bundle
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -15,8 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -62,6 +62,7 @@ import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.PlaylistMembershipToggleResult
 import com.mimeo.android.repository.PlaybackRepository
 import com.mimeo.android.repository.ProgressPostResult
+import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
 import com.mimeo.android.ui.settings.SettingsScreen
 import com.mimeo.android.ui.player.PlayerScreen
@@ -94,6 +95,17 @@ data class UiSnackbarMessage(
     val actionKey: String? = null,
     val duration: SnackbarDuration = SnackbarDuration.Short,
 )
+
+private fun isLikelyPhysicalDevice(): Boolean {
+    val fingerprint = Build.FINGERPRINT.lowercase()
+    val model = Build.MODEL.lowercase()
+    val brand = Build.BRAND.lowercase()
+    return !(fingerprint.contains("generic") ||
+        fingerprint.contains("emulator") ||
+        model.contains("sdk") ||
+        model.contains("emulator") ||
+        brand.startsWith("generic"))
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -867,13 +879,37 @@ private fun MimeoApp(vm: AppViewModel) {
     val navBackStack by nav.currentBackStackEntryAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val currentRoute = navBackStack?.destination?.route.orEmpty()
+    val settings by vm.settings.collectAsState()
+    val queueOffline by vm.queueOffline.collectAsState()
+    val statusMessage by vm.statusMessage.collectAsState()
     val selectedTab = when {
         currentRoute.startsWith("player") -> "player"
         currentRoute.startsWith("playlists") -> "playlists"
         currentRoute.startsWith("settings") -> "settings"
         else -> "queue"
     }
-    val snackbarBottomPadding = if (selectedTab == "player") 56.dp else 0.dp
+    val baseUrlHint = vm.baseUrlHintForDevice(isLikelyPhysicalDevice())
+    val baseAddress = settings.baseUrl.trim().removePrefix("http://").removePrefix("https://")
+    val statusLooksError = statusMessage?.let { message ->
+        val lower = message.lowercase()
+        lower.contains("failed") ||
+            lower.contains("error") ||
+            lower.contains("unauthorized") ||
+            lower.contains("forbidden") ||
+            lower.contains("timeout")
+    } ?: false
+    val bannerStateLabel = when {
+        queueOffline -> "Offline"
+        baseUrlHint != null -> "LAN mismatch"
+        else -> "Status"
+    }
+    val bannerSummary = when {
+        queueOffline -> "Cannot reach server at $baseAddress"
+        baseUrlHint != null -> baseUrlHint
+        statusLooksError -> statusMessage.orEmpty()
+        else -> ""
+    }
+    val showGlobalBanner = queueOffline || baseUrlHint != null || statusLooksError
 
     LaunchedEffect(vm, snackbarHostState) {
         vm.snackbarMessages.collect { message ->
@@ -895,9 +931,7 @@ private fun MimeoApp(vm: AppViewModel) {
         snackbarHost = {
             SnackbarHost(
                 hostState = snackbarHostState,
-                modifier = Modifier
-                    .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
-                    .padding(bottom = snackbarBottomPadding),
+                modifier = Modifier.windowInsetsPadding(WindowInsets.ime),
             )
         },
         bottomBar = {
@@ -929,37 +963,94 @@ private fun MimeoApp(vm: AppViewModel) {
             }
         },
     ) { innerPadding ->
-        NavHost(
-            navController = nav,
-            startDestination = "queue",
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .statusBarsPadding()
                 .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            composable("playlists") {
-                PlaylistsScreen(vm = vm)
-            }
-            composable("settings") {
-                SettingsScreen(
-                    vm = vm,
-                    onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
+            if (showGlobalBanner) {
+                StatusBanner(
+                    stateLabel = bannerStateLabel,
+                    summary = bannerSummary,
+                    detail = if (statusLooksError) statusMessage else baseUrlHint,
+                    onRetry = { vm.loadQueue() },
+                    onDiagnostics = { nav.navigate("settings/diagnostics") },
                 )
             }
-            composable("settings/diagnostics") {
-                ConnectivityDiagnosticsScreen(vm = vm)
-            }
-            composable("player") {
-                val nowPlayingId = vm.currentNowPlayingItemId()
-                if (nowPlayingId == null) {
-                    NoNowPlayingScreen(onGoQueue = { nav.navigate("queue") })
-                } else {
+            NavHost(
+                navController = nav,
+                startDestination = "queue",
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                composable("playlists") {
+                    PlaylistsScreen(vm = vm)
+                }
+                composable("settings") {
+                    SettingsScreen(
+                        vm = vm,
+                        onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
+                    )
+                }
+                composable("settings/diagnostics") {
+                    ConnectivityDiagnosticsScreen(vm = vm)
+                }
+                composable("player") {
+                    val nowPlayingId = vm.currentNowPlayingItemId()
+                    if (nowPlayingId == null) {
+                        NoNowPlayingScreen(onGoQueue = { nav.navigate("queue") })
+                    } else {
+                        PlayerScreen(
+                            vm = vm,
+                            onShowSnackbar = { message, actionLabel, actionKey ->
+                                vm.showSnackbar(message, actionLabel, actionKey)
+                            },
+                            initialItemId = nowPlayingId,
+                            onOpenItem = { nextId -> nav.navigate("player/$nextId") },
+                            onBackToQueue = { focusId ->
+                                if (focusId == null) {
+                                    nav.navigate("queue")
+                                } else {
+                                    nav.navigate("queue?focusItemId=$focusId")
+                                }
+                            },
+                            onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
+                        )
+                    }
+                }
+                composable(
+                    route = "queue?focusItemId={focusItemId}",
+                    arguments = listOf(
+                        navArgument("focusItemId") {
+                            type = NavType.IntType
+                            defaultValue = -1
+                        },
+                    ),
+                ) { backStack ->
+                    val focusItemId = backStack.arguments?.getInt("focusItemId")?.takeIf { it > 0 }
+                    QueueScreen(
+                        vm = vm,
+                        onShowSnackbar = { message, actionLabel, actionKey ->
+                            vm.showSnackbar(message, actionLabel, actionKey)
+                        },
+                        focusItemId = focusItemId,
+                        onOpenPlayer = { itemId -> nav.navigate("player/$itemId") },
+                        onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
+                    )
+                }
+                composable(
+                    "player/{itemId}",
+                    arguments = listOf(navArgument("itemId") { type = NavType.IntType }),
+                ) { backStack ->
+                    val itemId = backStack.arguments?.getInt("itemId") ?: return@composable
                     PlayerScreen(
                         vm = vm,
                         onShowSnackbar = { message, actionLabel, actionKey ->
                             vm.showSnackbar(message, actionLabel, actionKey)
                         },
-                        initialItemId = nowPlayingId,
+                        initialItemId = itemId,
                         onOpenItem = { nextId -> nav.navigate("player/$nextId") },
                         onBackToQueue = { focusId ->
                             if (focusId == null) {
@@ -971,48 +1062,6 @@ private fun MimeoApp(vm: AppViewModel) {
                         onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
                     )
                 }
-            }
-            composable(
-                route = "queue?focusItemId={focusItemId}",
-                arguments = listOf(
-                    navArgument("focusItemId") {
-                        type = NavType.IntType
-                        defaultValue = -1
-                    },
-                ),
-            ) { backStack ->
-                val focusItemId = backStack.arguments?.getInt("focusItemId")?.takeIf { it > 0 }
-                QueueScreen(
-                    vm = vm,
-                    onShowSnackbar = { message, actionLabel, actionKey ->
-                        vm.showSnackbar(message, actionLabel, actionKey)
-                    },
-                    focusItemId = focusItemId,
-                    onOpenPlayer = { itemId -> nav.navigate("player/$itemId") },
-                    onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
-                )
-            }
-            composable(
-                "player/{itemId}",
-                arguments = listOf(navArgument("itemId") { type = NavType.IntType }),
-            ) { backStack ->
-                val itemId = backStack.arguments?.getInt("itemId") ?: return@composable
-                PlayerScreen(
-                    vm = vm,
-                    onShowSnackbar = { message, actionLabel, actionKey ->
-                        vm.showSnackbar(message, actionLabel, actionKey)
-                    },
-                    initialItemId = itemId,
-                    onOpenItem = { nextId -> nav.navigate("player/$nextId") },
-                    onBackToQueue = { focusId ->
-                        if (focusId == null) {
-                            nav.navigate("queue")
-                        } else {
-                            nav.navigate("queue?focusItemId=$focusId")
-                        }
-                    },
-                    onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
-                )
             }
         }
     }
