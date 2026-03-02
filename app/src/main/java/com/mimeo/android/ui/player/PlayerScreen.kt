@@ -62,6 +62,7 @@ private const val PROGRESS_SYNC_DEBOUNCE_MS = 2_000L
 private const val PROGRESS_CHAR_STEP = 120
 private const val FALLBACK_CHUNK_MAX_CHARS = 900
 private const val DONE_PERCENT_THRESHOLD = 98
+private val PLAYBACK_SPEED_OPTIONS = listOf(0.8f, 0.9f, 1.0f, 1.1f, 1.25f, 1.5f, 1.75f, 2.0f)
 
 private fun debugLog(message: String) {
     if (DEBUG_PLAYBACK) {
@@ -92,6 +93,7 @@ fun PlayerScreen(
     var lastHandledDoneUtteranceId by remember { mutableStateOf<String?>(null) }
     var autoPlayAfterLoad by remember { mutableStateOf(false) }
     var showClearSessionDialog by remember { mutableStateOf(false) }
+    var showSpeedDialog by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
@@ -429,6 +431,19 @@ fun PlayerScreen(
     val isDoneLocal = currentPercent >= DONE_PERCENT_THRESHOLD
     val knownProgress = vm.knownProgressForItem(currentItemId)
     val showCompleted = isDoneLocal || nearEndForcedForItemId == currentItemId || knownProgress >= DONE_PERCENT_THRESHOLD
+    var lastAppliedSpeed by remember { mutableStateOf(settings.playbackSpeed) }
+
+    LaunchedEffect(settings.playbackSpeed, currentItemId, safePosition.chunkIndex, safePosition.offsetInChunkChars, chunks.size) {
+        ttsController.setSpeechRate(settings.playbackSpeed)
+        if (lastAppliedSpeed == settings.playbackSpeed) return@LaunchedEffect
+        lastAppliedSpeed = settings.playbackSpeed
+        if ((isSpeaking || isAutoPlaying) && chunks.isNotEmpty()) {
+            stopSpeaking(forceSync = false)
+            isAutoPlaying = true
+            playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
+            uiMessage = "Speed ${formatPlaybackSpeed(settings.playbackSpeed)}"
+        }
+    }
 
     LaunchedEffect(currentItemId, currentPercent) {
         val crossedNearEnd = shouldForceNearEndCommit(
@@ -487,56 +502,61 @@ fun PlayerScreen(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Box {
-                IconButton(onClick = { overflowExpanded = true }) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.msr_more_vert_24),
-                        contentDescription = "More actions",
-                    )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = { showSpeedDialog = true }) {
+                    Text(formatPlaybackSpeed(settings.playbackSpeed))
                 }
-                DropdownMenu(
-                    expanded = overflowExpanded,
-                    onDismissRequest = { overflowExpanded = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Playlists...") },
-                        onClick = {
-                            overflowExpanded = false
-                            vm.refreshPlaylists()
-                            showPlaylistPicker = true
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Back to queue") },
-                        onClick = {
-                            overflowExpanded = false
-                            onBackToQueue(currentItemId)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Restart session") },
-                        onClick = {
-                            overflowExpanded = false
-                            actionScope.launch {
-                                vm.restartNowPlayingSession()
-                                onShowSnackbar("Now Playing session restarted.", null, null)
-                            }
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Clear session") },
-                        onClick = {
-                            overflowExpanded = false
-                            showClearSessionDialog = true
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Diagnostics") },
-                        onClick = {
-                            overflowExpanded = false
-                            onOpenDiagnostics()
-                        },
-                    )
+                Box {
+                    IconButton(onClick = { overflowExpanded = true }) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.msr_more_vert_24),
+                            contentDescription = "More actions",
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = overflowExpanded,
+                        onDismissRequest = { overflowExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Playlists...") },
+                            onClick = {
+                                overflowExpanded = false
+                                vm.refreshPlaylists()
+                                showPlaylistPicker = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Back to queue") },
+                            onClick = {
+                                overflowExpanded = false
+                                onBackToQueue(currentItemId)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Restart session") },
+                            onClick = {
+                                overflowExpanded = false
+                                actionScope.launch {
+                                    vm.restartNowPlayingSession()
+                                    onShowSnackbar("Now Playing session restarted.", null, null)
+                                }
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Clear session") },
+                            onClick = {
+                                overflowExpanded = false
+                                showClearSessionDialog = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Diagnostics") },
+                            onClick = {
+                                overflowExpanded = false
+                                onOpenDiagnostics()
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -736,6 +756,39 @@ fun PlayerScreen(
         )
     }
 
+    if (showSpeedDialog) {
+        AlertDialog(
+            onDismissRequest = { showSpeedDialog = false },
+            title = { Text("Playback speed") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    PLAYBACK_SPEED_OPTIONS.forEach { speed ->
+                        TextButton(
+                            onClick = {
+                                showSpeedDialog = false
+                                vm.savePlaybackSpeed(speed)
+                            },
+                        ) {
+                            Text(
+                                text = if (speed == settings.playbackSpeed) {
+                                    "${formatPlaybackSpeed(speed)} (current)"
+                                } else {
+                                    formatPlaybackSpeed(speed)
+                                },
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showSpeedDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
     if (showClearSessionDialog) {
         AlertDialog(
             onDismissRequest = { showClearSessionDialog = false },
@@ -925,6 +978,17 @@ private fun isNetworkErrorMessage(message: String): Boolean {
         lower.contains("timeout") ||
         lower.contains("failed to connect") ||
         lower.contains("connection refused")
+}
+
+private fun formatPlaybackSpeed(speed: Float): String {
+    val text = if ((speed * 100).toInt() % 100 == 0) {
+        speed.toInt().toString()
+    } else if ((speed * 100).toInt() % 10 == 0) {
+        String.format("%.1f", speed)
+    } else {
+        String.format("%.2f", speed)
+    }
+    return "${text}x"
 }
 
 private fun friendlyPlaylistError(error: Throwable): String {
