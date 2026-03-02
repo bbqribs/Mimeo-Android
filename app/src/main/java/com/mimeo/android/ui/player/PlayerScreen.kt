@@ -591,6 +591,10 @@ fun PlayerScreen(
                     chunks = chunks,
                     currentChunkIndex = safePosition.chunkIndex,
                     autoScrollWhileListening = settings.autoScrollWhileListening,
+                    readingFontSizeSp = settings.readingFontSizeSp,
+                    readingLineHeightPercent = settings.readingLineHeightPercent,
+                    readingMaxWidthDp = settings.readingMaxWidthDp,
+                    paragraphSpacing = settings.readingParagraphSpacing,
                     onSelectChunk = { index ->
                         val safeIndex = index.coerceIn(0, chunks.lastIndex)
                         setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
