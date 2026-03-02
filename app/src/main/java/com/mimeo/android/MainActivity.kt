@@ -648,18 +648,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val title = current.title?.takeIf { it.isNotBlank() }
             ?: current.url.takeIf { it.isNotBlank() }
             ?: "Item ${current.itemId}"
-        val progress = knownProgressForItem(current.itemId)
-        val doneSuffix = if (progress >= DONE_PERCENT_THRESHOLD) " (Done)" else ""
+        val doneSuffix = if (knownFurthestForItem(current.itemId) >= DONE_PERCENT_THRESHOLD) " (Done)" else ""
         return "$title$doneSuffix"
     }
 
     fun knownProgressForItem(itemId: Int): Int {
-        val queueProgress = queueItems.value.firstOrNull { it.itemId == itemId }?.lastReadPercent ?: 0
+        val queueProgress = queueItems.value.firstOrNull { it.itemId == itemId }?.progressPercent ?: 0
         val sessionProgress = nowPlayingSession.value
             ?.items
             ?.firstOrNull { it.itemId == itemId }
             ?.lastReadPercent ?: 0
         return maxOf(queueProgress, sessionProgress)
+    }
+
+    fun knownFurthestForItem(itemId: Int): Int {
+        val queueFurthest = queueItems.value.firstOrNull { it.itemId == itemId }?.furthestPercent ?: 0
+        val sessionFurthest = nowPlayingSession.value
+            ?.items
+            ?.firstOrNull { it.itemId == itemId }
+            ?.lastReadPercent ?: 0
+        return maxOf(queueFurthest, sessionFurthest)
     }
 
     suspend fun setNowPlayingCurrentItem(itemId: Int) {

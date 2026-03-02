@@ -310,8 +310,8 @@ private fun QueueItemCard(
     onExpandMenu: () -> Unit,
 ) {
     val title = item.title?.ifBlank { null } ?: item.url
-    val progress = item.lastReadPercent ?: 0
-    val doneMarker = if (progress >= DONE_PERCENT_THRESHOLD) "done" else "active"
+    val progress = item.progressPercent
+    val doneMarker = if (item.furthestPercent >= DONE_PERCENT_THRESHOLD) "done" else "active"
     val cacheMarker = if (cached) "offline-ready" else "needs-network"
 
     ElevatedCard(

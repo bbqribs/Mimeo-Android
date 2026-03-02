@@ -61,10 +61,26 @@ data class PlaybackQueueItem(
     @SerialName("active_content_version_id") val activeContentVersionId: Int? = null,
     @SerialName("strategy_used") val strategyUsed: String? = null,
     @SerialName("word_count") val wordCount: Int? = null,
+    @SerialName("resume_read_percent") val resumeReadPercent: Int? = null,
     @SerialName("last_read_percent") val lastReadPercent: Int? = null,
+    @SerialName("progress_percent") val apiProgressPercent: Int? = null,
+    @SerialName("furthest_percent") val apiFurthestPercent: Int? = null,
     @SerialName("last_opened_at") val lastOpenedAt: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
-)
+) {
+    val progressPercent: Int
+        get() {
+            val parsedProgress = apiProgressPercent ?: resumeReadPercent ?: lastReadPercent ?: 0
+            val clampedProgress = parsedProgress.coerceAtLeast(0)
+            return minOf(clampedProgress, furthestPercent)
+        }
+
+    val furthestPercent: Int
+        get() {
+            val parsedFurthest = apiFurthestPercent ?: lastReadPercent ?: (apiProgressPercent ?: resumeReadPercent ?: 0)
+            return maxOf(parsedFurthest, 0)
+        }
+}
 
 @Serializable
 data class ItemTextResponse(
