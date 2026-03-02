@@ -21,12 +21,18 @@
 - [x] UI compression pass: compact nav, dense queue/player/playlists/settings layouts, and collapsible status banner for offline/LAN issues.
 - [x] UX follow-ups: root snackbar visibility, stable player status/banner placement, and denser player control bar without reducing tap targets.
 
-## Next
-1. [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.
-2. [ ] Persist last segment index per item in DataStore for cross-process resume.
-3. [ ] Add queue filters/sorting controls from playback API query params.
+## Android Redesign v1.1
+1. [~] Foundation: 4-tab nav shell (Up Next / Locus / Collections / Settings) plus black/purple theme foundations.
+2. [ ] Mini control panel (collapsed Locus peek) for active playback/session continuity.
+3. [ ] Up Next skeleton: playlist dropdown, search affordance, filter chips, and grouped queue sections.
+4. [ ] Typography preferences pass: reading fonts, line height, and display density controls.
+5. [ ] Playback speed control in Locus with persisted preference.
+6. [ ] Collections baseline: special collections + named playlist browser under the redesign shell.
 
 ## Later
+- [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.
+- [ ] Persist last segment index per item in DataStore for cross-process resume.
+- [ ] Add queue filters/sorting controls from playback API query params.
 - [ ] Named playlists and queue management.
 - [ ] Audio focus/media session polish.
 - [ ] Better conflict handling for stale cached versions during long offline sessions.
