@@ -1,24 +1,28 @@
 package com.mimeo.android.ui.queue
 
-import android.os.Build
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,6 +33,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -38,13 +43,20 @@ import com.mimeo.android.AppViewModel
 import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.PlaybackQueueItem
-import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import kotlinx.coroutines.launch
 
 private const val DONE_PERCENT_THRESHOLD = 98
+
+private enum class QueueFilterChip(val label: String, val enabled: Boolean = true) {
+    ALL("All"),
+    UNREAD("Unread"),
+    IN_PROGRESS("In progress"),
+    DONE("Done"),
+    ARCHIVED("Archived", enabled = false),
+}
 
 @Composable
 fun QueueScreen(
@@ -58,22 +70,18 @@ fun QueueScreen(
     val playlists by vm.playlists.collectAsState()
     val settings by vm.settings.collectAsState()
     val loading by vm.queueLoading.collectAsState()
-    val offline by vm.queueOffline.collectAsState()
-    val pendingCount by vm.pendingProgressCount.collectAsState()
-    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
-    val sessionIssueMessage by vm.sessionIssueMessage.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
-    val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
-    val statusMessage by vm.statusMessage.collectAsState()
     val actionScope = rememberCoroutineScope()
 
-    var showClearSessionDialog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     var pendingFocusId by remember { mutableIntStateOf(-1) }
     var playlistMenuExpanded by remember { mutableStateOf(false) }
     var rowMenuItemId by remember { mutableIntStateOf(-1) }
     var playlistPickerItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
+    var searchExpanded by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var selectedFilter by rememberSaveable { mutableStateOf(QueueFilterChip.ALL) }
 
     LaunchedEffect(Unit) {
         vm.refreshPlaylists()
@@ -85,25 +93,9 @@ fun QueueScreen(
         pendingFocusId = focusItemId ?: -1
     }
 
-    LaunchedEffect(items, pendingFocusId) {
-        if (pendingFocusId <= 0) return@LaunchedEffect
-        val index = items.indexOfFirst { it.itemId == pendingFocusId }
-        if (index >= 0) {
-            listState.animateScrollToItem(index)
-            pendingFocusId = -1
-        }
-    }
-
     val selectedPlaylistName = settings.selectedPlaylistId?.let { id ->
         playlists.firstOrNull { it.id == id }?.name
-    } ?: "Smart queue"
-    val syncLabel = when (syncBadgeState) {
-        ProgressSyncBadgeState.SYNCED -> "Synced"
-        ProgressSyncBadgeState.QUEUED -> "Queued"
-        ProgressSyncBadgeState.OFFLINE -> "Offline"
-    }
-    val resumeSummary = vm.nowPlayingSummaryText()
-    val resumeItemId = vm.currentNowPlayingItemId()
+    } ?: "All"
     val playlistChoices = playlistPickerItem?.let { target ->
         playlists.map { playlist ->
             PlaylistPickerChoice(
@@ -113,8 +105,35 @@ fun QueueScreen(
             )
         }
     }.orEmpty()
+    val displayedItems = items.filter { item ->
+        val matchesSearch = if (searchQuery.isBlank()) {
+            true
+        } else {
+            val query = searchQuery.trim().lowercase()
+            item.title.orEmpty().lowercase().contains(query) ||
+                item.host.orEmpty().lowercase().contains(query) ||
+                item.url.lowercase().contains(query)
+        }
+        val matchesFilter = when (selectedFilter) {
+            QueueFilterChip.ALL -> true
+            QueueFilterChip.UNREAD -> item.furthestPercent <= 0
+            QueueFilterChip.IN_PROGRESS -> item.furthestPercent in 1 until DONE_PERCENT_THRESHOLD
+            QueueFilterChip.DONE -> item.furthestPercent >= DONE_PERCENT_THRESHOLD
+            QueueFilterChip.ARCHIVED -> false
+        }
+        matchesSearch && matchesFilter
+    }
 
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    LaunchedEffect(displayedItems, pendingFocusId) {
+        if (pendingFocusId <= 0) return@LaunchedEffect
+        val index = displayedItems.indexOfFirst { it.itemId == pendingFocusId }
+        if (index >= 0) {
+            listState.animateScrollToItem(index)
+            pendingFocusId = -1
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         playlistMutationMessage?.let { message ->
             StatusBanner(
                 stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
@@ -124,23 +143,28 @@ fun QueueScreen(
                 onDiagnostics = onOpenDiagnostics,
             )
         }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            TextButton(onClick = { vm.loadQueue() }) { Text("Refresh") }
-            TextButton(onClick = { vm.flushPendingProgress() }) { Text("Sync") }
             Box {
                 AssistChip(
                     onClick = { playlistMenuExpanded = true },
-                    label = { Text("Queue: $selectedPlaylistName") },
+                    label = { Text(selectedPlaylistName) },
+                    trailingIcon = {
+                        Icon(
+                            painter = painterResource(android.R.drawable.arrow_down_float),
+                            contentDescription = "Choose playlist",
+                        )
+                    },
                 )
                 DropdownMenu(
                     expanded = playlistMenuExpanded,
                     onDismissRequest = { playlistMenuExpanded = false },
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Smart queue") },
+                        text = { Text("All") },
                         onClick = {
                             playlistMenuExpanded = false
                             vm.selectPlaylist(null)
@@ -157,61 +181,57 @@ fun QueueScreen(
                     }
                 }
             }
-            Text(
+            Row(
                 modifier = Modifier.weight(1f),
-                text = "Sync: $syncLabel  Pending: $pendingCount",
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-
-        nowPlayingSession?.let { session ->
-            val current = session.currentItem ?: session.items.firstOrNull()
-            val title = current?.title?.ifBlank { null } ?: current?.url ?: "Session item"
-            val progress = current?.itemId?.let { vm.knownProgressForItem(it) } ?: 0
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text("Now Playing ${session.currentIndex + 1}/${session.items.size} - $progress%")
-                    Text(
-                        text = title,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                horizontalArrangement = Arrangement.End,
+            ) {
+                IconButton(onClick = { searchExpanded = !searchExpanded }) {
+                    Icon(
+                        painter = painterResource(android.R.drawable.ic_menu_search),
+                        contentDescription = if (searchExpanded) "Close search" else "Search queue",
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TextButton(
-                            onClick = { resumeItemId?.let { onOpenPlayer(it) } },
-                            enabled = resumeItemId != null,
-                        ) { Text("Resume") }
-                        TextButton(
-                            onClick = {
-                                vm.restartNowPlayingSession()
-                                onShowSnackbar("Now Playing session restarted.", null, null)
-                            },
-                        ) { Text("Restart") }
-                        TextButton(onClick = { showClearSessionDialog = true }) { Text("Clear") }
-                    }
-                    if (resumeSummary != null && resumeItemId != null && items.none { it.itemId == resumeItemId }) {
-                        Text(
-                            text = "Current item hidden by queue filters; Resume still works.",
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
                 }
             }
         }
 
-        sessionIssueMessage?.let {
-            Text(
-                text = it,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+        if (searchExpanded) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    modifier = Modifier.weight(1f),
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    singleLine = true,
+                    label = { Text("Search Up Next") },
+                )
+                TextButton(
+                    modifier = Modifier.width(72.dp),
+                    onClick = {
+                        searchQuery = ""
+                        searchExpanded = false
+                    },
+                ) {
+                    Text("Close")
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            QueueFilterChip.entries.forEach { chip ->
+                FilterChip(
+                    selected = selectedFilter == chip,
+                    onClick = { selectedFilter = chip },
+                    enabled = chip.enabled,
+                    label = { Text(chip.label) },
+                )
+            }
         }
 
         if (loading) {
@@ -220,12 +240,15 @@ fun QueueScreen(
         if (items.isEmpty() && settings.selectedPlaylistId != null && !loading) {
             Text("No items yet in this playlist.")
         }
+        if (displayedItems.isEmpty() && items.isNotEmpty() && !loading) {
+            Text("No items match the current search/filter.")
+        }
 
         LazyColumn(
             state = listState,
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            items(items) { item ->
+            items(displayedItems, key = { it.itemId }) { item ->
                 QueueItemCard(
                     item = item,
                     cached = cachedItemIds.contains(item.itemId),
@@ -269,30 +292,6 @@ fun QueueScreen(
                                 "open_diagnostics",
                             )
                         }
-                }
-            },
-        )
-    }
-
-    if (showClearSessionDialog) {
-        AlertDialog(
-            onDismissRequest = { showClearSessionDialog = false },
-            title = { Text("Clear session?") },
-            text = { Text("This removes the persisted Now Playing snapshot.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        vm.clearNowPlayingSession()
-                        onShowSnackbar("Now Playing session cleared.", null, null)
-                        showClearSessionDialog = false
-                    },
-                ) {
-                    Text("Clear")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearSessionDialog = false }) {
-                    Text("Cancel")
                 }
             },
         )
@@ -375,15 +374,4 @@ private fun friendlyPlaylistError(error: Throwable): String {
         }
         else -> "Couldn't update playlist. Check connection, then open Diagnostics."
     }
-}
-
-private fun isLikelyPhysicalDevice(): Boolean {
-    val fingerprint = Build.FINGERPRINT.lowercase()
-    val model = Build.MODEL.lowercase()
-    val brand = Build.BRAND.lowercase()
-    return !(fingerprint.contains("generic") ||
-        fingerprint.contains("emulator") ||
-        model.contains("sdk") ||
-        model.contains("emulator") ||
-        brand.startsWith("generic"))
 }
