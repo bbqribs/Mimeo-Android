@@ -3,6 +3,7 @@ package com.mimeo.android
 import android.app.Application
 import android.os.Bundle
 import android.os.Build
+import androidx.annotation.DrawableRes
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -35,6 +37,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -68,6 +71,7 @@ import com.mimeo.android.ui.settings.SettingsScreen
 import com.mimeo.android.ui.player.PlayerScreen
 import com.mimeo.android.ui.playlists.PlaylistsScreen
 import com.mimeo.android.ui.queue.QueueScreen
+import com.mimeo.android.ui.theme.MimeoTheme
 import com.mimeo.android.work.WorkScheduler
 import java.io.IOException
 import java.text.SimpleDateFormat
@@ -88,6 +92,18 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 private const val DONE_PERCENT_THRESHOLD = 98
+private const val ROUTE_UP_NEXT = "upNext"
+private const val ROUTE_LOCUS = "locus"
+private const val ROUTE_LOCUS_ITEM = "locus/{itemId}"
+private const val ROUTE_COLLECTIONS = "collections"
+private const val ROUTE_SETTINGS = "settings"
+private const val ROUTE_SETTINGS_DIAGNOSTICS = "settings/diagnostics"
+
+private data class BottomNavDestination(
+    val route: String,
+    val label: String,
+    @DrawableRes val iconRes: Int,
+)
 
 data class UiSnackbarMessage(
     val message: String,
@@ -116,7 +132,7 @@ class MainActivity : ComponentActivity() {
             ViewModelProvider.AndroidViewModelFactory.getInstance(application),
         )[AppViewModel::class.java]
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
+            MimeoTheme {
                 MimeoApp(vm)
             }
         }
@@ -887,14 +903,20 @@ private fun MimeoApp(vm: AppViewModel) {
     val navBackStack by nav.currentBackStackEntryAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val currentRoute = navBackStack?.destination?.route.orEmpty()
+    val navItems = listOf(
+        BottomNavDestination(ROUTE_UP_NEXT, "Up Next", android.R.drawable.ic_media_next),
+        BottomNavDestination(ROUTE_LOCUS, "Locus", android.R.drawable.ic_menu_view),
+        BottomNavDestination(ROUTE_COLLECTIONS, "Collections", android.R.drawable.ic_menu_agenda),
+        BottomNavDestination(ROUTE_SETTINGS, "Settings", android.R.drawable.ic_menu_preferences),
+    )
     val settings by vm.settings.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val selectedTab = when {
-        currentRoute.startsWith("player") -> "player"
-        currentRoute.startsWith("playlists") -> "playlists"
-        currentRoute.startsWith("settings") -> "settings"
-        else -> "queue"
+        currentRoute.startsWith(ROUTE_LOCUS) -> ROUTE_LOCUS
+        currentRoute.startsWith(ROUTE_COLLECTIONS) -> ROUTE_COLLECTIONS
+        currentRoute.startsWith(ROUTE_SETTINGS) -> ROUTE_SETTINGS
+        else -> ROUTE_UP_NEXT
     }
     val baseUrlHint = vm.baseUrlHintForDevice(isLikelyPhysicalDevice())
     val baseAddress = settings.baseUrl.trim().removePrefix("http://").removePrefix("https://")
@@ -938,7 +960,7 @@ private fun MimeoApp(vm: AppViewModel) {
                 result == SnackbarResult.ActionPerformed &&
                 message.actionKey == "open_diagnostics"
             ) {
-                nav.navigate("settings/diagnostics") { launchSingleTop = true }
+                nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) { launchSingleTop = true }
             }
         }
     }
@@ -952,30 +974,19 @@ private fun MimeoApp(vm: AppViewModel) {
         },
         bottomBar = {
             NavigationBar {
-                NavigationBarItem(
-                    selected = selectedTab == "queue",
-                    onClick = { nav.navigate("queue") { launchSingleTop = true } },
-                    label = { Text("Queue") },
-                    icon = {},
-                )
-                NavigationBarItem(
-                    selected = selectedTab == "player",
-                    onClick = { nav.navigate("player") { launchSingleTop = true } },
-                    label = { Text("Player") },
-                    icon = {},
-                )
-                NavigationBarItem(
-                    selected = selectedTab == "playlists",
-                    onClick = { nav.navigate("playlists") { launchSingleTop = true } },
-                    label = { Text("Playlists") },
-                    icon = {},
-                )
-                NavigationBarItem(
-                    selected = selectedTab == "settings",
-                    onClick = { nav.navigate("settings") { launchSingleTop = true } },
-                    label = { Text("Settings") },
-                    icon = {},
-                )
+                navItems.forEach { destination ->
+                    NavigationBarItem(
+                        selected = selectedTab == destination.route,
+                        onClick = { nav.navigate(destination.route) { launchSingleTop = true } },
+                        label = { Text(destination.label) },
+                        icon = {
+                            Icon(
+                                painter = painterResource(destination.iconRes),
+                                contentDescription = destination.label,
+                            )
+                        },
+                    )
+                }
             }
         },
     ) { innerPadding ->
@@ -993,30 +1004,30 @@ private fun MimeoApp(vm: AppViewModel) {
                     summary = bannerSummary,
                     detail = bannerDetail,
                     onRetry = { vm.loadQueue() },
-                    onDiagnostics = { nav.navigate("settings/diagnostics") },
+                    onDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                 )
             }
             NavHost(
                 navController = nav,
-                startDestination = "queue",
+                startDestination = ROUTE_UP_NEXT,
                 modifier = Modifier.fillMaxSize(),
             ) {
-                composable("playlists") {
+                composable(ROUTE_COLLECTIONS) {
                     PlaylistsScreen(vm = vm)
                 }
-                composable("settings") {
+                composable(ROUTE_SETTINGS) {
                     SettingsScreen(
                         vm = vm,
-                        onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
+                        onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                     )
                 }
-                composable("settings/diagnostics") {
+                composable(ROUTE_SETTINGS_DIAGNOSTICS) {
                     ConnectivityDiagnosticsScreen(vm = vm)
                 }
-                composable("player") {
+                composable(ROUTE_LOCUS) {
                     val nowPlayingId = vm.currentNowPlayingItemId()
                     if (nowPlayingId == null) {
-                        NoNowPlayingScreen(onGoQueue = { nav.navigate("queue") })
+                        NoNowPlayingScreen(onGoQueue = { nav.navigate(ROUTE_UP_NEXT) })
                     } else {
                         PlayerScreen(
                             vm = vm,
@@ -1024,20 +1035,20 @@ private fun MimeoApp(vm: AppViewModel) {
                                 vm.showSnackbar(message, actionLabel, actionKey)
                             },
                             initialItemId = nowPlayingId,
-                            onOpenItem = { nextId -> nav.navigate("player/$nextId") },
+                            onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
                             onBackToQueue = { focusId ->
                                 if (focusId == null) {
-                                    nav.navigate("queue")
+                                    nav.navigate(ROUTE_UP_NEXT)
                                 } else {
-                                    nav.navigate("queue?focusItemId=$focusId")
+                                    nav.navigate("$ROUTE_UP_NEXT?focusItemId=$focusId")
                                 }
                             },
-                            onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
+                            onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                         )
                     }
                 }
                 composable(
-                    route = "queue?focusItemId={focusItemId}",
+                    route = "$ROUTE_UP_NEXT?focusItemId={focusItemId}",
                     arguments = listOf(
                         navArgument("focusItemId") {
                             type = NavType.IntType
@@ -1052,12 +1063,12 @@ private fun MimeoApp(vm: AppViewModel) {
                             vm.showSnackbar(message, actionLabel, actionKey)
                         },
                         focusItemId = focusItemId,
-                        onOpenPlayer = { itemId -> nav.navigate("player/$itemId") },
-                        onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
+                        onOpenPlayer = { itemId -> nav.navigate("$ROUTE_LOCUS/$itemId") },
+                        onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                     )
                 }
                 composable(
-                    "player/{itemId}",
+                    ROUTE_LOCUS_ITEM,
                     arguments = listOf(navArgument("itemId") { type = NavType.IntType }),
                 ) { backStack ->
                     val itemId = backStack.arguments?.getInt("itemId") ?: return@composable
@@ -1067,15 +1078,15 @@ private fun MimeoApp(vm: AppViewModel) {
                             vm.showSnackbar(message, actionLabel, actionKey)
                         },
                         initialItemId = itemId,
-                        onOpenItem = { nextId -> nav.navigate("player/$nextId") },
+                        onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
                         onBackToQueue = { focusId ->
                             if (focusId == null) {
-                                nav.navigate("queue")
+                                nav.navigate(ROUTE_UP_NEXT)
                             } else {
-                                nav.navigate("queue?focusItemId=$focusId")
+                                nav.navigate("$ROUTE_UP_NEXT?focusItemId=$focusId")
                             }
                         },
-                        onOpenDiagnostics = { nav.navigate("settings/diagnostics") },
+                        onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                     )
                 }
             }
@@ -1091,7 +1102,7 @@ private fun NoNowPlayingScreen(onGoQueue: () -> Unit) {
     ) {
         Text("No Now Playing session")
         Button(onClick = onGoQueue) {
-            Text("Go to Queue")
+            Text("Go to Up Next")
         }
     }
 }
