@@ -24,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -999,7 +1000,11 @@ private fun MimeoApp(vm: AppViewModel) {
             )
         },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(
+                modifier = Modifier.height(68.dp),
+                tonalElevation = 0.dp,
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+            ) {
                 navItems.forEach { destination ->
                     NavigationBarItem(
                         selected = selectedTab == destination.route,
@@ -1011,6 +1016,14 @@ private fun MimeoApp(vm: AppViewModel) {
                                 contentDescription = destination.label,
                             )
                         },
+                        alwaysShowLabel = true,
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
                     )
                 }
             }
