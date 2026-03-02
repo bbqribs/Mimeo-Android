@@ -3,6 +3,12 @@
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+enum class ParagraphSpacingOption {
+    SMALL,
+    MEDIUM,
+    LARGE,
+}
+
 enum class ConnectivityDiagnosticOutcome {
     PASS,
     FAIL,
@@ -120,6 +126,10 @@ data class AppSettings(
     val autoAdvanceOnCompletion: Boolean = false,
     val autoScrollWhileListening: Boolean = true,
     val selectedPlaylistId: Int? = null,
+    val readingFontSizeSp: Int = 18,
+    val readingLineHeightPercent: Int = 160,
+    val readingMaxWidthDp: Int = 720,
+    val readingParagraphSpacing: ParagraphSpacingOption = ParagraphSpacingOption.MEDIUM,
 )
 
 @Serializable

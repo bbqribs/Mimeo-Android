@@ -23,9 +23,9 @@
 
 ## Android Redesign v1.1
 1. [~] Foundation: 4-tab nav shell (Up Next / Locus / Collections / Settings) plus black/purple theme foundations.
-2. [ ] Mini control panel (collapsed Locus peek) for active playback/session continuity.
-3. [ ] Up Next skeleton: playlist dropdown, search affordance, filter chips, and grouped queue sections.
-4. [ ] Typography preferences pass: reading fonts, line height, and display density controls.
+2. [x] Mini control panel (collapsed Locus peek) for active playback/session continuity.
+3. [x] Up Next skeleton: playlist dropdown, search affordance, filter chips, and grouped queue sections.
+4. [~] Typography preferences pass: reading fonts, line height, and display density controls.
 5. [ ] Playback speed control in Locus with persisted preference.
 6. [ ] Collections baseline: special collections + named playlist browser under the redesign shell.
 

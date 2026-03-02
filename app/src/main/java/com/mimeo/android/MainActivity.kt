@@ -55,6 +55,7 @@ import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
+import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackPosition
@@ -238,8 +239,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 autoAdvanceOnCompletion = autoAdvanceOnCompletion,
                 autoScrollWhileListening = autoScrollWhileListening,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
+                readingFontSizeSp = settings.value.readingFontSizeSp,
+                readingLineHeightPercent = settings.value.readingLineHeightPercent,
+                readingMaxWidthDp = settings.value.readingMaxWidthDp,
+                readingParagraphSpacing = settings.value.readingParagraphSpacing,
             )
             _statusMessage.value = "Settings saved"
+        }
+    }
+
+    fun saveReadingPreferences(
+        readingFontSizeSp: Int,
+        readingLineHeightPercent: Int,
+        readingMaxWidthDp: Int,
+        readingParagraphSpacing: ParagraphSpacingOption,
+    ) {
+        viewModelScope.launch {
+            settingsStore.save(
+                baseUrl = settings.value.baseUrl,
+                apiToken = settings.value.apiToken,
+                autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
+                autoScrollWhileListening = settings.value.autoScrollWhileListening,
+                selectedPlaylistId = settings.value.selectedPlaylistId,
+                readingFontSizeSp = readingFontSizeSp,
+                readingLineHeightPercent = readingLineHeightPercent,
+                readingMaxWidthDp = readingMaxWidthDp,
+                readingParagraphSpacing = readingParagraphSpacing,
+            )
         }
     }
 

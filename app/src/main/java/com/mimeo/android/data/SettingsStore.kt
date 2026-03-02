@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.mimeo.android.model.AppSettings
+import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.decodeSelectedPlaylistId
 import com.mimeo.android.model.encodeSelectedPlaylistId
 import kotlinx.coroutines.flow.Flow
@@ -24,6 +25,14 @@ class SettingsStore(private val context: Context) {
         booleanPreferencesKey("auto_scroll_while_listening")
     private val selectedPlaylistIdKey: Preferences.Key<Int> =
         intPreferencesKey("selected_playlist_id")
+    private val readingFontSizeSpKey: Preferences.Key<Int> =
+        intPreferencesKey("reading_font_size_sp")
+    private val readingLineHeightPercentKey: Preferences.Key<Int> =
+        intPreferencesKey("reading_line_height_percent")
+    private val readingMaxWidthDpKey: Preferences.Key<Int> =
+        intPreferencesKey("reading_max_width_dp")
+    private val readingParagraphSpacingKey: Preferences.Key<String> =
+        stringPreferencesKey("reading_paragraph_spacing")
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->
         AppSettings(
@@ -32,6 +41,12 @@ class SettingsStore(private val context: Context) {
             autoAdvanceOnCompletion = prefs[autoAdvanceOnCompletionKey] ?: false,
             autoScrollWhileListening = prefs[autoScrollWhileListeningKey] ?: true,
             selectedPlaylistId = decodeSelectedPlaylistId(prefs[selectedPlaylistIdKey]),
+            readingFontSizeSp = prefs[readingFontSizeSpKey] ?: 18,
+            readingLineHeightPercent = prefs[readingLineHeightPercentKey] ?: 160,
+            readingMaxWidthDp = prefs[readingMaxWidthDpKey] ?: 720,
+            readingParagraphSpacing = prefs[readingParagraphSpacingKey]
+                ?.let { runCatching { ParagraphSpacingOption.valueOf(it) }.getOrNull() }
+                ?: ParagraphSpacingOption.MEDIUM,
         )
     }
 
@@ -41,6 +56,10 @@ class SettingsStore(private val context: Context) {
         autoAdvanceOnCompletion: Boolean,
         autoScrollWhileListening: Boolean,
         selectedPlaylistId: Int?,
+        readingFontSizeSp: Int,
+        readingLineHeightPercent: Int,
+        readingMaxWidthDp: Int,
+        readingParagraphSpacing: ParagraphSpacingOption,
     ) {
         context.dataStore.edit { prefs ->
             prefs[baseUrlKey] = baseUrl.trim()
@@ -48,12 +67,30 @@ class SettingsStore(private val context: Context) {
             prefs[autoAdvanceOnCompletionKey] = autoAdvanceOnCompletion
             prefs[autoScrollWhileListeningKey] = autoScrollWhileListening
             prefs[selectedPlaylistIdKey] = encodeSelectedPlaylistId(selectedPlaylistId)
+            prefs[readingFontSizeSpKey] = readingFontSizeSp
+            prefs[readingLineHeightPercentKey] = readingLineHeightPercent
+            prefs[readingMaxWidthDpKey] = readingMaxWidthDp
+            prefs[readingParagraphSpacingKey] = readingParagraphSpacing.name
         }
     }
 
     suspend fun saveSelectedPlaylistId(selectedPlaylistId: Int?) {
         context.dataStore.edit { prefs ->
             prefs[selectedPlaylistIdKey] = encodeSelectedPlaylistId(selectedPlaylistId)
+        }
+    }
+
+    suspend fun saveReadingPreferences(
+        readingFontSizeSp: Int,
+        readingLineHeightPercent: Int,
+        readingMaxWidthDp: Int,
+        readingParagraphSpacing: ParagraphSpacingOption,
+    ) {
+        context.dataStore.edit { prefs ->
+            prefs[readingFontSizeSpKey] = readingFontSizeSp
+            prefs[readingLineHeightPercentKey] = readingLineHeightPercent
+            prefs[readingMaxWidthDpKey] = readingMaxWidthDp
+            prefs[readingParagraphSpacingKey] = readingParagraphSpacing.name
         }
     }
 }
