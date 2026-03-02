@@ -1,5 +1,7 @@
 package com.mimeo.android.ui.settings
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -41,6 +44,7 @@ fun SettingsScreen(
     val settings by vm.settings.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val testingConnection by vm.testingConnection.collectAsState()
+    val configuration = LocalConfiguration.current
     var baseUrl by remember(settings.baseUrl) { mutableStateOf(settings.baseUrl) }
     var token by remember(settings.apiToken) { mutableStateOf(settings.apiToken) }
     var autoAdvance by remember(settings.autoAdvanceOnCompletion) {
@@ -109,8 +113,12 @@ fun SettingsScreen(
         lineHeight = (readingFontSizeSp * (readingLineHeightPercent / 100f)).sp,
         color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
     )
+    val isWideReadingSurface = configuration.screenWidthDp >= 700
 
     Column(
+        modifier = Modifier
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
@@ -222,16 +230,23 @@ fun SettingsScreen(
                     steps = 5,
                 )
 
-                Text("Max width: ${readingMaxWidthDp}dp")
-                Slider(
-                    value = readingMaxWidthDp.toFloat(),
-                    onValueChange = {
-                        readingMaxWidthDp = it.toInt()
-                        saveReading(maxWidthDp = readingMaxWidthDp)
-                    },
-                    valueRange = 600f..900f,
-                    steps = 5,
-                )
+                if (isWideReadingSurface) {
+                    Text("Max width: ${readingMaxWidthDp}dp")
+                    Slider(
+                        value = readingMaxWidthDp.toFloat(),
+                        onValueChange = {
+                            readingMaxWidthDp = it.toInt()
+                            saveReading(maxWidthDp = readingMaxWidthDp)
+                        },
+                        valueRange = 600f..900f,
+                        steps = 5,
+                    )
+                } else {
+                    Text(
+                        text = "Max width applies on wider screens such as tablets.",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    )
+                }
 
                 Text("Paragraph spacing")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
