@@ -324,7 +324,8 @@ fun PlayerScreen(
                 val safe = normalizedPosition(seeded)
                 vm.setPlaybackPosition(currentItemId, safe.chunkIndex, safe.offsetInChunkChars)
 
-                if (autoPlayAfterLoad && chunks.isNotEmpty()) {
+                val shouldAutoplay = autoPlayAfterLoad || vm.consumePendingAutoplay(currentItemId)
+                if (shouldAutoplay && chunks.isNotEmpty()) {
                     autoPlayAfterLoad = false
                     isAutoPlaying = true
                     playChunk(safe.chunkIndex, safe.offsetInChunkChars)

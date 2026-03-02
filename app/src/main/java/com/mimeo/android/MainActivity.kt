@@ -66,6 +66,7 @@ import com.mimeo.android.repository.PlaylistMembershipToggleResult
 import com.mimeo.android.repository.PlaybackRepository
 import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.components.StatusBanner
+import com.mimeo.android.ui.locus.LocusPeekCollapsed
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
 import com.mimeo.android.ui.settings.SettingsScreen
 import com.mimeo.android.ui.player.PlayerScreen
@@ -194,6 +195,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val nowPlayingSession: StateFlow<NowPlayingSession?> = _nowPlayingSession.asStateFlow()
     private val _sessionIssueMessage = MutableStateFlow<String?>(null)
     val sessionIssueMessage: StateFlow<String?> = _sessionIssueMessage.asStateFlow()
+    private val _pendingAutoplayItemId = MutableStateFlow<Int?>(null)
 
     init {
         viewModelScope.launch {
@@ -650,6 +652,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun currentNowPlayingItemId(): Int? = nowPlayingSession.value?.currentItem?.itemId
 
+    fun queueAutoplayForItem(itemId: Int) {
+        _pendingAutoplayItemId.value = itemId
+    }
+
+    fun consumePendingAutoplay(itemId: Int): Boolean {
+        if (_pendingAutoplayItemId.value != itemId) {
+            return false
+        }
+        _pendingAutoplayItemId.value = null
+        return true
+    }
+
     fun isItemCached(itemId: Int): Boolean = cachedItemIds.value.contains(itemId)
 
     fun shouldAutoAdvanceAfterCompletion(): Boolean = settings.value.autoAdvanceOnCompletion
@@ -910,6 +924,8 @@ private fun MimeoApp(vm: AppViewModel) {
         BottomNavDestination(ROUTE_SETTINGS, "Settings", android.R.drawable.ic_menu_preferences),
     )
     val settings by vm.settings.collectAsState()
+    val queueItems by vm.queueItems.collectAsState()
+    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val selectedTab = when {
@@ -948,6 +964,16 @@ private fun MimeoApp(vm: AppViewModel) {
         else -> null
     }
     val showGlobalBanner = queueOffline || baseUrlHint != null || statusLooksError
+    val peekItem = nowPlayingSession?.currentItem ?: nowPlayingSession?.items?.firstOrNull()
+    val peekQueueItem = peekItem?.let { current -> queueItems.firstOrNull { it.itemId == current.itemId } }
+    val peekTitle = peekQueueItem?.title?.takeIf { it.isNotBlank() }
+        ?: peekItem?.title?.takeIf { it.isNotBlank() }
+        ?: peekItem?.host?.takeIf { it.isNotBlank() }
+        ?: peekItem?.url
+        ?: "Resume in Locus"
+    val peekSecondary = peekQueueItem?.host?.takeIf { it.isNotBlank() }
+        ?: peekItem?.host?.takeIf { it.isNotBlank() }
+    val peekProgressPercent = (peekQueueItem?.progressPercent ?: peekItem?.lastReadPercent ?: 0).coerceIn(0, 100)
 
     LaunchedEffect(vm, snackbarHostState) {
         vm.snackbarMessages.collect { message ->
@@ -973,19 +999,34 @@ private fun MimeoApp(vm: AppViewModel) {
             )
         },
         bottomBar = {
-            NavigationBar {
-                navItems.forEach { destination ->
-                    NavigationBarItem(
-                        selected = selectedTab == destination.route,
-                        onClick = { nav.navigate(destination.route) { launchSingleTop = true } },
-                        label = { Text(destination.label) },
-                        icon = {
-                            Icon(
-                                painter = painterResource(destination.iconRes),
-                                contentDescription = destination.label,
-                            )
+            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                if (selectedTab == ROUTE_UP_NEXT && peekItem != null) {
+                    val peekTarget = peekItem
+                    LocusPeekCollapsed(
+                        title = peekTitle,
+                        secondary = peekSecondary,
+                        progressPercent = peekProgressPercent,
+                        onOpen = { nav.navigate("$ROUTE_LOCUS/${peekTarget.itemId}") { launchSingleTop = true } },
+                        onPlayPause = {
+                            vm.queueAutoplayForItem(peekTarget.itemId)
+                            nav.navigate("$ROUTE_LOCUS/${peekTarget.itemId}") { launchSingleTop = true }
                         },
                     )
+                }
+                NavigationBar {
+                    navItems.forEach { destination ->
+                        NavigationBarItem(
+                            selected = selectedTab == destination.route,
+                            onClick = { nav.navigate(destination.route) { launchSingleTop = true } },
+                            label = { Text(destination.label) },
+                            icon = {
+                                Icon(
+                                    painter = painterResource(destination.iconRes),
+                                    contentDescription = destination.label,
+                                )
+                            },
+                        )
+                    }
                 }
             }
         },
