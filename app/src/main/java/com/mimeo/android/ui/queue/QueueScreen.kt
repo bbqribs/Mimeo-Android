@@ -43,7 +43,6 @@ import com.mimeo.android.AppViewModel
 import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.PlaybackQueueItem
-import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
@@ -71,14 +70,9 @@ fun QueueScreen(
     val playlists by vm.playlists.collectAsState()
     val settings by vm.settings.collectAsState()
     val loading by vm.queueLoading.collectAsState()
-    val pendingCount by vm.pendingProgressCount.collectAsState()
-    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
-    val sessionIssueMessage by vm.sessionIssueMessage.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
-    val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val actionScope = rememberCoroutineScope()
 
-    var showClearSessionDialog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     var pendingFocusId by remember { mutableIntStateOf(-1) }
     var playlistMenuExpanded by remember { mutableStateOf(false) }
@@ -102,13 +96,6 @@ fun QueueScreen(
     val selectedPlaylistName = settings.selectedPlaylistId?.let { id ->
         playlists.firstOrNull { it.id == id }?.name
     } ?: "All"
-    val syncLabel = when (syncBadgeState) {
-        ProgressSyncBadgeState.SYNCED -> "Synced"
-        ProgressSyncBadgeState.QUEUED -> "Queued"
-        ProgressSyncBadgeState.OFFLINE -> "Offline"
-    }
-    val resumeSummary = vm.nowPlayingSummaryText()
-    val resumeItemId = vm.currentNowPlayingItemId()
     val playlistChoices = playlistPickerItem?.let { target ->
         playlists.map { playlist ->
             PlaylistPickerChoice(
@@ -198,20 +185,6 @@ fun QueueScreen(
                 modifier = Modifier.weight(1f),
                 horizontalArrangement = Arrangement.End,
             ) {
-                if (!searchExpanded) {
-                    IconButton(onClick = { vm.loadQueue() }) {
-                        Icon(
-                            painter = painterResource(android.R.drawable.ic_popup_sync),
-                            contentDescription = "Refresh queue",
-                        )
-                    }
-                    IconButton(onClick = { vm.flushPendingProgress() }) {
-                        Icon(
-                            painter = painterResource(android.R.drawable.stat_notify_sync),
-                            contentDescription = "Sync queued progress",
-                        )
-                    }
-                }
                 IconButton(onClick = { searchExpanded = !searchExpanded }) {
                     Icon(
                         painter = painterResource(android.R.drawable.ic_menu_search),
@@ -259,61 +232,6 @@ fun QueueScreen(
                     label = { Text(chip.label) },
                 )
             }
-        }
-
-        Text(
-            text = "Sync: $syncLabel  Pending: $pendingCount",
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-
-        nowPlayingSession?.let { session ->
-            val current = session.currentItem ?: session.items.firstOrNull()
-            val title = current?.title?.ifBlank { null } ?: current?.url ?: "Session item"
-            val progress = current?.itemId?.let { vm.knownProgressForItem(it) } ?: 0
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text("Now Playing ${session.currentIndex + 1}/${session.items.size} - $progress%")
-                    Text(
-                        text = title,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TextButton(
-                            onClick = { resumeItemId?.let { onOpenPlayer(it) } },
-                            enabled = resumeItemId != null,
-                        ) { Text("Resume") }
-                        TextButton(
-                            onClick = {
-                                vm.restartNowPlayingSession()
-                                onShowSnackbar("Now Playing session restarted.", null, null)
-                            },
-                        ) { Text("Restart") }
-                        TextButton(onClick = { showClearSessionDialog = true }) { Text("Clear") }
-                    }
-                    if (resumeSummary != null && resumeItemId != null && displayedItems.none { it.itemId == resumeItemId }) {
-                        Text(
-                            text = "Current item hidden by queue filters; Resume still works.",
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
-        }
-
-        sessionIssueMessage?.let {
-            Text(
-                text = it,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
 
         if (loading) {
@@ -374,30 +292,6 @@ fun QueueScreen(
                                 "open_diagnostics",
                             )
                         }
-                }
-            },
-        )
-    }
-
-    if (showClearSessionDialog) {
-        AlertDialog(
-            onDismissRequest = { showClearSessionDialog = false },
-            title = { Text("Clear session?") },
-            text = { Text("This removes the persisted Now Playing snapshot.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        vm.clearNowPlayingSession()
-                        onShowSnackbar("Now Playing session cleared.", null, null)
-                        showClearSessionDialog = false
-                    },
-                ) {
-                    Text("Clear")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearSessionDialog = false }) {
-                    Text("Cancel")
                 }
             },
         )
