@@ -26,8 +26,9 @@
 2. [x] Mini control panel (collapsed Locus peek) for active playback/session continuity.
 3. [x] Up Next skeleton: playlist dropdown, search affordance, filter chips, and grouped queue sections.
 4. [x] Typography preferences pass: reading fonts, line height, and display density controls.
-5. [~] Playback speed control in Locus with persisted preference.
-6. [ ] Collections baseline: special collections + named playlist browser under the redesign shell.
+5. [x] Playback speed control in Locus with persisted preference.
+6. [~] Collections baseline: special collections + named playlist browser under the redesign shell.
+7. [ ] Phase 6.2 follow-up: nested folders + moving items between folders.
 
 ## Later
 - [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.

@@ -66,6 +66,7 @@ import com.mimeo.android.repository.ItemTextResult
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.PlaylistMembershipToggleResult
 import com.mimeo.android.repository.PlaybackRepository
+import com.mimeo.android.ui.collections.CollectionsScreen
 import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
@@ -98,6 +99,7 @@ private const val ROUTE_UP_NEXT = "upNext"
 private const val ROUTE_LOCUS = "locus"
 private const val ROUTE_LOCUS_ITEM = "locus/{itemId}"
 private const val ROUTE_COLLECTIONS = "collections"
+private const val ROUTE_COLLECTIONS_PLAYLISTS = "collections/playlists"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_DIAGNOSTICS = "settings/diagnostics"
 
@@ -1071,6 +1073,12 @@ private fun MimeoApp(vm: AppViewModel) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 composable(ROUTE_COLLECTIONS) {
+                    CollectionsScreen(
+                        vm = vm,
+                        onOpenPlaylistsManager = { nav.navigate(ROUTE_COLLECTIONS_PLAYLISTS) },
+                    )
+                }
+                composable(ROUTE_COLLECTIONS_PLAYLISTS) {
                     PlaylistsScreen(vm = vm)
                 }
                 composable(ROUTE_SETTINGS) {
