@@ -88,7 +88,8 @@ private class ShareResultNotifications(
             .setContentTitle("Mimeo")
             .setContentText(result.notificationText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(result.notificationText))
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setAutoCancel(true)
 
         if (result.opensSettings) {
@@ -116,7 +117,7 @@ private class ShareResultNotifications(
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Saving",
-            NotificationManager.IMPORTANCE_DEFAULT,
+            NotificationManager.IMPORTANCE_HIGH,
         ).apply {
             description = "Share-sheet save results"
         }
@@ -147,7 +148,7 @@ private class ShareResultNotifications(
     private fun nextNotificationId(): Int = notificationIds.incrementAndGet()
 
     companion object {
-        private const val CHANNEL_ID = "share_saving"
+        private const val CHANNEL_ID = "share_saving_heads_up"
         private val notificationIds = AtomicInteger(2400)
     }
 }
