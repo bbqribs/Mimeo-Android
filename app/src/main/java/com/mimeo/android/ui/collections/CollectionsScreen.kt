@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.FolderSummary
 import com.mimeo.android.model.PlaylistSummary
+import com.mimeo.android.ui.components.FolderPickerDialog
 
 @Composable
 fun CollectionsScreen(
@@ -131,7 +132,7 @@ fun CollectionsScreen(
                                         text = buildString {
                                             append("${playlist.entries.size} items")
                                             if (!assignedFolderName.isNullOrBlank()) {
-                                                append(" â€¢ ")
+                                                append(" • ")
                                                 append(assignedFolderName)
                                             }
                                         },
@@ -335,7 +336,7 @@ fun CollectionsScreen(
 
     pickerPlaylist?.let { playlist ->
         FolderPickerDialog(
-            playlist = playlist,
+            title = playlist.name,
             folders = folders,
             assignedFolderId = playlistFolderAssignments[playlist.id],
             onDismiss = { pickerPlaylist = null },
@@ -345,63 +346,4 @@ fun CollectionsScreen(
             },
         )
     }
-}
-
-@Composable
-private fun FolderPickerDialog(
-    playlist: PlaylistSummary,
-    folders: List<FolderSummary>,
-    assignedFolderId: Int?,
-    onDismiss: () -> Unit,
-    onSelectFolder: (Int?) -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add to folder...") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = playlist.name,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (folders.isEmpty()) {
-                    Text(
-                        text = "No folders yet. Create one first.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    TextButton(
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = assignedFolderId != null,
-                        onClick = { onSelectFolder(null) },
-                    ) {
-                        Text("Remove from folder")
-                    }
-                    folders.forEach { folder ->
-                        TextButton(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = { onSelectFolder(folder.id) },
-                        ) {
-                            Text(
-                                text = if (folder.id == assignedFolderId) {
-                                    "${folder.name} (Current)"
-                                } else {
-                                    folder.name
-                                },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close")
-            }
-        },
-    )
 }
