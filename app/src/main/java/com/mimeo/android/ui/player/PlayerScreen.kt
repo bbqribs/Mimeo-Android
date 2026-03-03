@@ -670,6 +670,36 @@ fun PlayerScreen(
                 sessionLine = sessionLine,
                 progressLine = progressLine,
                 onExpand = { isExpanded = true },
+                overflowExpanded = overflowExpanded,
+                onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
+                overflowMenuContent = {
+                    LocusOverflowMenuItems(
+                        onOpenPlaylists = {
+                            overflowExpanded = false
+                            vm.refreshPlaylists()
+                            showPlaylistPicker = true
+                        },
+                        onBackToQueue = {
+                            overflowExpanded = false
+                            onBackToQueue(currentItemId)
+                        },
+                        onRestartSession = {
+                            overflowExpanded = false
+                            actionScope.launch {
+                                vm.restartNowPlayingSession()
+                                onShowSnackbar("Now Playing session restarted.", null, null)
+                            }
+                        },
+                        onClearSession = {
+                            overflowExpanded = false
+                            showClearSessionDialog = true
+                        },
+                        onOpenDiagnostics = {
+                            overflowExpanded = false
+                            onOpenDiagnostics()
+                        },
+                    )
+                },
             )
             playlistMutationMessage?.let { message ->
                 StatusBanner(
@@ -700,32 +730,8 @@ fun PlayerScreen(
         } else {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(
-                        text = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    metadataLine?.let { metadata ->
-                        Text(
-                            text = metadata,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    sessionLine?.let { session ->
-                        Text(
-                            text = session,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(onClick = { isExpanded = false }) {
                         Text("Collapse")
@@ -733,58 +739,60 @@ fun PlayerScreen(
                     TextButton(onClick = { showSpeedDialog = true }) {
                         Text(formatPlaybackSpeed(settings.playbackSpeed))
                     }
-                    Box {
-                        IconButton(onClick = { overflowExpanded = true }) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.msr_more_vert_24),
-                                contentDescription = "More actions",
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = overflowExpanded,
-                            onDismissRequest = { overflowExpanded = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Playlists...") },
-                                onClick = {
-                                    overflowExpanded = false
-                                    vm.refreshPlaylists()
-                                    showPlaylistPicker = true
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Back to queue") },
-                                onClick = {
-                                    overflowExpanded = false
-                                    onBackToQueue(currentItemId)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Restart session") },
-                                onClick = {
-                                    overflowExpanded = false
-                                    actionScope.launch {
-                                        vm.restartNowPlayingSession()
-                                        onShowSnackbar("Now Playing session restarted.", null, null)
-                                    }
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Clear session") },
-                                onClick = {
-                                    overflowExpanded = false
-                                    showClearSessionDialog = true
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Diagnostics") },
-                                onClick = {
-                                    overflowExpanded = false
-                                    onOpenDiagnostics()
-                                },
-                            )
-                        }
+                    LocusOverflowMenu(
+                        expanded = overflowExpanded,
+                        onExpandedChange = { expanded -> overflowExpanded = expanded },
+                    ) {
+                        LocusOverflowMenuItems(
+                            onOpenPlaylists = {
+                                overflowExpanded = false
+                                vm.refreshPlaylists()
+                                showPlaylistPicker = true
+                            },
+                            onBackToQueue = {
+                                overflowExpanded = false
+                                onBackToQueue(currentItemId)
+                            },
+                            onRestartSession = {
+                                overflowExpanded = false
+                                actionScope.launch {
+                                    vm.restartNowPlayingSession()
+                                    onShowSnackbar("Now Playing session restarted.", null, null)
+                                }
+                            },
+                            onClearSession = {
+                                overflowExpanded = false
+                                showClearSessionDialog = true
+                            },
+                            onOpenDiagnostics = {
+                                overflowExpanded = false
+                                onOpenDiagnostics()
+                            },
+                        )
                     }
+                }
+            }
+            Column(
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                metadataLine?.let { metadata ->
+                    Text(
+                        text = metadata,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                sessionLine?.let { session ->
+                    Text(
+                        text = session,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
             Text(
@@ -953,6 +961,9 @@ private fun LocusPeekCard(
     sessionLine: String?,
     progressLine: String,
     onExpand: () -> Unit,
+    overflowExpanded: Boolean,
+    onOverflowExpandedChange: (Boolean) -> Unit,
+    overflowMenuContent: @Composable () -> Unit,
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -961,6 +972,25 @@ private fun LocusPeekCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "Now playing",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = onExpand) {
+                        Text("Expand")
+                    }
+                    LocusOverflowMenu(
+                        expanded = overflowExpanded,
+                        onExpandedChange = onOverflowExpandedChange,
+                        content = overflowMenuContent,
+                    )
+                }
+            }
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
@@ -981,16 +1011,60 @@ private fun LocusPeekCard(
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                TextButton(onClick = onExpand) {
-                    Text("Expand")
-                }
-            }
         }
     }
+}
+
+@Composable
+private fun LocusOverflowMenu(
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Box {
+        IconButton(onClick = { onExpandedChange(true) }) {
+            Icon(
+                painter = painterResource(id = R.drawable.msr_more_vert_24),
+                contentDescription = "More actions",
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) },
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun LocusOverflowMenuItems(
+    onOpenPlaylists: () -> Unit,
+    onBackToQueue: () -> Unit,
+    onRestartSession: () -> Unit,
+    onClearSession: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
+) {
+    DropdownMenuItem(
+        text = { Text("Playlists...") },
+        onClick = onOpenPlaylists,
+    )
+    DropdownMenuItem(
+        text = { Text("Back to queue") },
+        onClick = onBackToQueue,
+    )
+    DropdownMenuItem(
+        text = { Text("Restart session") },
+        onClick = onRestartSession,
+    )
+    DropdownMenuItem(
+        text = { Text("Clear session") },
+        onClick = onClearSession,
+    )
+    DropdownMenuItem(
+        text = { Text("Diagnostics") },
+        onClick = onOpenDiagnostics,
+    )
 }
 
 @Composable
