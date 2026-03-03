@@ -5,16 +5,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -75,6 +73,7 @@ fun PlayerScreen(
     vm: AppViewModel,
     onShowSnackbar: (String, String?, String?) -> Unit,
     initialItemId: Int,
+    startExpanded: Boolean = false,
     onOpenItem: (Int) -> Unit,
     onBackToQueue: (Int?) -> Unit,
     onOpenDiagnostics: () -> Unit,
@@ -101,8 +100,9 @@ fun PlayerScreen(
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
     var lastObservedPercent by remember { mutableIntStateOf(-1) }
     var nearEndForcedForItemId by remember { mutableIntStateOf(-1) }
+    var isExpanded by rememberSaveable(startExpanded) { mutableStateOf(startExpanded) }
     val playbackPositionByItem by vm.playbackPositionByItem.collectAsState()
-    val queueOffline by vm.queueOffline.collectAsState()
+    val queueItems by vm.queueItems.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
     val settings by vm.settings.collectAsState()
@@ -408,11 +408,6 @@ fun PlayerScreen(
     val totalChars = totalCharsForPercent()
     val currentPercent = calculateCanonicalPercent(totalChars, chunks, safePosition)
     val currentTitle = textPayload?.title?.ifBlank { null } ?: textPayload?.url.orEmpty()
-    val currentChunkText = if (chunks.isNotEmpty()) {
-        chunks[safePosition.chunkIndex].text.take(400)
-    } else {
-        textPayload?.text?.take(400).orEmpty()
-    }
     val chunkLabel = if (chunks.isEmpty()) {
         "Chunk 0 / 0"
     } else {
@@ -487,244 +482,337 @@ fun PlayerScreen(
             isMember = vm.isItemInPlaylist(currentItemId, playlist.id),
         )
     }
+    val currentSessionItem = nowPlayingSession?.items?.firstOrNull { it.itemId == currentItemId }
+        ?: nowPlayingSession?.currentItem
+    val metadataLine = listOfNotNull(
+        textPayload?.host?.ifBlank { null } ?: currentSessionItem?.host?.ifBlank { null },
+        textPayload?.status?.ifBlank { null } ?: currentSessionItem?.status?.ifBlank { null },
+    ).joinToString("  ").ifBlank { null }
+    val progressLine = buildString {
+        append("Progress $currentPercent%")
+        append("  -  Sync $syncBadgeText")
+        append("  -  $chunkLabel")
+        append("  -  $offlineAvailability")
+        if (showCompleted) {
+            append("  -  Done")
+        }
+    }
+    val queuePreview = nowPlayingSession?.let { session ->
+        val startIndex = session.items.indexOfFirst { it.itemId == currentItemId }
+            .let { if (it >= 0) it + 1 else session.currentIndex + 1 }
+            .coerceAtLeast(0)
+            .coerceAtMost(session.items.size)
+        session.items.drop(startIndex).take(3).map { item ->
+            LocusQueuePreviewItem(
+                itemId = item.itemId,
+                title = item.title?.ifBlank { null } ?: item.url,
+                metadata = listOfNotNull(
+                    item.host?.ifBlank { null },
+                    item.status?.ifBlank { null },
+                    "Progress ${vm.knownProgressForItem(item.itemId)}%",
+                ).joinToString("  "),
+            )
+        }
+    }.orEmpty()
+    val fallbackQueuePreview = if (nowPlayingSession == null) {
+        queueItems.filter { it.itemId != currentItemId }.take(3).map { item ->
+            LocusQueuePreviewItem(
+                itemId = item.itemId,
+                title = item.title?.ifBlank { null } ?: item.url,
+                metadata = listOfNotNull(
+                    item.host?.ifBlank { null },
+                    item.status?.ifBlank { null },
+                    "Progress ${item.progressPercent}%",
+                ).joinToString("  "),
+            )
+        }
+    } else {
+        emptyList()
+    }
+    val queuePreviewItems = if (queuePreview.isNotEmpty()) queuePreview else fallbackQueuePreview
 
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                modifier = Modifier.weight(1f),
-                text = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { showSpeedDialog = true }) {
-                    Text(formatPlaybackSpeed(settings.playbackSpeed))
-                }
-                Box {
-                    IconButton(onClick = { overflowExpanded = true }) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.msr_more_vert_24),
-                            contentDescription = "More actions",
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = overflowExpanded,
-                        onDismissRequest = { overflowExpanded = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Playlists...") },
-                            onClick = {
-                                overflowExpanded = false
-                                vm.refreshPlaylists()
-                                showPlaylistPicker = true
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Back to queue") },
-                            onClick = {
-                                overflowExpanded = false
-                                onBackToQueue(currentItemId)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Restart session") },
-                            onClick = {
-                                overflowExpanded = false
-                                actionScope.launch {
-                                    vm.restartNowPlayingSession()
-                                    onShowSnackbar("Now Playing session restarted.", null, null)
-                                }
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Clear session") },
-                            onClick = {
-                                overflowExpanded = false
-                                showClearSessionDialog = true
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Diagnostics") },
-                            onClick = {
-                                overflowExpanded = false
-                                onOpenDiagnostics()
-                            },
-                        )
-                    }
-                }
+    val onPreviousSegment = {
+        if (chunks.isNotEmpty() && safePosition.chunkIndex > 0) {
+            val target = safePosition.chunkIndex - 1
+            setPlaybackPosition(target, 0)
+            if (isSpeaking || isAutoPlaying) {
+                isAutoPlaying = true
+                playChunk(target, 0)
             }
         }
-        if (sessionItemCount > 0) {
-            Text(
-                text = "Session ${sessionIndex + 1}/$sessionItemCount",
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+    }
+    val onPlayPause = {
+        if (isSpeaking || isAutoPlaying) {
+            stopSpeaking(forceSync = true)
+        } else if (chunks.isNotEmpty()) {
+            val restartFromStart = showCompleted ||
+                (safePosition.chunkIndex == chunks.lastIndex &&
+                    safePosition.offsetInChunkChars >= chunks.last().length)
+            if (restartFromStart) {
+                setPlaybackPosition(0, 0)
+                nearEndForcedForItemId = -1
+                lastObservedPercent = 0
+            }
+            isAutoPlaying = true
+            val positionToPlay = if (restartFromStart) {
+                PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
+            } else {
+                safePosition
+            }
+            playChunk(positionToPlay.chunkIndex, positionToPlay.offsetInChunkChars)
         }
-        Text(
-            text = "Progress $currentPercent%  -  Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability${if (showCompleted) "  -  Done" else ""}",
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        playlistMutationMessage?.let { message ->
-            StatusBanner(
-                stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
-                summary = message,
-                detail = null,
-                onRetry = { playlistMutationMessage = null },
-                onDiagnostics = onOpenDiagnostics,
-            )
-        }
-        if (showLocalPlayerBanner) {
-            StatusBanner(
-                stateLabel = "Status",
-                summary = uiMessage ?: "Player status",
-                detail = null,
-                onRetry = {
-                    uiMessage = null
-                    if (textPayload == null) {
-                        reloadNonce += 1
-                    } else if (chunks.isNotEmpty()) {
-                        isAutoPlaying = true
-                        playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
-                    }
-                },
-                onDiagnostics = null,
-            )
-        }
-        if (isLoading) {
-            CircularProgressIndicator()
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f, fill = true),
-        ) {
-            if (chunks.isNotEmpty()) {
-                ReaderScreen(
-                    chunks = chunks,
-                    currentChunkIndex = safePosition.chunkIndex,
-                    autoScrollWhileListening = settings.autoScrollWhileListening,
-                    readingFontSizeSp = settings.readingFontSizeSp,
-                    readingLineHeightPercent = settings.readingLineHeightPercent,
-                    readingMaxWidthDp = settings.readingMaxWidthDp,
-                    paragraphSpacing = settings.readingParagraphSpacing,
-                    onSelectChunk = { index ->
-                        val safeIndex = index.coerceIn(0, chunks.lastIndex)
-                        setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
-                        uiMessage = "Selected chunk ${safeIndex + 1}"
-                    },
-                    onPlayFromChunk = { index ->
-                        val safeIndex = index.coerceIn(0, chunks.lastIndex)
-                        setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
-                        isAutoPlaying = true
-                        playChunk(safeIndex, 0)
-                        uiMessage = "Starting from chunk ${safeIndex + 1}"
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
+    }
+    val onNextSegment = {
+        if (chunks.isNotEmpty() && safePosition.chunkIndex < chunks.lastIndex) {
+            val target = safePosition.chunkIndex + 1
+            setPlaybackPosition(target, 0)
+            if (isSpeaking || isAutoPlaying) {
+                isAutoPlaying = true
+                playChunk(target, 0)
             }
         }
-        PlayerControlBar(
+    }
+    val onPreviousItem = {
+        actionScope.launch {
+            val prevId = vm.prevSessionItemId(currentItemId)
+            if (prevId == null) {
+                uiMessage = "No previous item"
+            } else {
+                stopSpeaking(forceSync = true)
+                currentItemId = prevId
+                vm.setPlaybackPosition(prevId, 0, 0)
+                autoPlayAfterLoad = true
+                onOpenItem(prevId)
+            }
+        }
+        Unit
+    }
+    val onMarkDone = {
+        actionScope.launch {
+            vm.postProgress(currentItemId, 100)
+                .onSuccess {
+                    uiMessage = if (it.queued) "Done queued for sync" else "Marked done"
+                    onShowSnackbar(uiMessage.orEmpty(), null, null)
+                    if (chunks.isNotEmpty()) {
+                        val last = chunks.last()
+                        vm.setPlaybackPosition(currentItemId, chunks.lastIndex, last.length)
+                    }
+                }
+                .onFailure { error ->
+                    if (error is CancellationException) return@onFailure
+                    uiMessage = error.message ?: "Progress update failed"
+                    onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
+                }
+        }
+        Unit
+    }
+    val onNextItem = {
+        actionScope.launch {
+            val nextId = vm.nextSessionItemId(currentItemId)
+            if (nextId == null) {
+                uiMessage = "No next item"
+            } else {
+                stopSpeaking(forceSync = true)
+                currentItemId = nextId
+                vm.setPlaybackPosition(nextId, 0, 0)
+                autoPlayAfterLoad = true
+                onOpenItem(nextId)
+            }
+        }
+        Unit
+    }
+
+    if (!isExpanded) {
+        LocusPeekCard(
+            title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
+            metadataLine = metadataLine,
+            progressLine = progressLine,
+            isPlaying = isSpeaking || isAutoPlaying,
             canMoveBackward = chunks.size > 1 && safePosition.chunkIndex > 0,
             canMoveForward = chunks.size > 1 && safePosition.chunkIndex < chunks.lastIndex,
             canPlay = chunks.isNotEmpty(),
             canMarkDone = textPayload != null,
-            isPlaying = isSpeaking || isAutoPlaying,
-            onPreviousSegment = {
-                if (chunks.isNotEmpty() && safePosition.chunkIndex > 0) {
-                    val target = safePosition.chunkIndex - 1
-                    setPlaybackPosition(target, 0)
-                    if (isSpeaking || isAutoPlaying) {
-                        isAutoPlaying = true
-                        playChunk(target, 0)
-                    }
-                }
-            },
-            onPlayPause = {
-                if (isSpeaking || isAutoPlaying) {
-                    stopSpeaking(forceSync = true)
-                } else if (chunks.isNotEmpty()) {
-                    val restartFromStart = showCompleted ||
-                        (safePosition.chunkIndex == chunks.lastIndex &&
-                            safePosition.offsetInChunkChars >= chunks.last().length)
-                    if (restartFromStart) {
-                        setPlaybackPosition(0, 0)
-                        nearEndForcedForItemId = -1
-                        lastObservedPercent = 0
-                    }
-                    isAutoPlaying = true
-                    val positionToPlay = if (restartFromStart) {
-                        PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
-                    } else {
-                        safePosition
-                    }
-                    playChunk(positionToPlay.chunkIndex, positionToPlay.offsetInChunkChars)
-                }
-            },
-            onNextSegment = {
-                if (chunks.isNotEmpty() && safePosition.chunkIndex < chunks.lastIndex) {
-                    val target = safePosition.chunkIndex + 1
-                    setPlaybackPosition(target, 0)
-                    if (isSpeaking || isAutoPlaying) {
-                        isAutoPlaying = true
-                        playChunk(target, 0)
-                    }
-                }
-            },
-            onPreviousItem = {
-                actionScope.launch {
-                    val prevId = vm.prevSessionItemId(currentItemId)
-                    if (prevId == null) {
-                        uiMessage = "No previous item"
-                    } else {
-                        stopSpeaking(forceSync = true)
-                        currentItemId = prevId
-                        vm.setPlaybackPosition(prevId, 0, 0)
-                        autoPlayAfterLoad = true
-                        onOpenItem(prevId)
-                    }
-                }
-            },
-            onMarkDone = {
-                actionScope.launch {
-                    vm.postProgress(currentItemId, 100)
-                        .onSuccess {
-                            uiMessage = if (it.queued) "Done queued for sync" else "Marked done"
-                            onShowSnackbar(uiMessage.orEmpty(), null, null)
-                            if (chunks.isNotEmpty()) {
-                                val last = chunks.last()
-                                vm.setPlaybackPosition(currentItemId, chunks.lastIndex, last.length)
-                            }
-                        }
-                        .onFailure { error ->
-                            if (error is CancellationException) return@onFailure
-                            uiMessage = error.message ?: "Progress update failed"
-                            onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
-                        }
-                }
-            },
-            onNextItem = {
-                actionScope.launch {
-                    val nextId = vm.nextSessionItemId(currentItemId)
-                    if (nextId == null) {
-                        uiMessage = "No next item"
-                    } else {
-                        stopSpeaking(forceSync = true)
-                        currentItemId = nextId
-                        vm.setPlaybackPosition(nextId, 0, 0)
-                        autoPlayAfterLoad = true
-                        onOpenItem(nextId)
-                    }
-                }
-            },
+            onPreviousSegment = onPreviousSegment,
+            onPlayPause = onPlayPause,
+            onNextSegment = onNextSegment,
+            onPreviousItem = onPreviousItem,
+            onMarkDone = onMarkDone,
+            onNextItem = onNextItem,
+            onExpand = { isExpanded = true },
         )
+    } else {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    metadataLine?.let { metadata ->
+                        Text(
+                            text = metadata,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { isExpanded = false }) {
+                        Text("Collapse")
+                    }
+                    TextButton(onClick = { showSpeedDialog = true }) {
+                        Text(formatPlaybackSpeed(settings.playbackSpeed))
+                    }
+                    Box {
+                        IconButton(onClick = { overflowExpanded = true }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.msr_more_vert_24),
+                                contentDescription = "More actions",
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = overflowExpanded,
+                            onDismissRequest = { overflowExpanded = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Playlists...") },
+                                onClick = {
+                                    overflowExpanded = false
+                                    vm.refreshPlaylists()
+                                    showPlaylistPicker = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Back to queue") },
+                                onClick = {
+                                    overflowExpanded = false
+                                    onBackToQueue(currentItemId)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Restart session") },
+                                onClick = {
+                                    overflowExpanded = false
+                                    actionScope.launch {
+                                        vm.restartNowPlayingSession()
+                                        onShowSnackbar("Now Playing session restarted.", null, null)
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Clear session") },
+                                onClick = {
+                                    overflowExpanded = false
+                                    showClearSessionDialog = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Diagnostics") },
+                                onClick = {
+                                    overflowExpanded = false
+                                    onOpenDiagnostics()
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+            if (sessionItemCount > 0) {
+                Text(
+                    text = "Session ${sessionIndex + 1}/$sessionItemCount",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                text = progressLine,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            LocusQueuePreviewCard(queuePreviewItems = queuePreviewItems)
+            playlistMutationMessage?.let { message ->
+                StatusBanner(
+                    stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
+                    summary = message,
+                    detail = null,
+                    onRetry = { playlistMutationMessage = null },
+                    onDiagnostics = onOpenDiagnostics,
+                )
+            }
+            if (showLocalPlayerBanner) {
+                StatusBanner(
+                    stateLabel = "Status",
+                    summary = uiMessage ?: "Player status",
+                    detail = null,
+                    onRetry = {
+                        uiMessage = null
+                        if (textPayload == null) {
+                            reloadNonce += 1
+                        } else if (chunks.isNotEmpty()) {
+                            isAutoPlaying = true
+                            playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
+                        }
+                    },
+                    onDiagnostics = null,
+                )
+            }
+            if (isLoading) {
+                CircularProgressIndicator()
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = true),
+            ) {
+                if (chunks.isNotEmpty()) {
+                    ReaderScreen(
+                        chunks = chunks,
+                        currentChunkIndex = safePosition.chunkIndex,
+                        autoScrollWhileListening = settings.autoScrollWhileListening,
+                        readingFontSizeSp = settings.readingFontSizeSp,
+                        readingLineHeightPercent = settings.readingLineHeightPercent,
+                        readingMaxWidthDp = settings.readingMaxWidthDp,
+                        paragraphSpacing = settings.readingParagraphSpacing,
+                        onSelectChunk = { index ->
+                            val safeIndex = index.coerceIn(0, chunks.lastIndex)
+                            setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
+                            uiMessage = "Selected chunk ${safeIndex + 1}"
+                        },
+                        onPlayFromChunk = { index ->
+                            val safeIndex = index.coerceIn(0, chunks.lastIndex)
+                            setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
+                            isAutoPlaying = true
+                            playChunk(safeIndex, 0)
+                            uiMessage = "Starting from chunk ${safeIndex + 1}"
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+            PlayerControlBar(
+                canMoveBackward = chunks.size > 1 && safePosition.chunkIndex > 0,
+                canMoveForward = chunks.size > 1 && safePosition.chunkIndex < chunks.lastIndex,
+                canPlay = chunks.isNotEmpty(),
+                canMarkDone = textPayload != null,
+                isPlaying = isSpeaking || isAutoPlaying,
+                onPreviousSegment = onPreviousSegment,
+                onPlayPause = onPlayPause,
+                onNextSegment = onNextSegment,
+                onPreviousItem = onPreviousItem,
+                onMarkDone = onMarkDone,
+                onNextItem = onNextItem,
+            )
+        }
     }
 
     if (showPlaylistPicker) {
@@ -815,6 +903,115 @@ fun PlayerScreen(
                 }
             },
         )
+    }
+}
+
+private data class LocusQueuePreviewItem(
+    val itemId: Int,
+    val title: String,
+    val metadata: String,
+)
+
+@Composable
+private fun LocusPeekCard(
+    title: String,
+    metadataLine: String?,
+    progressLine: String,
+    isPlaying: Boolean,
+    canMoveBackward: Boolean,
+    canMoveForward: Boolean,
+    canPlay: Boolean,
+    canMarkDone: Boolean,
+    onPreviousSegment: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNextSegment: () -> Unit,
+    onPreviousItem: () -> Unit,
+    onMarkDone: () -> Unit,
+    onNextItem: () -> Unit,
+    onExpand: () -> Unit,
+) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text("Now playing")
+                    Text(
+                        text = title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    metadataLine?.let { metadata ->
+                        Text(
+                            text = metadata,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                TextButton(onClick = onExpand) {
+                    Text("Expand")
+                }
+            }
+            Text(
+                text = progressLine,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            PlayerControlBar(
+                canMoveBackward = canMoveBackward,
+                canMoveForward = canMoveForward,
+                canPlay = canPlay,
+                canMarkDone = canMarkDone,
+                isPlaying = isPlaying,
+                onPreviousSegment = onPreviousSegment,
+                onPlayPause = onPlayPause,
+                onNextSegment = onNextSegment,
+                onPreviousItem = onPreviousItem,
+                onMarkDone = onMarkDone,
+                onNextItem = onNextItem,
+            )
+        }
+    }
+}
+
+@Composable
+private fun LocusQueuePreviewCard(queuePreviewItems: List<LocusQueuePreviewItem>) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text("Up Next")
+            if (queuePreviewItems.isEmpty()) {
+                Text("Nothing queued")
+            } else {
+                queuePreviewItems.forEach { item ->
+                    Text(
+                        text = item.title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = item.metadata,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
     }
 }
 

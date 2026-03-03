@@ -1183,7 +1183,8 @@ private fun MimeoApp(vm: AppViewModel) {
                                 vm.showSnackbar(message, actionLabel, actionKey)
                             },
                             initialItemId = nowPlayingId,
-                            onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
+                            startExpanded = false,
+                            onOpenItem = {},
                             onBackToQueue = { focusId ->
                                 if (focusId == null) {
                                     nav.navigate(ROUTE_UP_NEXT)
@@ -1226,7 +1227,8 @@ private fun MimeoApp(vm: AppViewModel) {
                             vm.showSnackbar(message, actionLabel, actionKey)
                         },
                         initialItemId = itemId,
-                        onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
+                        startExpanded = true,
+                        onOpenItem = {},
                         onBackToQueue = { focusId ->
                             if (focusId == null) {
                                 nav.navigate(ROUTE_UP_NEXT)
