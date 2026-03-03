@@ -42,6 +42,7 @@ import com.mimeo.android.model.PlaylistSummary
 fun CollectionsScreen(
     vm: AppViewModel,
     onOpenPlaylistsManager: () -> Unit,
+    onOpenFolder: (Int) -> Unit,
 ) {
     val playlists by vm.playlists.collectAsState()
     val folders by vm.folders.collectAsState()
@@ -202,7 +203,10 @@ fun CollectionsScreen(
                     folders.forEach { folder ->
                         val assignedCount = playlistFolderAssignments.values.count { it == folder.id }
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenFolder(folder.id) }
+                                .padding(vertical = 2.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
