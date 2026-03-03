@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
@@ -1060,6 +1061,7 @@ private fun MimeoApp(vm: AppViewModel) {
         else -> null
     }
     val showGlobalBanner = queueOffline || baseUrlHint != null || statusLooksError
+    val bottomChromePadding = 76.dp
 
     LaunchedEffect(vm, snackbarHostState) {
         vm.snackbarMessages.collect { message ->
@@ -1081,7 +1083,11 @@ private fun MimeoApp(vm: AppViewModel) {
         snackbarHost = {
             SnackbarHost(
                 hostState = snackbarHostState,
-                modifier = Modifier.windowInsetsPadding(WindowInsets.ime),
+                modifier = Modifier
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .padding(bottom = bottomChromePadding)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .windowInsetsPadding(WindowInsets.ime),
             )
         },
         bottomBar = {
