@@ -3,6 +3,7 @@
 import com.mimeo.android.model.DebugVersionResponse
 import com.mimeo.android.model.DebugPythonResponse
 import com.mimeo.android.model.ItemTextResponse
+import com.mimeo.android.model.ArticleSummary
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.model.ProgressPayload
@@ -27,6 +28,14 @@ private data class PlaylistNamePayload(val name: String)
 @Serializable
 private data class PlaylistItemPayload(
     @kotlinx.serialization.SerialName("item_id") val itemId: Int,
+)
+
+@Serializable
+private data class CreateItemPayload(
+    val url: String,
+    val title: String? = null,
+    @kotlinx.serialization.SerialName("canonical_url") val canonicalUrl: String? = null,
+    @kotlinx.serialization.SerialName("site_name") val siteName: String? = null,
 )
 
 class ApiClient(
@@ -71,6 +80,32 @@ class ApiClient(
             .post(body)
             .build()
         executeJson(request) { payload -> json.decodeFromString<PlaylistSummary>(payload) }
+    }
+
+    suspend fun createItem(
+        baseUrl: String,
+        token: String,
+        url: String,
+        idempotencyKey: String,
+        title: String? = null,
+        canonicalUrl: String? = null,
+        siteName: String? = null,
+    ): ArticleSummary = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(
+            CreateItemPayload(
+                url = url,
+                title = title,
+                canonicalUrl = canonicalUrl,
+                siteName = siteName,
+            )
+        ).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/items"))
+            .header("Authorization", "Bearer $token")
+            .header("Idempotency-Key", idempotencyKey)
+            .post(body)
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<ArticleSummary>(payload) }
     }
 
     suspend fun renamePlaylist(baseUrl: String, token: String, playlistId: Int, name: String): PlaylistSummary = withContext(Dispatchers.IO) {
