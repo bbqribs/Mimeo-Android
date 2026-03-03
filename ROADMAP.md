@@ -28,10 +28,11 @@
 4. [x] Typography preferences pass: reading fonts, line height, and display density controls.
 5. [x] Playback speed control in Locus with persisted preference.
 6. [x] Playback speed location decision: keep speed in expanded Locus header, not the pinned PlayerBar.
-7. [x] Collections baseline: special collections + named playlist browser under the redesign shell.
-8. [x] Phase 6.2: local playlist folders (create/rename/delete + assign playlists within Collections).
-9. [~] Phase 6.3: folder detail view + counts + remove-from-folder inside Collections.
-10. [ ] Next: folder badges in playlist list and optional nested folders.
+7. [cancelled] Move playback speed into pinned PlayerBar. Superseded by docs/decision-playback-speed-location.md; keep speed local to the expanded Locus header and avoid expanding shared PlayerBar scope.
+8. [x] Collections baseline: special collections + named playlist browser under the redesign shell.
+9. [x] Phase 6.2: local playlist folders (create/rename/delete + assign playlists within Collections).
+10. [~] Phase 6.3: folder detail view + counts + remove-from-folder inside Collections.
+11. [ ] Next: folder badges in playlist list and optional nested folders.
 
 ## Later
 - [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.
