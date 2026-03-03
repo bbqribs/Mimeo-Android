@@ -27,10 +27,11 @@
 3. [x] Up Next skeleton: playlist dropdown, search affordance, filter chips, and grouped queue sections.
 4. [x] Typography preferences pass: reading fonts, line height, and display density controls.
 5. [x] Playback speed control in Locus with persisted preference.
-6. [x] Collections baseline: special collections + named playlist browser under the redesign shell.
-7. [x] Phase 6.2: local playlist folders (create/rename/delete + assign playlists within Collections).
-8. [~] Phase 6.3: folder detail view + counts + remove-from-folder inside Collections.
-9. [ ] Next: folder badges in playlist list and optional nested folders.
+6. [x] Playback speed location decision: keep speed in expanded Locus header, not the pinned PlayerBar.
+7. [x] Collections baseline: special collections + named playlist browser under the redesign shell.
+8. [x] Phase 6.2: local playlist folders (create/rename/delete + assign playlists within Collections).
+9. [~] Phase 6.3: folder detail view + counts + remove-from-folder inside Collections.
+10. [ ] Next: folder badges in playlist list and optional nested folders.
 
 ## Later
 - [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.
