@@ -15,6 +15,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -75,6 +76,7 @@ fun PlayerScreen(
     vm: AppViewModel,
     onShowSnackbar: (String, String?, String?) -> Unit,
     initialItemId: Int,
+    startExpanded: Boolean = false,
     onOpenItem: (Int) -> Unit,
     onBackToQueue: (Int?) -> Unit,
     onOpenDiagnostics: () -> Unit,
@@ -101,6 +103,7 @@ fun PlayerScreen(
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
     var lastObservedPercent by remember { mutableIntStateOf(-1) }
     var nearEndForcedForItemId by remember { mutableIntStateOf(-1) }
+    var isExpanded by rememberSaveable(initialItemId, startExpanded) { mutableStateOf(startExpanded) }
     val playbackPositionByItem by vm.playbackPositionByItem.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
@@ -492,143 +495,199 @@ fun PlayerScreen(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = true),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(
-                modifier = Modifier.weight(1f),
-                text = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { showSpeedDialog = true }) {
-                    Text(formatPlaybackSpeed(settings.playbackSpeed))
-                }
-                Box {
-                    IconButton(onClick = { overflowExpanded = true }) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.msr_more_vert_24),
-                            contentDescription = "More actions",
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = overflowExpanded,
-                        onDismissRequest = { overflowExpanded = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Playlists...") },
-                            onClick = {
+            if (!isExpanded) {
+                LocusPeekCard(
+                    title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
+                    sessionLine = if (sessionItemCount > 0) "Session ${sessionIndex + 1}/$sessionItemCount" else null,
+                    progressLine = "Progress $currentPercent%  -  Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability${if (showCompleted) "  -  Done" else ""}",
+                    overflowExpanded = overflowExpanded,
+                    onExpand = { isExpanded = true },
+                    onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
+                    overflowMenuContent = {
+                        LocusOverflowMenuItems(
+                            onOpenPlaylists = {
                                 overflowExpanded = false
                                 vm.refreshPlaylists()
                                 showPlaylistPicker = true
                             },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Back to queue") },
-                            onClick = {
+                            onBackToQueue = {
                                 overflowExpanded = false
                                 onBackToQueue(currentItemId)
                             },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Restart session") },
-                            onClick = {
+                            onRestartSession = {
                                 overflowExpanded = false
                                 actionScope.launch {
                                     vm.restartNowPlayingSession()
                                     onShowSnackbar("Now Playing session restarted.", null, null)
                                 }
                             },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Clear session") },
-                            onClick = {
+                            onClearSession = {
                                 overflowExpanded = false
                                 showClearSessionDialog = true
                             },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Diagnostics") },
-                            onClick = {
+                            onOpenDiagnostics = {
                                 overflowExpanded = false
                                 onOpenDiagnostics()
                             },
                         )
+                    },
+                )
+                playlistMutationMessage?.let { message ->
+                    StatusBanner(
+                        stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
+                        summary = message,
+                        detail = null,
+                        onRetry = { playlistMutationMessage = null },
+                        onDiagnostics = onOpenDiagnostics,
+                    )
+                }
+                if (showLocalPlayerBanner) {
+                    StatusBanner(
+                        stateLabel = "Status",
+                        summary = uiMessage ?: "Player status",
+                        detail = null,
+                        onRetry = {
+                            uiMessage = null
+                            if (textPayload == null) {
+                                reloadNonce += 1
+                            } else if (chunks.isNotEmpty()) {
+                                isAutoPlaying = true
+                                playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
+                            }
+                        },
+                        onDiagnostics = null,
+                    )
+                }
+                if (isLoading) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = { isExpanded = false }) {
+                            Text("Collapse")
+                        }
+                        TextButton(onClick = { showSpeedDialog = true }) {
+                            Text(formatPlaybackSpeed(settings.playbackSpeed))
+                        }
+                        LocusOverflowMenu(
+                            expanded = overflowExpanded,
+                            onExpandedChange = { expanded -> overflowExpanded = expanded },
+                        ) {
+                            LocusOverflowMenuItems(
+                                onOpenPlaylists = {
+                                    overflowExpanded = false
+                                    vm.refreshPlaylists()
+                                    showPlaylistPicker = true
+                                },
+                                onBackToQueue = {
+                                    overflowExpanded = false
+                                    onBackToQueue(currentItemId)
+                                },
+                                onRestartSession = {
+                                    overflowExpanded = false
+                                    actionScope.launch {
+                                        vm.restartNowPlayingSession()
+                                        onShowSnackbar("Now Playing session restarted.", null, null)
+                                    }
+                                },
+                                onClearSession = {
+                                    overflowExpanded = false
+                                    showClearSessionDialog = true
+                                },
+                                onOpenDiagnostics = {
+                                    overflowExpanded = false
+                                    onOpenDiagnostics()
+                                },
+                            )
+                        }
                     }
                 }
-            }
-        }
-        if (sessionItemCount > 0) {
-            Text(
-                text = "Session ${sessionIndex + 1}/$sessionItemCount",
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Text(
-            text = "Progress $currentPercent%  -  Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability${if (showCompleted) "  -  Done" else ""}",
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        playlistMutationMessage?.let { message ->
-            StatusBanner(
-                stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
-                summary = message,
-                detail = null,
-                onRetry = { playlistMutationMessage = null },
-                onDiagnostics = onOpenDiagnostics,
-            )
-        }
-        if (showLocalPlayerBanner) {
-            StatusBanner(
-                stateLabel = "Status",
-                summary = uiMessage ?: "Player status",
-                detail = null,
-                onRetry = {
-                    uiMessage = null
-                    if (textPayload == null) {
-                        reloadNonce += 1
-                    } else if (chunks.isNotEmpty()) {
-                        isAutoPlaying = true
-                        playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
-                    }
-                },
-                onDiagnostics = null,
-            )
-        }
-        if (isLoading) {
-            CircularProgressIndicator()
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f, fill = true),
-        ) {
-            if (chunks.isNotEmpty()) {
-                ReaderScreen(
-                    chunks = chunks,
-                    currentChunkIndex = safePosition.chunkIndex,
-                    autoScrollWhileListening = settings.autoScrollWhileListening,
-                    readingFontSizeSp = settings.readingFontSizeSp,
-                    readingLineHeightPercent = settings.readingLineHeightPercent,
-                    readingMaxWidthDp = settings.readingMaxWidthDp,
-                    paragraphSpacing = settings.readingParagraphSpacing,
-                    onSelectChunk = { index ->
-                        val safeIndex = index.coerceIn(0, chunks.lastIndex)
-                        setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
-                        uiMessage = "Selected chunk ${safeIndex + 1}"
-                    },
-                    onPlayFromChunk = { index ->
-                        val safeIndex = index.coerceIn(0, chunks.lastIndex)
-                        setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
-                        isAutoPlaying = true
-                        playChunk(safeIndex, 0)
-                        uiMessage = "Starting from chunk ${safeIndex + 1}"
-                    },
-                    modifier = Modifier.fillMaxSize(),
+                Text(
+                    text = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
+                if (sessionItemCount > 0) {
+                    Text(
+                        text = "Session ${sessionIndex + 1}/$sessionItemCount",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    text = "Progress $currentPercent%  -  Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability${if (showCompleted) "  -  Done" else ""}",
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                playlistMutationMessage?.let { message ->
+                    StatusBanner(
+                        stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
+                        summary = message,
+                        detail = null,
+                        onRetry = { playlistMutationMessage = null },
+                        onDiagnostics = onOpenDiagnostics,
+                    )
+                }
+                if (showLocalPlayerBanner) {
+                    StatusBanner(
+                        stateLabel = "Status",
+                        summary = uiMessage ?: "Player status",
+                        detail = null,
+                        onRetry = {
+                            uiMessage = null
+                            if (textPayload == null) {
+                                reloadNonce += 1
+                            } else if (chunks.isNotEmpty()) {
+                                isAutoPlaying = true
+                                playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
+                            }
+                        },
+                        onDiagnostics = null,
+                    )
+                }
+                if (isLoading) {
+                    CircularProgressIndicator()
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = true),
+                ) {
+                    if (chunks.isNotEmpty()) {
+                        ReaderScreen(
+                            chunks = chunks,
+                            currentChunkIndex = safePosition.chunkIndex,
+                            autoScrollWhileListening = settings.autoScrollWhileListening,
+                            readingFontSizeSp = settings.readingFontSizeSp,
+                            readingLineHeightPercent = settings.readingLineHeightPercent,
+                            readingMaxWidthDp = settings.readingMaxWidthDp,
+                            paragraphSpacing = settings.readingParagraphSpacing,
+                            onSelectChunk = { index ->
+                                val safeIndex = index.coerceIn(0, chunks.lastIndex)
+                                setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
+                                uiMessage = "Selected chunk ${safeIndex + 1}"
+                            },
+                            onPlayFromChunk = { index ->
+                                val safeIndex = index.coerceIn(0, chunks.lastIndex)
+                                setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
+                                isAutoPlaying = true
+                                playChunk(safeIndex, 0)
+                                uiMessage = "Starting from chunk ${safeIndex + 1}"
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
             }
         }
         PlayerControlBar(
@@ -816,6 +875,112 @@ fun PlayerScreen(
             },
         )
     }
+}
+
+@Composable
+private fun LocusPeekCard(
+    title: String,
+    sessionLine: String?,
+    progressLine: String,
+    overflowExpanded: Boolean,
+    onExpand: () -> Unit,
+    onOverflowExpandedChange: (Boolean) -> Unit,
+    overflowMenuContent: @Composable () -> Unit,
+) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(text = "Now playing")
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = onExpand) {
+                        Text("Expand")
+                    }
+                    LocusOverflowMenu(
+                        expanded = overflowExpanded,
+                        onExpandedChange = onOverflowExpandedChange,
+                        content = overflowMenuContent,
+                    )
+                }
+            }
+            Text(
+                text = title,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            sessionLine?.let { session ->
+                Text(
+                    text = session,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                text = progressLine,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun LocusOverflowMenu(
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Box {
+        IconButton(onClick = { onExpandedChange(true) }) {
+            Icon(
+                painter = painterResource(id = R.drawable.msr_more_vert_24),
+                contentDescription = "More actions",
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) },
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun LocusOverflowMenuItems(
+    onOpenPlaylists: () -> Unit,
+    onBackToQueue: () -> Unit,
+    onRestartSession: () -> Unit,
+    onClearSession: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
+) {
+    DropdownMenuItem(
+        text = { Text("Playlists...") },
+        onClick = onOpenPlaylists,
+    )
+    DropdownMenuItem(
+        text = { Text("Back to queue") },
+        onClick = onBackToQueue,
+    )
+    DropdownMenuItem(
+        text = { Text("Restart session") },
+        onClick = onRestartSession,
+    )
+    DropdownMenuItem(
+        text = { Text("Clear session") },
+        onClick = onClearSession,
+    )
+    DropdownMenuItem(
+        text = { Text("Diagnostics") },
+        onClick = onOpenDiagnostics,
+    )
 }
 
 @Composable
