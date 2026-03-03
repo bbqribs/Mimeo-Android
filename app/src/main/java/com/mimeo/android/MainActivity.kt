@@ -71,6 +71,7 @@ import com.mimeo.android.repository.PlaybackRepository
 import com.mimeo.android.ui.collections.CollectionsScreen
 import com.mimeo.android.ui.collections.FolderDetailScreen
 import com.mimeo.android.repository.ProgressPostResult
+import com.mimeo.android.ui.components.rememberLocusPlayerBarState
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
 import com.mimeo.android.ui.settings.SettingsScreen
@@ -1014,6 +1015,7 @@ private fun MimeoApp(vm: AppViewModel) {
     val nav = rememberNavController()
     val navBackStack by nav.currentBackStackEntryAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val locusPlayerBarState = rememberLocusPlayerBarState()
     val currentRoute = navBackStack?.destination?.route.orEmpty()
     val navItems = listOf(
         BottomNavDestination(ROUTE_UP_NEXT, "Up Next", android.R.drawable.ic_media_next),
@@ -1060,6 +1062,7 @@ private fun MimeoApp(vm: AppViewModel) {
         else -> null
     }
     val showGlobalBanner = queueOffline || baseUrlHint != null || statusLooksError
+    val showPinnedLocusPlayerBar = selectedTab == ROUTE_LOCUS && locusPlayerBarState.isVisible
 
     LaunchedEffect(vm, snackbarHostState) {
         vm.snackbarMessages.collect { message ->
@@ -1085,31 +1088,36 @@ private fun MimeoApp(vm: AppViewModel) {
             )
         },
         bottomBar = {
-            NavigationBar(
-                modifier = Modifier.height(68.dp),
-                tonalElevation = 0.dp,
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-            ) {
-                navItems.forEach { destination ->
-                    NavigationBarItem(
-                        selected = selectedTab == destination.route,
-                        onClick = { nav.navigate(destination.route) { launchSingleTop = true } },
-                        label = { Text(destination.label) },
-                        icon = {
-                            Icon(
-                                painter = painterResource(destination.iconRes),
-                                contentDescription = destination.label,
-                            )
-                        },
-                        alwaysShowLabel = true,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
+            Column {
+                if (showPinnedLocusPlayerBar) {
+                    locusPlayerBarState.Render()
+                }
+                NavigationBar(
+                    modifier = Modifier.height(68.dp),
+                    tonalElevation = 0.dp,
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                ) {
+                    navItems.forEach { destination ->
+                        NavigationBarItem(
+                            selected = selectedTab == destination.route,
+                            onClick = { nav.navigate(destination.route) { launchSingleTop = true } },
+                            label = { Text(destination.label) },
+                            icon = {
+                                Icon(
+                                    painter = painterResource(destination.iconRes),
+                                    contentDescription = destination.label,
+                                )
+                            },
+                            alwaysShowLabel = true,
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                        )
+                    }
                 }
             }
         },
@@ -1183,7 +1191,9 @@ private fun MimeoApp(vm: AppViewModel) {
                                 vm.showSnackbar(message, actionLabel, actionKey)
                             },
                             initialItemId = nowPlayingId,
-                            onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
+                            startExpanded = false,
+                            playerBarState = locusPlayerBarState,
+                            onOpenItem = {},
                             onBackToQueue = { focusId ->
                                 if (focusId == null) {
                                     nav.navigate(ROUTE_UP_NEXT)
@@ -1226,7 +1236,9 @@ private fun MimeoApp(vm: AppViewModel) {
                             vm.showSnackbar(message, actionLabel, actionKey)
                         },
                         initialItemId = itemId,
-                        onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
+                        startExpanded = true,
+                        playerBarState = locusPlayerBarState,
+                        onOpenItem = {},
                         onBackToQueue = { focusId ->
                             if (focusId == null) {
                                 nav.navigate(ROUTE_UP_NEXT)
