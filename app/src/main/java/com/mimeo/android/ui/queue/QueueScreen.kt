@@ -38,6 +38,7 @@ import com.mimeo.android.AppViewModel
 import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.ui.components.FolderPickerDialog
 import com.mimeo.android.ui.components.StatusBanner
@@ -46,6 +47,11 @@ import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import kotlinx.coroutines.launch
 
 private const val DONE_PERCENT_THRESHOLD = 98
+
+private data class FolderAssignmentTarget(
+    val itemTitle: String,
+    val playlistId: Int,
+)
 
 @Composable
 fun QueueScreen(
@@ -76,7 +82,8 @@ fun QueueScreen(
     var playlistMenuExpanded by remember { mutableStateOf(false) }
     var rowMenuItemId by remember { mutableIntStateOf(-1) }
     var playlistPickerItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
-    var folderPickerItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
+    var playlistChoiceTarget by remember { mutableStateOf<PlaybackQueueItem?>(null) }
+    var folderPickerTarget by remember { mutableStateOf<FolderAssignmentTarget?>(null) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
@@ -99,8 +106,7 @@ fun QueueScreen(
         }
     }
 
-    val selectedPlaylistId = settings.selectedPlaylistId
-    val selectedPlaylistName = selectedPlaylistId?.let { id ->
+    val selectedPlaylistName = settings.selectedPlaylistId?.let { id ->
         playlists.firstOrNull { it.id == id }?.name
     } ?: "Smart queue"
     val syncLabel = when (syncBadgeState) {
@@ -119,7 +125,6 @@ fun QueueScreen(
             )
         }
     }.orEmpty()
-    val assignedFolderId = selectedPlaylistId?.let { playlistFolderAssignments[it] }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         playlistMutationMessage?.let { message ->
@@ -224,7 +229,7 @@ fun QueueScreen(
         if (loading) {
             CircularProgressIndicator()
         }
-        if (items.isEmpty() && selectedPlaylistId != null && !loading) {
+        if (items.isEmpty() && settings.selectedPlaylistId != null && !loading) {
             Text("No items yet in this playlist.")
         }
 
@@ -245,11 +250,21 @@ fun QueueScreen(
                         playlistPickerItem = item
                     },
                     onOpenFolderPicker = {
-                        if (selectedPlaylistId == null) {
-                            onShowSnackbar("This item isn't in a playlist yet.", null, null)
-                        } else {
-                            vm.refreshFolders()
-                            folderPickerItem = item
+                        val candidatePlaylists = itemPlaylists(item.itemId, playlists)
+                        when {
+                            candidatePlaylists.isEmpty() -> {
+                                onShowSnackbar("This item isn't in a playlist yet.", null, null)
+                            }
+                            candidatePlaylists.size == 1 -> {
+                                vm.refreshFolders()
+                                folderPickerTarget = FolderAssignmentTarget(
+                                    itemTitle = item.title?.ifBlank { null } ?: item.url,
+                                    playlistId = candidatePlaylists.first().id,
+                                )
+                            }
+                            else -> {
+                                playlistChoiceTarget = item
+                            }
                         }
                     },
                     isMenuExpanded = rowMenuItemId == item.itemId,
@@ -289,28 +304,63 @@ fun QueueScreen(
         )
     }
 
-    folderPickerItem?.let { target ->
-        FolderPickerDialog(
-            title = target.title?.ifBlank { null } ?: target.url,
-            folders = folders,
-            assignedFolderId = assignedFolderId,
-            onDismiss = { folderPickerItem = null },
-            onSelectFolder = { folderId ->
-                val playlistId = selectedPlaylistId
-                if (playlistId == null) {
-                    folderPickerItem = null
-                    onShowSnackbar("This item isn't in a playlist yet.", null, null)
-                } else {
-                    vm.assignPlaylistToFolder(playlistId, folderId)
-                    val message = if (folderId == null) {
-                        "Removed from folder"
-                    } else {
-                        val folderName = folders.firstOrNull { it.id == folderId }?.name ?: "folder"
-                        "Added to $folderName"
+    playlistChoiceTarget?.let { target ->
+        val candidatePlaylists = itemPlaylists(target.itemId, playlists)
+        AlertDialog(
+            onDismissRequest = { playlistChoiceTarget = null },
+            title = { Text("Choose playlist") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = target.title?.ifBlank { null } ?: target.url,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    candidatePlaylists.forEach { playlist ->
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                vm.refreshFolders()
+                                folderPickerTarget = FolderAssignmentTarget(
+                                    itemTitle = target.title?.ifBlank { null } ?: target.url,
+                                    playlistId = playlist.id,
+                                )
+                                playlistChoiceTarget = null
+                            },
+                        ) {
+                            Text(
+                                text = playlist.name,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
-                    folderPickerItem = null
-                    onShowSnackbar(message, null, null)
                 }
+            },
+            confirmButton = {
+                TextButton(onClick = { playlistChoiceTarget = null }) {
+                    Text("Close")
+                }
+            },
+        )
+    }
+
+    folderPickerTarget?.let { target ->
+        FolderPickerDialog(
+            title = target.itemTitle,
+            folders = folders,
+            assignedFolderId = playlistFolderAssignments[target.playlistId],
+            onDismiss = { folderPickerTarget = null },
+            onSelectFolder = { folderId ->
+                vm.assignPlaylistToFolder(target.playlistId, folderId)
+                val message = if (folderId == null) {
+                    "Removed from folder"
+                } else {
+                    val folderName = folders.firstOrNull { it.id == folderId }?.name ?: "folder"
+                    "Added to $folderName"
+                }
+                folderPickerTarget = null
+                onShowSnackbar(message, null, null)
             },
         )
     }
@@ -411,6 +461,12 @@ private fun QueueItemCard(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+    }
+}
+
+private fun itemPlaylists(itemId: Int, playlists: List<PlaylistSummary>): List<PlaylistSummary> {
+    return playlists.filter { playlist ->
+        playlist.entries.any { entry -> entry.articleId == itemId }
     }
 }
 
