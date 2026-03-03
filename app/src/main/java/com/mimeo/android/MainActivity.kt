@@ -239,6 +239,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 apiToken = token,
                 autoAdvanceOnCompletion = autoAdvanceOnCompletion,
                 autoScrollWhileListening = autoScrollWhileListening,
+                playbackSpeed = settings.value.playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
                 readingFontSizeSp = settings.value.readingFontSizeSp,
                 readingLineHeightPercent = settings.value.readingLineHeightPercent,
@@ -261,11 +262,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 apiToken = settings.value.apiToken,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
+                playbackSpeed = settings.value.playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
                 readingFontSizeSp = readingFontSizeSp,
                 readingLineHeightPercent = readingLineHeightPercent,
                 readingMaxWidthDp = readingMaxWidthDp,
                 readingParagraphSpacing = readingParagraphSpacing,
+            )
+        }
+    }
+
+    fun savePlaybackSpeed(playbackSpeed: Float) {
+        viewModelScope.launch {
+            settingsStore.save(
+                baseUrl = settings.value.baseUrl,
+                apiToken = settings.value.apiToken,
+                autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
+                autoScrollWhileListening = settings.value.autoScrollWhileListening,
+                playbackSpeed = playbackSpeed,
+                selectedPlaylistId = settings.value.selectedPlaylistId,
+                readingFontSizeSp = settings.value.readingFontSizeSp,
+                readingLineHeightPercent = settings.value.readingLineHeightPercent,
+                readingMaxWidthDp = settings.value.readingMaxWidthDp,
+                readingParagraphSpacing = settings.value.readingParagraphSpacing,
             )
         }
     }

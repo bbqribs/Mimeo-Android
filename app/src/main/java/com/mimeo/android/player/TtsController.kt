@@ -46,6 +46,7 @@ class TtsController(
     private val generationCounter = AtomicLong(0L)
     private val utteranceMetaById = ConcurrentHashMap<String, UtteranceMeta>()
     private val handledDoneUtterances = CopyOnWriteArraySet<String>()
+    private var speechRate = 1.0f
 
     init {
         lateinit var createdEngine: TextToSpeech
@@ -53,6 +54,7 @@ class TtsController(
             if (status == TextToSpeech.SUCCESS) {
                 initialized = true
                 createdEngine.language = Locale.US
+                createdEngine.setSpeechRate(speechRate)
             } else {
                 mainHandler.post { onError("TTS init failed") }
             }
@@ -131,6 +133,7 @@ class TtsController(
 
     fun speakChunk(itemId: Int, chunkIndex: Int, text: String, baseOffset: Int) {
         if (!initialized || text.isBlank()) return
+        tts.setSpeechRate(speechRate)
         val generation = generationCounter.incrementAndGet()
         val utteranceId = "mimeo-item-$itemId-chunk-$chunkIndex-$generation"
         handledDoneUtterances.remove(utteranceId)
@@ -147,6 +150,13 @@ class TtsController(
             println("[Mimeo][tts] speak utteranceId=$utteranceId item=$itemId chunk=$chunkIndex base=$baseOffset")
         }
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+    }
+
+    fun setSpeechRate(rate: Float) {
+        speechRate = rate.coerceIn(0.8f, 2.0f)
+        if (initialized) {
+            tts.setSpeechRate(speechRate)
+        }
     }
 
     fun stop() {

@@ -125,6 +125,7 @@ data class AppSettings(
     val apiToken: String = "",
     val autoAdvanceOnCompletion: Boolean = false,
     val autoScrollWhileListening: Boolean = true,
+    val playbackSpeed: Float = 1.0f,
     val selectedPlaylistId: Int? = null,
     val readingFontSizeSp: Int = 18,
     val readingLineHeightPercent: Int = 160,

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -23,6 +24,8 @@ class SettingsStore(private val context: Context) {
         booleanPreferencesKey("auto_advance_on_completion")
     private val autoScrollWhileListeningKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("auto_scroll_while_listening")
+    private val playbackSpeedKey: Preferences.Key<Float> =
+        floatPreferencesKey("playback_speed")
     private val selectedPlaylistIdKey: Preferences.Key<Int> =
         intPreferencesKey("selected_playlist_id")
     private val readingFontSizeSpKey: Preferences.Key<Int> =
@@ -40,6 +43,7 @@ class SettingsStore(private val context: Context) {
             apiToken = prefs[tokenKey] ?: "",
             autoAdvanceOnCompletion = prefs[autoAdvanceOnCompletionKey] ?: false,
             autoScrollWhileListening = prefs[autoScrollWhileListeningKey] ?: true,
+            playbackSpeed = prefs[playbackSpeedKey] ?: 1.0f,
             selectedPlaylistId = decodeSelectedPlaylistId(prefs[selectedPlaylistIdKey]),
             readingFontSizeSp = prefs[readingFontSizeSpKey] ?: 18,
             readingLineHeightPercent = prefs[readingLineHeightPercentKey] ?: 160,
@@ -55,6 +59,7 @@ class SettingsStore(private val context: Context) {
         apiToken: String,
         autoAdvanceOnCompletion: Boolean,
         autoScrollWhileListening: Boolean,
+        playbackSpeed: Float,
         selectedPlaylistId: Int?,
         readingFontSizeSp: Int,
         readingLineHeightPercent: Int,
@@ -66,6 +71,7 @@ class SettingsStore(private val context: Context) {
             prefs[tokenKey] = apiToken.trim()
             prefs[autoAdvanceOnCompletionKey] = autoAdvanceOnCompletion
             prefs[autoScrollWhileListeningKey] = autoScrollWhileListening
+            prefs[playbackSpeedKey] = playbackSpeed
             prefs[selectedPlaylistIdKey] = encodeSelectedPlaylistId(selectedPlaylistId)
             prefs[readingFontSizeSpKey] = readingFontSizeSp
             prefs[readingLineHeightPercentKey] = readingLineHeightPercent
@@ -91,6 +97,12 @@ class SettingsStore(private val context: Context) {
             prefs[readingLineHeightPercentKey] = readingLineHeightPercent
             prefs[readingMaxWidthDpKey] = readingMaxWidthDp
             prefs[readingParagraphSpacingKey] = readingParagraphSpacing.name
+        }
+    }
+
+    suspend fun savePlaybackSpeed(playbackSpeed: Float) {
+        context.dataStore.edit { prefs ->
+            prefs[playbackSpeedKey] = playbackSpeed
         }
     }
 }
