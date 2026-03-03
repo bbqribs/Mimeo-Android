@@ -69,6 +69,7 @@ import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.PlaylistMembershipToggleResult
 import com.mimeo.android.repository.PlaybackRepository
 import com.mimeo.android.ui.collections.CollectionsScreen
+import com.mimeo.android.ui.collections.FolderDetailScreen
 import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
@@ -102,6 +103,7 @@ private const val ROUTE_LOCUS = "locus"
 private const val ROUTE_LOCUS_ITEM = "locus/{itemId}"
 private const val ROUTE_COLLECTIONS = "collections"
 private const val ROUTE_COLLECTIONS_PLAYLISTS = "collections/playlists"
+private const val ROUTE_COLLECTIONS_FOLDER = "collections/folder/{folderId}"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_DIAGNOSTICS = "settings/diagnostics"
 
@@ -1138,6 +1140,24 @@ private fun MimeoApp(vm: AppViewModel) {
                     CollectionsScreen(
                         vm = vm,
                         onOpenPlaylistsManager = { nav.navigate(ROUTE_COLLECTIONS_PLAYLISTS) },
+                        onOpenFolder = { folderId -> nav.navigate("collections/folder/$folderId") },
+                    )
+                }
+                composable(
+                    ROUTE_COLLECTIONS_FOLDER,
+                    arguments = listOf(navArgument("folderId") { type = NavType.IntType }),
+                ) { backStack ->
+                    val folderId = backStack.arguments?.getInt("folderId") ?: return@composable
+                    FolderDetailScreen(
+                        vm = vm,
+                        folderId = folderId,
+                        onBack = { nav.popBackStack() },
+                        onOpenPlaylist = {
+                            nav.navigate(ROUTE_UP_NEXT) {
+                                popUpTo(ROUTE_COLLECTIONS)
+                                launchSingleTop = true
+                            }
+                        },
                     )
                 }
                 composable(ROUTE_COLLECTIONS_PLAYLISTS) {

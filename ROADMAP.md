@@ -29,7 +29,8 @@
 5. [x] Playback speed control in Locus with persisted preference.
 6. [x] Collections baseline: special collections + named playlist browser under the redesign shell.
 7. [x] Phase 6.2: local playlist folders (create/rename/delete + assign playlists within Collections).
-8. [ ] Phase 6.3: deferred until folder context is visible outside Collections.
+8. [~] Phase 6.3: folder detail view + counts + remove-from-folder inside Collections.
+9. [ ] Next: folder badges in playlist list and optional nested folders.
 
 ## Later
 - [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.
@@ -39,3 +40,5 @@
 - [ ] Audio focus/media session polish.
 - [ ] Better conflict handling for stale cached versions during long offline sessions.
 - [ ] Replace dev cleartext dependence with HTTPS-friendly transport story for hosted/mobile use.
+
+
