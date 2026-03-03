@@ -19,6 +19,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -74,6 +75,8 @@ fun QueueScreen(
     var rowMenuItemId by remember { mutableIntStateOf(-1) }
     var playlistPickerItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
+    var searchExpanded by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         vm.refreshPlaylists()
@@ -113,6 +116,16 @@ fun QueueScreen(
             )
         }
     }.orEmpty()
+    val visibleItems = if (searchQuery.isBlank()) {
+        items
+    } else {
+        val needle = searchQuery.trim().lowercase()
+        items.filter { item ->
+            (item.title?.lowercase()?.contains(needle) == true) ||
+                item.url.lowercase().contains(needle) ||
+                (item.host?.lowercase()?.contains(needle) == true)
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         playlistMutationMessage?.let { message ->
@@ -128,6 +141,14 @@ fun QueueScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            Box {
+                IconButton(onClick = { searchExpanded = !searchExpanded }) {
+                    Icon(
+                        painter = painterResource(android.R.drawable.ic_menu_search),
+                        contentDescription = if (searchExpanded) "Close search" else "Search",
+                    )
+                }
+            }
             TextButton(onClick = { vm.loadQueue() }) { Text("Refresh") }
             TextButton(onClick = { vm.flushPendingProgress() }) { Text("Sync") }
             Box {
@@ -162,6 +183,15 @@ fun QueueScreen(
                 text = "Sync: $syncLabel  Pending: $pendingCount",
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (searchExpanded) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Search queue") },
+                singleLine = true,
             )
         }
 
@@ -225,7 +255,7 @@ fun QueueScreen(
             state = listState,
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            items(items) { item ->
+            items(visibleItems) { item ->
                 QueueItemCard(
                     item = item,
                     cached = cachedItemIds.contains(item.itemId),
