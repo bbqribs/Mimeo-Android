@@ -1,10 +1,13 @@
 package com.mimeo.android
 
+import android.Manifest
 import android.app.Application
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Build
 import androidx.annotation.DrawableRes
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -43,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -71,8 +75,7 @@ import com.mimeo.android.repository.FoldersRepository
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.PlaylistMembershipToggleResult
 import com.mimeo.android.repository.PlaybackRepository
-import com.mimeo.android.share.buildShareIdempotencyKey
-import com.mimeo.android.share.extractFirstHttpUrl
+import com.mimeo.android.share.ShareSaveRefreshBus
 import com.mimeo.android.ui.collections.CollectionsScreen
 import com.mimeo.android.ui.collections.FolderDetailScreen
 import com.mimeo.android.repository.ProgressPostResult
@@ -88,9 +91,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -114,7 +115,6 @@ private const val ROUTE_COLLECTIONS_FOLDER = "collections/folder/{folderId}"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_DIAGNOSTICS = "settings/diagnostics"
 private const val ACTION_KEY_OPEN_DIAGNOSTICS = "open_diagnostics"
-private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
 
 private data class BottomNavDestination(
     val route: String,
@@ -127,11 +127,6 @@ data class UiSnackbarMessage(
     val actionLabel: String? = null,
     val actionKey: String? = null,
     val duration: SnackbarDuration = SnackbarDuration.Short,
-)
-
-data class PendingShareIntent(
-    val sharedText: String?,
-    val sharedTitle: String?,
 )
 
 private fun isLikelyPhysicalDevice(): Boolean {
@@ -147,6 +142,9 @@ private fun isLikelyPhysicalDevice(): Boolean {
 
 class MainActivity : ComponentActivity() {
     private lateinit var vm: AppViewModel
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -155,7 +153,8 @@ class MainActivity : ComponentActivity() {
             this,
             ViewModelProvider.AndroidViewModelFactory.getInstance(application),
         )[AppViewModel::class.java]
-        consumeShareIntent(intent)
+        consumeLaunchIntent(intent)
+        requestNotificationPermissionIfNeeded()
         setContent {
             MimeoTheme {
                 MimeoApp(vm)
@@ -165,25 +164,25 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        consumeShareIntent(intent)
+        setIntent(intent)
+        consumeLaunchIntent(intent)
     }
 
-    private fun consumeShareIntent(incomingIntent: Intent?) {
-        if (incomingIntent?.action != Intent.ACTION_SEND) return
-        val mimeType = incomingIntent.type.orEmpty()
-        if (!mimeType.startsWith("text/")) return
-        vm.handleShareIntent(
-            sharedText = incomingIntent.getStringExtra(Intent.EXTRA_TEXT),
-            sharedTitle = incomingIntent.getStringExtra(Intent.EXTRA_SUBJECT),
-        )
-        setIntent(
-            Intent(incomingIntent).apply {
-                action = null
-                type = null
-                removeExtra(Intent.EXTRA_TEXT)
-                removeExtra(Intent.EXTRA_SUBJECT)
-            }
-        )
+    private fun consumeLaunchIntent(incomingIntent: Intent?) {
+        if (incomingIntent?.action != ShareReceiverActivity.ACTION_OPEN_SETTINGS) return
+        vm.requestNavigation(ROUTE_SETTINGS)
+        setIntent(Intent(incomingIntent).apply { action = null })
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 }
 
@@ -248,23 +247,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val nowPlayingSession: StateFlow<NowPlayingSession?> = _nowPlayingSession.asStateFlow()
     private val _sessionIssueMessage = MutableStateFlow<String?>(null)
     val sessionIssueMessage: StateFlow<String?> = _sessionIssueMessage.asStateFlow()
-    private val _pendingShareIntent = MutableStateFlow<PendingShareIntent?>(null)
-    val pendingShareIntent: StateFlow<PendingShareIntent?> = _pendingShareIntent.asStateFlow()
-    private val settingsLoaded = CompletableDeferred<Unit>()
+    private val _pendingNavigationRoute = MutableStateFlow<String?>(null)
+    val pendingNavigationRoute: StateFlow<String?> = _pendingNavigationRoute.asStateFlow()
 
     init {
         viewModelScope.launch {
             settingsStore.settingsFlow.collect {
                 _settings.value = it
-                if (!settingsLoaded.isCompleted) {
-                    settingsLoaded.complete(Unit)
-                }
             }
         }
         WorkScheduler.enqueueProgressSync(application.applicationContext)
         viewModelScope.launch {
             refreshPendingCount()
             flushPendingProgress()
+        }
+        viewModelScope.launch {
+            ShareSaveRefreshBus.events.collect { event ->
+                refreshPlaylists()
+                if (settings.value.selectedPlaylistId == event.playlistId) {
+                    loadQueue()
+                }
+            }
         }
         viewModelScope.launch {
             val loadResult = repository.getSessionLoadResult()
@@ -830,24 +833,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _statusMessage.value = "Now Playing session cleared."
     }
 
-    fun handleShareIntent(sharedText: String?, sharedTitle: String?) {
-        _pendingShareIntent.value = PendingShareIntent(
-            sharedText = sharedText,
-            sharedTitle = sharedTitle,
-        )
-    }
-
-    fun consumePendingShareIntent(pendingShareIntent: PendingShareIntent) {
-        viewModelScope.launch {
-            delay(250)
-            settingsLoaded.await()
-            processSharedUrl(pendingShareIntent.sharedText, pendingShareIntent.sharedTitle)
-            if (_pendingShareIntent.value == pendingShareIntent) {
-                _pendingShareIntent.value = null
-            }
-        }
-    }
-
     fun currentNowPlayingItemId(): Int? = nowPlayingSession.value?.currentItem?.itemId
 
     fun isItemCached(itemId: Int): Boolean = cachedItemIds.value.contains(itemId)
@@ -857,6 +842,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun baseUrlHintForDevice(isPhysicalDevice: Boolean): String? =
         baseUrlHint(settings.value.baseUrl.trim().trimEnd('/'), isPhysicalDevice)
+
+    fun requestNavigation(route: String) {
+        _pendingNavigationRoute.value = route
+    }
+
+    fun consumePendingNavigation(route: String) {
+        if (_pendingNavigationRoute.value == route) {
+            _pendingNavigationRoute.value = null
+        }
+    }
 
     fun nowPlayingSummaryText(): String? {
         val session = nowPlayingSession.value ?: return null
@@ -982,78 +977,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val fromSession = nowPlayingSession.value?.items?.firstOrNull { it.itemId == itemId }?.activeContentVersionId
         if (fromSession != null) return fromSession
         return queueItems.value.firstOrNull { it.itemId == itemId }?.activeContentVersionId
-    }
-
-    private suspend fun processSharedUrl(sharedText: String?, sharedTitle: String?) {
-        val url = extractFirstHttpUrl(sharedText)
-        if (url == null) {
-            showSnackbar("No valid URL found", duration = SnackbarDuration.Long)
-            return
-        }
-
-        val current = settings.value
-        if (current.apiToken.isBlank()) {
-            showSnackbar(
-                message = "Configure API token in Settings first",
-                actionLabel = "Settings",
-                actionKey = ACTION_KEY_OPEN_SETTINGS,
-                duration = SnackbarDuration.Long,
-            )
-            return
-        }
-
-        try {
-            val article = apiClient.createItem(
-                baseUrl = current.baseUrl,
-                token = current.apiToken,
-                url = url,
-                idempotencyKey = buildShareIdempotencyKey(url),
-            )
-            val alreadySaved = routeSavedItem(article.id, current.defaultSavePlaylistId, current)
-            refreshPlaylists()
-            if (current.selectedPlaylistId == current.defaultSavePlaylistId) {
-                loadQueue()
-            }
-            showSnackbar(
-                message = if (alreadySaved) "Already saved ✅" else "Saved to queue ✅",
-                duration = SnackbarDuration.Long,
-            )
-        } catch (error: ApiException) {
-            when {
-                error.statusCode == 401 -> {
-                    showSnackbar(
-                        message = "Check your API token",
-                        actionLabel = "Settings",
-                        actionKey = ACTION_KEY_OPEN_SETTINGS,
-                        duration = SnackbarDuration.Long,
-                    )
-                }
-                error.statusCode in 500..599 -> showSnackbar("Server error. Try again.", duration = SnackbarDuration.Long)
-                else -> showSnackbar("Couldn't save article", duration = SnackbarDuration.Long)
-            }
-        } catch (error: Exception) {
-            if (isNetworkError(error)) {
-                showSnackbar("Couldn't reach server", duration = SnackbarDuration.Long)
-            } else {
-                showSnackbar("Couldn't save article", duration = SnackbarDuration.Long)
-            }
-        }
-    }
-
-    private suspend fun routeSavedItem(itemId: Int, playlistId: Int?, current: AppSettings): Boolean {
-        if (playlistId == null) {
-            return false
-        }
-        return try {
-            apiClient.addItemToPlaylist(current.baseUrl, current.apiToken, playlistId, itemId)
-            false
-        } catch (error: ApiException) {
-            if (error.statusCode == 409) {
-                true
-            } else {
-                throw error
-            }
-        }
     }
 
     private fun updateSyncBadgeState(pendingCount: Int = _pendingProgressCount.value) {
@@ -1184,7 +1107,7 @@ private fun MimeoApp(vm: AppViewModel) {
     val settings by vm.settings.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
-    val pendingShareIntent by vm.pendingShareIntent.collectAsState()
+    val pendingNavigationRoute by vm.pendingNavigationRoute.collectAsState()
     val selectedTab = when {
         currentRoute.startsWith(ROUTE_LOCUS) -> ROUTE_LOCUS
         currentRoute.startsWith(ROUTE_COLLECTIONS) -> ROUTE_COLLECTIONS
@@ -1232,14 +1155,16 @@ private fun MimeoApp(vm: AppViewModel) {
             if (result == SnackbarResult.ActionPerformed) {
                 when (message.actionKey) {
                     ACTION_KEY_OPEN_DIAGNOSTICS -> nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) { launchSingleTop = true }
-                    ACTION_KEY_OPEN_SETTINGS -> nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true }
                 }
             }
         }
     }
 
-    LaunchedEffect(pendingShareIntent) {
-        pendingShareIntent?.let { vm.consumePendingShareIntent(it) }
+    LaunchedEffect(pendingNavigationRoute) {
+        pendingNavigationRoute?.let { route ->
+            nav.navigate(route) { launchSingleTop = true }
+            vm.consumePendingNavigation(route)
+        }
     }
 
     Scaffold(
