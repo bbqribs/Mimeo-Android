@@ -1,4 +1,4 @@
-﻿# Roadmap (Android)
+# Roadmap (Android)
 
 ## Done
 - [x] MVP v0 app scaffold with Compose + DataStore + OkHttp.
@@ -17,7 +17,7 @@
 - [x] Start listening here + highlight + optional auto-scroll: player `View text` supports long-press start-from-chunk, current chunk highlighting, and auto-scroll toggle with temporary manual-scroll suppression.
 - [x] Now Playing/session UX refinements + playlists entry point stub: queue session banner with resume/restart/clear controls, player session header/back-to-queue action, and a top-level playlists placeholder screen.
 - [x] Named playlists v1 integration: playlist CRUD + selection UI, Smart queue fallback, and playlist-scoped queue loading.
-- [x] Playlist item membership UX: Queue row/player overflow now expose `Add to playlist…` with per-playlist add/remove toggles.
+- [x] Playlist item membership UX: Queue row/player overflow now expose `Add to playlist�` with per-playlist add/remove toggles.
 - [x] UI compression pass: compact nav, dense queue/player/playlists/settings layouts, and collapsible status banner for offline/LAN issues.
 - [x] UX follow-ups: root snackbar visibility, stable player status/banner placement, and denser player control bar without reducing tap targets.
 
@@ -28,8 +28,9 @@
 4. [x] Typography preferences pass: reading fonts, line height, and display density controls.
 5. [x] Playback speed control in Locus with persisted preference.
 6. [x] Collections baseline: special collections + named playlist browser under the redesign shell.
-7. [~] Phase 6.2: local playlist folders (create/rename/delete + assign playlists within Collections).
-8. [ ] Phase 6.3: add “Add to folder” from Up Next row overflow and richer library moves.
+7. [x] Phase 6.2: local playlist folders (create/rename/delete + assign playlists within Collections).
+8. [ ] Phase 6.3: deferred / explored only. Do not ship folders-from-Up Next until folder context is visible outside Collections.
+9. [ ] Next: folder detail view (drill-in) + counts + remove from folder (Collections-only).
 
 ## Later
 - [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.
