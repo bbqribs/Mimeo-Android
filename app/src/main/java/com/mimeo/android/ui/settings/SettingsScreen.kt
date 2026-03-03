@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
@@ -14,6 +15,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -44,6 +46,7 @@ fun SettingsScreen(
     val settings by vm.settings.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val testingConnection by vm.testingConnection.collectAsState()
+    val playlists by vm.playlists.collectAsState()
     val configuration = LocalConfiguration.current
     var baseUrl by remember(settings.baseUrl) { mutableStateOf(settings.baseUrl) }
     var token by remember(settings.apiToken) { mutableStateOf(settings.apiToken) }
@@ -66,6 +69,7 @@ fun SettingsScreen(
         mutableStateOf(settings.readingParagraphSpacing)
     }
     var testRequested by remember { mutableStateOf(false) }
+    var showDefaultSavePlaylistDialog by remember { mutableStateOf(false) }
 
     fun saveCurrent() {
         vm.saveSettings(baseUrl, token, autoAdvance, autoScrollWhileListening)
@@ -106,6 +110,12 @@ fun SettingsScreen(
             }
         }
     }
+
+    LaunchedEffect(Unit) {
+        vm.refreshPlaylists()
+    }
+
+    val defaultSavePlaylistName = playlists.firstOrNull { it.id == settings.defaultSavePlaylistId }?.name ?: "Smart Queue"
 
     val previewTextStyle = TextStyle(
         fontFamily = if (ReaderLiterataFontFamily == FontFamily.Default) FontFamily.Serif else ReaderLiterataFontFamily,
@@ -161,6 +171,32 @@ fun SettingsScreen(
                     ) { Text(if (testingConnection) "Testing..." else "Test") }
                     Button(onClick = onOpenDiagnostics) { Text("Diagnostics") }
                 }
+            }
+        }
+
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text("Saving")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("Default playlist")
+                    TextButton(onClick = { showDefaultSavePlaylistDialog = true }) {
+                        Text("$defaultSavePlaylistName ▼")
+                    }
+                }
+                Text(
+                    text = "Shared links save to Smart Queue unless you choose a playlist here.",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 
@@ -288,5 +324,41 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    if (showDefaultSavePlaylistDialog) {
+        AlertDialog(
+            onDismissRequest = { showDefaultSavePlaylistDialog = false },
+            title = { Text("Default playlist") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            vm.saveDefaultSavePlaylistId(null)
+                            showDefaultSavePlaylistDialog = false
+                        },
+                    ) {
+                        Text("Smart Queue")
+                    }
+                    playlists.forEach { playlist ->
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                vm.saveDefaultSavePlaylistId(playlist.id)
+                                showDefaultSavePlaylistDialog = false
+                            },
+                        ) {
+                            Text(playlist.name)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDefaultSavePlaylistDialog = false }) {
+                    Text("Close")
+                }
+            },
+        )
     }
 }

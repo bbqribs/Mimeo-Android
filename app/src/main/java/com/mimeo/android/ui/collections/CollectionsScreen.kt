@@ -54,6 +54,7 @@ fun CollectionsScreen(
     var deleteFolderTarget by remember { mutableStateOf<FolderSummary?>(null) }
     var folderMenuForId by remember { mutableIntStateOf(-1) }
     var pickerPlaylist by remember { mutableStateOf<PlaylistSummary?>(null) }
+    var showShareInstructions by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         vm.refreshPlaylists()
@@ -71,6 +72,12 @@ fun CollectionsScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            TextButton(
+                modifier = Modifier.padding(top = 2.dp),
+                onClick = { showShareInstructions = true },
+            ) {
+                Text("Save from any app")
+            }
         }
 
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
@@ -346,6 +353,25 @@ fun CollectionsScreen(
             onSelectFolder = { folderId ->
                 vm.assignPlaylistToFolder(playlist.id, folderId)
                 pickerPlaylist = null
+            },
+        )
+    }
+
+    if (showShareInstructions) {
+        AlertDialog(
+            onDismissRequest = { showShareInstructions = false },
+            title = { Text("Save from any app") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("1. Open Share in Chrome, BlueSky, or another app.")
+                    Text("2. Choose Mimeo from the Android share sheet.")
+                    Text("3. Wait for the confirmation snackbar in Mimeo.")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showShareInstructions = false }) {
+                    Text("Close")
+                }
             },
         )
     }
