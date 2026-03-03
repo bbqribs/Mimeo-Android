@@ -8,15 +8,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
@@ -37,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -1014,6 +1017,8 @@ private fun MimeoApp(vm: AppViewModel) {
     val nav = rememberNavController()
     val navBackStack by nav.currentBackStackEntryAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val imeBottomPadding = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    val snackbarBottomPadding = if (imeBottomPadding > 0.dp) 8.dp else 76.dp
     val currentRoute = navBackStack?.destination?.route.orEmpty()
     val navItems = listOf(
         BottomNavDestination(ROUTE_UP_NEXT, "Up Next", android.R.drawable.ic_media_next),
@@ -1060,7 +1065,6 @@ private fun MimeoApp(vm: AppViewModel) {
         else -> null
     }
     val showGlobalBanner = queueOffline || baseUrlHint != null || statusLooksError
-
     LaunchedEffect(vm, snackbarHostState) {
         vm.snackbarMessages.collect { message ->
             val result = snackbarHostState.showSnackbar(
@@ -1077,65 +1081,60 @@ private fun MimeoApp(vm: AppViewModel) {
         }
     }
 
-    Scaffold(
-        snackbarHost = {
-            SnackbarHost(
-                hostState = snackbarHostState,
-                modifier = Modifier.windowInsetsPadding(WindowInsets.ime),
-            )
-        },
-        bottomBar = {
-            NavigationBar(
-                modifier = Modifier.height(68.dp),
-                tonalElevation = 0.dp,
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            bottomBar = {
+                NavigationBar(
+                    modifier = Modifier.height(68.dp),
+                    tonalElevation = 0.dp,
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                ) {
+                    navItems.forEach { destination ->
+                        NavigationBarItem(
+                            selected = selectedTab == destination.route,
+                            onClick = { nav.navigate(destination.route) { launchSingleTop = true } },
+                            label = { Text(destination.label) },
+                            icon = {
+                                Icon(
+                                    painter = painterResource(destination.iconRes),
+                                    contentDescription = destination.label,
+                                )
+                            },
+                            alwaysShowLabel = true,
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                        )
+                    }
+                }
+            },
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .statusBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                navItems.forEach { destination ->
-                    NavigationBarItem(
-                        selected = selectedTab == destination.route,
-                        onClick = { nav.navigate(destination.route) { launchSingleTop = true } },
-                        label = { Text(destination.label) },
-                        icon = {
-                            Icon(
-                                painter = painterResource(destination.iconRes),
-                                contentDescription = destination.label,
-                            )
-                        },
-                        alwaysShowLabel = true,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
+                if (showGlobalBanner) {
+                    StatusBanner(
+                        stateLabel = bannerStateLabel,
+                        summary = bannerSummary,
+                        detail = bannerDetail,
+                        onRetry = { vm.loadQueue() },
+                        onDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                     )
                 }
-            }
-        },
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .statusBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            if (showGlobalBanner) {
-                StatusBanner(
-                    stateLabel = bannerStateLabel,
-                    summary = bannerSummary,
-                    detail = bannerDetail,
-                    onRetry = { vm.loadQueue() },
-                    onDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
-                )
-            }
-            NavHost(
-                navController = nav,
-                startDestination = ROUTE_UP_NEXT,
-                modifier = Modifier.fillMaxSize(),
-            ) {
+                NavHost(
+                    navController = nav,
+                    startDestination = ROUTE_UP_NEXT,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
                 composable(ROUTE_COLLECTIONS) {
                     CollectionsScreen(
                         vm = vm,
@@ -1237,8 +1236,17 @@ private fun MimeoApp(vm: AppViewModel) {
                         onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                     )
                 }
+                }
             }
         }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(bottom = snackbarBottomPadding)
+                .windowInsetsPadding(WindowInsets.ime),
+        )
     }
 }
 

@@ -835,8 +835,8 @@ private fun PlayerControlBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
+            .padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         IconButton(onClick = onMarkDone, enabled = canMarkDone) {
             Icon(
