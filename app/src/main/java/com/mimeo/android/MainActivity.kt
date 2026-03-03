@@ -56,6 +56,7 @@ import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
+import com.mimeo.android.model.FolderSummary
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaylistEntrySummary
@@ -63,6 +64,7 @@ import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.repository.ItemTextResult
+import com.mimeo.android.repository.FoldersRepository
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.PlaylistMembershipToggleResult
 import com.mimeo.android.repository.PlaybackRepository
@@ -146,11 +148,13 @@ class MainActivity : ComponentActivity() {
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsStore = SettingsStore(application.applicationContext)
     private val apiClient = ApiClient()
+    private val database = AppDatabase.getInstance(application.applicationContext)
     private val repository = PlaybackRepository(
         apiClient = apiClient,
-        database = AppDatabase.getInstance(application.applicationContext),
+        database = database,
         appContext = application.applicationContext,
     )
+    private val foldersRepository = FoldersRepository(database)
 
     private val _settings = MutableStateFlow(AppSettings())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
@@ -159,6 +163,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val queueItems: StateFlow<List<PlaybackQueueItem>> = _queueItems.asStateFlow()
     private val _playlists = MutableStateFlow<List<PlaylistSummary>>(emptyList())
     val playlists: StateFlow<List<PlaylistSummary>> = _playlists.asStateFlow()
+    private val _folders = MutableStateFlow<List<FolderSummary>>(emptyList())
+    val folders: StateFlow<List<FolderSummary>> = _folders.asStateFlow()
+    private val _playlistFolderAssignments = MutableStateFlow<Map<Int, Int>>(emptyMap())
+    val playlistFolderAssignments: StateFlow<Map<Int, Int>> = _playlistFolderAssignments.asStateFlow()
 
     private val _queueLoading = MutableStateFlow(false)
     val queueLoading: StateFlow<Boolean> = _queueLoading.asStateFlow()
@@ -226,6 +234,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 _cachedItemIds.value = repository.getCachedItemIds(session.items.map { it.itemId })
             }
+        }
+        viewModelScope.launch {
+            refreshFolders()
         }
     }
 
@@ -387,6 +398,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun refreshFolders() {
+        viewModelScope.launch {
+            _folders.value = foldersRepository.listFolders()
+            _playlistFolderAssignments.value = foldersRepository.listPlaylistAssignments()
+        }
+    }
+
     fun selectPlaylist(playlistId: Int?) {
         viewModelScope.launch {
             _settings.update { current -> current.copy(selectedPlaylistId = playlistId) }
@@ -438,15 +456,59 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 repository.deletePlaylist(current.baseUrl, current.apiToken, playlistId)
+                foldersRepository.assignPlaylistToFolder(playlistId, null)
                 _playlists.update { rows -> rows.filterNot { it.id == playlistId } }
                 if (settings.value.selectedPlaylistId == playlistId) {
                     settingsStore.saveSelectedPlaylistId(null)
                 }
+                refreshFolders()
                 _statusMessage.value = "Playlist deleted"
                 loadQueue()
             } catch (e: Exception) {
                 _statusMessage.value = e.message ?: "Delete playlist failed"
             }
+        }
+    }
+
+    fun createFolder(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            foldersRepository.createFolder(trimmed)
+            refreshFolders()
+            showSnackbar("Folder created")
+        }
+    }
+
+    fun renameFolder(folderId: Int, name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            foldersRepository.renameFolder(folderId, trimmed)
+            refreshFolders()
+            showSnackbar("Folder renamed")
+        }
+    }
+
+    fun deleteFolder(folderId: Int) {
+        viewModelScope.launch {
+            foldersRepository.deleteFolder(folderId)
+            refreshFolders()
+            showSnackbar("Folder deleted")
+        }
+    }
+
+    fun assignPlaylistToFolder(playlistId: Int, folderId: Int?) {
+        viewModelScope.launch {
+            foldersRepository.assignPlaylistToFolder(playlistId, folderId)
+            refreshFolders()
+            val message = if (folderId == null) {
+                "Removed from folder"
+            } else {
+                val folderName = _folders.value.firstOrNull { it.id == folderId }?.name ?: "folder"
+                "Assigned to $folderName"
+            }
+            showSnackbar(message)
         }
     }
 
