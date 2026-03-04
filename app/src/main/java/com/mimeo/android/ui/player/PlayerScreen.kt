@@ -107,6 +107,7 @@ fun PlayerScreen(
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
+    var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
@@ -440,10 +441,11 @@ fun PlayerScreen(
     } else {
         "Needs network"
     }
-    val isDoneLocal = currentPercent >= DONE_PERCENT_THRESHOLD
+    val effectivePercent = if (localDonePercentOverride >= 0) localDonePercentOverride else currentPercent
+    val isDoneLocal = effectivePercent >= DONE_PERCENT_THRESHOLD
     val knownProgress = vm.knownProgressForItem(currentItemId)
     val showCompleted = isDoneLocal || nearEndForcedForItemId == currentItemId || knownProgress >= DONE_PERCENT_THRESHOLD
-    val undoDonePercent = currentPercent.coerceIn(0, DONE_PERCENT_THRESHOLD - 1)
+    val undoDonePercent = effectivePercent.coerceIn(0, DONE_PERCENT_THRESHOLD - 1)
     var lastAppliedSpeed by remember { mutableStateOf(settings.playbackSpeed) }
 
     LaunchedEffect(settings.playbackSpeed, currentItemId, safePosition.chunkIndex, safePosition.offsetInChunkChars, chunks.size) {
@@ -518,6 +520,7 @@ fun PlayerScreen(
                         val targetPercent = if (showCompleted) undoDonePercent else 100
                         vm.postProgress(currentItemId, targetPercent)
                             .onSuccess {
+                                localDonePercentOverride = targetPercent
                                 uiMessage = when {
                                     showCompleted && it.queued -> "Done removal queued for sync"
                                     showCompleted -> "Marked not done"
@@ -684,6 +687,11 @@ fun PlayerScreen(
             isPlaying = isSpeaking || isAutoPlaying,
             onSeekToPercent = { targetPercent ->
                 if (chunks.isEmpty()) return@PlayerControlBar
+                localDonePercentOverride = targetPercent
+                if (targetPercent < DONE_PERCENT_THRESHOLD) {
+                    nearEndForcedForItemId = -1
+                    lastObservedPercent = targetPercent
+                }
                 val targetPosition = positionForPercent(targetPercent)
                 setPlaybackPosition(targetPosition.chunkIndex, targetPosition.offsetInChunkChars)
                 if (isSpeaking || isAutoPlaying) {
@@ -876,7 +884,7 @@ private fun ExpandedPlayerTopBar(
                 checked = isDone,
                 enabled = canMarkDone,
                 onCheckedChange = { checked ->
-                    if (checked && !isDone) {
+                    if (checked != isDone) {
                         onMarkDone()
                     }
                 },
@@ -1032,7 +1040,9 @@ private fun PlayerControlBar(
                 onSeekToPercent((sliderValue * 100).toInt().coerceIn(0, 100))
             },
             enabled = canSeek,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 28.dp),
         )
         Row(
             modifier = Modifier
