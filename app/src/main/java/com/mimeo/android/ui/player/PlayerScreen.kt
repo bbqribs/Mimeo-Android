@@ -1,6 +1,8 @@
 package com.mimeo.android.ui.player
 
 import android.os.Build
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +22,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -71,6 +75,7 @@ private fun debugLog(message: String) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PlayerScreen(
     vm: AppViewModel,
@@ -568,54 +573,41 @@ fun PlayerScreen(
                     CircularProgressIndicator()
                 }
             } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TextButton(onClick = { isExpanded = false }) {
-                            Text("Collapse")
-                        }
-                        TextButton(onClick = { showSpeedDialog = true }) {
-                            Text(formatPlaybackSpeed(settings.playbackSpeed))
-                        }
-                        LocusOverflowMenu(
-                            expanded = overflowExpanded,
-                            onExpandedChange = { expanded -> overflowExpanded = expanded },
-                        ) {
-                            LocusOverflowMenuItems(
-                                onOpenPlaylists = {
-                                    overflowExpanded = false
-                                    vm.refreshPlaylists()
-                                    showPlaylistPicker = true
-                                },
-                                onBackToQueue = {
-                                    overflowExpanded = false
-                                    onBackToQueue(currentItemId)
-                                },
-                                onRestartSession = {
-                                    overflowExpanded = false
-                                    actionScope.launch {
-                                        vm.restartNowPlayingSession()
-                                        onShowSnackbar("Now Playing session restarted.", null, null)
-                                    }
-                                },
-                                onClearSession = {
-                                    overflowExpanded = false
-                                    showClearSessionDialog = true
-                                },
-                                onOpenDiagnostics = {
-                                    overflowExpanded = false
-                                    onOpenDiagnostics()
-                                },
-                            )
-                        }
-                    }
-                }
-                Text(
-                    text = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                ExpandedPlayerTopBar(
+                    speedLabel = formatPlaybackSpeed(settings.playbackSpeed),
+                    overflowExpanded = overflowExpanded,
+                    onBack = { onBackToQueue(currentItemId) },
+                    onCollapse = { isExpanded = false },
+                    onSpeed = { showSpeedDialog = true },
+                    onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
+                    overflowMenuContent = {
+                        LocusOverflowMenuItems(
+                            onOpenPlaylists = {
+                                overflowExpanded = false
+                                vm.refreshPlaylists()
+                                showPlaylistPicker = true
+                            },
+                            onBackToQueue = {
+                                overflowExpanded = false
+                                onBackToQueue(currentItemId)
+                            },
+                            onRestartSession = {
+                                overflowExpanded = false
+                                actionScope.launch {
+                                    vm.restartNowPlayingSession()
+                                    onShowSnackbar("Now Playing session restarted.", null, null)
+                                }
+                            },
+                            onClearSession = {
+                                overflowExpanded = false
+                                showClearSessionDialog = true
+                            },
+                            onOpenDiagnostics = {
+                                overflowExpanded = false
+                                onOpenDiagnostics()
+                            },
+                        )
+                    },
                 )
                 if (sessionItemCount > 0) {
                     Text(
@@ -689,6 +681,12 @@ fun PlayerScreen(
                     }
                 }
             }
+        }
+        if (isExpanded) {
+            PlayerTitleMarqueeRow(
+                title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
+                onBackToQueue = { onBackToQueue(currentItemId) },
+            )
         }
         PlayerControlBar(
             canMoveBackward = chunks.size > 1 && safePosition.chunkIndex > 0,
@@ -873,6 +871,66 @@ fun PlayerScreen(
                     Text("Cancel")
                 }
             },
+        )
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun ExpandedPlayerTopBar(
+    speedLabel: String,
+    overflowExpanded: Boolean,
+    onBack: () -> Unit,
+    onCollapse: () -> Unit,
+    onSpeed: () -> Unit,
+    onOverflowExpandedChange: (Boolean) -> Unit,
+    overflowMenuContent: @Composable () -> Unit,
+) {
+    TopAppBar(
+        title = { Text("Now playing", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        navigationIcon = {
+            TextButton(onClick = onBack) {
+                Text("Back")
+            }
+        },
+        actions = {
+            TextButton(onClick = onCollapse) {
+                Text("Collapse")
+            }
+            TextButton(onClick = onSpeed) {
+                Text(speedLabel)
+            }
+            LocusOverflowMenu(
+                expanded = overflowExpanded,
+                onExpandedChange = onOverflowExpandedChange,
+                content = overflowMenuContent,
+            )
+        },
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PlayerTitleMarqueeRow(
+    title: String,
+    onBackToQueue: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        TextButton(onClick = onBackToQueue) {
+            Text("Back to queue", maxLines = 1)
+        }
+        Text(
+            modifier = Modifier
+                .weight(1f)
+                .basicMarquee(),
+            text = title,
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
         )
     }
 }
