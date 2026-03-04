@@ -2,6 +2,7 @@ package com.mimeo.android.ui.player
 
 import android.os.Build
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -108,7 +109,9 @@ fun PlayerScreen(
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var preserveVisibleContentOnReload by remember { mutableStateOf(false) }
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
+    val readerScrollState = rememberSaveable(currentItemId, saver = ScrollState.Saver) { ScrollState(0) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
@@ -307,9 +310,11 @@ fun PlayerScreen(
         vm.setNowPlayingCurrentItem(currentItemId)
         isLoading = true
         uiMessage = null
-        textPayload = null
-        usingCachedText = false
-        chunks = emptyList()
+        if (!preserveVisibleContentOnReload) {
+            textPayload = null
+            usingCachedText = false
+            chunks = emptyList()
+        }
         pendingDoneEvent = null
         lastHandledDoneUtteranceId = null
         lastSyncedPercent = -1
@@ -324,6 +329,7 @@ fun PlayerScreen(
                 textPayload = payload
                 usingCachedText = loaded.usingCache
                 chunks = buildChunks(payload)
+                preserveVisibleContentOnReload = false
 
                 val saved = vm.getPlaybackPosition(currentItemId)
                 val knownProgress = vm.knownProgressForItem(currentItemId)
@@ -357,6 +363,7 @@ fun PlayerScreen(
                 } else {
                     err.message ?: "Failed to load text"
                 }
+                preserveVisibleContentOnReload = false
             }
         isLoading = false
     }
@@ -516,6 +523,7 @@ fun PlayerScreen(
                         vm.refreshCurrentPlayerItem(currentItemId)
                             .onSuccess {
                                 localDonePercentOverride = -1
+                                preserveVisibleContentOnReload = true
                                 reloadNonce += 1
                             }
                             .onFailure { error ->
@@ -663,6 +671,7 @@ fun PlayerScreen(
                         readingLineHeightPercent = settings.readingLineHeightPercent,
                         readingMaxWidthDp = settings.readingMaxWidthDp,
                         paragraphSpacing = settings.readingParagraphSpacing,
+                        scrollState = readerScrollState,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
