@@ -1,11 +1,15 @@
 package com.mimeo.android.repository
 
 import android.content.Context
+import android.util.Log
+import com.mimeo.android.BuildConfig
 import com.mimeo.android.data.ApiClient
 import com.mimeo.android.data.AppDatabase
+import com.mimeo.android.data.QueueFetchResult
 import com.mimeo.android.data.entities.NowPlayingEntity
 import com.mimeo.android.data.entities.CachedItemEntity
 import com.mimeo.android.data.entities.PendingProgressEntity
+import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackQueueItem
@@ -87,6 +91,8 @@ class PlaybackRepository(
         private const val PREFETCH_MAX = 10
         private const val MAX_ATTEMPTS = 10
         private const val MAX_ERROR_CHARS = 240
+        private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
+        private const val DEBUG_TARGET_ITEM_ID = 409
     }
 
     suspend fun loadQueueAndPrefetch(
@@ -94,14 +100,25 @@ class PlaybackRepository(
         token: String,
         playlistId: Int? = null,
         prefetchCount: Int = PREFETCH_DEFAULT,
-    ): PlaybackQueueResponse {
-        val queue = apiClient.getQueue(baseUrl, token, playlistId = playlistId)
+    ): QueueFetchResult {
+        val queueResult = apiClient.getQueue(baseUrl, token, playlistId = playlistId)
+        val queue = queueResult.payload
         val targets = queue.items.take(prefetchCount.coerceIn(1, PREFETCH_MAX))
         for (item in targets) {
             runCatching { apiClient.getItemText(baseUrl, token, item.itemId) }
                 .onSuccess { payload -> cacheItem(payload) }
         }
-        return queue
+        val snapshot = queueResult.debugSnapshot.copy(
+            appliedItemCount = queue.items.size,
+            appliedContains409 = queue.items.any { it.itemId == DEBUG_TARGET_ITEM_ID },
+        )
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                QUEUE_DEBUG_TAG,
+                "repositoryApply playlistId=$playlistId appliedCount=${snapshot.appliedItemCount} appliedContains409=${snapshot.appliedContains409}",
+            )
+        }
+        return queueResult.copy(debugSnapshot = snapshot)
     }
 
     suspend fun listPlaylists(baseUrl: String, token: String): List<PlaylistSummary> {
