@@ -20,6 +20,9 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -482,12 +485,6 @@ fun PlayerScreen(
     val showRecoveryActions = uiMessage != null && (isRecoverableNetworkError || textPayload == null)
     val showDiagnosticsHint = showRecoveryActions && baseUrlHint != null
     val showLocalPlayerBanner = uiMessage != null && !showRecoveryActions && !showDiagnosticsHint
-    val sessionItemCount = nowPlayingSession?.items?.size ?: 0
-    val sessionIndex = nowPlayingSession?.let { session ->
-        val found = session.items.indexOfFirst { it.itemId == currentItemId }
-        val resolved = if (found >= 0) found else session.currentIndex
-        resolved.coerceIn(0, (session.items.size - 1).coerceAtLeast(0))
-    } ?: 0
     var overflowExpanded by remember { mutableStateOf(false) }
     val playlistChoices = playlists.map { playlist ->
         PlaylistPickerChoice(
@@ -511,8 +508,28 @@ fun PlayerScreen(
                 speedLabel = formatPlaybackSpeed(settings.playbackSpeed),
                 overflowExpanded = overflowExpanded,
                 isExpanded = isExpanded,
+                canMarkDone = textPayload != null,
+                isDone = showCompleted,
                 onCollapse = { isExpanded = false },
                 onExpand = { isExpanded = true },
+                onMarkDone = {
+                    actionScope.launch {
+                        vm.postProgress(currentItemId, 100)
+                            .onSuccess {
+                                uiMessage = if (it.queued) "Done queued for sync" else "Marked done"
+                                onShowSnackbar(uiMessage.orEmpty(), null, null)
+                                if (chunks.isNotEmpty()) {
+                                    val last = chunks.last()
+                                    vm.setPlaybackPosition(currentItemId, chunks.lastIndex, last.length)
+                                }
+                            }
+                            .onFailure { error ->
+                                if (error is CancellationException) return@onFailure
+                                uiMessage = error.message ?: "Progress update failed"
+                                onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
+                            }
+                    }
+                },
                 onSpeed = { showSpeedDialog = true },
                 onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
                 overflowMenuContent = {
@@ -547,8 +564,7 @@ fun PlayerScreen(
             if (!isExpanded) {
                 LocusPeekCard(
                     title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
-                    sessionLine = if (sessionItemCount > 0) "Session ${sessionIndex + 1}/$sessionItemCount" else null,
-                    progressLine = "Progress $currentPercent%  -  Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability${if (showCompleted) "  -  Done" else ""}",
+                    statusLine = "Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability",
                     overflowExpanded = overflowExpanded,
                     overflowMenuContent = {
                         Spacer(modifier = Modifier)
@@ -584,18 +600,6 @@ fun PlayerScreen(
                     CircularProgressIndicator()
                 }
             } else {
-                if (sessionItemCount > 0) {
-                    Text(
-                        text = "Session ${sessionIndex + 1}/$sessionItemCount",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Text(
-                    text = "Progress $currentPercent%  -  Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability${if (showCompleted) "  -  Done" else ""}",
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
                 playlistMutationMessage?.let { message ->
                     StatusBanner(
                         stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
@@ -661,10 +665,10 @@ fun PlayerScreen(
             title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
         )
         PlayerControlBar(
+            progressPercent = currentPercent,
             canMoveBackward = chunks.size > 1 && safePosition.chunkIndex > 0,
             canMoveForward = chunks.size > 1 && safePosition.chunkIndex < chunks.lastIndex,
             canPlay = chunks.isNotEmpty(),
-            canMarkDone = textPayload != null,
             isPlaying = isSpeaking || isAutoPlaying,
             onPreviousSegment = {
                 if (chunks.isNotEmpty() && safePosition.chunkIndex > 0) {
@@ -719,24 +723,6 @@ fun PlayerScreen(
                         autoPlayAfterLoad = true
                         onOpenItem(prevId)
                     }
-                }
-            },
-            onMarkDone = {
-                actionScope.launch {
-                    vm.postProgress(currentItemId, 100)
-                        .onSuccess {
-                            uiMessage = if (it.queued) "Done queued for sync" else "Marked done"
-                            onShowSnackbar(uiMessage.orEmpty(), null, null)
-                            if (chunks.isNotEmpty()) {
-                                val last = chunks.last()
-                                vm.setPlaybackPosition(currentItemId, chunks.lastIndex, last.length)
-                            }
-                        }
-                        .onFailure { error ->
-                            if (error is CancellationException) return@onFailure
-                            uiMessage = error.message ?: "Progress update failed"
-                            onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
-                        }
                 }
             },
             onNextItem = {
@@ -853,8 +839,11 @@ private fun ExpandedPlayerTopBar(
     speedLabel: String,
     overflowExpanded: Boolean,
     isExpanded: Boolean,
+    canMarkDone: Boolean,
+    isDone: Boolean,
     onCollapse: () -> Unit,
     onExpand: () -> Unit,
+    onMarkDone: () -> Unit,
     onSpeed: () -> Unit,
     onOverflowExpandedChange: (Boolean) -> Unit,
     overflowMenuContent: @Composable () -> Unit,
@@ -862,6 +851,21 @@ private fun ExpandedPlayerTopBar(
     TopAppBar(
         title = {},
         actions = {
+            IconToggleButton(
+                checked = isDone,
+                enabled = canMarkDone,
+                onCheckedChange = { checked ->
+                    if (checked && !isDone) {
+                        onMarkDone()
+                    }
+                },
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_check_circle_24),
+                    contentDescription = if (isDone) "Done" else "Mark done",
+                    tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                )
+            }
             TextButton(onClick = if (isExpanded) onCollapse else onExpand) {
                 Text(if (isExpanded) "Collapse" else "Expand")
             }
@@ -903,8 +907,7 @@ private fun PlayerTitleMarqueeRow(
 @Composable
 private fun LocusPeekCard(
     title: String,
-    sessionLine: String?,
-    progressLine: String,
+    statusLine: String,
     overflowExpanded: Boolean,
     overflowMenuContent: @Composable () -> Unit,
 ) {
@@ -920,16 +923,9 @@ private fun LocusPeekCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            sessionLine?.let { session ->
-                Text(
-                    text = session,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
             Text(
-                text = progressLine,
-                maxLines = 3,
+                text = statusLine,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }
@@ -990,61 +986,65 @@ private fun LocusOverflowMenuItems(
 
 @Composable
 private fun PlayerControlBar(
+    progressPercent: Int,
     canMoveBackward: Boolean,
     canMoveForward: Boolean,
     canPlay: Boolean,
-    canMarkDone: Boolean,
     isPlaying: Boolean,
     onPreviousSegment: () -> Unit,
     onPlayPause: () -> Unit,
     onNextSegment: () -> Unit,
     onPreviousItem: () -> Unit,
-    onMarkDone: () -> Unit,
     onNextItem: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        IconButton(onClick = onMarkDone, enabled = canMarkDone) {
-            Icon(
-                painter = painterResource(id = R.drawable.msr_check_circle_24),
-                contentDescription = "Mark done",
-            )
-        }
-        IconButton(onClick = onPreviousItem) {
-            Icon(
-                painter = painterResource(id = R.drawable.msr_skip_previous_24),
-                contentDescription = "Previous item",
-            )
-        }
-        IconButton(onClick = onPreviousSegment, enabled = canMoveBackward) {
-            Icon(
-                painter = painterResource(id = R.drawable.msr_fast_rewind_24),
-                contentDescription = "Previous segment",
-            )
-        }
-        IconButton(onClick = onPlayPause, enabled = canPlay) {
-            Icon(
-                painter = painterResource(
-                    id = if (isPlaying) R.drawable.msr_pause_24 else R.drawable.msr_play_arrow_24,
-                ),
-                contentDescription = if (isPlaying) "Pause playback" else "Play",
-            )
-        }
-        IconButton(onClick = onNextSegment, enabled = canMoveForward) {
-            Icon(
-                painter = painterResource(id = R.drawable.msr_fast_forward_24),
-                contentDescription = "Next segment",
-            )
-        }
-        IconButton(onClick = onNextItem) {
-            Icon(
-                painter = painterResource(id = R.drawable.msr_skip_next_24),
-                contentDescription = "Next item",
-            )
+        Slider(
+            value = progressPercent.coerceIn(0, 100) / 100f,
+            onValueChange = {},
+            enabled = false,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            IconButton(onClick = onPreviousItem) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_skip_previous_24),
+                    contentDescription = "Previous item",
+                )
+            }
+            IconButton(onClick = onPreviousSegment, enabled = canMoveBackward) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_fast_rewind_24),
+                    contentDescription = "Previous segment",
+                )
+            }
+            IconButton(onClick = onPlayPause, enabled = canPlay) {
+                Icon(
+                    painter = painterResource(
+                        id = if (isPlaying) R.drawable.msr_pause_24 else R.drawable.msr_play_arrow_24,
+                    ),
+                    contentDescription = if (isPlaying) "Pause playback" else "Play",
+                )
+            }
+            IconButton(onClick = onNextSegment, enabled = canMoveForward) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_fast_forward_24),
+                    contentDescription = "Next segment",
+                )
+            }
+            IconButton(onClick = onNextItem) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_skip_next_24),
+                    contentDescription = "Next item",
+                )
+            }
         }
     }
 }

@@ -94,11 +94,7 @@ fun ReaderScreen(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = "Long-press a chunk to start listening here.",
-            style = MaterialTheme.typography.bodySmall,
-        )
-        Box(
+Box(
             modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.TopCenter,
         ) {
@@ -131,7 +127,7 @@ fun ReaderScreen(
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Text(
-                            text = "Chunk ${idx + 1} • chars ${chunk.startChar}-${chunk.endChar}",
+                            text = "Chunk ${idx + 1} ï¿½ chars ${chunk.startChar}-${chunk.endChar}",
                             style = MaterialTheme.typography.labelSmall,
                             color = textColor,
                         )
