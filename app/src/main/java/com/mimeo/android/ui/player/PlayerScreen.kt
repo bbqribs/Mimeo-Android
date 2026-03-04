@@ -2,6 +2,7 @@ package com.mimeo.android.ui.player
 
 import android.os.Build
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,7 +63,7 @@ import com.mimeo.android.player.TtsController
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
-import com.mimeo.android.ui.reader.ReaderScreen
+import com.mimeo.android.ui.reader.ReaderBody
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -108,7 +109,9 @@ fun PlayerScreen(
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var preserveVisibleContentOnReload by remember { mutableStateOf(false) }
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
+    val readerScrollState = rememberSaveable(currentItemId, saver = ScrollState.Saver) { ScrollState(0) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
@@ -307,9 +310,11 @@ fun PlayerScreen(
         vm.setNowPlayingCurrentItem(currentItemId)
         isLoading = true
         uiMessage = null
-        textPayload = null
-        usingCachedText = false
-        chunks = emptyList()
+        if (!preserveVisibleContentOnReload) {
+            textPayload = null
+            usingCachedText = false
+            chunks = emptyList()
+        }
         pendingDoneEvent = null
         lastHandledDoneUtteranceId = null
         lastSyncedPercent = -1
@@ -324,6 +329,7 @@ fun PlayerScreen(
                 textPayload = payload
                 usingCachedText = loaded.usingCache
                 chunks = buildChunks(payload)
+                preserveVisibleContentOnReload = false
 
                 val saved = vm.getPlaybackPosition(currentItemId)
                 val knownProgress = vm.knownProgressForItem(currentItemId)
@@ -357,6 +363,7 @@ fun PlayerScreen(
                 } else {
                     err.message ?: "Failed to load text"
                 }
+                preserveVisibleContentOnReload = false
             }
         isLoading = false
     }
@@ -422,11 +429,6 @@ fun PlayerScreen(
     val totalChars = totalCharsForPercent()
     val currentPercent = calculateCanonicalPercent(totalChars, chunks, safePosition)
     val currentTitle = textPayload?.title?.ifBlank { null } ?: textPayload?.url.orEmpty()
-    val currentChunkText = if (chunks.isNotEmpty()) {
-        chunks[safePosition.chunkIndex].text.take(400)
-    } else {
-        textPayload?.text?.take(400).orEmpty()
-    }
     val chunkLabel = if (chunks.isEmpty()) {
         "Chunk 0 / 0"
     } else {
@@ -521,6 +523,7 @@ fun PlayerScreen(
                         vm.refreshCurrentPlayerItem(currentItemId)
                             .onSuccess {
                                 localDonePercentOverride = -1
+                                preserveVisibleContentOnReload = true
                                 reloadNonce += 1
                             }
                             .onFailure { error ->
@@ -660,30 +663,17 @@ fun PlayerScreen(
                         .fillMaxWidth()
                         .weight(1f, fill = true),
                 ) {
-                    if (chunks.isNotEmpty()) {
-                        ReaderScreen(
-                            chunks = chunks,
-                            currentChunkIndex = safePosition.chunkIndex,
-                            autoScrollWhileListening = settings.autoScrollWhileListening,
-                            readingFontSizeSp = settings.readingFontSizeSp,
-                            readingLineHeightPercent = settings.readingLineHeightPercent,
-                            readingMaxWidthDp = settings.readingMaxWidthDp,
-                            paragraphSpacing = settings.readingParagraphSpacing,
-                            onSelectChunk = { index ->
-                                val safeIndex = index.coerceIn(0, chunks.lastIndex)
-                                setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
-                                uiMessage = "Selected chunk ${safeIndex + 1}"
-                            },
-                            onPlayFromChunk = { index ->
-                                val safeIndex = index.coerceIn(0, chunks.lastIndex)
-                                setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
-                                isAutoPlaying = true
-                                playChunk(safeIndex, 0)
-                                uiMessage = "Starting from chunk ${safeIndex + 1}"
-                            },
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
+                    ReaderBody(
+                        fullText = textPayload?.text,
+                        chunks = chunks,
+                        currentChunkIndex = safePosition.chunkIndex,
+                        readingFontSizeSp = settings.readingFontSizeSp,
+                        readingLineHeightPercent = settings.readingLineHeightPercent,
+                        readingMaxWidthDp = settings.readingMaxWidthDp,
+                        paragraphSpacing = settings.readingParagraphSpacing,
+                        scrollState = readerScrollState,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
             }
         }
