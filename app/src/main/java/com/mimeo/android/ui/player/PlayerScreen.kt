@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
@@ -506,41 +507,51 @@ fun PlayerScreen(
                 .weight(1f, fill = true),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            ExpandedPlayerTopBar(
+                speedLabel = formatPlaybackSpeed(settings.playbackSpeed),
+                overflowExpanded = overflowExpanded,
+                isExpanded = isExpanded,
+                onCollapse = { isExpanded = false },
+                onExpand = { isExpanded = true },
+                onSpeed = { showSpeedDialog = true },
+                onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
+                overflowMenuContent = {
+                    LocusOverflowMenuItems(
+                        onOpenPlaylists = {
+                            overflowExpanded = false
+                            vm.refreshPlaylists()
+                            showPlaylistPicker = true
+                        },
+                        onBackToQueue = {
+                            overflowExpanded = false
+                            onBackToQueue(currentItemId)
+                        },
+                        onRestartSession = {
+                            overflowExpanded = false
+                            actionScope.launch {
+                                vm.restartNowPlayingSession()
+                                onShowSnackbar("Now Playing session restarted.", null, null)
+                            }
+                        },
+                        onClearSession = {
+                            overflowExpanded = false
+                            showClearSessionDialog = true
+                        },
+                        onOpenDiagnostics = {
+                            overflowExpanded = false
+                            onOpenDiagnostics()
+                        },
+                    )
+                },
+            )
             if (!isExpanded) {
                 LocusPeekCard(
                     title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
                     sessionLine = if (sessionItemCount > 0) "Session ${sessionIndex + 1}/$sessionItemCount" else null,
                     progressLine = "Progress $currentPercent%  -  Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability${if (showCompleted) "  -  Done" else ""}",
                     overflowExpanded = overflowExpanded,
-                    onExpand = { isExpanded = true },
-                    onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
                     overflowMenuContent = {
-                        LocusOverflowMenuItems(
-                            onOpenPlaylists = {
-                                overflowExpanded = false
-                                vm.refreshPlaylists()
-                                showPlaylistPicker = true
-                            },
-                            onBackToQueue = {
-                                overflowExpanded = false
-                                onBackToQueue(currentItemId)
-                            },
-                            onRestartSession = {
-                                overflowExpanded = false
-                                actionScope.launch {
-                                    vm.restartNowPlayingSession()
-                                    onShowSnackbar("Now Playing session restarted.", null, null)
-                                }
-                            },
-                            onClearSession = {
-                                overflowExpanded = false
-                                showClearSessionDialog = true
-                            },
-                            onOpenDiagnostics = {
-                                overflowExpanded = false
-                                onOpenDiagnostics()
-                            },
-                        )
+                        Spacer(modifier = Modifier)
                     },
                 )
                 playlistMutationMessage?.let { message ->
@@ -573,42 +584,6 @@ fun PlayerScreen(
                     CircularProgressIndicator()
                 }
             } else {
-                ExpandedPlayerTopBar(
-                    speedLabel = formatPlaybackSpeed(settings.playbackSpeed),
-                    overflowExpanded = overflowExpanded,
-                    onBack = { onBackToQueue(currentItemId) },
-                    onCollapse = { isExpanded = false },
-                    onSpeed = { showSpeedDialog = true },
-                    onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
-                    overflowMenuContent = {
-                        LocusOverflowMenuItems(
-                            onOpenPlaylists = {
-                                overflowExpanded = false
-                                vm.refreshPlaylists()
-                                showPlaylistPicker = true
-                            },
-                            onBackToQueue = {
-                                overflowExpanded = false
-                                onBackToQueue(currentItemId)
-                            },
-                            onRestartSession = {
-                                overflowExpanded = false
-                                actionScope.launch {
-                                    vm.restartNowPlayingSession()
-                                    onShowSnackbar("Now Playing session restarted.", null, null)
-                                }
-                            },
-                            onClearSession = {
-                                overflowExpanded = false
-                                showClearSessionDialog = true
-                            },
-                            onOpenDiagnostics = {
-                                overflowExpanded = false
-                                onOpenDiagnostics()
-                            },
-                        )
-                    },
-                )
                 if (sessionItemCount > 0) {
                     Text(
                         text = "Session ${sessionIndex + 1}/$sessionItemCount",
@@ -682,12 +657,9 @@ fun PlayerScreen(
                 }
             }
         }
-        if (isExpanded) {
-            PlayerTitleMarqueeRow(
-                title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
-                onBackToQueue = { onBackToQueue(currentItemId) },
-            )
-        }
+        PlayerTitleMarqueeRow(
+            title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
+        )
         PlayerControlBar(
             canMoveBackward = chunks.size > 1 && safePosition.chunkIndex > 0,
             canMoveForward = chunks.size > 1 && safePosition.chunkIndex < chunks.lastIndex,
@@ -880,22 +852,18 @@ fun PlayerScreen(
 private fun ExpandedPlayerTopBar(
     speedLabel: String,
     overflowExpanded: Boolean,
-    onBack: () -> Unit,
+    isExpanded: Boolean,
     onCollapse: () -> Unit,
+    onExpand: () -> Unit,
     onSpeed: () -> Unit,
     onOverflowExpandedChange: (Boolean) -> Unit,
     overflowMenuContent: @Composable () -> Unit,
 ) {
     TopAppBar(
-        title = { Text("Now playing", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        navigationIcon = {
-            TextButton(onClick = onBack) {
-                Text("Back")
-            }
-        },
+        title = {},
         actions = {
-            TextButton(onClick = onCollapse) {
-                Text("Collapse")
+            TextButton(onClick = if (isExpanded) onCollapse else onExpand) {
+                Text(if (isExpanded) "Collapse" else "Expand")
             }
             TextButton(onClick = onSpeed) {
                 Text(speedLabel)
@@ -913,7 +881,6 @@ private fun ExpandedPlayerTopBar(
 @Composable
 private fun PlayerTitleMarqueeRow(
     title: String,
-    onBackToQueue: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -921,16 +888,14 @@ private fun PlayerTitleMarqueeRow(
             .padding(horizontal = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        TextButton(onClick = onBackToQueue) {
-            Text("Back to queue", maxLines = 1)
-        }
         Text(
             modifier = Modifier
-                .weight(1f)
+                .fillMaxWidth()
                 .basicMarquee(),
             text = title,
             maxLines = 1,
             overflow = TextOverflow.Clip,
+            fontSize = 12.sp,
         )
     }
 }
@@ -941,8 +906,6 @@ private fun LocusPeekCard(
     sessionLine: String?,
     progressLine: String,
     overflowExpanded: Boolean,
-    onExpand: () -> Unit,
-    onOverflowExpandedChange: (Boolean) -> Unit,
     overflowMenuContent: @Composable () -> Unit,
 ) {
     ElevatedCard(
@@ -952,22 +915,6 @@ private fun LocusPeekCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(text = "Now playing")
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = onExpand) {
-                        Text("Expand")
-                    }
-                    LocusOverflowMenu(
-                        expanded = overflowExpanded,
-                        onExpandedChange = onOverflowExpandedChange,
-                        content = overflowMenuContent,
-                    )
-                }
-            }
             Text(
                 text = title,
                 maxLines = 2,
