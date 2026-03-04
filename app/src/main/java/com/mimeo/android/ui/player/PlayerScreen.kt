@@ -883,8 +883,8 @@ private fun ExpandedPlayerTopBar(
                 },
             ) {
                 Icon(
-                    painter = painterResource(id = R.drawable.msr_check_circle_24),
-                    contentDescription = if (isDone) "Done" else "Mark done",
+                    painter = painterResource(id = if (isDone) R.drawable.ic_book_closed_24 else R.drawable.ic_book_open_24),
+                    contentDescription = if (isDone) "Mark as not done" else "Mark as done",
                     tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                 )
             }
