@@ -22,7 +22,24 @@
 - [x] UX follow-ups: root snackbar visibility, stable player status/banner placement, and denser player control bar without reducing tap targets.
 
 ## Priority 0
-- [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result snackbars.
+- [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
+
+### Share-sheet saving (P0)
+- [x] Share target implemented via `ACTION_SEND` and `ShareReceiverActivity`.
+- [x] System notifications for success/error with Settings action for token issues.
+- [x] Optional persistent notification mode in Settings; default behavior auto-dismisses after about 4 seconds.
+- [x] Default save playlist routing.
+- [x] Collections discovery link and instructions dialog.
+- [x] Queue verification controls restored (search + filters).
+- [x] Queue search robustness fix (raw substring + normalized fallback).
+- [ ] Smart Queue duplicate semantics still do not always surface `Already saved ✅`.
+- [ ] Decide whether the debug-only queue fetch overlay should stay on `main` or be removed after follow-up verification work.
+- [ ] Backlog: allow sharing plain text and saving it as a readable item, not just URLs.
+
+### Next tickets
+- [ ] Share-save duplicates follow-up: tighten Smart Queue duplicate detection and messaging without backend changes.
+- [ ] Queue debug cleanup: decide whether to remove the debug-only queue fetch overlay after one more verification pass.
+- [ ] Share plain text capture: convert non-URL shared text into a readable item flow or explicitly reject it with a clearer product decision.
 
 ## Android Redesign v1.1
 1. [~] Foundation: 4-tab nav shell (Up Next / Locus / Collections / Settings) plus black/purple theme foundations.
@@ -36,6 +53,8 @@
 9. [x] Phase 6.2: local playlist folders (create/rename/delete + assign playlists within Collections).
 10. [~] Phase 6.3: folder detail view + counts + remove-from-folder inside Collections.
 11. [ ] Next: folder badges in playlist list and optional nested folders.
+12. [x] Locus expand/collapse on `main`: explicit buttons only, collapsed tab entry, expanded resume/direct entry, title ellipsis fix, and TESTING.md invariants checklist.
+13. [ ] Shared pinned PlayerBar on `main` remains a separate architecture ticket, not part of playback-speed follow-up.
 
 ## Later
 - [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.

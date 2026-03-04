@@ -11,3 +11,27 @@ Copy this checklist into any PR that changes Locus or player UI:
 - The expanded title truncates with ellipsis and does not overlap the speed or overflow actions.
 - Playback speed remains in the expanded Locus header unless a separate decision changes it.
 - Run manual sanity on a narrow-width device or emulator before merging.
+
+## Share-sheet manual sanity
+
+Run this checklist for PRs that touch share-sheet saving, notifications, or save routing:
+
+- Share a URL from Chrome and confirm Mimeo does not stay foregrounded.
+- Share a URL from BlueSky (or another `ACTION_SEND` source) and confirm the same receiver flow.
+- Confirm success/error feedback appears as heads-up notifications.
+- With `Keep share result notifications` off, confirm results auto-dismiss after about 4 seconds.
+- With `Keep share result notifications` on, confirm results remain in the tray.
+- Clear the token and confirm `Configure API token in Settings` with a working `Open Settings` action.
+- Set an invalid token and confirm `Check your API token` with a working `Open Settings` action.
+- Share text without a URL and confirm `No valid URL found`.
+- Disable connectivity and confirm `Couldn't reach server`.
+
+## Queue verification checklist
+
+Use this for PRs that touch queue rendering, playlists, or share-save verification:
+
+- Select the expected playlist or Smart Queue in-app before verifying save results.
+- Confirm search is visible and filters the current queue list.
+- Confirm filter chips are visible and reset cleanly to `All`.
+- Verify a newly shared item appears without using the web app.
+- Search by title/domain and, when relevant, by a URL-derived token to confirm normalized fallback still works.
