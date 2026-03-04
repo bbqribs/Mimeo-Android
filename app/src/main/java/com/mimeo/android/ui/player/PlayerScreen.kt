@@ -442,9 +442,7 @@ fun PlayerScreen(
         "Needs network"
     }
     val effectivePercent = if (localDonePercentOverride >= 0) localDonePercentOverride else currentPercent
-    val isDoneLocal = effectivePercent >= DONE_PERCENT_THRESHOLD
-    val knownProgress = vm.knownProgressForItem(currentItemId)
-    val showCompleted = isDoneLocal || nearEndForcedForItemId == currentItemId || knownProgress >= DONE_PERCENT_THRESHOLD
+    val showCompleted = effectivePercent >= DONE_PERCENT_THRESHOLD || nearEndForcedForItemId == currentItemId
     val undoDonePercent = effectivePercent.coerceIn(0, DONE_PERCENT_THRESHOLD - 1)
     var lastAppliedSpeed by remember { mutableStateOf(settings.playbackSpeed) }
 
@@ -521,13 +519,13 @@ fun PlayerScreen(
                         vm.postProgress(currentItemId, targetPercent)
                             .onSuccess {
                                 localDonePercentOverride = targetPercent
-                                uiMessage = when {
+                                val toggleMessage = when {
                                     showCompleted && it.queued -> "Done removal queued for sync"
                                     showCompleted -> "Marked not done"
                                     it.queued -> "Done queued for sync"
                                     else -> "Marked done"
                                 }
-                                onShowSnackbar(uiMessage.orEmpty(), null, null)
+                                onShowSnackbar(toggleMessage, null, null)
                                 if (showCompleted && chunks.isNotEmpty()) {
                                     nearEndForcedForItemId = -1
                                     lastObservedPercent = targetPercent
@@ -713,7 +711,7 @@ fun PlayerScreen(
                 if (isSpeaking || isAutoPlaying) {
                     stopSpeaking(forceSync = true)
                 } else if (chunks.isNotEmpty()) {
-                    val restartFromStart = showCompleted ||
+                    val restartFromStart = (effectivePercent >= DONE_PERCENT_THRESHOLD || nearEndForcedForItemId == currentItemId) ||
                         (safePosition.chunkIndex == chunks.lastIndex &&
                             safePosition.offsetInChunkChars >= chunks.last().length)
                     if (restartFromStart) {
