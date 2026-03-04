@@ -24,10 +24,14 @@ class SettingsStore(private val context: Context) {
         booleanPreferencesKey("auto_advance_on_completion")
     private val autoScrollWhileListeningKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("auto_scroll_while_listening")
+    private val keepShareResultNotificationsKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("keep_share_result_notifications")
     private val playbackSpeedKey: Preferences.Key<Float> =
         floatPreferencesKey("playback_speed")
     private val selectedPlaylistIdKey: Preferences.Key<Int> =
         intPreferencesKey("selected_playlist_id")
+    private val defaultSavePlaylistIdKey: Preferences.Key<Int> =
+        intPreferencesKey("default_save_playlist_id")
     private val readingFontSizeSpKey: Preferences.Key<Int> =
         intPreferencesKey("reading_font_size_sp")
     private val readingLineHeightPercentKey: Preferences.Key<Int> =
@@ -43,8 +47,10 @@ class SettingsStore(private val context: Context) {
             apiToken = prefs[tokenKey] ?: "",
             autoAdvanceOnCompletion = prefs[autoAdvanceOnCompletionKey] ?: false,
             autoScrollWhileListening = prefs[autoScrollWhileListeningKey] ?: true,
+            keepShareResultNotifications = prefs[keepShareResultNotificationsKey] ?: false,
             playbackSpeed = prefs[playbackSpeedKey] ?: 1.0f,
             selectedPlaylistId = decodeSelectedPlaylistId(prefs[selectedPlaylistIdKey]),
+            defaultSavePlaylistId = decodeSelectedPlaylistId(prefs[defaultSavePlaylistIdKey]),
             readingFontSizeSp = prefs[readingFontSizeSpKey] ?: 18,
             readingLineHeightPercent = prefs[readingLineHeightPercentKey] ?: 160,
             readingMaxWidthDp = prefs[readingMaxWidthDpKey] ?: 720,
@@ -59,8 +65,10 @@ class SettingsStore(private val context: Context) {
         apiToken: String,
         autoAdvanceOnCompletion: Boolean,
         autoScrollWhileListening: Boolean,
+        keepShareResultNotifications: Boolean,
         playbackSpeed: Float,
         selectedPlaylistId: Int?,
+        defaultSavePlaylistId: Int?,
         readingFontSizeSp: Int,
         readingLineHeightPercent: Int,
         readingMaxWidthDp: Int,
@@ -71,8 +79,10 @@ class SettingsStore(private val context: Context) {
             prefs[tokenKey] = apiToken.trim()
             prefs[autoAdvanceOnCompletionKey] = autoAdvanceOnCompletion
             prefs[autoScrollWhileListeningKey] = autoScrollWhileListening
+            prefs[keepShareResultNotificationsKey] = keepShareResultNotifications
             prefs[playbackSpeedKey] = playbackSpeed
             prefs[selectedPlaylistIdKey] = encodeSelectedPlaylistId(selectedPlaylistId)
+            prefs[defaultSavePlaylistIdKey] = encodeSelectedPlaylistId(defaultSavePlaylistId)
             prefs[readingFontSizeSpKey] = readingFontSizeSp
             prefs[readingLineHeightPercentKey] = readingLineHeightPercent
             prefs[readingMaxWidthDpKey] = readingMaxWidthDp
@@ -83,6 +93,12 @@ class SettingsStore(private val context: Context) {
     suspend fun saveSelectedPlaylistId(selectedPlaylistId: Int?) {
         context.dataStore.edit { prefs ->
             prefs[selectedPlaylistIdKey] = encodeSelectedPlaylistId(selectedPlaylistId)
+        }
+    }
+
+    suspend fun saveDefaultSavePlaylistId(defaultSavePlaylistId: Int?) {
+        context.dataStore.edit { prefs ->
+            prefs[defaultSavePlaylistIdKey] = encodeSelectedPlaylistId(defaultSavePlaylistId)
         }
     }
 

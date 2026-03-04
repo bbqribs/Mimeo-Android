@@ -1,13 +1,18 @@
 package com.mimeo.android
 
+import android.Manifest
 import android.app.Application
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Build
 import androidx.annotation.DrawableRes
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,9 +42,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -68,6 +75,7 @@ import com.mimeo.android.repository.FoldersRepository
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.PlaylistMembershipToggleResult
 import com.mimeo.android.repository.PlaybackRepository
+import com.mimeo.android.share.ShareSaveRefreshBus
 import com.mimeo.android.ui.collections.CollectionsScreen
 import com.mimeo.android.ui.collections.FolderDetailScreen
 import com.mimeo.android.repository.ProgressPostResult
@@ -84,12 +92,12 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -106,6 +114,7 @@ private const val ROUTE_COLLECTIONS_PLAYLISTS = "collections/playlists"
 private const val ROUTE_COLLECTIONS_FOLDER = "collections/folder/{folderId}"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_DIAGNOSTICS = "settings/diagnostics"
+private const val ACTION_KEY_OPEN_DIAGNOSTICS = "open_diagnostics"
 
 private data class BottomNavDestination(
     val route: String,
@@ -132,17 +141,47 @@ private fun isLikelyPhysicalDevice(): Boolean {
 }
 
 class MainActivity : ComponentActivity() {
+    private lateinit var vm: AppViewModel
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val vm = ViewModelProvider(
+        vm = ViewModelProvider(
             this,
             ViewModelProvider.AndroidViewModelFactory.getInstance(application),
         )[AppViewModel::class.java]
+        consumeLaunchIntent(intent)
+        requestNotificationPermissionIfNeeded()
         setContent {
             MimeoTheme {
                 MimeoApp(vm)
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        consumeLaunchIntent(intent)
+    }
+
+    private fun consumeLaunchIntent(incomingIntent: Intent?) {
+        if (incomingIntent?.action != ShareReceiverActivity.ACTION_OPEN_SETTINGS) return
+        vm.requestNavigation(ROUTE_SETTINGS)
+        setIntent(Intent(incomingIntent).apply { action = null })
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 }
@@ -187,8 +226,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
-    private val _snackbarMessages = MutableSharedFlow<UiSnackbarMessage>(extraBufferCapacity = 8)
-    val snackbarMessages: SharedFlow<UiSnackbarMessage> = _snackbarMessages.asSharedFlow()
+    private val _snackbarMessages = Channel<UiSnackbarMessage>(capacity = Channel.BUFFERED)
+    val snackbarMessages: Flow<UiSnackbarMessage> = _snackbarMessages.receiveAsFlow()
     private val _testingConnection = MutableStateFlow(false)
     val testingConnection: StateFlow<Boolean> = _testingConnection.asStateFlow()
 
@@ -208,15 +247,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val nowPlayingSession: StateFlow<NowPlayingSession?> = _nowPlayingSession.asStateFlow()
     private val _sessionIssueMessage = MutableStateFlow<String?>(null)
     val sessionIssueMessage: StateFlow<String?> = _sessionIssueMessage.asStateFlow()
+    private val _pendingNavigationRoute = MutableStateFlow<String?>(null)
+    val pendingNavigationRoute: StateFlow<String?> = _pendingNavigationRoute.asStateFlow()
 
     init {
         viewModelScope.launch {
-            settingsStore.settingsFlow.collect { _settings.value = it }
+            settingsStore.settingsFlow.collect {
+                _settings.value = it
+            }
         }
         WorkScheduler.enqueueProgressSync(application.applicationContext)
         viewModelScope.launch {
             refreshPendingCount()
             flushPendingProgress()
+        }
+        viewModelScope.launch {
+            ShareSaveRefreshBus.events.collect { event ->
+                refreshPlaylists()
+                if (settings.value.selectedPlaylistId == event.playlistId) {
+                    loadQueue()
+                }
+            }
         }
         viewModelScope.launch {
             val loadResult = repository.getSessionLoadResult()
@@ -247,6 +298,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         token: String,
         autoAdvanceOnCompletion: Boolean,
         autoScrollWhileListening: Boolean,
+        keepShareResultNotifications: Boolean,
     ) {
         viewModelScope.launch {
             settingsStore.save(
@@ -254,8 +306,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 apiToken = token,
                 autoAdvanceOnCompletion = autoAdvanceOnCompletion,
                 autoScrollWhileListening = autoScrollWhileListening,
+                keepShareResultNotifications = keepShareResultNotifications,
                 playbackSpeed = settings.value.playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
+                defaultSavePlaylistId = settings.value.defaultSavePlaylistId,
                 readingFontSizeSp = settings.value.readingFontSizeSp,
                 readingLineHeightPercent = settings.value.readingLineHeightPercent,
                 readingMaxWidthDp = settings.value.readingMaxWidthDp,
@@ -277,8 +331,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 apiToken = settings.value.apiToken,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
+                keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 playbackSpeed = settings.value.playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
+                defaultSavePlaylistId = settings.value.defaultSavePlaylistId,
                 readingFontSizeSp = readingFontSizeSp,
                 readingLineHeightPercent = readingLineHeightPercent,
                 readingMaxWidthDp = readingMaxWidthDp,
@@ -294,8 +350,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 apiToken = settings.value.apiToken,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
+                keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 playbackSpeed = playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
+                defaultSavePlaylistId = settings.value.defaultSavePlaylistId,
                 readingFontSizeSp = settings.value.readingFontSizeSp,
                 readingLineHeightPercent = settings.value.readingLineHeightPercent,
                 readingMaxWidthDp = settings.value.readingMaxWidthDp,
@@ -310,7 +368,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         actionKey: String? = null,
         duration: SnackbarDuration = SnackbarDuration.Short,
     ) {
-        _snackbarMessages.tryEmit(
+        _snackbarMessages.trySend(
             UiSnackbarMessage(
                 message = message,
                 actionLabel = actionLabel,
@@ -391,8 +449,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _playlists.value = loaded
                 val selected = current.selectedPlaylistId
                 if (selected != null && loaded.none { it.id == selected }) {
+                    _settings.update { it.copy(selectedPlaylistId = null) }
                     settingsStore.saveSelectedPlaylistId(null)
                     _statusMessage.value = "Selected playlist removed; switched to Smart queue"
+                }
+                val defaultSave = current.defaultSavePlaylistId
+                if (defaultSave != null && loaded.none { it.id == defaultSave }) {
+                    _settings.update { it.copy(defaultSavePlaylistId = null) }
+                    settingsStore.saveDefaultSavePlaylistId(null)
+                    _statusMessage.value = "Default save playlist removed; switched to Smart queue"
                 }
             } catch (_: Exception) {
                 // Keep prior value; queue still works with Smart mode fallback.
@@ -412,6 +477,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _settings.update { current -> current.copy(selectedPlaylistId = playlistId) }
             settingsStore.saveSelectedPlaylistId(playlistId)
             loadQueue()
+        }
+    }
+
+    fun saveDefaultSavePlaylistId(playlistId: Int?) {
+        viewModelScope.launch {
+            _settings.update { current -> current.copy(defaultSavePlaylistId = playlistId) }
+            settingsStore.saveDefaultSavePlaylistId(playlistId)
         }
     }
 
@@ -461,7 +533,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 foldersRepository.assignPlaylistToFolder(playlistId, null)
                 _playlists.update { rows -> rows.filterNot { it.id == playlistId } }
                 if (settings.value.selectedPlaylistId == playlistId) {
+                    _settings.update { it.copy(selectedPlaylistId = null) }
                     settingsStore.saveSelectedPlaylistId(null)
+                }
+                if (settings.value.defaultSavePlaylistId == playlistId) {
+                    _settings.update { it.copy(defaultSavePlaylistId = null) }
+                    settingsStore.saveDefaultSavePlaylistId(null)
                 }
                 refreshFolders()
                 _statusMessage.value = "Playlist deleted"
@@ -770,6 +847,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun baseUrlHintForDevice(isPhysicalDevice: Boolean): String? =
         baseUrlHint(settings.value.baseUrl.trim().trimEnd('/'), isPhysicalDevice)
 
+    fun requestNavigation(route: String) {
+        _pendingNavigationRoute.value = route
+    }
+
+    fun consumePendingNavigation(route: String) {
+        if (_pendingNavigationRoute.value == route) {
+            _pendingNavigationRoute.value = null
+        }
+    }
+
     fun nowPlayingSummaryText(): String? {
         val session = nowPlayingSession.value ?: return null
         val current = session.currentItem ?: session.items.firstOrNull() ?: return null
@@ -1024,6 +1111,7 @@ private fun MimeoApp(vm: AppViewModel) {
     val settings by vm.settings.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
+    val pendingNavigationRoute by vm.pendingNavigationRoute.collectAsState()
     val selectedTab = when {
         currentRoute.startsWith(ROUTE_LOCUS) -> ROUTE_LOCUS
         currentRoute.startsWith(ROUTE_COLLECTIONS) -> ROUTE_COLLECTIONS
@@ -1068,22 +1156,22 @@ private fun MimeoApp(vm: AppViewModel) {
                 actionLabel = message.actionLabel,
                 duration = message.duration,
             )
-            if (
-                result == SnackbarResult.ActionPerformed &&
-                message.actionKey == "open_diagnostics"
-            ) {
-                nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) { launchSingleTop = true }
+            if (result == SnackbarResult.ActionPerformed) {
+                when (message.actionKey) {
+                    ACTION_KEY_OPEN_DIAGNOSTICS -> nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) { launchSingleTop = true }
+                }
             }
         }
     }
 
+    LaunchedEffect(pendingNavigationRoute) {
+        pendingNavigationRoute?.let { route ->
+            nav.navigate(route) { launchSingleTop = true }
+            vm.consumePendingNavigation(route)
+        }
+    }
+
     Scaffold(
-        snackbarHost = {
-            SnackbarHost(
-                hostState = snackbarHostState,
-                modifier = Modifier.windowInsetsPadding(WindowInsets.ime),
-            )
-        },
         bottomBar = {
             NavigationBar(
                 modifier = Modifier.height(68.dp),
@@ -1114,76 +1202,123 @@ private fun MimeoApp(vm: AppViewModel) {
             }
         },
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .statusBarsPadding()
                 .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            if (showGlobalBanner) {
-                StatusBanner(
-                    stateLabel = bannerStateLabel,
-                    summary = bannerSummary,
-                    detail = bannerDetail,
-                    onRetry = { vm.loadQueue() },
-                    onDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
-                )
-            }
-            NavHost(
-                navController = nav,
-                startDestination = ROUTE_UP_NEXT,
+            Column(
                 modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                composable(ROUTE_COLLECTIONS) {
-                    CollectionsScreen(
-                        vm = vm,
-                        onOpenPlaylistsManager = { nav.navigate(ROUTE_COLLECTIONS_PLAYLISTS) },
-                        onOpenFolder = { folderId -> nav.navigate("collections/folder/$folderId") },
+                if (showGlobalBanner) {
+                    StatusBanner(
+                        stateLabel = bannerStateLabel,
+                        summary = bannerSummary,
+                        detail = bannerDetail,
+                        onRetry = { vm.loadQueue() },
+                        onDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                     )
                 }
-                composable(
-                    ROUTE_COLLECTIONS_FOLDER,
-                    arguments = listOf(navArgument("folderId") { type = NavType.IntType }),
-                ) { backStack ->
-                    val folderId = backStack.arguments?.getInt("folderId") ?: return@composable
-                    FolderDetailScreen(
-                        vm = vm,
-                        folderId = folderId,
-                        onBack = { nav.popBackStack() },
-                        onOpenPlaylist = {
-                            nav.navigate(ROUTE_UP_NEXT) {
-                                popUpTo(ROUTE_COLLECTIONS)
-                                launchSingleTop = true
-                            }
-                        },
-                    )
-                }
-                composable(ROUTE_COLLECTIONS_PLAYLISTS) {
-                    PlaylistsScreen(vm = vm)
-                }
-                composable(ROUTE_SETTINGS) {
-                    SettingsScreen(
-                        vm = vm,
-                        onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
-                    )
-                }
-                composable(ROUTE_SETTINGS_DIAGNOSTICS) {
-                    ConnectivityDiagnosticsScreen(vm = vm)
-                }
-                composable(ROUTE_LOCUS) {
-                    val nowPlayingId = vm.currentNowPlayingItemId()
-                    if (nowPlayingId == null) {
-                        NoNowPlayingScreen(onGoQueue = { nav.navigate(ROUTE_UP_NEXT) })
-                    } else {
+                NavHost(
+                    navController = nav,
+                    startDestination = ROUTE_UP_NEXT,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    composable(ROUTE_COLLECTIONS) {
+                        CollectionsScreen(
+                            vm = vm,
+                            onOpenPlaylistsManager = { nav.navigate(ROUTE_COLLECTIONS_PLAYLISTS) },
+                            onOpenFolder = { folderId -> nav.navigate("collections/folder/$folderId") },
+                        )
+                    }
+                    composable(
+                        ROUTE_COLLECTIONS_FOLDER,
+                        arguments = listOf(navArgument("folderId") { type = NavType.IntType }),
+                    ) { backStack ->
+                        val folderId = backStack.arguments?.getInt("folderId") ?: return@composable
+                        FolderDetailScreen(
+                            vm = vm,
+                            folderId = folderId,
+                            onBack = { nav.popBackStack() },
+                            onOpenPlaylist = {
+                                nav.navigate(ROUTE_UP_NEXT) {
+                                    popUpTo(ROUTE_COLLECTIONS)
+                                    launchSingleTop = true
+                                }
+                            },
+                        )
+                    }
+                    composable(ROUTE_COLLECTIONS_PLAYLISTS) {
+                        PlaylistsScreen(vm = vm)
+                    }
+                    composable(ROUTE_SETTINGS) {
+                        SettingsScreen(
+                            vm = vm,
+                            onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
+                        )
+                    }
+                    composable(ROUTE_SETTINGS_DIAGNOSTICS) {
+                        ConnectivityDiagnosticsScreen(vm = vm)
+                    }
+                    composable(ROUTE_LOCUS) {
+                        val nowPlayingId = vm.currentNowPlayingItemId()
+                        if (nowPlayingId == null) {
+                            NoNowPlayingScreen(onGoQueue = { nav.navigate(ROUTE_UP_NEXT) })
+                        } else {
+                            PlayerScreen(
+                                vm = vm,
+                                onShowSnackbar = { message, actionLabel, actionKey ->
+                                    vm.showSnackbar(message, actionLabel, actionKey)
+                                },
+                                initialItemId = nowPlayingId,
+                                startExpanded = false,
+                                onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
+                                onBackToQueue = { focusId ->
+                                    if (focusId == null) {
+                                        nav.navigate(ROUTE_UP_NEXT)
+                                    } else {
+                                        nav.navigate("$ROUTE_UP_NEXT?focusItemId=$focusId")
+                                    }
+                                },
+                                onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
+                            )
+                        }
+                    }
+                    composable(
+                        route = "$ROUTE_UP_NEXT?focusItemId={focusItemId}",
+                        arguments = listOf(
+                            navArgument("focusItemId") {
+                                type = NavType.IntType
+                                defaultValue = -1
+                            },
+                        ),
+                    ) { backStack ->
+                        val focusItemId = backStack.arguments?.getInt("focusItemId")?.takeIf { it > 0 }
+                        QueueScreen(
+                            vm = vm,
+                            onShowSnackbar = { message, actionLabel, actionKey ->
+                                vm.showSnackbar(message, actionLabel, actionKey)
+                            },
+                            focusItemId = focusItemId,
+                            onOpenPlayer = { itemId -> nav.navigate("$ROUTE_LOCUS/$itemId") },
+                            onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
+                        )
+                    }
+                    composable(
+                        ROUTE_LOCUS_ITEM,
+                        arguments = listOf(navArgument("itemId") { type = NavType.IntType }),
+                    ) { backStack ->
+                        val itemId = backStack.arguments?.getInt("itemId") ?: return@composable
                         PlayerScreen(
                             vm = vm,
                             onShowSnackbar = { message, actionLabel, actionKey ->
                                 vm.showSnackbar(message, actionLabel, actionKey)
                             },
-                            initialItemId = nowPlayingId,
-                            startExpanded = false,
+                            initialItemId = itemId,
+                            startExpanded = true,
                             onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
                             onBackToQueue = { focusId ->
                                 if (focusId == null) {
@@ -1196,50 +1331,15 @@ private fun MimeoApp(vm: AppViewModel) {
                         )
                     }
                 }
-                composable(
-                    route = "$ROUTE_UP_NEXT?focusItemId={focusItemId}",
-                    arguments = listOf(
-                        navArgument("focusItemId") {
-                            type = NavType.IntType
-                            defaultValue = -1
-                        },
-                    ),
-                ) { backStack ->
-                    val focusItemId = backStack.arguments?.getInt("focusItemId")?.takeIf { it > 0 }
-                    QueueScreen(
-                        vm = vm,
-                        onShowSnackbar = { message, actionLabel, actionKey ->
-                            vm.showSnackbar(message, actionLabel, actionKey)
-                        },
-                        focusItemId = focusItemId,
-                        onOpenPlayer = { itemId -> nav.navigate("$ROUTE_LOCUS/$itemId") },
-                        onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
-                    )
-                }
-                composable(
-                    ROUTE_LOCUS_ITEM,
-                    arguments = listOf(navArgument("itemId") { type = NavType.IntType }),
-                ) { backStack ->
-                    val itemId = backStack.arguments?.getInt("itemId") ?: return@composable
-                    PlayerScreen(
-                        vm = vm,
-                        onShowSnackbar = { message, actionLabel, actionKey ->
-                            vm.showSnackbar(message, actionLabel, actionKey)
-                        },
-                        initialItemId = itemId,
-                        startExpanded = true,
-                        onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
-                        onBackToQueue = { focusId ->
-                            if (focusId == null) {
-                                nav.navigate(ROUTE_UP_NEXT)
-                            } else {
-                                nav.navigate("$ROUTE_UP_NEXT?focusItemId=$focusId")
-                            }
-                        },
-                        onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
-                    )
-                }
             }
+
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.ime)
+                    .padding(bottom = 76.dp),
+            )
         }
     }
 }

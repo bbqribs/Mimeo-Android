@@ -126,13 +126,40 @@ data class ProgressPayload(
 )
 
 @Serializable
+data class ArticleSummary(
+    val id: Int,
+    val url: String,
+    @SerialName("canonical_url") val canonicalUrl: String? = null,
+    val title: String? = null,
+    @SerialName("site_name") val siteName: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("last_opened_at") val lastOpenedAt: String? = null,
+    @SerialName("open_count") val openCount: Int = 0,
+    @SerialName("last_read_percent") val lastReadPercent: Int? = null,
+    @SerialName("resume_read_percent") val resumeReadPercent: Int? = null,
+    @SerialName("progress_percent") val progressPercent: Int? = null,
+    @SerialName("furthest_percent") val furthestPercent: Int? = null,
+    @SerialName("last_read_at") val lastReadAt: String? = null,
+    @SerialName("archived_at") val archivedAt: String? = null,
+    @SerialName("is_favorited") val isFavorited: Boolean = false,
+    val status: String? = null,
+    @SerialName("failure_reason") val failureReason: String? = null,
+    @SerialName("strategy_used") val strategyUsed: String? = null,
+    @SerialName("fetch_http_status") val fetchHttpStatus: Int? = null,
+    @SerialName("word_count") val wordCount: Int? = null,
+    @SerialName("estimated_listen_minutes") val estimatedListenMinutes: Int? = null,
+)
+
+@Serializable
 data class AppSettings(
     val baseUrl: String = "http://10.0.2.2:8000",
     val apiToken: String = "",
     val autoAdvanceOnCompletion: Boolean = false,
     val autoScrollWhileListening: Boolean = true,
+    val keepShareResultNotifications: Boolean = false,
     val playbackSpeed: Float = 1.0f,
     val selectedPlaylistId: Int? = null,
+    val defaultSavePlaylistId: Int? = null,
     val readingFontSizeSp: Int = 18,
     val readingLineHeightPercent: Int = 160,
     val readingMaxWidthDp: Int = 720,
