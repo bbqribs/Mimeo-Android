@@ -127,9 +127,15 @@ fun QueueScreen(
             true
         } else {
             val needle = searchQuery.trim().lowercase()
-            item.title.orEmpty().lowercase().contains(needle) ||
-                item.host.orEmpty().lowercase().contains(needle) ||
-                item.url.lowercase().contains(needle)
+            val normalizedNeedle = normalizeSearchText(needle)
+            listOf(
+                item.title.orEmpty(),
+                item.host.orEmpty(),
+                item.url,
+            ).any { candidate ->
+                val lowered = candidate.lowercase()
+                lowered.contains(needle) || normalizeSearchText(lowered).contains(normalizedNeedle)
+            }
         }
         val matchesFilter = when (selectedFilter) {
             QueueFilterChip.ALL -> true
@@ -232,6 +238,11 @@ fun QueueScreen(
                     )
                     Text(
                         text = lastQueueFetchDebug.requestUrl,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = "renderedIds=${displayedItems.take(3).joinToString { it.itemId.toString() }}${if (displayedItems.size > 6) " … " else ""}${displayedItems.takeLast(3).joinToString { it.itemId.toString() }}",
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -412,6 +423,10 @@ fun QueueScreen(
             },
         )
     }
+}
+
+private fun normalizeSearchText(value: String): String {
+    return value.filter { it.isLetterOrDigit() }
 }
 
 @Composable
