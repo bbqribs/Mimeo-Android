@@ -62,7 +62,7 @@ import com.mimeo.android.player.TtsController
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
-import com.mimeo.android.ui.reader.ReaderScreen
+import com.mimeo.android.ui.reader.ReaderBody
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -422,11 +422,6 @@ fun PlayerScreen(
     val totalChars = totalCharsForPercent()
     val currentPercent = calculateCanonicalPercent(totalChars, chunks, safePosition)
     val currentTitle = textPayload?.title?.ifBlank { null } ?: textPayload?.url.orEmpty()
-    val currentChunkText = if (chunks.isNotEmpty()) {
-        chunks[safePosition.chunkIndex].text.take(400)
-    } else {
-        textPayload?.text?.take(400).orEmpty()
-    }
     val chunkLabel = if (chunks.isEmpty()) {
         "Chunk 0 / 0"
     } else {
@@ -660,30 +655,16 @@ fun PlayerScreen(
                         .fillMaxWidth()
                         .weight(1f, fill = true),
                 ) {
-                    if (chunks.isNotEmpty()) {
-                        ReaderScreen(
-                            chunks = chunks,
-                            currentChunkIndex = safePosition.chunkIndex,
-                            autoScrollWhileListening = settings.autoScrollWhileListening,
-                            readingFontSizeSp = settings.readingFontSizeSp,
-                            readingLineHeightPercent = settings.readingLineHeightPercent,
-                            readingMaxWidthDp = settings.readingMaxWidthDp,
-                            paragraphSpacing = settings.readingParagraphSpacing,
-                            onSelectChunk = { index ->
-                                val safeIndex = index.coerceIn(0, chunks.lastIndex)
-                                setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
-                                uiMessage = "Selected chunk ${safeIndex + 1}"
-                            },
-                            onPlayFromChunk = { index ->
-                                val safeIndex = index.coerceIn(0, chunks.lastIndex)
-                                setPlaybackPositionFromAbsoluteOffset(chunks[safeIndex].startChar)
-                                isAutoPlaying = true
-                                playChunk(safeIndex, 0)
-                                uiMessage = "Starting from chunk ${safeIndex + 1}"
-                            },
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
+                    ReaderBody(
+                        fullText = textPayload?.text,
+                        chunks = chunks,
+                        currentChunkIndex = safePosition.chunkIndex,
+                        readingFontSizeSp = settings.readingFontSizeSp,
+                        readingLineHeightPercent = settings.readingLineHeightPercent,
+                        readingMaxWidthDp = settings.readingMaxWidthDp,
+                        paragraphSpacing = settings.readingParagraphSpacing,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
             }
         }
