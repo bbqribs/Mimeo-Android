@@ -38,6 +38,7 @@ fun ReaderBody(
     chunks: List<PlaybackChunk>,
     currentChunkIndex: Int,
     currentChunkOffsetInChars: Int,
+    activeRangeInChunk: IntRange?,
     readingFontSizeSp: Int,
     readingLineHeightPercent: Int,
     readingMaxWidthDp: Int,
@@ -56,14 +57,12 @@ fun ReaderBody(
     val sentenceRangesByChunk = remember(chunks) {
         chunks.map { segmentSentences(it.text) }
     }
-    // v1 uses the current TTS offset within the active chunk to resolve the sentence range.
-    // If the offset does not advance yet for a given platform/runtime, this naturally falls back
-    // to the first sentence in the chunk and still gives a stable, non-jumpy highlight.
-    val highlightedSentenceRange = remember(chunks, sentenceRangesByChunk, safeChunkIndex, currentChunkOffsetInChars) {
+    val highlightedSentenceRange = remember(chunks, sentenceRangesByChunk, safeChunkIndex, currentChunkOffsetInChars, activeRangeInChunk) {
         chunks.getOrNull(safeChunkIndex)?.let { chunk ->
+            val offsetForSentence = activeRangeInChunk?.first ?: currentChunkOffsetInChars
             findSentenceRangeForOffset(
                 text = chunk.text,
-                offsetInText = currentChunkOffsetInChars,
+                offsetInText = offsetForSentence,
                 sentenceRanges = sentenceRangesByChunk.getOrNull(safeChunkIndex).orEmpty(),
             ) ?: if (chunk.text.isNotEmpty()) SentenceRange(0, chunk.text.length) else null
         }
@@ -95,7 +94,16 @@ fun ReaderBody(
                 ) {
                     chunks.forEachIndexed { index, chunk ->
                         val isHighlighted = index == safeChunkIndex
-                        val chunkText = if (isHighlighted && highlightedSentenceRange != null) {
+                        val effectiveHighlightRange = if (isHighlighted) {
+                            resolveReaderHighlightRange(
+                                textLength = chunk.text.length,
+                                activeRange = activeRangeInChunk,
+                                sentenceRange = highlightedSentenceRange,
+                            )
+                        } else {
+                            null
+                        }
+                        val chunkText = if (effectiveHighlightRange != null) {
                             buildAnnotatedString {
                                 append(chunk.text)
                                 addStyle(
@@ -104,8 +112,8 @@ fun ReaderBody(
                                         color = highlightFg,
                                         fontWeight = FontWeight.SemiBold,
                                     ),
-                                    start = highlightedSentenceRange.start,
-                                    end = highlightedSentenceRange.endExclusive.coerceAtMost(chunk.text.length),
+                                    start = effectiveHighlightRange.first,
+                                    end = (effectiveHighlightRange.last + 1).coerceAtMost(chunk.text.length),
                                 )
                             }
                         } else {

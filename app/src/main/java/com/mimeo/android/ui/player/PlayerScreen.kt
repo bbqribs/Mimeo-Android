@@ -72,6 +72,7 @@ private const val PROGRESS_SYNC_DEBOUNCE_MS = 2_000L
 private const val PROGRESS_CHAR_STEP = 120
 private const val FALLBACK_CHUNK_MAX_CHARS = 900
 private const val DONE_PERCENT_THRESHOLD = 98
+private const val DEBUG_DISABLE_RANGE_HIGHLIGHT = false
 private val PLAYBACK_SPEED_OPTIONS = listOf(0.8f, 0.9f, 1.0f, 1.1f, 1.25f, 1.5f, 1.75f, 2.0f)
 
 private fun debugLog(message: String) {
@@ -112,6 +113,7 @@ fun PlayerScreen(
     var preserveVisibleContentOnReload by remember { mutableStateOf(false) }
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     val readerScrollState = rememberSaveable(currentItemId, saver = ScrollState.Saver) { ScrollState(0) }
+    var activeChunkRange by remember { mutableStateOf<IntRange?>(null) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
@@ -146,6 +148,7 @@ fun PlayerScreen(
                     debugLog("ignore stale onDone utterance=${event.utteranceId} eventChunk=${event.chunkIndex} currentChunk=${latestPosition.chunkIndex}")
                     return@TtsController
                 }
+                activeChunkRange = null
                 pendingDoneEvent = PlaybackDoneEvent(
                     utteranceId = event.utteranceId,
                     itemId = event.itemId,
@@ -159,6 +162,18 @@ fun PlayerScreen(
                 if (event.chunkIndex != latestPosition.chunkIndex) return@TtsController
                 val safeIndex = event.chunkIndex.coerceIn(0, currentChunks.lastIndex)
                 val safeOffset = event.absoluteOffsetInChunk.coerceIn(0, currentChunks[safeIndex].length)
+                val safeRange = if (DEBUG_DISABLE_RANGE_HIGHLIGHT) {
+                    null
+                } else {
+                    event.activeRangeInChunk?.let { range ->
+                        val start = range.first.coerceIn(0, currentChunks[safeIndex].length)
+                        val endExclusive = (range.last + 1).coerceIn(0, currentChunks[safeIndex].length)
+                        if (endExclusive > start) start until endExclusive else null
+                    }
+                }
+                if (safeRange != activeChunkRange) {
+                    activeChunkRange = safeRange
+                }
                 val currentOffset = latestPosition.offsetInChunkChars.coerceAtLeast(0)
                 if (safeOffset > currentOffset) {
                     vm.setPlaybackPosition(
@@ -286,6 +301,7 @@ fun PlayerScreen(
         ttsController.stop()
         isSpeaking = false
         isAutoPlaying = false
+        activeChunkRange = null
         if (forceSync) {
             actionScope.launch { syncProgress(force = true) }
         }
@@ -316,6 +332,7 @@ fun PlayerScreen(
             chunks = emptyList()
         }
         pendingDoneEvent = null
+        activeChunkRange = null
         lastHandledDoneUtteranceId = null
         lastSyncedPercent = -1
         lastSyncedAbsoluteChars = -1
@@ -668,6 +685,7 @@ fun PlayerScreen(
                         chunks = chunks,
                         currentChunkIndex = safePosition.chunkIndex,
                         currentChunkOffsetInChars = safePosition.offsetInChunkChars,
+                        activeRangeInChunk = activeChunkRange,
                         readingFontSizeSp = settings.readingFontSizeSp,
                         readingLineHeightPercent = settings.readingLineHeightPercent,
                         readingMaxWidthDp = settings.readingMaxWidthDp,

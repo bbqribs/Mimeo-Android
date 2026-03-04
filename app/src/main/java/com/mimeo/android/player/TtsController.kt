@@ -19,6 +19,7 @@ data class TtsChunkProgressEvent(
     val itemId: Int,
     val chunkIndex: Int,
     val absoluteOffsetInChunk: Int,
+    val activeRangeInChunk: IntRange? = null,
 )
 
 data class TtsChunkDoneEvent(
@@ -37,6 +38,7 @@ class TtsController(
         val itemId: Int,
         val chunkIndex: Int,
         val baseOffset: Int,
+        val chunkTextLength: Int,
         val generation: Long,
     )
 
@@ -111,10 +113,16 @@ class TtsController(
                 val id = utteranceId ?: return
                 val meta = utteranceMetaById[id] ?: return
                 val absoluteInChunk = (meta.baseOffset + start).coerceAtLeast(0)
+                val activeRange = normalizeActiveChunkRange(
+                    textLength = meta.chunkTextLength,
+                    baseOffset = meta.baseOffset,
+                    start = start,
+                    endExclusive = end,
+                )
                 if (DEBUG_PLAYBACK) {
                     println(
                         "[Mimeo][tts] onRange utteranceId=$id item=${meta.itemId} chunk=${meta.chunkIndex} " +
-                            "offset=$absoluteInChunk",
+                            "offset=$absoluteInChunk range=$activeRange",
                     )
                 }
                 mainHandler.post {
@@ -124,6 +132,7 @@ class TtsController(
                             itemId = meta.itemId,
                             chunkIndex = meta.chunkIndex,
                             absoluteOffsetInChunk = absoluteInChunk,
+                            activeRangeInChunk = activeRange,
                         ),
                     )
                 }
@@ -141,6 +150,7 @@ class TtsController(
             itemId = itemId,
             chunkIndex = chunkIndex,
             baseOffset = baseOffset.coerceAtLeast(0),
+            chunkTextLength = (baseOffset.coerceAtLeast(0) + text.length).coerceAtLeast(0),
             generation = generation,
         )
         val params = Bundle().apply {
