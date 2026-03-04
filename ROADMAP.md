@@ -54,6 +54,7 @@
 10. [~] Phase 6.3: folder detail view + counts + remove-from-folder inside Collections.
 11. [ ] Next: folder badges in playlist list and optional nested folders.
 12. [x] Locus expand/collapse on `main`: explicit buttons only, collapsed tab entry, expanded resume/direct entry, title ellipsis fix, and TESTING.md invariants checklist.
+13. [ ] Player completion icon follow-up: evaluate open-book/closed-book completion iconography for Locus as a separate ticket after the current player banding work settles.
 13. [ ] Shared pinned PlayerBar on `main` remains a separate architecture ticket, not part of playback-speed follow-up.
 14. [ ] Player screen banding: TopAppBar + reader body + pinned controls above bottom nav + title marquee row.
 15. [ ] Highlight currently spoken sentence/word as a refinement of the existing reader playback highlight.
