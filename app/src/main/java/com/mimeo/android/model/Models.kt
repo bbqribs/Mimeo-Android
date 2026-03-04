@@ -177,3 +177,16 @@ data class RawHttpResponse(
     val statusCode: Int,
     val body: String,
 )
+
+data class QueueFetchDebugSnapshot(
+    val selectedPlaylistId: Int? = null,
+    val requestUrl: String = "",
+    val statusCode: Int? = null,
+    val responseItemCount: Int = 0,
+    val responseContains409: Boolean = false,
+    val responseBytes: Int = 0,
+    val responseHash: String = "",
+    val appliedItemCount: Int = 0,
+    val appliedContains409: Boolean = false,
+    val lastFetchAt: String = "",
+)

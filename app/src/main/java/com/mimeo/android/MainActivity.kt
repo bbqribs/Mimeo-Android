@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Build
+import android.util.Log
 import androidx.annotation.DrawableRes
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
@@ -70,6 +71,7 @@ import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.ProgressSyncBadgeState
+import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.repository.ItemTextResult
 import com.mimeo.android.repository.FoldersRepository
 import com.mimeo.android.repository.NowPlayingSession
@@ -115,6 +117,8 @@ private const val ROUTE_COLLECTIONS_FOLDER = "collections/folder/{folderId}"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_DIAGNOSTICS = "settings/diagnostics"
 private const val ACTION_KEY_OPEN_DIAGNOSTICS = "open_diagnostics"
+private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
+private const val DEBUG_TARGET_ITEM_ID = 409
 
 private data class BottomNavDestination(
     val route: String,
@@ -211,6 +215,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _queueLoading = MutableStateFlow(false)
     val queueLoading: StateFlow<Boolean> = _queueLoading.asStateFlow()
+    private val _lastQueueFetchDebug = MutableStateFlow(QueueFetchDebugSnapshot())
+    val lastQueueFetchDebug: StateFlow<QueueFetchDebugSnapshot> = _lastQueueFetchDebug.asStateFlow()
 
     private val _queueOffline = MutableStateFlow(false)
     val queueOffline: StateFlow<Boolean> = _queueOffline.asStateFlow()
@@ -415,12 +421,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }.getOrNull()?.let { loaded ->
                     _playlists.value = loaded
                 }
-                val queue = repository.loadQueueAndPrefetch(
+                val queueResult = repository.loadQueueAndPrefetch(
                     current.baseUrl,
                     current.apiToken,
                     playlistId = current.selectedPlaylistId,
                 )
+                val queue = queueResult.payload
                 _queueItems.value = queue.items
+                val appliedSnapshot = queueResult.debugSnapshot.copy(
+                    appliedItemCount = _queueItems.value.size,
+                    appliedContains409 = _queueItems.value.any { it.itemId == DEBUG_TARGET_ITEM_ID },
+                    lastFetchAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()),
+                )
+                _lastQueueFetchDebug.value = appliedSnapshot
+                if (BuildConfig.DEBUG) {
+                    Log.d(
+                        QUEUE_DEBUG_TAG,
+                        "viewModelApply playlistId=${appliedSnapshot.selectedPlaylistId} uiCount=${appliedSnapshot.appliedItemCount} uiContains409=${appliedSnapshot.appliedContains409} requestUrl=${appliedSnapshot.requestUrl}",
+                    )
+                }
                 _cachedItemIds.value = repository.getCachedItemIds(queue.items.map { it.itemId })
                 _queueOffline.value = false
                 _statusMessage.value = "Queue loaded (${queue.count})"

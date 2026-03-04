@@ -40,6 +40,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
+import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.PlaybackQueueItem
@@ -78,6 +79,7 @@ fun QueueScreen(
     val cachedItemIds by vm.cachedItemIds.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
+    val lastQueueFetchDebug by vm.lastQueueFetchDebug.collectAsState()
     val actionScope = rememberCoroutineScope()
 
     var showClearSessionDialog by remember { mutableStateOf(false) }
@@ -203,6 +205,38 @@ fun QueueScreen(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+        }
+        if (BuildConfig.DEBUG && lastQueueFetchDebug.statusCode != null) {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text("Debug queue fetch")
+                    Text(
+                        text = "playlistId=${lastQueueFetchDebug.selectedPlaylistId ?: "smart"} status=${lastQueueFetchDebug.statusCode} responseCount=${lastQueueFetchDebug.responseItemCount} responseContains409=${lastQueueFetchDebug.responseContains409}",
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = "appliedCount=${lastQueueFetchDebug.appliedItemCount} appliedContains409=${lastQueueFetchDebug.appliedContains409} bytes=${lastQueueFetchDebug.responseBytes} hash=${lastQueueFetchDebug.responseHash}",
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = "at=${lastQueueFetchDebug.lastFetchAt}",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = lastQueueFetchDebug.requestUrl,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
         if (searchExpanded) {
             Row(

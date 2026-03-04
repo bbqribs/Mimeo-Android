@@ -1,5 +1,7 @@
 ﻿package com.mimeo.android.data
 
+import android.util.Log
+import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.DebugVersionResponse
 import com.mimeo.android.model.DebugPythonResponse
 import com.mimeo.android.model.ItemTextResponse
@@ -7,7 +9,9 @@ import com.mimeo.android.model.ArticleSummary
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.model.ProgressPayload
+import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.model.RawHttpResponse
+import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -21,6 +25,11 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 
 class ApiException(val statusCode: Int, message: String) : Exception(message)
+
+data class QueueFetchResult(
+    val payload: PlaybackQueueResponse,
+    val debugSnapshot: QueueFetchDebugSnapshot,
+)
 
 @Serializable
 private data class PlaylistNamePayload(val name: String)
@@ -42,6 +51,11 @@ class ApiClient(
     private val okHttpClient: OkHttpClient = OkHttpClient(),
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) {
+    companion object {
+        private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
+        private const val DEBUG_TARGET_ITEM_ID = 409
+    }
+
     suspend fun getDebugVersion(baseUrl: String, token: String): DebugVersionResponse = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(resolveUrl(baseUrl, "/debug/version"))
@@ -51,14 +65,37 @@ class ApiClient(
         executeJson(request) { payload -> json.decodeFromString<DebugVersionResponse>(payload) }
     }
 
-    suspend fun getQueue(baseUrl: String, token: String, playlistId: Int? = null): PlaybackQueueResponse = withContext(Dispatchers.IO) {
+    suspend fun getQueue(baseUrl: String, token: String, playlistId: Int? = null): QueueFetchResult = withContext(Dispatchers.IO) {
         val playlistParam = playlistId?.let { "&playlist_id=$it" } ?: ""
+        val requestUrl = resolveUrl(baseUrl, "/playback/queue?include_done=true&limit=50$playlistParam")
         val request = Request.Builder()
-            .url(resolveUrl(baseUrl, "/playback/queue?include_done=true&limit=50$playlistParam"))
+            .url(requestUrl)
             .header("Authorization", "Bearer $token")
             .get()
             .build()
-        executeJson(request) { payload -> json.decodeFromString<PlaybackQueueResponse>(payload) }
+        okHttpClient.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                throwApiException(response.code, body)
+            }
+            val payload = json.decodeFromString<PlaybackQueueResponse>(body)
+            val snapshot = QueueFetchDebugSnapshot(
+                selectedPlaylistId = playlistId,
+                requestUrl = requestUrl,
+                statusCode = response.code,
+                responseItemCount = payload.items.size,
+                responseContains409 = payload.items.any { it.itemId == DEBUG_TARGET_ITEM_ID },
+                responseBytes = body.toByteArray().size,
+                responseHash = sha256Short(body),
+            )
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    QUEUE_DEBUG_TAG,
+                    "requestUrl=$requestUrl playlistId=$playlistId status=${response.code} responseCount=${payload.items.size} contains409=${snapshot.responseContains409} bytes=${snapshot.responseBytes} hash=${snapshot.responseHash}",
+                )
+            }
+            QueueFetchResult(payload = payload, debugSnapshot = snapshot)
+        }
     }
 
     suspend fun getPlaylists(baseUrl: String, token: String): List<PlaylistSummary> = withContext(Dispatchers.IO) {
@@ -236,5 +273,10 @@ class ApiClient(
             else -> if (body.isNotBlank()) "HTTP $statusCode: $body" else "HTTP $statusCode"
         }
         throw ApiException(statusCode, message)
+    }
+
+    private fun sha256Short(body: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(body.toByteArray())
+        return digest.take(4).joinToString("") { "%02x".format(it) }
     }
 }
