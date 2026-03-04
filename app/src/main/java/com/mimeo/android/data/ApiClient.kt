@@ -241,6 +241,34 @@ class ApiClient(
         executeNoBody(request)
     }
 
+    suspend fun markItemDone(
+        baseUrl: String,
+        token: String,
+        itemId: Int,
+        autoArchive: Boolean = false,
+    ) = withContext(Dispatchers.IO) {
+        val autoArchiveFlag = if (autoArchive) 1 else 0
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/items/$itemId/done?auto_archive=$autoArchiveFlag"))
+            .header("Authorization", "Bearer $token")
+            .post(ByteArray(0).toRequestBody())
+            .build()
+        executeNoBody(request)
+    }
+
+    suspend fun resetItemDone(
+        baseUrl: String,
+        token: String,
+        itemId: Int,
+    ) = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/items/$itemId/reset"))
+            .header("Authorization", "Bearer $token")
+            .post(ByteArray(0).toRequestBody())
+            .build()
+        executeNoBody(request)
+    }
+
     private fun resolveUrl(baseUrl: String, path: String): String {
         val cleanBase = baseUrl.trim().trimEnd('/')
         val cleanPath = if (path.startsWith('/')) path else "/$path"

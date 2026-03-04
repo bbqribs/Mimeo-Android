@@ -191,6 +191,16 @@ class PlaybackRepository(
         }
     }
 
+    suspend fun toggleCompletion(baseUrl: String, token: String, itemId: Int, markDone: Boolean): ProgressPostResult {
+        return if (markDone) {
+            apiClient.markItemDone(baseUrl, token, itemId, autoArchive = false)
+            ProgressPostResult(queued = false)
+        } else {
+            apiClient.resetItemDone(baseUrl, token, itemId)
+            ProgressPostResult(queued = false)
+        }
+    }
+
     suspend fun flushPendingProgress(baseUrl: String, token: String): FlushProgressResult {
         val dao = database.pendingProgressDao()
         val pending = dao.listPending()
@@ -383,6 +393,30 @@ class PlaybackRepository(
         val clamped = percent.coerceIn(0, 100)
         val merged = maxOf(stored[idx].lastReadPercent ?: 0, clamped)
         stored[idx] = stored[idx].copy(lastReadPercent = merged)
+        val updatedAt = System.currentTimeMillis()
+        val updatedRow = row.copy(
+            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(stored)
+    }
+
+    suspend fun setNowPlayingItemCanonicalProgress(itemId: Int, percent: Int): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson).toMutableList()
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        val idx = stored.indexOfFirst { it.itemId == itemId }
+        if (idx < 0) {
+            return row.toSession(stored)
+        }
+
+        val clamped = percent.coerceIn(0, 100)
+        stored[idx] = stored[idx].copy(lastReadPercent = clamped)
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
             queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
