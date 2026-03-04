@@ -515,14 +515,14 @@ fun PlayerScreen(
                 onExpand = { isExpanded = true },
                 onMarkDone = {
                     actionScope.launch {
-                        val targetPercent = if (showCompleted) undoDonePercent else 100
-                        vm.postProgress(currentItemId, targetPercent)
+                        val markDone = !showCompleted
+                        val targetPercent = if (markDone) 100 else 97
+                        val resumePercent = if (markDone) currentPercent else undoDonePercent
+                        vm.toggleCompletion(currentItemId, markDone = markDone, resumePercent = resumePercent)
                             .onSuccess {
                                 localDonePercentOverride = targetPercent
                                 val toggleMessage = when {
-                                    showCompleted && it.queued -> "Done removal queued for sync"
                                     showCompleted -> "Marked not done"
-                                    it.queued -> "Done queued for sync"
                                     else -> "Marked done"
                                 }
                                 onShowSnackbar(toggleMessage, null, null)
@@ -530,14 +530,10 @@ fun PlayerScreen(
                                     nearEndForcedForItemId = -1
                                     lastObservedPercent = targetPercent
                                 }
-                                if (!showCompleted && chunks.isNotEmpty()) {
-                                    val last = chunks.last()
-                                    vm.setPlaybackPosition(currentItemId, chunks.lastIndex, last.length)
-                                }
                             }
                             .onFailure { error ->
                                 if (error is CancellationException) return@onFailure
-                                uiMessage = error.message ?: "Progress update failed"
+                                uiMessage = error.message ?: "Completion update failed"
                                 onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
                             }
                     }
@@ -711,9 +707,8 @@ fun PlayerScreen(
                 if (isSpeaking || isAutoPlaying) {
                     stopSpeaking(forceSync = true)
                 } else if (chunks.isNotEmpty()) {
-                    val restartFromStart = (effectivePercent >= DONE_PERCENT_THRESHOLD || nearEndForcedForItemId == currentItemId) ||
-                        (safePosition.chunkIndex == chunks.lastIndex &&
-                            safePosition.offsetInChunkChars >= chunks.last().length)
+                    val restartFromStart = safePosition.chunkIndex == chunks.lastIndex &&
+                        safePosition.offsetInChunkChars >= chunks.last().length
                     if (restartFromStart) {
                         setPlaybackPosition(0, 0)
                         nearEndForcedForItemId = -1

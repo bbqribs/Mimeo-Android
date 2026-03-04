@@ -804,6 +804,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    suspend fun toggleCompletion(itemId: Int, markDone: Boolean, resumePercent: Int): Result<ProgressPostResult> {
+        val current = settings.value
+        val canonicalPercent = if (markDone) 100 else 97
+        val clampedResume = resumePercent.coerceIn(0, canonicalPercent)
+        return try {
+            val result = repository.toggleCompletion(current.baseUrl, current.apiToken, itemId, markDone)
+            applyLocalCompletionState(
+                itemId = itemId,
+                canonicalPercent = canonicalPercent,
+                resumePercent = clampedResume,
+            )
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(result)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+            }
+            Result.failure(error)
+        }
+    }
+
     suspend fun resolveInitialPlayerItemId(fallbackItemId: Int): Int {
         val existing = nowPlayingSession.value
         val existingItem = existing?.currentItem
@@ -981,6 +1006,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         repository.setNowPlayingItemProgress(itemId, clamped)?.let { updated ->
+            _nowPlayingSession.value = updated
+        }
+    }
+
+    private suspend fun applyLocalCompletionState(itemId: Int, canonicalPercent: Int, resumePercent: Int) {
+        val clampedCanonical = canonicalPercent.coerceIn(0, 100)
+        val clampedResume = resumePercent.coerceIn(0, clampedCanonical)
+        _queueItems.update { existing ->
+            existing.map { item ->
+                if (item.itemId != itemId) {
+                    item
+                } else {
+                    item.copy(
+                        lastReadPercent = clampedCanonical,
+                        resumeReadPercent = clampedResume,
+                        apiProgressPercent = clampedResume,
+                        apiFurthestPercent = clampedCanonical,
+                    )
+                }
+            }
+        }
+        repository.setNowPlayingItemCanonicalProgress(itemId, clampedCanonical)?.let { updated ->
             _nowPlayingSession.value = updated
         }
     }
