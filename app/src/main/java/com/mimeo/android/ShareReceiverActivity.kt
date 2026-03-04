@@ -12,12 +12,14 @@ import androidx.activity.ComponentActivity
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.share.ShareSaveCoordinator
 import com.mimeo.android.share.ShareSaveResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import java.util.concurrent.atomic.AtomicInteger
 
 class ShareReceiverActivity : ComponentActivity() {
@@ -79,9 +81,10 @@ class ShareReceiverActivity : ComponentActivity() {
 private class ShareResultNotifications(
     private val context: Context,
 ) {
-    fun post(result: ShareSaveResult) {
+    suspend fun post(result: ShareSaveResult) {
         if (!canPostNotifications()) return
 
+        val settings = SettingsStore(context.applicationContext).settingsFlow.first()
         ensureChannel()
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.msr_check_circle_24)
@@ -91,6 +94,10 @@ private class ShareResultNotifications(
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setAutoCancel(true)
+
+        if (!settings.keepShareResultNotifications) {
+            builder.setTimeoutAfter(4_000L)
+        }
 
         if (result.opensSettings) {
             builder.addAction(

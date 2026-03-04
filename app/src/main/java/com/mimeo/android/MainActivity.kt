@@ -298,6 +298,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         token: String,
         autoAdvanceOnCompletion: Boolean,
         autoScrollWhileListening: Boolean,
+        keepShareResultNotifications: Boolean,
     ) {
         viewModelScope.launch {
             settingsStore.save(
@@ -305,6 +306,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 apiToken = token,
                 autoAdvanceOnCompletion = autoAdvanceOnCompletion,
                 autoScrollWhileListening = autoScrollWhileListening,
+                keepShareResultNotifications = keepShareResultNotifications,
                 playbackSpeed = settings.value.playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
                 defaultSavePlaylistId = settings.value.defaultSavePlaylistId,
@@ -329,6 +331,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 apiToken = settings.value.apiToken,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
+                keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 playbackSpeed = settings.value.playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
                 defaultSavePlaylistId = settings.value.defaultSavePlaylistId,
@@ -347,6 +350,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 apiToken = settings.value.apiToken,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
+                keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 playbackSpeed = playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
                 defaultSavePlaylistId = settings.value.defaultSavePlaylistId,

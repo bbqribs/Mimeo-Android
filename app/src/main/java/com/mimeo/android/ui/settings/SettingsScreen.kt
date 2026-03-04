@@ -56,6 +56,9 @@ fun SettingsScreen(
     var autoScrollWhileListening by remember(settings.autoScrollWhileListening) {
         mutableStateOf(settings.autoScrollWhileListening)
     }
+    var keepShareResultNotifications by remember(settings.keepShareResultNotifications) {
+        mutableStateOf(settings.keepShareResultNotifications)
+    }
     var readingFontSizeSp by remember(settings.readingFontSizeSp) {
         mutableIntStateOf(settings.readingFontSizeSp)
     }
@@ -72,7 +75,13 @@ fun SettingsScreen(
     var showDefaultSavePlaylistDialog by remember { mutableStateOf(false) }
 
     fun saveCurrent() {
-        vm.saveSettings(baseUrl, token, autoAdvance, autoScrollWhileListening)
+        vm.saveSettings(
+            baseUrl = baseUrl,
+            token = token,
+            autoAdvanceOnCompletion = autoAdvance,
+            autoScrollWhileListening = autoScrollWhileListening,
+            keepShareResultNotifications = keepShareResultNotifications,
+        )
     }
 
     fun saveReading(
@@ -197,6 +206,27 @@ fun SettingsScreen(
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text("Keep share result notifications")
+                        Text(
+                            text = "Off: share results drop away after about 4 seconds. On: results stay in the notification tray.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = keepShareResultNotifications,
+                        onCheckedChange = { keepShareResultNotifications = it },
+                    )
+                }
             }
         }
 
