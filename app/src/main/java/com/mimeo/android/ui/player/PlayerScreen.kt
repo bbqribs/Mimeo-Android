@@ -1,6 +1,8 @@
 package com.mimeo.android.ui.player
 
 import android.os.Build
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,8 +20,13 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -36,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
@@ -71,6 +79,7 @@ private fun debugLog(message: String) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PlayerScreen(
     vm: AppViewModel,
@@ -98,6 +107,7 @@ fun PlayerScreen(
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
+    var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
@@ -431,9 +441,9 @@ fun PlayerScreen(
     } else {
         "Needs network"
     }
-    val isDoneLocal = currentPercent >= DONE_PERCENT_THRESHOLD
-    val knownProgress = vm.knownProgressForItem(currentItemId)
-    val showCompleted = isDoneLocal || nearEndForcedForItemId == currentItemId || knownProgress >= DONE_PERCENT_THRESHOLD
+    val effectivePercent = if (localDonePercentOverride >= 0) localDonePercentOverride else currentPercent
+    val showCompleted = effectivePercent >= DONE_PERCENT_THRESHOLD || nearEndForcedForItemId == currentItemId
+    val undoDonePercent = effectivePercent.coerceIn(0, DONE_PERCENT_THRESHOLD - 1)
     var lastAppliedSpeed by remember { mutableStateOf(settings.playbackSpeed) }
 
     LaunchedEffect(settings.playbackSpeed, currentItemId, safePosition.chunkIndex, safePosition.offsetInChunkChars, chunks.size) {
@@ -476,12 +486,6 @@ fun PlayerScreen(
     val showRecoveryActions = uiMessage != null && (isRecoverableNetworkError || textPayload == null)
     val showDiagnosticsHint = showRecoveryActions && baseUrlHint != null
     val showLocalPlayerBanner = uiMessage != null && !showRecoveryActions && !showDiagnosticsHint
-    val sessionItemCount = nowPlayingSession?.items?.size ?: 0
-    val sessionIndex = nowPlayingSession?.let { session ->
-        val found = session.items.indexOfFirst { it.itemId == currentItemId }
-        val resolved = if (found >= 0) found else session.currentIndex
-        resolved.coerceIn(0, (session.items.size - 1).coerceAtLeast(0))
-    } ?: 0
     var overflowExpanded by remember { mutableStateOf(false) }
     val playlistChoices = playlists.map { playlist ->
         PlaylistPickerChoice(
@@ -501,41 +505,81 @@ fun PlayerScreen(
                 .weight(1f, fill = true),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            ExpandedPlayerTopBar(
+                speedLabel = formatPlaybackSpeed(settings.playbackSpeed),
+                overflowExpanded = overflowExpanded,
+                isExpanded = isExpanded,
+                canMarkDone = textPayload != null,
+                isDone = showCompleted,
+                onCollapse = { isExpanded = false },
+                onExpand = { isExpanded = true },
+                onMarkDone = {
+                    actionScope.launch {
+                        val targetPercent = if (showCompleted) undoDonePercent else 100
+                        vm.postProgress(currentItemId, targetPercent)
+                            .onSuccess {
+                                localDonePercentOverride = targetPercent
+                                val toggleMessage = when {
+                                    showCompleted && it.queued -> "Done removal queued for sync"
+                                    showCompleted -> "Marked not done"
+                                    it.queued -> "Done queued for sync"
+                                    else -> "Marked done"
+                                }
+                                onShowSnackbar(toggleMessage, null, null)
+                                if (showCompleted && chunks.isNotEmpty()) {
+                                    nearEndForcedForItemId = -1
+                                    lastObservedPercent = targetPercent
+                                }
+                                if (!showCompleted && chunks.isNotEmpty()) {
+                                    val last = chunks.last()
+                                    vm.setPlaybackPosition(currentItemId, chunks.lastIndex, last.length)
+                                }
+                            }
+                            .onFailure { error ->
+                                if (error is CancellationException) return@onFailure
+                                uiMessage = error.message ?: "Progress update failed"
+                                onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
+                            }
+                    }
+                },
+                onSpeed = { showSpeedDialog = true },
+                onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
+                overflowMenuContent = {
+                    LocusOverflowMenuItems(
+                        onOpenPlaylists = {
+                            overflowExpanded = false
+                            vm.refreshPlaylists()
+                            showPlaylistPicker = true
+                        },
+                        onBackToQueue = {
+                            overflowExpanded = false
+                            onBackToQueue(currentItemId)
+                        },
+                        onRestartSession = {
+                            overflowExpanded = false
+                            actionScope.launch {
+                                vm.restartNowPlayingSession()
+                                onShowSnackbar("Now Playing session restarted.", null, null)
+                            }
+                        },
+                        onClearSession = {
+                            overflowExpanded = false
+                            showClearSessionDialog = true
+                        },
+                        onOpenDiagnostics = {
+                            overflowExpanded = false
+                            onOpenDiagnostics()
+                        },
+                    )
+                },
+            )
             if (!isExpanded) {
                 LocusPeekCard(
                     title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
-                    sessionLine = if (sessionItemCount > 0) "Session ${sessionIndex + 1}/$sessionItemCount" else null,
-                    progressLine = "Progress $currentPercent%  -  Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability${if (showCompleted) "  -  Done" else ""}",
+                    statusLine = "Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability",
                     overflowExpanded = overflowExpanded,
-                    onExpand = { isExpanded = true },
-                    onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
                     overflowMenuContent = {
-                        LocusOverflowMenuItems(
-                            onOpenPlaylists = {
-                                overflowExpanded = false
-                                vm.refreshPlaylists()
-                                showPlaylistPicker = true
-                            },
-                            onBackToQueue = {
-                                overflowExpanded = false
-                                onBackToQueue(currentItemId)
-                            },
-                            onRestartSession = {
-                                overflowExpanded = false
-                                actionScope.launch {
-                                    vm.restartNowPlayingSession()
-                                    onShowSnackbar("Now Playing session restarted.", null, null)
-                                }
-                            },
-                            onClearSession = {
-                                overflowExpanded = false
-                                showClearSessionDialog = true
-                            },
-                            onOpenDiagnostics = {
-                                overflowExpanded = false
-                                onOpenDiagnostics()
-                            },
-                        )
+                        Spacer(modifier = Modifier)
                     },
                 )
                 playlistMutationMessage?.let { message ->
@@ -568,67 +612,6 @@ fun PlayerScreen(
                     CircularProgressIndicator()
                 }
             } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TextButton(onClick = { isExpanded = false }) {
-                            Text("Collapse")
-                        }
-                        TextButton(onClick = { showSpeedDialog = true }) {
-                            Text(formatPlaybackSpeed(settings.playbackSpeed))
-                        }
-                        LocusOverflowMenu(
-                            expanded = overflowExpanded,
-                            onExpandedChange = { expanded -> overflowExpanded = expanded },
-                        ) {
-                            LocusOverflowMenuItems(
-                                onOpenPlaylists = {
-                                    overflowExpanded = false
-                                    vm.refreshPlaylists()
-                                    showPlaylistPicker = true
-                                },
-                                onBackToQueue = {
-                                    overflowExpanded = false
-                                    onBackToQueue(currentItemId)
-                                },
-                                onRestartSession = {
-                                    overflowExpanded = false
-                                    actionScope.launch {
-                                        vm.restartNowPlayingSession()
-                                        onShowSnackbar("Now Playing session restarted.", null, null)
-                                    }
-                                },
-                                onClearSession = {
-                                    overflowExpanded = false
-                                    showClearSessionDialog = true
-                                },
-                                onOpenDiagnostics = {
-                                    overflowExpanded = false
-                                    onOpenDiagnostics()
-                                },
-                            )
-                        }
-                    }
-                }
-                Text(
-                    text = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (sessionItemCount > 0) {
-                    Text(
-                        text = "Session ${sessionIndex + 1}/$sessionItemCount",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Text(
-                    text = "Progress $currentPercent%  -  Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability${if (showCompleted) "  -  Done" else ""}",
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
                 playlistMutationMessage?.let { message ->
                     StatusBanner(
                         stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
@@ -690,12 +673,30 @@ fun PlayerScreen(
                 }
             }
         }
+        PlayerTitleMarqueeRow(
+            title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
+        )
         PlayerControlBar(
+            progressPercent = currentPercent,
+            canSeek = chunks.isNotEmpty(),
             canMoveBackward = chunks.size > 1 && safePosition.chunkIndex > 0,
             canMoveForward = chunks.size > 1 && safePosition.chunkIndex < chunks.lastIndex,
             canPlay = chunks.isNotEmpty(),
-            canMarkDone = textPayload != null,
             isPlaying = isSpeaking || isAutoPlaying,
+            onSeekToPercent = { targetPercent ->
+                if (chunks.isEmpty()) return@PlayerControlBar
+                localDonePercentOverride = targetPercent
+                if (targetPercent < DONE_PERCENT_THRESHOLD) {
+                    nearEndForcedForItemId = -1
+                    lastObservedPercent = targetPercent
+                }
+                val targetPosition = positionForPercent(targetPercent)
+                setPlaybackPosition(targetPosition.chunkIndex, targetPosition.offsetInChunkChars)
+                if (isSpeaking || isAutoPlaying) {
+                    isAutoPlaying = true
+                    playChunk(targetPosition.chunkIndex, targetPosition.offsetInChunkChars)
+                }
+            },
             onPreviousSegment = {
                 if (chunks.isNotEmpty() && safePosition.chunkIndex > 0) {
                     val target = safePosition.chunkIndex - 1
@@ -710,7 +711,7 @@ fun PlayerScreen(
                 if (isSpeaking || isAutoPlaying) {
                     stopSpeaking(forceSync = true)
                 } else if (chunks.isNotEmpty()) {
-                    val restartFromStart = showCompleted ||
+                    val restartFromStart = (effectivePercent >= DONE_PERCENT_THRESHOLD || nearEndForcedForItemId == currentItemId) ||
                         (safePosition.chunkIndex == chunks.lastIndex &&
                             safePosition.offsetInChunkChars >= chunks.last().length)
                     if (restartFromStart) {
@@ -749,24 +750,6 @@ fun PlayerScreen(
                         autoPlayAfterLoad = true
                         onOpenItem(prevId)
                     }
-                }
-            },
-            onMarkDone = {
-                actionScope.launch {
-                    vm.postProgress(currentItemId, 100)
-                        .onSuccess {
-                            uiMessage = if (it.queued) "Done queued for sync" else "Marked done"
-                            onShowSnackbar(uiMessage.orEmpty(), null, null)
-                            if (chunks.isNotEmpty()) {
-                                val last = chunks.last()
-                                vm.setPlaybackPosition(currentItemId, chunks.lastIndex, last.length)
-                            }
-                        }
-                        .onFailure { error ->
-                            if (error is CancellationException) return@onFailure
-                            uiMessage = error.message ?: "Progress update failed"
-                            onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
-                        }
                 }
             },
             onNextItem = {
@@ -878,13 +861,81 @@ fun PlayerScreen(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun ExpandedPlayerTopBar(
+    speedLabel: String,
+    overflowExpanded: Boolean,
+    isExpanded: Boolean,
+    canMarkDone: Boolean,
+    isDone: Boolean,
+    onCollapse: () -> Unit,
+    onExpand: () -> Unit,
+    onMarkDone: () -> Unit,
+    onSpeed: () -> Unit,
+    onOverflowExpandedChange: (Boolean) -> Unit,
+    overflowMenuContent: @Composable () -> Unit,
+) {
+    TopAppBar(
+        title = {},
+        actions = {
+            IconToggleButton(
+                checked = isDone,
+                enabled = canMarkDone,
+                onCheckedChange = { checked ->
+                    if (checked != isDone) {
+                        onMarkDone()
+                    }
+                },
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_check_circle_24),
+                    contentDescription = if (isDone) "Done" else "Mark done",
+                    tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                )
+            }
+            TextButton(onClick = if (isExpanded) onCollapse else onExpand) {
+                Text(if (isExpanded) "Collapse" else "Expand")
+            }
+            TextButton(onClick = onSpeed) {
+                Text(speedLabel)
+            }
+            LocusOverflowMenu(
+                expanded = overflowExpanded,
+                onExpandedChange = onOverflowExpandedChange,
+                content = overflowMenuContent,
+            )
+        },
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PlayerTitleMarqueeRow(
+    title: String,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            modifier = Modifier
+                .fillMaxWidth()
+                .basicMarquee(),
+            text = title,
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
+            fontSize = 12.sp,
+        )
+    }
+}
+
+@Composable
 private fun LocusPeekCard(
     title: String,
-    sessionLine: String?,
-    progressLine: String,
+    statusLine: String,
     overflowExpanded: Boolean,
-    onExpand: () -> Unit,
-    onOverflowExpandedChange: (Boolean) -> Unit,
     overflowMenuContent: @Composable () -> Unit,
 ) {
     ElevatedCard(
@@ -894,37 +945,14 @@ private fun LocusPeekCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(text = "Now playing")
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = onExpand) {
-                        Text("Expand")
-                    }
-                    LocusOverflowMenu(
-                        expanded = overflowExpanded,
-                        onExpandedChange = onOverflowExpandedChange,
-                        content = overflowMenuContent,
-                    )
-                }
-            }
             Text(
                 text = title,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            sessionLine?.let { session ->
-                Text(
-                    text = session,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
             Text(
-                text = progressLine,
-                maxLines = 3,
+                text = statusLine,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }
@@ -985,61 +1013,73 @@ private fun LocusOverflowMenuItems(
 
 @Composable
 private fun PlayerControlBar(
+    progressPercent: Int,
+    canSeek: Boolean,
     canMoveBackward: Boolean,
     canMoveForward: Boolean,
     canPlay: Boolean,
-    canMarkDone: Boolean,
     isPlaying: Boolean,
+    onSeekToPercent: (Int) -> Unit,
     onPreviousSegment: () -> Unit,
     onPlayPause: () -> Unit,
     onNextSegment: () -> Unit,
     onPreviousItem: () -> Unit,
-    onMarkDone: () -> Unit,
     onNextItem: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
+    var sliderValue by remember(progressPercent) { mutableStateOf(progressPercent.coerceIn(0, 100) / 100f) }
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        IconButton(onClick = onMarkDone, enabled = canMarkDone) {
-            Icon(
-                painter = painterResource(id = R.drawable.msr_check_circle_24),
-                contentDescription = "Mark done",
-            )
-        }
-        IconButton(onClick = onPreviousItem) {
-            Icon(
-                painter = painterResource(id = R.drawable.msr_skip_previous_24),
-                contentDescription = "Previous item",
-            )
-        }
-        IconButton(onClick = onPreviousSegment, enabled = canMoveBackward) {
-            Icon(
-                painter = painterResource(id = R.drawable.msr_fast_rewind_24),
-                contentDescription = "Previous segment",
-            )
-        }
-        IconButton(onClick = onPlayPause, enabled = canPlay) {
-            Icon(
-                painter = painterResource(
-                    id = if (isPlaying) R.drawable.msr_pause_24 else R.drawable.msr_play_arrow_24,
-                ),
-                contentDescription = if (isPlaying) "Pause playback" else "Play",
-            )
-        }
-        IconButton(onClick = onNextSegment, enabled = canMoveForward) {
-            Icon(
-                painter = painterResource(id = R.drawable.msr_fast_forward_24),
-                contentDescription = "Next segment",
-            )
-        }
-        IconButton(onClick = onNextItem) {
-            Icon(
-                painter = painterResource(id = R.drawable.msr_skip_next_24),
-                contentDescription = "Next item",
-            )
+        Slider(
+            value = sliderValue,
+            onValueChange = { sliderValue = it.coerceIn(0f, 1f) },
+            onValueChangeFinished = {
+                onSeekToPercent((sliderValue * 100).toInt().coerceIn(0, 100))
+            },
+            enabled = canSeek,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 28.dp),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            IconButton(onClick = onPreviousItem) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_skip_previous_24),
+                    contentDescription = "Previous item",
+                )
+            }
+            IconButton(onClick = onPreviousSegment, enabled = canMoveBackward) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_fast_rewind_24),
+                    contentDescription = "Previous segment",
+                )
+            }
+            IconButton(onClick = onPlayPause, enabled = canPlay) {
+                Icon(
+                    painter = painterResource(
+                        id = if (isPlaying) R.drawable.msr_pause_24 else R.drawable.msr_play_arrow_24,
+                    ),
+                    contentDescription = if (isPlaying) "Pause playback" else "Play",
+                )
+            }
+            IconButton(onClick = onNextSegment, enabled = canMoveForward) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_fast_forward_24),
+                    contentDescription = "Next segment",
+                )
+            }
+            IconButton(onClick = onNextItem) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_skip_next_24),
+                    contentDescription = "Next item",
+                )
+            }
         }
     }
 }
