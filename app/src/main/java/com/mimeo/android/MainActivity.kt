@@ -304,6 +304,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         token: String,
         autoAdvanceOnCompletion: Boolean,
         autoScrollWhileListening: Boolean,
+        forceSentenceHighlightFallback: Boolean,
         keepShareResultNotifications: Boolean,
     ) {
         viewModelScope.launch {
@@ -312,6 +313,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 apiToken = token,
                 autoAdvanceOnCompletion = autoAdvanceOnCompletion,
                 autoScrollWhileListening = autoScrollWhileListening,
+                forceSentenceHighlightFallback = forceSentenceHighlightFallback,
                 keepShareResultNotifications = keepShareResultNotifications,
                 playbackSpeed = settings.value.playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
@@ -337,6 +339,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 apiToken = settings.value.apiToken,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
+                forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 playbackSpeed = settings.value.playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
@@ -356,6 +359,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 apiToken = settings.value.apiToken,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
+                forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 playbackSpeed = playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
@@ -503,6 +507,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _settings.update { current -> current.copy(defaultSavePlaylistId = playlistId) }
             settingsStore.saveDefaultSavePlaylistId(playlistId)
+        }
+    }
+
+    fun saveForceSentenceHighlightFallback(enabled: Boolean) {
+        viewModelScope.launch {
+            _settings.update { current -> current.copy(forceSentenceHighlightFallback = enabled) }
+            settingsStore.saveForceSentenceHighlightFallback(enabled)
         }
     }
 

@@ -156,6 +156,7 @@ data class AppSettings(
     val apiToken: String = "",
     val autoAdvanceOnCompletion: Boolean = false,
     val autoScrollWhileListening: Boolean = true,
+    val forceSentenceHighlightFallback: Boolean = false,
     val keepShareResultNotifications: Boolean = false,
     val playbackSpeed: Float = 1.0f,
     val selectedPlaylistId: Int? = null,

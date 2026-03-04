@@ -24,6 +24,8 @@ class SettingsStore(private val context: Context) {
         booleanPreferencesKey("auto_advance_on_completion")
     private val autoScrollWhileListeningKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("auto_scroll_while_listening")
+    private val forceSentenceHighlightFallbackKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("force_sentence_highlight_fallback")
     private val keepShareResultNotificationsKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("keep_share_result_notifications")
     private val playbackSpeedKey: Preferences.Key<Float> =
@@ -47,6 +49,7 @@ class SettingsStore(private val context: Context) {
             apiToken = prefs[tokenKey] ?: "",
             autoAdvanceOnCompletion = prefs[autoAdvanceOnCompletionKey] ?: false,
             autoScrollWhileListening = prefs[autoScrollWhileListeningKey] ?: true,
+            forceSentenceHighlightFallback = prefs[forceSentenceHighlightFallbackKey] ?: false,
             keepShareResultNotifications = prefs[keepShareResultNotificationsKey] ?: false,
             playbackSpeed = prefs[playbackSpeedKey] ?: 1.0f,
             selectedPlaylistId = decodeSelectedPlaylistId(prefs[selectedPlaylistIdKey]),
@@ -65,6 +68,7 @@ class SettingsStore(private val context: Context) {
         apiToken: String,
         autoAdvanceOnCompletion: Boolean,
         autoScrollWhileListening: Boolean,
+        forceSentenceHighlightFallback: Boolean,
         keepShareResultNotifications: Boolean,
         playbackSpeed: Float,
         selectedPlaylistId: Int?,
@@ -79,6 +83,7 @@ class SettingsStore(private val context: Context) {
             prefs[tokenKey] = apiToken.trim()
             prefs[autoAdvanceOnCompletionKey] = autoAdvanceOnCompletion
             prefs[autoScrollWhileListeningKey] = autoScrollWhileListening
+            prefs[forceSentenceHighlightFallbackKey] = forceSentenceHighlightFallback
             prefs[keepShareResultNotificationsKey] = keepShareResultNotifications
             prefs[playbackSpeedKey] = playbackSpeed
             prefs[selectedPlaylistIdKey] = encodeSelectedPlaylistId(selectedPlaylistId)
@@ -119,6 +124,12 @@ class SettingsStore(private val context: Context) {
     suspend fun savePlaybackSpeed(playbackSpeed: Float) {
         context.dataStore.edit { prefs ->
             prefs[playbackSpeedKey] = playbackSpeed
+        }
+    }
+
+    suspend fun saveForceSentenceHighlightFallback(forceSentenceHighlightFallback: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[forceSentenceHighlightFallbackKey] = forceSentenceHighlightFallback
         }
     }
 }

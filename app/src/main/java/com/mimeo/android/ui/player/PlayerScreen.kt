@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
+import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.ItemTextResponse
@@ -72,7 +73,6 @@ private const val PROGRESS_SYNC_DEBOUNCE_MS = 2_000L
 private const val PROGRESS_CHAR_STEP = 120
 private const val FALLBACK_CHUNK_MAX_CHARS = 900
 private const val DONE_PERCENT_THRESHOLD = 98
-private const val DEBUG_DISABLE_RANGE_HIGHLIGHT = false
 private val PLAYBACK_SPEED_OPTIONS = listOf(0.8f, 0.9f, 1.0f, 1.1f, 1.25f, 1.5f, 1.75f, 2.0f)
 
 private fun debugLog(message: String) {
@@ -162,7 +162,7 @@ fun PlayerScreen(
                 if (event.chunkIndex != latestPosition.chunkIndex) return@TtsController
                 val safeIndex = event.chunkIndex.coerceIn(0, currentChunks.lastIndex)
                 val safeOffset = event.absoluteOffsetInChunk.coerceIn(0, currentChunks[safeIndex].length)
-                val safeRange = if (DEBUG_DISABLE_RANGE_HIGHLIGHT) {
+                val safeRange = if (BuildConfig.DEBUG && settings.forceSentenceHighlightFallback) {
                     null
                 } else {
                     event.activeRangeInChunk?.let { range ->
@@ -686,6 +686,7 @@ fun PlayerScreen(
                         currentChunkIndex = safePosition.chunkIndex,
                         currentChunkOffsetInChars = safePosition.offsetInChunkChars,
                         activeRangeInChunk = activeChunkRange,
+                        autoScrollWhileListening = settings.autoScrollWhileListening,
                         readingFontSizeSp = settings.readingFontSizeSp,
                         readingLineHeightPercent = settings.readingLineHeightPercent,
                         readingMaxWidthDp = settings.readingMaxWidthDp,
