@@ -667,6 +667,7 @@ fun PlayerScreen(
                         fullText = textPayload?.text,
                         chunks = chunks,
                         currentChunkIndex = safePosition.chunkIndex,
+                        currentChunkOffsetInChars = safePosition.offsetInChunkChars,
                         readingFontSizeSp = settings.readingFontSizeSp,
                         readingLineHeightPercent = settings.readingLineHeightPercent,
                         readingMaxWidthDp = settings.readingMaxWidthDp,

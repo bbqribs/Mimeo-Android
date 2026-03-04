@@ -21,7 +21,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -35,6 +37,7 @@ fun ReaderBody(
     fullText: String?,
     chunks: List<PlaybackChunk>,
     currentChunkIndex: Int,
+    currentChunkOffsetInChars: Int,
     readingFontSizeSp: Int,
     readingLineHeightPercent: Int,
     readingMaxWidthDp: Int,
@@ -50,6 +53,21 @@ fun ReaderBody(
     val safeChunkIndex = currentChunkIndex.coerceIn(0, (chunks.lastIndex).coerceAtLeast(0))
     val highlightBg = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f)
     val highlightFg = MaterialTheme.colorScheme.onPrimaryContainer
+    val sentenceRangesByChunk = remember(chunks) {
+        chunks.map { segmentSentences(it.text) }
+    }
+    // v1 uses the current TTS offset within the active chunk to resolve the sentence range.
+    // If the offset does not advance yet for a given platform/runtime, this naturally falls back
+    // to the first sentence in the chunk and still gives a stable, non-jumpy highlight.
+    val highlightedSentenceRange = remember(chunks, sentenceRangesByChunk, safeChunkIndex, currentChunkOffsetInChars) {
+        chunks.getOrNull(safeChunkIndex)?.let { chunk ->
+            findSentenceRangeForOffset(
+                text = chunk.text,
+                offsetInText = currentChunkOffsetInChars,
+                sentenceRanges = sentenceRangesByChunk.getOrNull(safeChunkIndex).orEmpty(),
+            ) ?: if (chunk.text.isNotEmpty()) SentenceRange(0, chunk.text.length) else null
+        }
+    }
     val readingTextStyle = MaterialTheme.typography.bodyMedium.merge(
         TextStyle(
             fontSize = readingFontSizeSp.sp,
@@ -66,7 +84,7 @@ fun ReaderBody(
                 val chunkRequesters = remember(chunks.size) {
                     List(chunks.size) { BringIntoViewRequester() }
                 }
-                LaunchedEffect(safeChunkIndex, chunks.size) {
+                LaunchedEffect(safeChunkIndex, highlightedSentenceRange, chunks.size) {
                     chunkRequesters.getOrNull(safeChunkIndex)?.bringIntoView()
                 }
                 Column(
@@ -77,24 +95,33 @@ fun ReaderBody(
                 ) {
                     chunks.forEachIndexed { index, chunk ->
                         val isHighlighted = index == safeChunkIndex
+                        val chunkText = if (isHighlighted && highlightedSentenceRange != null) {
+                            buildAnnotatedString {
+                                append(chunk.text)
+                                addStyle(
+                                    style = SpanStyle(
+                                        background = highlightBg,
+                                        color = highlightFg,
+                                        fontWeight = FontWeight.SemiBold,
+                                    ),
+                                    start = highlightedSentenceRange.start,
+                                    end = highlightedSentenceRange.endExclusive.coerceAtMost(chunk.text.length),
+                                )
+                            }
+                        } else {
+                            buildAnnotatedString { append(chunk.text) }
+                        }
                         Text(
-                            text = chunk.text,
+                            text = chunkText,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .bringIntoViewRequester(chunkRequesters[index])
                                 .background(
-                                    color = if (isHighlighted) highlightBg else MaterialTheme.colorScheme.surface,
+                                    color = MaterialTheme.colorScheme.surface,
                                     shape = MaterialTheme.shapes.medium,
                                 )
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
-                            style = if (isHighlighted) {
-                                readingTextStyle.copy(
-                                    color = highlightFg,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                            } else {
-                                readingTextStyle
-                            },
+                            style = readingTextStyle,
                         )
                         if (index < chunks.lastIndex) {
                             ParagraphSpacer(height = paragraphSpacingDp)
