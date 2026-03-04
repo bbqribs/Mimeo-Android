@@ -107,6 +107,7 @@ fun PlayerScreen(
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
+    var isRefreshing by remember { mutableStateOf(false) }
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
@@ -513,6 +514,23 @@ fun PlayerScreen(
                 isDone = showCompleted,
                 onCollapse = { isExpanded = false },
                 onExpand = { isExpanded = true },
+                onRefresh = {
+                    if (isRefreshing) return@ExpandedPlayerTopBar
+                    actionScope.launch {
+                        isRefreshing = true
+                        vm.refreshCurrentPlayerItem(currentItemId)
+                            .onSuccess {
+                                localDonePercentOverride = -1
+                                reloadNonce += 1
+                            }
+                            .onFailure { error ->
+                                if (error is CancellationException) return@onFailure
+                                uiMessage = error.message ?: "Refresh failed"
+                                onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
+                            }
+                        isRefreshing = false
+                    }
+                },
                 onMarkDone = {
                     actionScope.launch {
                         val markDone = !showCompleted
@@ -865,6 +883,7 @@ private fun ExpandedPlayerTopBar(
     isDone: Boolean,
     onCollapse: () -> Unit,
     onExpand: () -> Unit,
+    onRefresh: () -> Unit,
     onMarkDone: () -> Unit,
     onSpeed: () -> Unit,
     onOverflowExpandedChange: (Boolean) -> Unit,
@@ -890,6 +909,12 @@ private fun ExpandedPlayerTopBar(
             }
             TextButton(onClick = if (isExpanded) onCollapse else onExpand) {
                 Text(if (isExpanded) "Collapse" else "Expand")
+            }
+            IconButton(onClick = onRefresh) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_refresh_24),
+                    contentDescription = "Refresh item",
+                )
             }
             TextButton(onClick = onSpeed) {
                 Text(speedLabel)

@@ -778,6 +778,50 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    suspend fun refreshCurrentPlayerItem(itemId: Int): Result<Unit> {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        return try {
+            runCatching {
+                repository.listPlaylists(current.baseUrl, current.apiToken)
+            }.getOrNull()?.let { loaded ->
+                _playlists.value = loaded
+            }
+
+            val queueResult = repository.loadQueueAndPrefetch(
+                current.baseUrl,
+                current.apiToken,
+                playlistId = current.selectedPlaylistId,
+            )
+            val queue = queueResult.payload
+            _queueItems.value = queue.items
+            val appliedSnapshot = queueResult.debugSnapshot.copy(
+                appliedItemCount = _queueItems.value.size,
+                appliedContains409 = _queueItems.value.any { it.itemId == DEBUG_TARGET_ITEM_ID },
+                lastFetchAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()),
+            )
+            _lastQueueFetchDebug.value = appliedSnapshot
+            _cachedItemIds.value = repository.getCachedItemIds(queue.items.map { it.itemId })
+            repository.reconcileSessionWithQueue(queue.items)?.let { updated ->
+                _nowPlayingSession.value = updated
+            }
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            refreshPendingCount()
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                updateSyncBadgeState()
+            }
+            Result.failure(error)
+        }
+    }
+
     suspend fun postProgress(itemId: Int, percent: Int): Result<ProgressPostResult> {
         val current = settings.value
         val clamped = percent.coerceIn(0, 100)

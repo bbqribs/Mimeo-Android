@@ -426,6 +426,36 @@ class PlaybackRepository(
         return updatedRow.toSession(stored)
     }
 
+    suspend fun reconcileSessionWithQueue(queueItems: List<PlaybackQueueItem>): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson).toMutableList()
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+
+        val queueById = queueItems.associateBy { it.itemId }
+        val reconciled = stored.map { item ->
+            val refreshed = queueById[item.itemId] ?: return@map item
+            item.copy(
+                title = refreshed.title,
+                url = refreshed.url,
+                host = refreshed.host,
+                status = refreshed.status,
+                activeContentVersionId = refreshed.activeContentVersionId,
+                lastReadPercent = refreshed.lastReadPercent,
+            )
+        }
+        val updatedAt = System.currentTimeMillis()
+        val updatedRow = row.copy(
+            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), reconciled),
+            updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(reconciled)
+    }
+
     suspend fun clearSession() {
         database.nowPlayingDao().clear()
     }
