@@ -443,6 +443,7 @@ fun PlayerScreen(
     val isDoneLocal = currentPercent >= DONE_PERCENT_THRESHOLD
     val knownProgress = vm.knownProgressForItem(currentItemId)
     val showCompleted = isDoneLocal || nearEndForcedForItemId == currentItemId || knownProgress >= DONE_PERCENT_THRESHOLD
+    val undoDonePercent = currentPercent.coerceIn(0, DONE_PERCENT_THRESHOLD - 1)
     var lastAppliedSpeed by remember { mutableStateOf(settings.playbackSpeed) }
 
     LaunchedEffect(settings.playbackSpeed, currentItemId, safePosition.chunkIndex, safePosition.offsetInChunkChars, chunks.size) {
@@ -514,11 +515,21 @@ fun PlayerScreen(
                 onExpand = { isExpanded = true },
                 onMarkDone = {
                     actionScope.launch {
-                        vm.postProgress(currentItemId, 100)
+                        val targetPercent = if (showCompleted) undoDonePercent else 100
+                        vm.postProgress(currentItemId, targetPercent)
                             .onSuccess {
-                                uiMessage = if (it.queued) "Done queued for sync" else "Marked done"
+                                uiMessage = when {
+                                    showCompleted && it.queued -> "Done removal queued for sync"
+                                    showCompleted -> "Marked not done"
+                                    it.queued -> "Done queued for sync"
+                                    else -> "Marked done"
+                                }
                                 onShowSnackbar(uiMessage.orEmpty(), null, null)
-                                if (chunks.isNotEmpty()) {
+                                if (showCompleted && chunks.isNotEmpty()) {
+                                    nearEndForcedForItemId = -1
+                                    lastObservedPercent = targetPercent
+                                }
+                                if (!showCompleted && chunks.isNotEmpty()) {
                                     val last = chunks.last()
                                     vm.setPlaybackPosition(currentItemId, chunks.lastIndex, last.length)
                                 }
@@ -666,10 +677,20 @@ fun PlayerScreen(
         )
         PlayerControlBar(
             progressPercent = currentPercent,
+            canSeek = chunks.isNotEmpty(),
             canMoveBackward = chunks.size > 1 && safePosition.chunkIndex > 0,
             canMoveForward = chunks.size > 1 && safePosition.chunkIndex < chunks.lastIndex,
             canPlay = chunks.isNotEmpty(),
             isPlaying = isSpeaking || isAutoPlaying,
+            onSeekToPercent = { targetPercent ->
+                if (chunks.isEmpty()) return@PlayerControlBar
+                val targetPosition = positionForPercent(targetPercent)
+                setPlaybackPosition(targetPosition.chunkIndex, targetPosition.offsetInChunkChars)
+                if (isSpeaking || isAutoPlaying) {
+                    isAutoPlaying = true
+                    playChunk(targetPosition.chunkIndex, targetPosition.offsetInChunkChars)
+                }
+            },
             onPreviousSegment = {
                 if (chunks.isNotEmpty() && safePosition.chunkIndex > 0) {
                     val target = safePosition.chunkIndex - 1
@@ -987,24 +1008,30 @@ private fun LocusOverflowMenuItems(
 @Composable
 private fun PlayerControlBar(
     progressPercent: Int,
+    canSeek: Boolean,
     canMoveBackward: Boolean,
     canMoveForward: Boolean,
     canPlay: Boolean,
     isPlaying: Boolean,
+    onSeekToPercent: (Int) -> Unit,
     onPreviousSegment: () -> Unit,
     onPlayPause: () -> Unit,
     onNextSegment: () -> Unit,
     onPreviousItem: () -> Unit,
     onNextItem: () -> Unit,
 ) {
+    var sliderValue by remember(progressPercent) { mutableStateOf(progressPercent.coerceIn(0, 100) / 100f) }
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Slider(
-            value = progressPercent.coerceIn(0, 100) / 100f,
-            onValueChange = {},
-            enabled = false,
+            value = sliderValue,
+            onValueChange = { sliderValue = it.coerceIn(0f, 1f) },
+            onValueChangeFinished = {
+                onSeekToPercent((sliderValue * 100).toInt().coerceIn(0, 100))
+            },
+            enabled = canSeek,
             modifier = Modifier.fillMaxWidth(),
         )
         Row(
