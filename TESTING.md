@@ -12,6 +12,16 @@ Copy this checklist into any PR that changes Locus or player UI:
 - Playback speed remains in the expanded Locus header unless a separate decision changes it.
 - Run manual sanity on a narrow-width device or emulator before merging.
 
+## Player screen layout sanity
+
+Copy this checklist into any PR that changes `PlayerScreen` or the Locus playback layout:
+
+- Top action bar is present.
+- Title marquee row is present when that work is in scope.
+- Player controls remain pinned above the bottom nav with no overlap.
+- Reader body remains scrollable and separate from the pinned controls.
+- Highlight is visible during playback when that work is in scope.
+
 ## Share-sheet manual sanity
 
 Run this checklist for PRs that touch share-sheet saving, notifications, or save routing:
