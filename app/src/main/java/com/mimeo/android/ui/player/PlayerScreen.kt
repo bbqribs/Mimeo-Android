@@ -114,6 +114,7 @@ fun PlayerScreen(
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     val readerScrollState = rememberSaveable(currentItemId, saver = ScrollState.Saver) { ScrollState(0) }
     var activeChunkRange by remember { mutableStateOf<IntRange?>(null) }
+    var readerScrollTriggerSignal by rememberSaveable { mutableIntStateOf(0) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
@@ -347,6 +348,7 @@ fun PlayerScreen(
                 usingCachedText = loaded.usingCache
                 chunks = buildChunks(payload)
                 preserveVisibleContentOnReload = false
+                readerScrollTriggerSignal += 1
 
                 val saved = vm.getPlaybackPosition(currentItemId)
                 val knownProgress = vm.knownProgressForItem(currentItemId)
@@ -688,6 +690,7 @@ fun PlayerScreen(
                         currentChunkIndex = safePosition.chunkIndex,
                         currentChunkOffsetInChars = safePosition.offsetInChunkChars,
                         activeRangeInChunk = activeChunkRange,
+                        scrollTriggerSignal = readerScrollTriggerSignal,
                         autoScrollWhileListening = settings.autoScrollWhileListening,
                         readingFontSizeSp = settings.readingFontSizeSp,
                         readingLineHeightPercent = settings.readingLineHeightPercent,
@@ -750,6 +753,7 @@ fun PlayerScreen(
                     } else {
                         safePosition
                     }
+                    readerScrollTriggerSignal += 1
                     playChunk(positionToPlay.chunkIndex, positionToPlay.offsetInChunkChars)
                 }
             },

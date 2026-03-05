@@ -16,9 +16,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
@@ -45,6 +47,7 @@ fun ReaderBody(
     currentChunkIndex: Int,
     currentChunkOffsetInChars: Int,
     activeRangeInChunk: IntRange?,
+    scrollTriggerSignal: Int,
     autoScrollWhileListening: Boolean,
     readingFontSizeSp: Int,
     readingLineHeightPercent: Int,
@@ -66,6 +69,8 @@ fun ReaderBody(
     }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     var activeTextLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    var wasFullyVisible by remember { mutableStateOf<Boolean?>(null) }
+    var lastHandledScrollTrigger by remember { mutableIntStateOf(scrollTriggerSignal) }
     val highlightedSentenceRange = remember(chunks, sentenceRangesByChunk, safeChunkIndex, currentChunkOffsetInChars, activeRangeInChunk) {
         chunks.getOrNull(safeChunkIndex)?.let { chunk ->
             val offsetForSentence = activeRangeInChunk?.first ?: currentChunkOffsetInChars
@@ -85,6 +90,11 @@ fun ReaderBody(
     val density = androidx.compose.ui.platform.LocalDensity.current
     val topComfortPx = with(density) { READER_SCROLL_TOP_PADDING.roundToPx().toFloat() }
     val bottomComfortPx = with(density) { READER_SCROLL_BOTTOM_PADDING.roundToPx().toFloat() }
+    val anchorRange = resolveReaderHighlightRange(
+        textLength = chunks.getOrNull(safeChunkIndex)?.text?.length ?: 0,
+        activeRange = activeRangeInChunk,
+        sentenceRange = highlightedSentenceRange,
+    )
 
     Box(
         modifier = modifier.onSizeChanged { viewportSize = it },
@@ -159,38 +169,51 @@ fun ReaderBody(
         }
     }
 
-    LaunchedEffect(
-        autoScrollWhileListening,
-        safeChunkIndex,
-        activeRangeInChunk,
-        highlightedSentenceRange,
-        viewportSize,
-        activeTextLayout,
-    ) {
-        if (!autoScrollWhileListening) return@LaunchedEffect
+    LaunchedEffect(anchorRange, activeTextLayout, viewportSize) {
         val layout = activeTextLayout ?: return@LaunchedEffect
+        val anchor = anchorRange ?: return@LaunchedEffect
         if (viewportSize.height <= 0) return@LaunchedEffect
-        val anchor = resolveReaderHighlightRange(
-            textLength = chunks.getOrNull(safeChunkIndex)?.text?.length ?: 0,
-            activeRange = activeRangeInChunk,
-            sentenceRange = highlightedSentenceRange,
-        ) ?: return@LaunchedEffect
+        snapshotFlow { scrollState.value }
+            .collect { scrollValue ->
+                val startBox = layout.getCursorRect(anchor.first)
+                val endIndex = anchor.last.coerceAtLeast(anchor.first)
+                val endBox = layout.getCursorRect(endIndex)
+                val visibleTop = scrollValue.toFloat()
+                val visibleBottom = visibleTop + viewportSize.height.toFloat()
+                val fullyVisible = startBox.top >= visibleTop && endBox.bottom <= (visibleBottom - bottomComfortPx)
+                wasFullyVisible = fullyVisible
+            }
+    }
+
+    LaunchedEffect(scrollTriggerSignal, anchorRange, activeTextLayout, viewportSize, autoScrollWhileListening) {
+        val layout = activeTextLayout ?: return@LaunchedEffect
+        val anchor = anchorRange ?: return@LaunchedEffect
+        if (viewportSize.height <= 0) return@LaunchedEffect
 
         val startBox = layout.getCursorRect(anchor.first)
-        val endIndex = (anchor.last).coerceAtLeast(anchor.first)
+        val endIndex = anchor.last.coerceAtLeast(anchor.first)
         val endBox = layout.getCursorRect(endIndex)
-        val top = startBox.top
-        val bottom = endBox.bottom
         val visibleTop = scrollState.value.toFloat()
         val visibleBottom = visibleTop + viewportSize.height.toFloat()
         val desiredBottom = visibleBottom - bottomComfortPx
+        val fullyVisibleNow = startBox.top >= visibleTop && endBox.bottom <= desiredBottom
 
-        if (bottom <= desiredBottom) return@LaunchedEffect
-        val target = (top - topComfortPx).roundToInt().coerceIn(0, scrollState.maxValue)
+        val externalTrigger = scrollTriggerSignal != lastHandledScrollTrigger
+        if (externalTrigger) {
+            lastHandledScrollTrigger = scrollTriggerSignal
+        }
+        val transitionTrigger = autoScrollWhileListening && wasFullyVisible == true && !fullyVisibleNow
+        val shouldScroll = externalTrigger || transitionTrigger
+        if (!shouldScroll || fullyVisibleNow) {
+            wasFullyVisible = fullyVisibleNow
+            return@LaunchedEffect
+        }
 
+        val target = (startBox.top - topComfortPx).roundToInt().coerceIn(0, scrollState.maxValue)
         if (target != scrollState.value) {
             scrollState.animateScrollTo(target)
         }
+        wasFullyVisible = true
     }
 }
 
