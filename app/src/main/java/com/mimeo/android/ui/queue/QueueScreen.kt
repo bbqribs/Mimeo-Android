@@ -90,9 +90,11 @@ fun QueueScreen(
     var rowMenuItemId by remember { mutableIntStateOf(-1) }
     var playlistPickerItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
+    var topActionsMenuExpanded by remember { mutableStateOf(false) }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedFilter by rememberSaveable { mutableStateOf(QueueFilterChip.ALL) }
+    var showQueueFetchDebug by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         vm.refreshPlaylists()
@@ -211,6 +213,36 @@ fun QueueScreen(
                     }
                 }
             }
+            if (BuildConfig.DEBUG) {
+                Box {
+                    IconButton(onClick = { topActionsMenuExpanded = true }) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.msr_more_vert_24),
+                            contentDescription = "Queue actions",
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = topActionsMenuExpanded,
+                        onDismissRequest = { topActionsMenuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (showQueueFetchDebug) {
+                                        "Hide debug fetch"
+                                    } else {
+                                        "Show debug fetch"
+                                    },
+                                )
+                            },
+                            onClick = {
+                                showQueueFetchDebug = !showQueueFetchDebug
+                                topActionsMenuExpanded = false
+                            },
+                        )
+                    }
+                }
+            }
         }
         Text(
             modifier = Modifier.fillMaxWidth(),
@@ -218,7 +250,7 @@ fun QueueScreen(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        if (BuildConfig.DEBUG && lastQueueFetchDebug.statusCode != null) {
+        if (BuildConfig.DEBUG && showQueueFetchDebug && lastQueueFetchDebug.statusCode != null) {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier
