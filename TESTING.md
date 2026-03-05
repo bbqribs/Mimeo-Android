@@ -22,6 +22,16 @@ Copy this checklist into any PR that changes `PlayerScreen` or the Locus playbac
 - Reader body remains scrollable and separate from the pinned controls.
 - Highlight is visible during playback when that work is in scope.
 
+## Reader auto-scroll invariants
+
+Copy this checklist into any PR that changes `ReaderBody`, highlight selection, or player scroll triggers:
+
+- Anchor triggers are explicit only: Locus tab tap and Play action.
+- Highlight/viewport visibility math uses root-space alignment.
+- Explicit trigger consumption is deferred until scroll bounds are ready.
+- Auto-scroll transition trigger fires only when highlight crosses out at the bottom edge.
+- Manual-scroll suppression is time-bounded (about 1.2 seconds).
+
 ## Share-sheet manual sanity
 
 Run this checklist for PRs that touch share-sheet saving, notifications, or save routing:
