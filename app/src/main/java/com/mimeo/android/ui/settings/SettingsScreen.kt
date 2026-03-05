@@ -33,6 +33,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mimeo.android.AppViewModel
+import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.ui.theme.ReaderLiterataFontFamily
 
@@ -55,6 +56,9 @@ fun SettingsScreen(
     }
     var autoScrollWhileListening by remember(settings.autoScrollWhileListening) {
         mutableStateOf(settings.autoScrollWhileListening)
+    }
+    var forceSentenceHighlightFallback by remember(settings.forceSentenceHighlightFallback) {
+        mutableStateOf(settings.forceSentenceHighlightFallback)
     }
     var keepShareResultNotifications by remember(settings.keepShareResultNotifications) {
         mutableStateOf(settings.keepShareResultNotifications)
@@ -80,6 +84,7 @@ fun SettingsScreen(
             token = token,
             autoAdvanceOnCompletion = autoAdvance,
             autoScrollWhileListening = autoScrollWhileListening,
+            forceSentenceHighlightFallback = forceSentenceHighlightFallback,
             keepShareResultNotifications = keepShareResultNotifications,
         )
     }
@@ -261,6 +266,43 @@ fun SettingsScreen(
                     )
                 }
                 Text("Emulator default: http://10.0.2.2:8000")
+            }
+        }
+
+        if (BuildConfig.DEBUG) {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text("Debug")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text("Force sentence highlight fallback")
+                            Text(
+                                text = "Disables TTS range-level highlighting so you can verify the sentence-level fallback path.",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = forceSentenceHighlightFallback,
+                            onCheckedChange = {
+                                forceSentenceHighlightFallback = it
+                                vm.saveForceSentenceHighlightFallback(it)
+                            },
+                        )
+                    }
+                }
             }
         }
 

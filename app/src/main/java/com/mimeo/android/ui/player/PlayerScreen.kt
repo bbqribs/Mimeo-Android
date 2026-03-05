@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
+import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.ItemTextResponse
@@ -87,6 +88,7 @@ fun PlayerScreen(
     onShowSnackbar: (String, String?, String?) -> Unit,
     initialItemId: Int,
     startExpanded: Boolean = false,
+    locusTapSignal: Int = 0,
     onOpenItem: (Int) -> Unit,
     onBackToQueue: (Int?) -> Unit,
     onOpenDiagnostics: () -> Unit,
@@ -112,12 +114,15 @@ fun PlayerScreen(
     var preserveVisibleContentOnReload by remember { mutableStateOf(false) }
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     val readerScrollState = rememberSaveable(currentItemId, saver = ScrollState.Saver) { ScrollState(0) }
+    var activeChunkRange by remember { mutableStateOf<IntRange?>(null) }
+    var readerScrollTriggerSignal by rememberSaveable { mutableIntStateOf(0) }
+    var lastHandledLocusTapSignal by rememberSaveable { mutableIntStateOf(locusTapSignal) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
     var lastObservedPercent by remember { mutableIntStateOf(-1) }
     var nearEndForcedForItemId by remember { mutableIntStateOf(-1) }
-    var isExpanded by rememberSaveable(initialItemId, startExpanded) { mutableStateOf(startExpanded) }
+    var isExpanded by rememberSaveable { mutableStateOf(true) }
     val playbackPositionByItem by vm.playbackPositionByItem.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
@@ -146,6 +151,7 @@ fun PlayerScreen(
                     debugLog("ignore stale onDone utterance=${event.utteranceId} eventChunk=${event.chunkIndex} currentChunk=${latestPosition.chunkIndex}")
                     return@TtsController
                 }
+                activeChunkRange = null
                 pendingDoneEvent = PlaybackDoneEvent(
                     utteranceId = event.utteranceId,
                     itemId = event.itemId,
@@ -159,6 +165,18 @@ fun PlayerScreen(
                 if (event.chunkIndex != latestPosition.chunkIndex) return@TtsController
                 val safeIndex = event.chunkIndex.coerceIn(0, currentChunks.lastIndex)
                 val safeOffset = event.absoluteOffsetInChunk.coerceIn(0, currentChunks[safeIndex].length)
+                val safeRange = if (BuildConfig.DEBUG && settings.forceSentenceHighlightFallback) {
+                    null
+                } else {
+                    event.activeRangeInChunk?.let { range ->
+                        val start = range.first.coerceIn(0, currentChunks[safeIndex].length)
+                        val endExclusive = (range.last + 1).coerceIn(0, currentChunks[safeIndex].length)
+                        if (endExclusive > start) start until endExclusive else null
+                    }
+                }
+                if (safeRange != activeChunkRange) {
+                    activeChunkRange = safeRange
+                }
                 val currentOffset = latestPosition.offsetInChunkChars.coerceAtLeast(0)
                 if (safeOffset > currentOffset) {
                     vm.setPlaybackPosition(
@@ -286,6 +304,7 @@ fun PlayerScreen(
         ttsController.stop()
         isSpeaking = false
         isAutoPlaying = false
+        activeChunkRange = null
         if (forceSync) {
             actionScope.launch { syncProgress(force = true) }
         }
@@ -304,6 +323,12 @@ fun PlayerScreen(
         resolvedInitial = true
     }
 
+    LaunchedEffect(locusTapSignal) {
+        if (locusTapSignal == lastHandledLocusTapSignal) return@LaunchedEffect
+        lastHandledLocusTapSignal = locusTapSignal
+        readerScrollTriggerSignal += 1
+    }
+
     LaunchedEffect(currentItemId, resolvedInitial, reloadNonce) {
         if (!resolvedInitial) return@LaunchedEffect
         stopSpeaking(forceSync = false)
@@ -316,6 +341,7 @@ fun PlayerScreen(
             chunks = emptyList()
         }
         pendingDoneEvent = null
+        activeChunkRange = null
         lastHandledDoneUtteranceId = null
         lastSyncedPercent = -1
         lastSyncedAbsoluteChars = -1
@@ -330,6 +356,7 @@ fun PlayerScreen(
                 usingCachedText = loaded.usingCache
                 chunks = buildChunks(payload)
                 preserveVisibleContentOnReload = false
+                readerScrollTriggerSignal += 1
 
                 val saved = vm.getPlaybackPosition(currentItemId)
                 val knownProgress = vm.knownProgressForItem(currentItemId)
@@ -511,11 +538,8 @@ fun PlayerScreen(
             ExpandedPlayerTopBar(
                 speedLabel = formatPlaybackSpeed(settings.playbackSpeed),
                 overflowExpanded = overflowExpanded,
-                isExpanded = isExpanded,
                 canMarkDone = textPayload != null,
                 isDone = showCompleted,
-                onCollapse = { isExpanded = false },
-                onExpand = { isExpanded = true },
                 onRefresh = {
                     if (isRefreshing) return@ExpandedPlayerTopBar
                     actionScope.launch {
@@ -586,6 +610,11 @@ fun PlayerScreen(
                         onOpenDiagnostics = {
                             overflowExpanded = false
                             onOpenDiagnostics()
+                        },
+                        isExpanded = isExpanded,
+                        onToggleExpanded = {
+                            overflowExpanded = false
+                            isExpanded = !isExpanded
                         },
                     )
                 },
@@ -668,6 +697,9 @@ fun PlayerScreen(
                         chunks = chunks,
                         currentChunkIndex = safePosition.chunkIndex,
                         currentChunkOffsetInChars = safePosition.offsetInChunkChars,
+                        activeRangeInChunk = activeChunkRange,
+                        scrollTriggerSignal = readerScrollTriggerSignal,
+                        autoScrollWhileListening = settings.autoScrollWhileListening,
                         readingFontSizeSp = settings.readingFontSizeSp,
                         readingLineHeightPercent = settings.readingLineHeightPercent,
                         readingMaxWidthDp = settings.readingMaxWidthDp,
@@ -729,6 +761,7 @@ fun PlayerScreen(
                     } else {
                         safePosition
                     }
+                    readerScrollTriggerSignal += 1
                     playChunk(positionToPlay.chunkIndex, positionToPlay.offsetInChunkChars)
                 }
             },
@@ -869,11 +902,8 @@ fun PlayerScreen(
 private fun ExpandedPlayerTopBar(
     speedLabel: String,
     overflowExpanded: Boolean,
-    isExpanded: Boolean,
     canMarkDone: Boolean,
     isDone: Boolean,
-    onCollapse: () -> Unit,
-    onExpand: () -> Unit,
     onRefresh: () -> Unit,
     onMarkDone: () -> Unit,
     onSpeed: () -> Unit,
@@ -897,9 +927,6 @@ private fun ExpandedPlayerTopBar(
                     contentDescription = if (isDone) "Mark as not done" else "Mark as done",
                     tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                 )
-            }
-            TextButton(onClick = if (isExpanded) onCollapse else onExpand) {
-                Text(if (isExpanded) "Collapse" else "Expand")
             }
             IconButton(onClick = onRefresh) {
                 Icon(
@@ -999,10 +1026,16 @@ private fun LocusOverflowMenuItems(
     onRestartSession: () -> Unit,
     onClearSession: () -> Unit,
     onOpenDiagnostics: () -> Unit,
+    isExpanded: Boolean,
+    onToggleExpanded: () -> Unit,
 ) {
     DropdownMenuItem(
         text = { Text("Playlists...") },
         onClick = onOpenPlaylists,
+    )
+    DropdownMenuItem(
+        text = { Text(if (isExpanded) "Collapse player" else "Expand player") },
+        onClick = onToggleExpanded,
     )
     DropdownMenuItem(
         text = { Text("Back to queue") },
