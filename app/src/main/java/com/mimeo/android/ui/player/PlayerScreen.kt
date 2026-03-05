@@ -826,7 +826,9 @@ fun PlayerScreen(
                 }
             }
         }
-            renderPlayerControlBar()
+            if (controlsMode != PlayerControlsMode.NUB) {
+                renderPlayerControlBar()
+            }
         }
     }
 
