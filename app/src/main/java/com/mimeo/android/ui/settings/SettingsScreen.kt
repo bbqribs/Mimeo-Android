@@ -54,8 +54,14 @@ fun SettingsScreen(
     var autoAdvance by remember(settings.autoAdvanceOnCompletion) {
         mutableStateOf(settings.autoAdvanceOnCompletion)
     }
+    var persistentPlayerEnabled by remember(settings.persistentPlayerEnabled) {
+        mutableStateOf(settings.persistentPlayerEnabled)
+    }
     var autoScrollWhileListening by remember(settings.autoScrollWhileListening) {
         mutableStateOf(settings.autoScrollWhileListening)
+    }
+    var continuousNowPlayingMarquee by remember(settings.continuousNowPlayingMarquee) {
+        mutableStateOf(settings.continuousNowPlayingMarquee)
     }
     var forceSentenceHighlightFallback by remember(settings.forceSentenceHighlightFallback) {
         mutableStateOf(settings.forceSentenceHighlightFallback)
@@ -83,7 +89,9 @@ fun SettingsScreen(
             baseUrl = baseUrl,
             token = token,
             autoAdvanceOnCompletion = autoAdvance,
+            persistentPlayerEnabled = persistentPlayerEnabled,
             autoScrollWhileListening = autoScrollWhileListening,
+            continuousNowPlayingMarquee = continuousNowPlayingMarquee,
             forceSentenceHighlightFallback = forceSentenceHighlightFallback,
             keepShareResultNotifications = keepShareResultNotifications,
         )
@@ -259,10 +267,32 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
+                    Text("Persistent player across tabs")
+                    Switch(
+                        checked = persistentPlayerEnabled,
+                        onCheckedChange = { persistentPlayerEnabled = it },
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
                     Text("Auto-scroll while listening")
                     Switch(
                         checked = autoScrollWhileListening,
                         onCheckedChange = { autoScrollWhileListening = it },
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("Continuous now-playing marquee")
+                    Switch(
+                        checked = continuousNowPlayingMarquee,
+                        onCheckedChange = { continuousNowPlayingMarquee = it },
                     )
                 }
                 Text("Emulator default: http://10.0.2.2:8000")

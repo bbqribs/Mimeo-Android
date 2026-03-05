@@ -84,11 +84,13 @@ fun PlayerScreen(
     vm: AppViewModel,
     onShowSnackbar: (String, String?, String?) -> Unit,
     initialItemId: Int,
+    requestedItemId: Int? = null,
     startExpanded: Boolean = false,
     locusTapSignal: Int = 0,
     onOpenItem: (Int) -> Unit,
-    onBackToQueue: (Int?) -> Unit,
     onOpenDiagnostics: () -> Unit,
+    stopPlaybackOnDispose: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     var currentItemId by rememberSaveable { mutableIntStateOf(initialItemId) }
     var resolvedInitial by rememberSaveable { mutableStateOf(false) }
@@ -308,8 +310,9 @@ fun PlayerScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            // Keep playback alive while navigating between tabs/screens.
-            // Lifecycle-driven shutdown remains process-level for this slice.
+            if (stopPlaybackOnDispose) {
+                ttsController.shutdown()
+            }
         }
     }
 
@@ -318,6 +321,15 @@ fun PlayerScreen(
         val resolvedId = vm.resolveInitialPlayerItemId(initialItemId)
         currentItemId = resolvedId
         resolvedInitial = true
+    }
+
+    LaunchedEffect(requestedItemId, resolvedInitial) {
+        if (!resolvedInitial) return@LaunchedEffect
+        val target = requestedItemId ?: return@LaunchedEffect
+        if (target == currentItemId) return@LaunchedEffect
+        stopSpeaking(forceSync = true)
+        currentItemId = target
+        autoPlayAfterLoad = false
     }
 
     LaunchedEffect(locusTapSignal) {
@@ -523,7 +535,9 @@ fun PlayerScreen(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .then(modifier),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Column(

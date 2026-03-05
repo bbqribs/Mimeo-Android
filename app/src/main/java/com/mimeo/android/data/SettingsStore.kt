@@ -22,8 +22,12 @@ class SettingsStore(private val context: Context) {
     private val tokenKey: Preferences.Key<String> = stringPreferencesKey("api_token")
     private val autoAdvanceOnCompletionKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("auto_advance_on_completion")
+    private val persistentPlayerEnabledKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("persistent_player_enabled")
     private val autoScrollWhileListeningKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("auto_scroll_while_listening")
+    private val continuousNowPlayingMarqueeKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("continuous_now_playing_marquee")
     private val forceSentenceHighlightFallbackKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("force_sentence_highlight_fallback")
     private val keepShareResultNotificationsKey: Preferences.Key<Boolean> =
@@ -48,7 +52,9 @@ class SettingsStore(private val context: Context) {
             baseUrl = prefs[baseUrlKey] ?: "http://10.0.2.2:8000",
             apiToken = prefs[tokenKey] ?: "",
             autoAdvanceOnCompletion = prefs[autoAdvanceOnCompletionKey] ?: false,
+            persistentPlayerEnabled = prefs[persistentPlayerEnabledKey] ?: true,
             autoScrollWhileListening = prefs[autoScrollWhileListeningKey] ?: true,
+            continuousNowPlayingMarquee = prefs[continuousNowPlayingMarqueeKey] ?: true,
             forceSentenceHighlightFallback = prefs[forceSentenceHighlightFallbackKey] ?: false,
             keepShareResultNotifications = prefs[keepShareResultNotificationsKey] ?: false,
             playbackSpeed = prefs[playbackSpeedKey] ?: 1.0f,
@@ -67,7 +73,9 @@ class SettingsStore(private val context: Context) {
         baseUrl: String,
         apiToken: String,
         autoAdvanceOnCompletion: Boolean,
+        persistentPlayerEnabled: Boolean,
         autoScrollWhileListening: Boolean,
+        continuousNowPlayingMarquee: Boolean,
         forceSentenceHighlightFallback: Boolean,
         keepShareResultNotifications: Boolean,
         playbackSpeed: Float,
@@ -82,7 +90,9 @@ class SettingsStore(private val context: Context) {
             prefs[baseUrlKey] = baseUrl.trim()
             prefs[tokenKey] = apiToken.trim()
             prefs[autoAdvanceOnCompletionKey] = autoAdvanceOnCompletion
+            prefs[persistentPlayerEnabledKey] = persistentPlayerEnabled
             prefs[autoScrollWhileListeningKey] = autoScrollWhileListening
+            prefs[continuousNowPlayingMarqueeKey] = continuousNowPlayingMarquee
             prefs[forceSentenceHighlightFallbackKey] = forceSentenceHighlightFallback
             prefs[keepShareResultNotificationsKey] = keepShareResultNotifications
             prefs[playbackSpeedKey] = playbackSpeed
