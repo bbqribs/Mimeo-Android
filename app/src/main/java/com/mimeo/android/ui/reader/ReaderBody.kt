@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -36,9 +37,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
-private val READER_SCROLL_TOP_PADDING = 8.dp
+private val READER_SCROLL_TOP_PADDING = 0.dp
 private val READER_SCROLL_BOTTOM_PADDING = 120.dp
 
 @Composable
@@ -74,6 +76,9 @@ fun ReaderBody(
     var lastAnchorRange by remember { mutableStateOf<IntRange?>(null) }
     var lastAnchorWasFullyVisible by remember { mutableStateOf<Boolean?>(null) }
     var lastHandledScrollTrigger by remember { mutableIntStateOf(scrollTriggerSignal) }
+    var lastObservedScrollValue by remember(scrollState) { mutableIntStateOf(scrollState.value) }
+    var isProgrammaticScroll by remember { mutableStateOf(false) }
+    var suppressTransitionAutoScroll by remember { mutableStateOf(false) }
     val highlightedSentenceRange = remember(chunks, sentenceRangesByChunk, safeChunkIndex, currentChunkOffsetInChars, activeRangeInChunk) {
         chunks.getOrNull(safeChunkIndex)?.let { chunk ->
             val offsetForSentence = activeRangeInChunk?.first ?: currentChunkOffsetInChars
@@ -185,7 +190,11 @@ fun ReaderBody(
 
     LaunchedEffect(scrollState) {
         snapshotFlow { scrollState.value }
-            .collect {
+            .collect { scrollValue ->
+                if (scrollValue != lastObservedScrollValue && !isProgrammaticScroll) {
+                    suppressTransitionAutoScroll = true
+                }
+                lastObservedScrollValue = scrollValue
                 val layout = activeTextLayout ?: return@collect
                 val anchor = anchorRange ?: return@collect
                 val chunkTopInRoot = activeChunkTopInRootPx ?: return@collect
@@ -234,12 +243,15 @@ fun ReaderBody(
         val externalTrigger = scrollTriggerSignal != lastHandledScrollTrigger
         if (externalTrigger) {
             lastHandledScrollTrigger = scrollTriggerSignal
+            suppressTransitionAutoScroll = false
         }
         val anchorChanged = lastAnchorRange != anchor
+        val hiddenByBottom = endBottomInRoot > desiredBottomInRoot
         val transitionTrigger = autoScrollWhileListening &&
+            !suppressTransitionAutoScroll &&
             anchorChanged &&
             lastAnchorWasFullyVisible == true &&
-            !fullyVisibleNow
+            hiddenByBottom
         val shouldScroll = externalTrigger || transitionTrigger
         if (!shouldScroll) {
             if (anchorChanged) {
@@ -249,11 +261,26 @@ fun ReaderBody(
             return@LaunchedEffect
         }
 
-        val desiredAnchorInRoot = visibleTopInRoot + topComfortPx
-        val delta = startTopInRoot - desiredAnchorInRoot
-        val target = (scrollState.value + delta).roundToInt().coerceIn(0, scrollState.maxValue)
-        if (target != scrollState.value) {
-            scrollState.animateScrollTo(target)
+        suspend fun jumpAnchorToTop() {
+            repeat(3) {
+                val latestLayout = activeTextLayout ?: return
+                val latestChunkTop = activeChunkTopInRootPx ?: return
+                val latestViewportTop = viewportTopInRootPx ?: return
+                val latestStartTopInRoot = latestChunkTop + latestLayout.getCursorRect(anchor.first).top
+                val desiredAnchorInRoot = latestViewportTop + topComfortPx
+                val delta = latestStartTopInRoot - desiredAnchorInRoot
+                val target = (scrollState.value + delta).roundToInt().coerceIn(0, scrollState.maxValue)
+                if (abs(target - scrollState.value) <= 1) return
+                isProgrammaticScroll = true
+                scrollState.scrollTo(target)
+                isProgrammaticScroll = false
+                withFrameNanos { }
+            }
+        }
+
+        jumpAnchorToTop()
+        if (isProgrammaticScroll) {
+            isProgrammaticScroll = false
         }
         lastAnchorRange = anchor
         lastAnchorWasFullyVisible = true
