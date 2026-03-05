@@ -222,6 +222,7 @@ fun ReaderBody(
         activeChunkTopInRootPx,
         viewportTopInRootPx,
         viewportSize,
+        scrollState.maxValue,
         autoScrollWhileListening,
     ) {
         val layout = activeTextLayout ?: return@LaunchedEffect
@@ -239,11 +240,12 @@ fun ReaderBody(
         val visibleBottomInRoot = viewportTopInRoot + viewportSize.height.toFloat()
         val desiredBottomInRoot = visibleBottomInRoot - bottomComfortPx
         val fullyVisibleNow = startTopInRoot >= visibleTopInRoot && endBottomInRoot <= desiredBottomInRoot
+        val desiredAnchorInRoot = visibleTopInRoot + topComfortPx
+        val deltaToTopAnchor = startTopInRoot - desiredAnchorInRoot
 
         val externalTrigger = scrollTriggerSignal != lastHandledScrollTrigger
-        if (externalTrigger) {
-            lastHandledScrollTrigger = scrollTriggerSignal
-            suppressTransitionAutoScroll = false
+        if (externalTrigger && scrollState.maxValue == 0 && abs(deltaToTopAnchor) > 1f) {
+            return@LaunchedEffect
         }
         val anchorChanged = lastAnchorRange != anchor
         val hiddenByBottom = endBottomInRoot > desiredBottomInRoot
@@ -262,7 +264,7 @@ fun ReaderBody(
         }
 
         suspend fun jumpAnchorToTop() {
-            repeat(3) {
+            repeat(8) {
                 val latestLayout = activeTextLayout ?: return
                 val latestChunkTop = activeChunkTopInRootPx ?: return
                 val latestViewportTop = viewportTopInRootPx ?: return
@@ -273,6 +275,7 @@ fun ReaderBody(
                 if (abs(target - scrollState.value) <= 1) return
                 isProgrammaticScroll = true
                 scrollState.scrollTo(target)
+                withFrameNanos { }
                 isProgrammaticScroll = false
                 withFrameNanos { }
             }
@@ -281,6 +284,10 @@ fun ReaderBody(
         jumpAnchorToTop()
         if (isProgrammaticScroll) {
             isProgrammaticScroll = false
+        }
+        if (externalTrigger) {
+            lastHandledScrollTrigger = scrollTriggerSignal
+            suppressTransitionAutoScroll = false
         }
         lastAnchorRange = anchor
         lastAnchorWasFullyVisible = true
