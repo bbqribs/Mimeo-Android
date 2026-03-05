@@ -184,7 +184,12 @@ fun QueueScreen(
                     contentDescription = if (searchExpanded) "Close search" else "Search queue",
                 )
             }
-            TextButton(onClick = { vm.loadQueue() }) { Text("Refresh") }
+            IconButton(onClick = { vm.loadQueue() }) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_refresh_24),
+                    contentDescription = "Refresh queue",
+                )
+            }
             TextButton(onClick = { vm.flushPendingProgress() }) { Text("Sync") }
             Box {
                 AssistChip(
