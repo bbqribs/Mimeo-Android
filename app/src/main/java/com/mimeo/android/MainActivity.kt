@@ -28,6 +28,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -1531,20 +1536,29 @@ private fun PersistentNowPlayingStrip(
             .padding(horizontal = 2.dp, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(
-            text = text,
-            modifier = Modifier
-                .fillMaxWidth()
-                .let { base ->
-                    if (!expanded) {
-                        base.basicMarquee(iterations = if (continuous) Int.MAX_VALUE else 1)
-                    } else {
-                        base
-                    }
-                },
-            maxLines = if (expanded) 5 else 1,
-            style = MaterialTheme.typography.labelMedium,
-        )
+        AnimatedContent(
+            targetState = expanded,
+            transitionSpec = {
+                fadeIn(animationSpec = tween(150)) togetherWith
+                    fadeOut(animationSpec = tween(120))
+            },
+            label = "nowPlayingStripExpand",
+        ) { isExpanded ->
+            Text(
+                text = text,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .let { base ->
+                        if (!isExpanded) {
+                            base.basicMarquee(iterations = if (continuous) Int.MAX_VALUE else 1)
+                        } else {
+                            base
+                        }
+                    },
+                maxLines = if (isExpanded) 5 else 1,
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
     }
 }
 
