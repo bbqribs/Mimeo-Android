@@ -1385,7 +1385,11 @@ private fun MimeoApp(vm: AppViewModel) {
                         }
                     },
                 )
-                Box(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = true),
+                ) {
                     if (!isOnLocusRoute && shouldComposePlayer && requestedPlayerItemId != null) {
                         PlayerScreen(
                             vm = vm,
