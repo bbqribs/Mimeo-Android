@@ -1,9 +1,8 @@
 package com.mimeo.android.ui.player
 
 import android.os.Build
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -44,7 +44,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
@@ -81,17 +80,20 @@ private fun debugLog(message: String) {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PlayerScreen(
     vm: AppViewModel,
     onShowSnackbar: (String, String?, String?) -> Unit,
     initialItemId: Int,
+    requestedItemId: Int? = null,
     startExpanded: Boolean = false,
     locusTapSignal: Int = 0,
     onOpenItem: (Int) -> Unit,
-    onBackToQueue: (Int?) -> Unit,
     onOpenDiagnostics: () -> Unit,
+    stopPlaybackOnDispose: Boolean = false,
+    compactControlsOnly: Boolean = false,
+    showCompactControls: Boolean = true,
+    modifier: Modifier = Modifier,
 ) {
     var currentItemId by rememberSaveable { mutableIntStateOf(initialItemId) }
     var resolvedInitial by rememberSaveable { mutableStateOf(false) }
@@ -106,7 +108,6 @@ fun PlayerScreen(
     var pendingDoneEvent by remember { mutableStateOf<PlaybackDoneEvent?>(null) }
     var lastHandledDoneUtteranceId by remember { mutableStateOf<String?>(null) }
     var autoPlayAfterLoad by remember { mutableStateOf(false) }
-    var showClearSessionDialog by remember { mutableStateOf(false) }
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
@@ -312,7 +313,9 @@ fun PlayerScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            ttsController.shutdown()
+            if (stopPlaybackOnDispose) {
+                ttsController.shutdown()
+            }
         }
     }
 
@@ -321,6 +324,15 @@ fun PlayerScreen(
         val resolvedId = vm.resolveInitialPlayerItemId(initialItemId)
         currentItemId = resolvedId
         resolvedInitial = true
+    }
+
+    LaunchedEffect(requestedItemId, resolvedInitial) {
+        if (!resolvedInitial) return@LaunchedEffect
+        val target = requestedItemId ?: return@LaunchedEffect
+        if (target == currentItemId) return@LaunchedEffect
+        stopSpeaking(forceSync = true)
+        currentItemId = target
+        autoPlayAfterLoad = false
     }
 
     LaunchedEffect(locusTapSignal) {
@@ -525,17 +537,127 @@ fun PlayerScreen(
         )
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
+    val renderPlayerControlBar: @Composable () -> Unit = {
+        PlayerControlBar(
+            progressPercent = currentPercent,
+            canSeek = chunks.isNotEmpty(),
+            canMoveBackward = chunks.size > 1 && safePosition.chunkIndex > 0,
+            canMoveForward = chunks.size > 1 && safePosition.chunkIndex < chunks.lastIndex,
+            canPlay = chunks.isNotEmpty(),
+            isPlaying = isSpeaking || isAutoPlaying,
+            onSeekToPercent = { targetPercent ->
+                if (chunks.isEmpty()) return@PlayerControlBar
+                localDonePercentOverride = targetPercent
+                if (targetPercent < DONE_PERCENT_THRESHOLD) {
+                    nearEndForcedForItemId = -1
+                    lastObservedPercent = targetPercent
+                }
+                val targetPosition = positionForPercent(targetPercent)
+                setPlaybackPosition(targetPosition.chunkIndex, targetPosition.offsetInChunkChars)
+                if (isSpeaking || isAutoPlaying) {
+                    isAutoPlaying = true
+                    playChunk(targetPosition.chunkIndex, targetPosition.offsetInChunkChars)
+                }
+            },
+            onPreviousSegment = {
+                if (chunks.isNotEmpty() && safePosition.chunkIndex > 0) {
+                    val target = safePosition.chunkIndex - 1
+                    setPlaybackPosition(target, 0)
+                    if (isSpeaking || isAutoPlaying) {
+                        isAutoPlaying = true
+                        playChunk(target, 0)
+                    }
+                }
+            },
+            onPlayPause = {
+                if (isSpeaking || isAutoPlaying) {
+                    stopSpeaking(forceSync = true)
+                } else if (chunks.isNotEmpty()) {
+                    val restartFromStart = safePosition.chunkIndex == chunks.lastIndex &&
+                        safePosition.offsetInChunkChars >= chunks.last().length
+                    if (restartFromStart) {
+                        setPlaybackPosition(0, 0)
+                        nearEndForcedForItemId = -1
+                        lastObservedPercent = 0
+                    }
+                    isAutoPlaying = true
+                    val positionToPlay = if (restartFromStart) {
+                        PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
+                    } else {
+                        safePosition
+                    }
+                    readerScrollTriggerSignal += 1
+                    playChunk(positionToPlay.chunkIndex, positionToPlay.offsetInChunkChars)
+                }
+            },
+            onNextSegment = {
+                if (chunks.isNotEmpty() && safePosition.chunkIndex < chunks.lastIndex) {
+                    val target = safePosition.chunkIndex + 1
+                    setPlaybackPosition(target, 0)
+                    if (isSpeaking || isAutoPlaying) {
+                        isAutoPlaying = true
+                        playChunk(target, 0)
+                    }
+                }
+            },
+            onPreviousItem = {
+                actionScope.launch {
+                    val prevId = vm.prevSessionItemId(currentItemId)
+                    if (prevId == null) {
+                        uiMessage = "No previous item"
+                    } else {
+                        stopSpeaking(forceSync = true)
+                        currentItemId = prevId
+                        vm.setPlaybackPosition(prevId, 0, 0)
+                        autoPlayAfterLoad = true
+                        onOpenItem(prevId)
+                    }
+                }
+            },
+            onNextItem = {
+                actionScope.launch {
+                    val nextId = vm.nextSessionItemId(currentItemId)
+                    if (nextId == null) {
+                        uiMessage = "No next item"
+                    } else {
+                        stopSpeaking(forceSync = true)
+                        currentItemId = nextId
+                        vm.setPlaybackPosition(nextId, 0, 0)
+                        autoPlayAfterLoad = true
+                        onOpenItem(nextId)
+                    }
+                }
+            },
+        )
+    }
+
+    if (compactControlsOnly) {
+        if (showCompactControls) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f))
+                    .then(modifier),
+            ) {
+                renderPlayerControlBar()
+            }
+        } else {
+            Box(modifier = modifier)
+        }
+    } else {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f, fill = true),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                .fillMaxSize()
+                .then(modifier),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            ExpandedPlayerTopBar(
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = true),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                ExpandedPlayerTopBar(
                 speedLabel = formatPlaybackSpeed(settings.playbackSpeed),
                 overflowExpanded = overflowExpanded,
                 canMarkDone = textPayload != null,
@@ -591,25 +713,6 @@ fun PlayerScreen(
                             overflowExpanded = false
                             vm.refreshPlaylists()
                             showPlaylistPicker = true
-                        },
-                        onBackToQueue = {
-                            overflowExpanded = false
-                            onBackToQueue(currentItemId)
-                        },
-                        onRestartSession = {
-                            overflowExpanded = false
-                            actionScope.launch {
-                                vm.restartNowPlayingSession()
-                                onShowSnackbar("Now Playing session restarted.", null, null)
-                            }
-                        },
-                        onClearSession = {
-                            overflowExpanded = false
-                            showClearSessionDialog = true
-                        },
-                        onOpenDiagnostics = {
-                            overflowExpanded = false
-                            onOpenDiagnostics()
                         },
                         isExpanded = isExpanded,
                         onToggleExpanded = {
@@ -710,100 +813,8 @@ fun PlayerScreen(
                 }
             }
         }
-        PlayerTitleMarqueeRow(
-            title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
-        )
-        PlayerControlBar(
-            progressPercent = currentPercent,
-            canSeek = chunks.isNotEmpty(),
-            canMoveBackward = chunks.size > 1 && safePosition.chunkIndex > 0,
-            canMoveForward = chunks.size > 1 && safePosition.chunkIndex < chunks.lastIndex,
-            canPlay = chunks.isNotEmpty(),
-            isPlaying = isSpeaking || isAutoPlaying,
-            onSeekToPercent = { targetPercent ->
-                if (chunks.isEmpty()) return@PlayerControlBar
-                localDonePercentOverride = targetPercent
-                if (targetPercent < DONE_PERCENT_THRESHOLD) {
-                    nearEndForcedForItemId = -1
-                    lastObservedPercent = targetPercent
-                }
-                val targetPosition = positionForPercent(targetPercent)
-                setPlaybackPosition(targetPosition.chunkIndex, targetPosition.offsetInChunkChars)
-                if (isSpeaking || isAutoPlaying) {
-                    isAutoPlaying = true
-                    playChunk(targetPosition.chunkIndex, targetPosition.offsetInChunkChars)
-                }
-            },
-            onPreviousSegment = {
-                if (chunks.isNotEmpty() && safePosition.chunkIndex > 0) {
-                    val target = safePosition.chunkIndex - 1
-                    setPlaybackPosition(target, 0)
-                    if (isSpeaking || isAutoPlaying) {
-                        isAutoPlaying = true
-                        playChunk(target, 0)
-                    }
-                }
-            },
-            onPlayPause = {
-                if (isSpeaking || isAutoPlaying) {
-                    stopSpeaking(forceSync = true)
-                } else if (chunks.isNotEmpty()) {
-                    val restartFromStart = safePosition.chunkIndex == chunks.lastIndex &&
-                        safePosition.offsetInChunkChars >= chunks.last().length
-                    if (restartFromStart) {
-                        setPlaybackPosition(0, 0)
-                        nearEndForcedForItemId = -1
-                        lastObservedPercent = 0
-                    }
-                    isAutoPlaying = true
-                    val positionToPlay = if (restartFromStart) {
-                        PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
-                    } else {
-                        safePosition
-                    }
-                    readerScrollTriggerSignal += 1
-                    playChunk(positionToPlay.chunkIndex, positionToPlay.offsetInChunkChars)
-                }
-            },
-            onNextSegment = {
-                if (chunks.isNotEmpty() && safePosition.chunkIndex < chunks.lastIndex) {
-                    val target = safePosition.chunkIndex + 1
-                    setPlaybackPosition(target, 0)
-                    if (isSpeaking || isAutoPlaying) {
-                        isAutoPlaying = true
-                        playChunk(target, 0)
-                    }
-                }
-            },
-            onPreviousItem = {
-                actionScope.launch {
-                    val prevId = vm.prevSessionItemId(currentItemId)
-                    if (prevId == null) {
-                        uiMessage = "No previous item"
-                    } else {
-                        stopSpeaking(forceSync = true)
-                        currentItemId = prevId
-                        vm.setPlaybackPosition(prevId, 0, 0)
-                        autoPlayAfterLoad = true
-                        onOpenItem(prevId)
-                    }
-                }
-            },
-            onNextItem = {
-                actionScope.launch {
-                    val nextId = vm.nextSessionItemId(currentItemId)
-                    if (nextId == null) {
-                        uiMessage = "No next item"
-                    } else {
-                        stopSpeaking(forceSync = true)
-                        currentItemId = nextId
-                        vm.setPlaybackPosition(nextId, 0, 0)
-                        autoPlayAfterLoad = true
-                        onOpenItem(nextId)
-                    }
-                }
-            },
-        )
+            renderPlayerControlBar()
+        }
     }
 
     if (showPlaylistPicker) {
@@ -868,33 +879,6 @@ fun PlayerScreen(
         )
     }
 
-    if (showClearSessionDialog) {
-        AlertDialog(
-            onDismissRequest = { showClearSessionDialog = false },
-            title = { Text("Clear session?") },
-            text = { Text("This removes the persisted Now Playing snapshot and returns to queue.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showClearSessionDialog = false
-                        actionScope.launch {
-                            stopSpeaking(forceSync = true)
-                            vm.clearNowPlayingSessionNow()
-                            onShowSnackbar("Now Playing session cleared.", null, null)
-                            onBackToQueue(null)
-                        }
-                    },
-                ) {
-                    Text("Clear")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearSessionDialog = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
-    }
 }
 
 @Composable
@@ -911,6 +895,7 @@ private fun ExpandedPlayerTopBar(
     overflowMenuContent: @Composable () -> Unit,
 ) {
     TopAppBar(
+        modifier = Modifier.heightIn(min = 48.dp),
         title = {},
         actions = {
             IconToggleButton(
@@ -944,29 +929,6 @@ private fun ExpandedPlayerTopBar(
             )
         },
     )
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun PlayerTitleMarqueeRow(
-    title: String,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            modifier = Modifier
-                .fillMaxWidth()
-                .basicMarquee(),
-            text = title,
-            maxLines = 1,
-            overflow = TextOverflow.Clip,
-            fontSize = 12.sp,
-        )
-    }
 }
 
 @Composable
@@ -1022,10 +984,6 @@ private fun LocusOverflowMenu(
 @Composable
 private fun LocusOverflowMenuItems(
     onOpenPlaylists: () -> Unit,
-    onBackToQueue: () -> Unit,
-    onRestartSession: () -> Unit,
-    onClearSession: () -> Unit,
-    onOpenDiagnostics: () -> Unit,
     isExpanded: Boolean,
     onToggleExpanded: () -> Unit,
 ) {
@@ -1036,22 +994,6 @@ private fun LocusOverflowMenuItems(
     DropdownMenuItem(
         text = { Text(if (isExpanded) "Collapse player" else "Expand player") },
         onClick = onToggleExpanded,
-    )
-    DropdownMenuItem(
-        text = { Text("Back to queue") },
-        onClick = onBackToQueue,
-    )
-    DropdownMenuItem(
-        text = { Text("Restart session") },
-        onClick = onRestartSession,
-    )
-    DropdownMenuItem(
-        text = { Text("Clear session") },
-        onClick = onClearSession,
-    )
-    DropdownMenuItem(
-        text = { Text("Diagnostics") },
-        onClick = onOpenDiagnostics,
     )
 }
 
@@ -1073,7 +1015,7 @@ private fun PlayerControlBar(
     var sliderValue by remember(progressPercent) { mutableStateOf(progressPercent.coerceIn(0, 100) / 100f) }
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         Slider(
             value = sliderValue,
@@ -1084,12 +1026,12 @@ private fun PlayerControlBar(
             enabled = canSeek,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 28.dp),
+                .padding(horizontal = 18.dp),
         )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 2.dp),
+                .padding(vertical = 0.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
             IconButton(onClick = onPreviousItem) {

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -89,9 +90,11 @@ fun QueueScreen(
     var rowMenuItemId by remember { mutableIntStateOf(-1) }
     var playlistPickerItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
+    var topActionsMenuExpanded by remember { mutableStateOf(false) }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedFilter by rememberSaveable { mutableStateOf(QueueFilterChip.ALL) }
+    var showQueueFetchDebug by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         vm.refreshPlaylists()
@@ -156,7 +159,10 @@ fun QueueScreen(
         }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
         playlistMutationMessage?.let { message ->
             StatusBanner(
                 stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
@@ -167,7 +173,9 @@ fun QueueScreen(
             )
         }
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             IconButton(onClick = { searchExpanded = !searchExpanded }) {
@@ -176,8 +184,12 @@ fun QueueScreen(
                     contentDescription = if (searchExpanded) "Close search" else "Search queue",
                 )
             }
-            TextButton(onClick = { vm.loadQueue() }) { Text("Refresh") }
-            TextButton(onClick = { vm.flushPendingProgress() }) { Text("Sync") }
+            IconButton(onClick = { vm.loadQueue() }) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_refresh_24),
+                    contentDescription = "Refresh queue and sync progress",
+                )
+            }
             Box {
                 AssistChip(
                     onClick = { playlistMenuExpanded = true },
@@ -205,14 +217,44 @@ fun QueueScreen(
                     }
                 }
             }
-            Text(
-                modifier = Modifier.weight(1f),
-                text = "Sync: $syncLabel  Pending: $pendingCount",
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (BuildConfig.DEBUG) {
+                Box {
+                    IconButton(onClick = { topActionsMenuExpanded = true }) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.msr_more_vert_24),
+                            contentDescription = "Queue actions",
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = topActionsMenuExpanded,
+                        onDismissRequest = { topActionsMenuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (showQueueFetchDebug) {
+                                        "Hide debug fetch"
+                                    } else {
+                                        "Show debug fetch"
+                                    },
+                                )
+                            },
+                            onClick = {
+                                showQueueFetchDebug = !showQueueFetchDebug
+                                topActionsMenuExpanded = false
+                            },
+                        )
+                    }
+                }
+            }
         }
-        if (BuildConfig.DEBUG && lastQueueFetchDebug.statusCode != null) {
+        Text(
+            modifier = Modifier.fillMaxWidth(),
+            text = "Sync: $syncLabel  Pending: $pendingCount",
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (BuildConfig.DEBUG && showQueueFetchDebug && lastQueueFetchDebug.statusCode != null) {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier
@@ -348,6 +390,9 @@ fun QueueScreen(
         }
 
         LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = true),
             state = listState,
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {

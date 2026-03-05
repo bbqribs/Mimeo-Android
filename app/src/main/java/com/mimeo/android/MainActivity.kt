@@ -7,11 +7,14 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Build
 import android.util.Log
-import androidx.annotation.DrawableRes
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,8 +28,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -43,12 +50,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -126,7 +133,6 @@ private const val DEBUG_TARGET_ITEM_ID = 409
 private data class BottomNavDestination(
     val route: String,
     val label: String,
-    @DrawableRes val iconRes: Int,
 )
 
 data class UiSnackbarMessage(
@@ -306,7 +312,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         baseUrl: String,
         token: String,
         autoAdvanceOnCompletion: Boolean,
+        persistentPlayerEnabled: Boolean,
         autoScrollWhileListening: Boolean,
+        continuousNowPlayingMarquee: Boolean,
         forceSentenceHighlightFallback: Boolean,
         keepShareResultNotifications: Boolean,
     ) {
@@ -315,7 +323,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 baseUrl = baseUrl,
                 apiToken = token,
                 autoAdvanceOnCompletion = autoAdvanceOnCompletion,
+                persistentPlayerEnabled = persistentPlayerEnabled,
                 autoScrollWhileListening = autoScrollWhileListening,
+                continuousNowPlayingMarquee = continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = forceSentenceHighlightFallback,
                 keepShareResultNotifications = keepShareResultNotifications,
                 playbackSpeed = settings.value.playbackSpeed,
@@ -341,7 +351,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 baseUrl = settings.value.baseUrl,
                 apiToken = settings.value.apiToken,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
+                persistentPlayerEnabled = settings.value.persistentPlayerEnabled,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
+                continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 playbackSpeed = settings.value.playbackSpeed,
@@ -361,7 +373,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 baseUrl = settings.value.baseUrl,
                 apiToken = settings.value.apiToken,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
+                persistentPlayerEnabled = settings.value.persistentPlayerEnabled,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
+                continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 playbackSpeed = playbackSpeed,
@@ -372,6 +386,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 readingMaxWidthDp = settings.value.readingMaxWidthDp,
                 readingParagraphSpacing = settings.value.readingParagraphSpacing,
             )
+        }
+    }
+
+    fun savePersistentPlayerEnabled(enabled: Boolean) {
+        val current = settings.value
+        _settings.value = current.copy(persistentPlayerEnabled = enabled)
+        viewModelScope.launch {
+            settingsStore.savePersistentPlayerEnabled(enabled)
+        }
+    }
+
+    fun saveContinuousNowPlayingMarquee(enabled: Boolean) {
+        val current = settings.value
+        _settings.value = current.copy(continuousNowPlayingMarquee = enabled)
+        viewModelScope.launch {
+            settingsStore.saveContinuousNowPlayingMarquee(enabled)
         }
     }
 
@@ -1227,22 +1257,41 @@ private fun MimeoApp(vm: AppViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     val currentRoute = navBackStack?.destination?.route.orEmpty()
     val navItems = listOf(
-        BottomNavDestination(ROUTE_UP_NEXT, "Up Next", android.R.drawable.ic_media_next),
-        BottomNavDestination(ROUTE_LOCUS, "Locus", android.R.drawable.ic_menu_view),
-        BottomNavDestination(ROUTE_COLLECTIONS, "Collections", android.R.drawable.ic_menu_agenda),
-        BottomNavDestination(ROUTE_SETTINGS, "Settings", android.R.drawable.ic_menu_preferences),
+        BottomNavDestination(ROUTE_UP_NEXT, "Up Next"),
+        BottomNavDestination(ROUTE_LOCUS, "Locus"),
+        BottomNavDestination(ROUTE_COLLECTIONS, "Collections"),
+        BottomNavDestination(ROUTE_SETTINGS, "Settings"),
     )
     val settings by vm.settings.collectAsState()
+    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val pendingNavigationRoute by vm.pendingNavigationRoute.collectAsState()
+    val sessionNowPlayingItemId = vm.currentNowPlayingItemId()
+    val routeItemId = navBackStack?.arguments?.let { args ->
+        if (args.containsKey("itemId")) args.getInt("itemId").takeIf { it > 0 } else null
+    }
+    val requestedPlayerItemId = routeItemId ?: sessionNowPlayingItemId
     val selectedTab = when {
         currentRoute.startsWith(ROUTE_LOCUS) -> ROUTE_LOCUS
         currentRoute.startsWith(ROUTE_COLLECTIONS) -> ROUTE_COLLECTIONS
         currentRoute.startsWith(ROUTE_SETTINGS) -> ROUTE_SETTINGS
         else -> ROUTE_UP_NEXT
     }
+    val isOnLocusRoute = currentRoute.startsWith(ROUTE_LOCUS)
+    val showPersistentPlayerOverlay = !isOnLocusRoute && settings.persistentPlayerEnabled
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
+    var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
+    val nowPlayingStripText = nowPlayingSession
+        ?.currentItem
+        ?.let { current ->
+            val title = current.title?.takeIf { it.isNotBlank() }
+                ?: current.url.takeIf { it.isNotBlank() }
+                ?: "Item ${current.itemId}"
+            val host = current.host?.takeIf { it.isNotBlank() }
+            if (host == null) title else "$title  ·  $host"
+        } ?: "No active playback"
+    val canExpandNowPlayingTitle = nowPlayingSession?.currentItem != null
     val baseUrlHint = vm.baseUrlHintForDevice(isLikelyPhysicalDevice())
     val baseAddress = settings.baseUrl.trim().removePrefix("http://").removePrefix("https://")
     val statusLooksError = statusMessage?.let { message ->
@@ -1313,17 +1362,12 @@ private fun MimeoApp(vm: AppViewModel) {
                             nav.navigate(destination.route) { launchSingleTop = true }
                         },
                         label = { Text(destination.label) },
-                        icon = {
-                            Icon(
-                                painter = painterResource(destination.iconRes),
-                                contentDescription = destination.label,
-                            )
-                        },
+                        icon = {},
                         alwaysShowLabel = true,
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
                             unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         ),
@@ -1337,11 +1381,11 @@ private fun MimeoApp(vm: AppViewModel) {
                 .fillMaxSize()
                 .padding(innerPadding)
                 .statusBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
             Column(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 if (showGlobalBanner) {
                     StatusBanner(
@@ -1352,114 +1396,122 @@ private fun MimeoApp(vm: AppViewModel) {
                         onDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                     )
                 }
-                NavHost(
-                    navController = nav,
-                    startDestination = ROUTE_UP_NEXT,
-                    modifier = Modifier.fillMaxSize(),
+                PersistentNowPlayingStrip(
+                    text = nowPlayingStripText,
+                    continuous = settings.continuousNowPlayingMarquee,
+                    expanded = isNowPlayingStripExpanded,
+                    onTap = {
+                        if (canExpandNowPlayingTitle) {
+                            isNowPlayingStripExpanded = !isNowPlayingStripExpanded
+                        }
+                    },
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = true),
                 ) {
-                    composable(ROUTE_COLLECTIONS) {
-                        CollectionsScreen(
-                            vm = vm,
-                            onOpenPlaylistsManager = { nav.navigate(ROUTE_COLLECTIONS_PLAYLISTS) },
-                            onOpenFolder = { folderId -> nav.navigate("collections/folder/$folderId") },
-                        )
-                    }
-                    composable(
-                        ROUTE_COLLECTIONS_FOLDER,
-                        arguments = listOf(navArgument("folderId") { type = NavType.IntType }),
-                    ) { backStack ->
-                        val folderId = backStack.arguments?.getInt("folderId") ?: return@composable
-                        FolderDetailScreen(
-                            vm = vm,
-                            folderId = folderId,
-                            onBack = { nav.popBackStack() },
-                            onOpenPlaylist = {
-                                nav.navigate(ROUTE_UP_NEXT) {
-                                    popUpTo(ROUTE_COLLECTIONS)
-                                    launchSingleTop = true
-                                }
-                            },
-                        )
-                    }
-                    composable(ROUTE_COLLECTIONS_PLAYLISTS) {
-                        PlaylistsScreen(vm = vm)
-                    }
-                    composable(ROUTE_SETTINGS) {
-                        SettingsScreen(
-                            vm = vm,
-                            onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
-                        )
-                    }
-                    composable(ROUTE_SETTINGS_DIAGNOSTICS) {
-                        ConnectivityDiagnosticsScreen(vm = vm)
-                    }
-                    composable(ROUTE_LOCUS) {
-                        val nowPlayingId = vm.currentNowPlayingItemId()
-                        if (nowPlayingId == null) {
-                            NoNowPlayingScreen(onGoQueue = { nav.navigate(ROUTE_UP_NEXT) })
-                        } else {
-                            PlayerScreen(
+                    NavHost(
+                        navController = nav,
+                        startDestination = ROUTE_UP_NEXT,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background),
+                    ) {
+                        composable(ROUTE_COLLECTIONS) {
+                            CollectionsScreen(
+                                vm = vm,
+                                onOpenPlaylistsManager = { nav.navigate(ROUTE_COLLECTIONS_PLAYLISTS) },
+                                onOpenFolder = { folderId -> nav.navigate("collections/folder/$folderId") },
+                            )
+                        }
+                        composable(
+                            ROUTE_COLLECTIONS_FOLDER,
+                            arguments = listOf(navArgument("folderId") { type = NavType.IntType }),
+                        ) { backStack ->
+                            val folderId = backStack.arguments?.getInt("folderId") ?: return@composable
+                            FolderDetailScreen(
+                                vm = vm,
+                                folderId = folderId,
+                                onBack = { nav.popBackStack() },
+                                onOpenPlaylist = {
+                                    nav.navigate(ROUTE_UP_NEXT) {
+                                        popUpTo(ROUTE_COLLECTIONS)
+                                        launchSingleTop = true
+                                    }
+                                },
+                            )
+                        }
+                        composable(ROUTE_COLLECTIONS_PLAYLISTS) {
+                            PlaylistsScreen(vm = vm)
+                        }
+                        composable(ROUTE_SETTINGS) {
+                            SettingsScreen(
+                                vm = vm,
+                                onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
+                            )
+                        }
+                        composable(ROUTE_SETTINGS_DIAGNOSTICS) {
+                            ConnectivityDiagnosticsScreen(vm = vm)
+                        }
+                        composable(ROUTE_LOCUS) {
+                            if (requestedPlayerItemId == null) {
+                                NoNowPlayingScreen(onGoQueue = { nav.navigate(ROUTE_UP_NEXT) })
+                            } else {
+                                Box(modifier = Modifier.fillMaxSize())
+                            }
+                        }
+                        composable(
+                            route = "$ROUTE_UP_NEXT?focusItemId={focusItemId}",
+                            arguments = listOf(
+                                navArgument("focusItemId") {
+                                    type = NavType.IntType
+                                    defaultValue = -1
+                                },
+                            ),
+                        ) { backStack ->
+                            val focusItemId = backStack.arguments?.getInt("focusItemId")?.takeIf { it > 0 }
+                            QueueScreen(
                                 vm = vm,
                                 onShowSnackbar = { message, actionLabel, actionKey ->
                                     vm.showSnackbar(message, actionLabel, actionKey)
                                 },
-                                initialItemId = nowPlayingId,
-                                startExpanded = false,
-                                locusTapSignal = locusTabTapSignal,
-                                onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
-                                onBackToQueue = { focusId ->
-                                    if (focusId == null) {
-                                        nav.navigate(ROUTE_UP_NEXT)
-                                    } else {
-                                        nav.navigate("$ROUTE_UP_NEXT?focusItemId=$focusId")
-                                    }
-                                },
+                                focusItemId = focusItemId,
+                                onOpenPlayer = { itemId -> nav.navigate("$ROUTE_LOCUS/$itemId") },
                                 onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                             )
                         }
+                        composable(
+                            ROUTE_LOCUS_ITEM,
+                            arguments = listOf(navArgument("itemId") { type = NavType.IntType }),
+                        ) {
+                            Box(modifier = Modifier.fillMaxSize())
+                        }
                     }
-                    composable(
-                        route = "$ROUTE_UP_NEXT?focusItemId={focusItemId}",
-                        arguments = listOf(
-                            navArgument("focusItemId") {
-                                type = NavType.IntType
-                                defaultValue = -1
-                            },
-                        ),
-                    ) { backStack ->
-                        val focusItemId = backStack.arguments?.getInt("focusItemId")?.takeIf { it > 0 }
-                        QueueScreen(
-                            vm = vm,
-                            onShowSnackbar = { message, actionLabel, actionKey ->
-                                vm.showSnackbar(message, actionLabel, actionKey)
-                            },
-                            focusItemId = focusItemId,
-                            onOpenPlayer = { itemId -> nav.navigate("$ROUTE_LOCUS/$itemId") },
-                            onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
-                        )
-                    }
-                    composable(
-                        ROUTE_LOCUS_ITEM,
-                        arguments = listOf(navArgument("itemId") { type = NavType.IntType }),
-                    ) { backStack ->
-                        val itemId = backStack.arguments?.getInt("itemId") ?: return@composable
+
+                    if (requestedPlayerItemId != null) {
+                        val compactControlsOnly = !isOnLocusRoute
                         PlayerScreen(
                             vm = vm,
                             onShowSnackbar = { message, actionLabel, actionKey ->
                                 vm.showSnackbar(message, actionLabel, actionKey)
                             },
-                            initialItemId = itemId,
-                            startExpanded = true,
+                            initialItemId = requestedPlayerItemId,
+                            requestedItemId = requestedPlayerItemId,
+                            startExpanded = isOnLocusRoute && routeItemId != null,
                             locusTapSignal = locusTabTapSignal,
                             onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
-                            onBackToQueue = { focusId ->
-                                if (focusId == null) {
-                                    nav.navigate(ROUTE_UP_NEXT)
-                                } else {
-                                    nav.navigate("$ROUTE_UP_NEXT?focusItemId=$focusId")
-                                }
-                            },
                             onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
+                            stopPlaybackOnDispose = !settings.persistentPlayerEnabled,
+                            compactControlsOnly = compactControlsOnly,
+                            showCompactControls = showPersistentPlayerOverlay,
+                            modifier = if (compactControlsOnly) {
+                                Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .fillMaxWidth()
+                            } else {
+                                Modifier.fillMaxSize()
+                            },
                         )
                     }
                 }
@@ -1471,6 +1523,47 @@ private fun MimeoApp(vm: AppViewModel) {
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.ime)
                     .padding(bottom = 76.dp),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PersistentNowPlayingStrip(
+    text: String,
+    continuous: Boolean,
+    expanded: Boolean,
+    onTap: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onTap)
+            .padding(horizontal = 2.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        AnimatedContent(
+            targetState = expanded,
+            transitionSpec = {
+                fadeIn(animationSpec = tween(150)) togetherWith
+                    fadeOut(animationSpec = tween(120))
+            },
+            label = "nowPlayingStripExpand",
+        ) { isExpanded ->
+            Text(
+                text = text,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .let { base ->
+                        if (!isExpanded) {
+                            base.basicMarquee(iterations = if (continuous) Int.MAX_VALUE else 1)
+                        } else {
+                            base
+                        }
+                    },
+                maxLines = if (isExpanded) 5 else 1,
+                style = MaterialTheme.typography.labelMedium,
             )
         }
     }

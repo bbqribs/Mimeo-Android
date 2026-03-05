@@ -50,8 +50,20 @@ Run this checklist for PRs that touch share-sheet saving, notifications, or save
 
 Use this for PRs that touch queue rendering, playlists, or share-save verification:
 
+- Queue top row exposes one explicit refresh action; there is no separate Sync button.
+- Refresh must continue to perform both queue reload and queued-progress flush semantics.
 - Select the expected playlist or Smart Queue in-app before verifying save results.
 - Confirm search is visible and filters the current queue list.
 - Confirm filter chips are visible and reset cleanly to `All`.
 - Verify a newly shared item appears without using the web app.
 - Search by title/domain and, when relevant, by a URL-derived token to confirm normalized fallback still works.
+
+## Persistent player cross-tab invariants
+
+Use this for PRs that touch `MainActivity`, `PlayerScreen`, or settings toggles:
+
+- Playback (TTS) continues across tab switches regardless of the `Persistent player across tabs` toggle state.
+- `Persistent player across tabs` controls non-Locus controls visibility only.
+- With toggle ON: controls are visible and interactive on non-Locus tabs.
+- With toggle OFF: controls are hidden on non-Locus tabs, but playback continues and remains controllable when returning to Locus.
+- Switching tabs does not create overlapping/invisible full-screen player layers or block tab interaction.

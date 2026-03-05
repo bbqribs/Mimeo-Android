@@ -1,10 +1,11 @@
 # Mimeo Android Design Specification
 
-**Version:** 1.2
+**Version:** 1.5
 **Status:** Draft
-**Last Updated:** 2026-03-04
+**Last Updated:** 2026-03-05
 
 **Version history:**
+- 1.5: Locked cross-tab playback semantics (persistent-player toggle controls chrome visibility only) and recorded single Refresh action on Up Next (sync is implicit)
 - 1.4: Added target player-screen banding notes and restated that Locus planning must remain no-gesture
 - 1.3: Reality check on `main` after share-save + queue verification work; Locus expand/collapse is explicit-button only, and shared pinned PlayerBar remains separate architecture work
 - 1.2: Recorded playback-speed location decision; speed stays in expanded Locus header, not the pinned PlayerBar
@@ -23,6 +24,8 @@ These notes reflect what is actually shipped on `main` after the redesign and sh
 - Locus tab entry is collapsed; direct item or resume entry opens expanded.
 - Expanded header title truncation and speed/overflow action spacing are fixed on `main`.
 - The TESTING.md Locus invariants checklist is the current merge gate for Locus/player UI changes.
+- Cross-tab playback remains active even when leaving Locus; the `Persistent player across tabs` setting controls control-bar visibility on non-Locus tabs, not TTS lifetime.
+- Up Next uses a single explicit Refresh action; queued progress sync remains part of that refresh path.
 - A shared pinned PlayerBar architecture on `main` is still a separate future ticket, not implied by the playback-speed decision.
 - Player-screen planning should assume explicit buttons only; do not reintroduce drag handles, swipe-to-expand, or bottom-sheet gestures in docs.
 
