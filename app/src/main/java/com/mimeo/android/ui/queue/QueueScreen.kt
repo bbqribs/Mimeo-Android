@@ -187,10 +187,9 @@ fun QueueScreen(
             IconButton(onClick = { vm.loadQueue() }) {
                 Icon(
                     painter = painterResource(id = R.drawable.msr_refresh_24),
-                    contentDescription = "Refresh queue",
+                    contentDescription = "Refresh queue and sync progress",
                 )
             }
-            TextButton(onClick = { vm.flushPendingProgress() }) { Text("Sync") }
             Box {
                 AssistChip(
                     onClick = { playlistMenuExpanded = true },

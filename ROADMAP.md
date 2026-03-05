@@ -20,6 +20,8 @@
 - [x] Playlist item membership UX: Queue row/player overflow now expose `Add to playlist…` with per-playlist add/remove toggles.
 - [x] UI compression pass: compact nav, dense queue/player/playlists/settings layouts, and collapsible status banner for offline/LAN issues.
 - [x] UX follow-ups: root snackbar visibility, stable player status/banner placement, and denser player control bar without reducing tap targets.
+- [x] Player chrome reliability follow-up: non-Locus player controls render as a bottom overlay without tab hit-test conflicts; settings toggles persist correctly; playback remains alive across tab switches even when persistent controls are hidden.
+- [x] Up Next controls cleanup: single Refresh action remains and covers queue reload plus queued-progress sync path; standalone Sync button removed.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
@@ -32,13 +34,13 @@
 - [x] Collections discovery link and instructions dialog.
 - [x] Queue verification controls restored (search + filters).
 - [x] Queue search robustness fix (raw substring + normalized fallback).
+- [x] Queue debug instrumentation is hidden behind an explicit overflow toggle (debug builds).
 - [ ] Smart Queue duplicate semantics still do not always surface `Already saved ✅`.
-- [ ] Decide whether the debug-only queue fetch overlay should stay on `main` or be removed after follow-up verification work.
 - [ ] Backlog: allow sharing plain text and saving it as a readable item, not just URLs.
 
 ### Next tickets
 - [ ] Share-save duplicates follow-up: tighten Smart Queue duplicate detection and messaging without backend changes.
-- [ ] Queue debug cleanup: decide whether to remove the debug-only queue fetch overlay after one more verification pass.
+- [ ] Queue debug cleanup finalization: decide whether to fully remove the debug-only fetch overlay after investigation is complete.
 - [ ] Share plain text capture: convert non-URL shared text into a readable item flow or explicitly reject it with a clearer product decision.
 
 ## Android Redesign v1.1
