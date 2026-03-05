@@ -15,6 +15,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,8 +27,10 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.animation.AnimatedContent
@@ -34,6 +39,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -50,13 +56,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -80,6 +91,8 @@ import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.model.PlayerChevronSnapEdge
+import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.repository.ItemTextResult
@@ -103,6 +116,8 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -335,6 +350,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 readingLineHeightPercent = settings.value.readingLineHeightPercent,
                 readingMaxWidthDp = settings.value.readingMaxWidthDp,
                 readingParagraphSpacing = settings.value.readingParagraphSpacing,
+                playerControlsMode = settings.value.playerControlsMode,
+                playerChevronSnapEdge = settings.value.playerChevronSnapEdge,
+                playerChevronEdgeOffset = settings.value.playerChevronEdgeOffset,
             )
             _statusMessage.value = "Settings saved"
         }
@@ -363,6 +381,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 readingLineHeightPercent = readingLineHeightPercent,
                 readingMaxWidthDp = readingMaxWidthDp,
                 readingParagraphSpacing = readingParagraphSpacing,
+                playerControlsMode = settings.value.playerControlsMode,
+                playerChevronSnapEdge = settings.value.playerChevronSnapEdge,
+                playerChevronEdgeOffset = settings.value.playerChevronEdgeOffset,
             )
         }
     }
@@ -385,6 +406,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 readingLineHeightPercent = settings.value.readingLineHeightPercent,
                 readingMaxWidthDp = settings.value.readingMaxWidthDp,
                 readingParagraphSpacing = settings.value.readingParagraphSpacing,
+                playerControlsMode = settings.value.playerControlsMode,
+                playerChevronSnapEdge = settings.value.playerChevronSnapEdge,
+                playerChevronEdgeOffset = settings.value.playerChevronEdgeOffset,
             )
         }
     }
@@ -402,6 +426,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _settings.value = current.copy(continuousNowPlayingMarquee = enabled)
         viewModelScope.launch {
             settingsStore.saveContinuousNowPlayingMarquee(enabled)
+        }
+    }
+
+    fun savePlayerControlsMode(mode: PlayerControlsMode) {
+        val current = settings.value
+        _settings.value = current.copy(playerControlsMode = mode)
+        viewModelScope.launch {
+            settingsStore.savePlayerControlsMode(mode)
+        }
+    }
+
+    fun savePlayerChevronSnap(edge: PlayerChevronSnapEdge, edgeOffset: Float) {
+        val current = settings.value
+        _settings.value = current.copy(
+            playerChevronSnapEdge = edge,
+            playerChevronEdgeOffset = edgeOffset.coerceIn(0f, 1f),
+        )
+        viewModelScope.launch {
+            settingsStore.savePlayerChevronSnap(edge, edgeOffset)
         }
     }
 
@@ -1279,7 +1322,11 @@ private fun MimeoApp(vm: AppViewModel) {
         else -> ROUTE_UP_NEXT
     }
     val isOnLocusRoute = currentRoute.startsWith(ROUTE_LOCUS)
-    val showPersistentPlayerOverlay = !isOnLocusRoute && settings.persistentPlayerEnabled
+    var playbackActive by rememberSaveable { mutableStateOf(false) }
+    var playbackProgressPercent by rememberSaveable { mutableIntStateOf(0) }
+    val controlsMode = settings.playerControlsMode
+    val compactControlsOnly = !isOnLocusRoute || controlsMode != PlayerControlsMode.FULL
+    val showCompactControls = controlsMode != PlayerControlsMode.NUB
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
     val nowPlayingStripText = nowPlayingSession
@@ -1347,31 +1394,37 @@ private fun MimeoApp(vm: AppViewModel) {
 
     Scaffold(
         bottomBar = {
-            NavigationBar(
-                modifier = Modifier.height(68.dp),
-                tonalElevation = 0.dp,
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-            ) {
-                navItems.forEach { destination ->
-                    NavigationBarItem(
-                        selected = selectedTab == destination.route,
-                        onClick = {
-                            if (destination.route == ROUTE_LOCUS) {
-                                locusTabTapSignal += 1
-                            }
-                            nav.navigate(destination.route) { launchSingleTop = true }
-                        },
-                        label = { Text(destination.label) },
-                        icon = {},
-                        alwaysShowLabel = true,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
+            Column {
+                PlayerProgressLine(
+                    visible = playbackActive,
+                    progressPercent = playbackProgressPercent,
+                )
+                NavigationBar(
+                    modifier = Modifier.height(68.dp),
+                    tonalElevation = 0.dp,
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                ) {
+                    navItems.forEach { destination ->
+                        NavigationBarItem(
+                            selected = selectedTab == destination.route,
+                            onClick = {
+                                if (destination.route == ROUTE_LOCUS) {
+                                    locusTabTapSignal += 1
+                                }
+                                nav.navigate(destination.route) { launchSingleTop = true }
+                            },
+                            label = { Text(destination.label) },
+                            icon = {},
+                            alwaysShowLabel = true,
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                        )
+                    }
                 }
             }
         },
@@ -1490,7 +1543,6 @@ private fun MimeoApp(vm: AppViewModel) {
                     }
 
                     if (requestedPlayerItemId != null) {
-                        val compactControlsOnly = !isOnLocusRoute
                         PlayerScreen(
                             vm = vm,
                             onShowSnackbar = { message, actionLabel, actionKey ->
@@ -1502,9 +1554,14 @@ private fun MimeoApp(vm: AppViewModel) {
                             locusTapSignal = locusTabTapSignal,
                             onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
                             onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
-                            stopPlaybackOnDispose = !settings.persistentPlayerEnabled,
+                            stopPlaybackOnDispose = true,
                             compactControlsOnly = compactControlsOnly,
-                            showCompactControls = showPersistentPlayerOverlay,
+                            showCompactControls = showCompactControls,
+                            controlsMode = controlsMode,
+                            onPlaybackActiveChange = { active -> playbackActive = active },
+                            onPlaybackProgressPercentChange = { percent ->
+                                playbackProgressPercent = percent.coerceIn(0, 100)
+                            },
                             modifier = if (compactControlsOnly) {
                                 Modifier
                                     .align(Alignment.BottomCenter)
@@ -1512,6 +1569,36 @@ private fun MimeoApp(vm: AppViewModel) {
                             } else {
                                 Modifier.fillMaxSize()
                             },
+                        )
+                    }
+
+                    val chevronDescription = when (controlsMode) {
+                        PlayerControlsMode.FULL -> "Collapse player controls"
+                        PlayerControlsMode.MINIMAL -> "Expand player controls. Long press to hide player controls"
+                        PlayerControlsMode.NUB -> "Show player controls"
+                    }
+                    val bottomReserve = when {
+                        controlsMode == PlayerControlsMode.NUB -> 0.dp
+                        compactControlsOnly && controlsMode == PlayerControlsMode.MINIMAL -> 68.dp
+                        compactControlsOnly -> 112.dp
+                        else -> 0.dp
+                    }
+                    if (requestedPlayerItemId != null && playbackActive) {
+                        FloatingChevronControl(
+                            snapEdge = settings.playerChevronSnapEdge,
+                            edgeOffset = settings.playerChevronEdgeOffset,
+                            bottomReserved = bottomReserve,
+                            contentDescription = chevronDescription,
+                            onTap = {
+                                vm.savePlayerControlsMode(nextPlayerControlsModeOnTap(controlsMode))
+                            },
+                            onLongPress = {
+                                vm.savePlayerControlsMode(nextPlayerControlsModeOnLongPress(controlsMode))
+                            },
+                            onSnapChanged = { edge, offset ->
+                                vm.savePlayerChevronSnap(edge, offset)
+                            },
+                            modifier = Modifier.align(Alignment.TopStart),
                         )
                     }
                 }
@@ -1564,6 +1651,188 @@ private fun PersistentNowPlayingStrip(
                     },
                 maxLines = if (isExpanded) 5 else 1,
                 style = MaterialTheme.typography.labelMedium,
+            )
+        }
+    }
+}
+
+private fun nextPlayerControlsModeOnTap(current: PlayerControlsMode): PlayerControlsMode {
+    return when (current) {
+        PlayerControlsMode.FULL -> PlayerControlsMode.MINIMAL
+        PlayerControlsMode.MINIMAL -> PlayerControlsMode.FULL
+        PlayerControlsMode.NUB -> PlayerControlsMode.MINIMAL
+    }
+}
+
+private fun nextPlayerControlsModeOnLongPress(current: PlayerControlsMode): PlayerControlsMode {
+    return when (current) {
+        PlayerControlsMode.FULL -> PlayerControlsMode.MINIMAL
+        PlayerControlsMode.MINIMAL -> PlayerControlsMode.NUB
+        PlayerControlsMode.NUB -> PlayerControlsMode.MINIMAL
+    }
+}
+
+@Composable
+private fun PlayerProgressLine(visible: Boolean, progressPercent: Int) {
+    if (!visible) return
+    val clamped = progressPercent.coerceIn(0, 100)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(3.dp)
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(clamped / 100f)
+                .height(3.dp)
+                .background(MaterialTheme.colorScheme.primary),
+        )
+    }
+}
+
+private data class SnapResult(
+    val edge: PlayerChevronSnapEdge,
+    val edgeOffset: Float,
+    val target: Offset,
+)
+
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
+private fun FloatingChevronControl(
+    snapEdge: PlayerChevronSnapEdge,
+    edgeOffset: Float,
+    bottomReserved: androidx.compose.ui.unit.Dp,
+    contentDescription: String,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
+    onSnapChanged: (PlayerChevronSnapEdge, Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    val sizeDp = 48.dp
+    val marginDp = 12.dp
+    BoxWithConstraints(
+        modifier = modifier.fillMaxSize(),
+    ) {
+        val widthPx = constraints.maxWidth.toFloat()
+        val heightPx = constraints.maxHeight.toFloat()
+        val sizePx = with(density) { sizeDp.toPx() }
+        val marginPx = with(density) { marginDp.toPx() }
+        val bottomReservePx = with(density) { bottomReserved.toPx() }
+
+        val minX = marginPx
+        val maxX = (widthPx - sizePx - marginPx).coerceAtLeast(minX)
+        val minY = marginPx
+        val maxY = (heightPx - sizePx - marginPx - bottomReservePx).coerceAtLeast(minY)
+        val xRange = (maxX - minX).coerceAtLeast(0f)
+        val yRange = (maxY - minY).coerceAtLeast(0f)
+        val home = Offset(maxX, maxY)
+
+        fun targetFor(edge: PlayerChevronSnapEdge, normalized: Float): Offset {
+            val safe = normalized.coerceIn(0f, 1f)
+            return when (edge) {
+                PlayerChevronSnapEdge.LEFT -> Offset(minX, minY + (yRange * safe))
+                PlayerChevronSnapEdge.RIGHT -> Offset(maxX, minY + (yRange * safe))
+                PlayerChevronSnapEdge.TOP -> Offset(minX + (xRange * safe), minY)
+                PlayerChevronSnapEdge.BOTTOM -> Offset(minX + (xRange * safe), maxY)
+                PlayerChevronSnapEdge.HOME -> home
+            }
+        }
+
+        var dragX by remember { mutableFloatStateOf(targetFor(snapEdge, edgeOffset).x) }
+        var dragY by remember { mutableFloatStateOf(targetFor(snapEdge, edgeOffset).y) }
+        var targetX by remember { mutableFloatStateOf(dragX) }
+        var targetY by remember { mutableFloatStateOf(dragY) }
+        var dragging by remember { mutableStateOf(false) }
+        val animatedX = androidx.compose.animation.core.animateFloatAsState(
+            targetValue = if (dragging) dragX else targetX,
+            animationSpec = tween(durationMillis = 180),
+            label = "chevronX",
+        )
+        val animatedY = androidx.compose.animation.core.animateFloatAsState(
+            targetValue = if (dragging) dragY else targetY,
+            animationSpec = tween(durationMillis = 180),
+            label = "chevronY",
+        )
+
+        LaunchedEffect(widthPx, heightPx, snapEdge, edgeOffset, bottomReserved) {
+            val target = targetFor(snapEdge, edgeOffset)
+            targetX = target.x
+            targetY = target.y
+            if (!dragging) {
+                dragX = target.x
+                dragY = target.y
+            }
+        }
+
+        fun resolveSnap(x: Float, y: Float): SnapResult {
+            val clampedX = x.coerceIn(minX, maxX)
+            val clampedY = y.coerceIn(minY, maxY)
+            val leftOffset = if (yRange > 0f) ((clampedY - minY) / yRange).coerceIn(0f, 1f) else 0f
+            val rightOffset = leftOffset
+            val topOffset = if (xRange > 0f) ((clampedX - minX) / xRange).coerceIn(0f, 1f) else 0f
+            val bottomOffset = topOffset
+
+            val leftTarget = Offset(minX, minY + (yRange * leftOffset))
+            val rightTarget = Offset(maxX, minY + (yRange * rightOffset))
+            val topTarget = Offset(minX + (xRange * topOffset), minY)
+            val bottomTarget = Offset(minX + (xRange * bottomOffset), maxY)
+            val homeTarget = home
+
+            val candidates = listOf(
+                SnapResult(PlayerChevronSnapEdge.LEFT, leftOffset, leftTarget),
+                SnapResult(PlayerChevronSnapEdge.RIGHT, rightOffset, rightTarget),
+                SnapResult(PlayerChevronSnapEdge.TOP, topOffset, topTarget),
+                SnapResult(PlayerChevronSnapEdge.BOTTOM, bottomOffset, bottomTarget),
+                SnapResult(PlayerChevronSnapEdge.HOME, 0.5f, homeTarget),
+            )
+            return candidates.minByOrNull { candidate ->
+                val dx = candidate.target.x - clampedX
+                val dy = candidate.target.y - clampedY
+                dx.pow(2) + dy.pow(2)
+            } ?: SnapResult(PlayerChevronSnapEdge.HOME, 0.5f, home)
+        }
+
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(animatedX.value.roundToInt(), animatedY.value.roundToInt()) }
+                .size(sizeDp)
+                .combinedClickable(
+                    onClick = onTap,
+                    onLongClick = onLongPress,
+                )
+                .pointerInput(minX, maxX, minY, maxY, bottomReservePx) {
+                    detectDragGestures(
+                        onDragStart = {
+                            dragging = true
+                            dragX = animatedX.value
+                            dragY = animatedY.value
+                        },
+                        onDragEnd = {
+                            val snapped = resolveSnap(dragX, dragY)
+                            targetX = snapped.target.x
+                            targetY = snapped.target.y
+                            dragging = false
+                            onSnapChanged(snapped.edge, snapped.edgeOffset)
+                        },
+                        onDragCancel = { dragging = false },
+                    ) { change, dragAmount ->
+                        change.consume()
+                        dragX = (dragX + dragAmount.x).coerceIn(minX, maxX)
+                        dragY = (dragY + dragAmount.y).coerceIn(minY, maxY)
+                    }
+                }
+                .background(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = androidx.compose.ui.res.painterResource(id = R.drawable.msr_chevron_right_24),
+                contentDescription = contentDescription,
+                tint = MaterialTheme.colorScheme.primary,
             )
         }
     }

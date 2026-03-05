@@ -53,6 +53,7 @@ import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.PlaybackPosition
+import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.model.absoluteCharOffset
 import com.mimeo.android.model.calculateCanonicalPercent
@@ -93,6 +94,9 @@ fun PlayerScreen(
     stopPlaybackOnDispose: Boolean = false,
     compactControlsOnly: Boolean = false,
     showCompactControls: Boolean = true,
+    controlsMode: PlayerControlsMode = PlayerControlsMode.FULL,
+    onPlaybackActiveChange: (Boolean) -> Unit = {},
+    onPlaybackProgressPercentChange: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var currentItemId by rememberSaveable { mutableIntStateOf(initialItemId) }
@@ -488,6 +492,14 @@ fun PlayerScreen(
     val undoDonePercent = effectivePercent.coerceIn(0, DONE_PERCENT_THRESHOLD - 1)
     var lastAppliedSpeed by remember { mutableStateOf(settings.playbackSpeed) }
 
+    LaunchedEffect(isSpeaking, isAutoPlaying) {
+        onPlaybackActiveChange(isSpeaking || isAutoPlaying)
+    }
+
+    LaunchedEffect(currentPercent) {
+        onPlaybackProgressPercentChange(currentPercent)
+    }
+
     LaunchedEffect(settings.playbackSpeed, currentItemId, safePosition.chunkIndex, safePosition.offsetInChunkChars, chunks.size) {
         ttsController.setSpeechRate(settings.playbackSpeed)
         if (lastAppliedSpeed == settings.playbackSpeed) return@LaunchedEffect
@@ -540,6 +552,7 @@ fun PlayerScreen(
     val renderPlayerControlBar: @Composable () -> Unit = {
         PlayerControlBar(
             progressPercent = currentPercent,
+            minimal = controlsMode == PlayerControlsMode.MINIMAL,
             canSeek = chunks.isNotEmpty(),
             canMoveBackward = chunks.size > 1 && safePosition.chunkIndex > 0,
             canMoveForward = chunks.size > 1 && safePosition.chunkIndex < chunks.lastIndex,
@@ -1000,6 +1013,7 @@ private fun LocusOverflowMenuItems(
 @Composable
 private fun PlayerControlBar(
     progressPercent: Int,
+    minimal: Boolean,
     canSeek: Boolean,
     canMoveBackward: Boolean,
     canMoveForward: Boolean,
@@ -1017,28 +1031,32 @@ private fun PlayerControlBar(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
-        Slider(
-            value = sliderValue,
-            onValueChange = { sliderValue = it.coerceIn(0f, 1f) },
-            onValueChangeFinished = {
-                onSeekToPercent((sliderValue * 100).toInt().coerceIn(0, 100))
-            },
-            enabled = canSeek,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp),
-        )
+        if (!minimal) {
+            Slider(
+                value = sliderValue,
+                onValueChange = { sliderValue = it.coerceIn(0f, 1f) },
+                onValueChangeFinished = {
+                    onSeekToPercent((sliderValue * 100).toInt().coerceIn(0, 100))
+                },
+                enabled = canSeek,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp),
+            )
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 0.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            horizontalArrangement = if (minimal) Arrangement.spacedBy(10.dp, androidx.compose.ui.Alignment.CenterHorizontally) else Arrangement.SpaceEvenly,
         ) {
-            IconButton(onClick = onPreviousItem) {
-                Icon(
-                    painter = painterResource(id = R.drawable.msr_skip_previous_24),
-                    contentDescription = "Previous item",
-                )
+            if (!minimal) {
+                IconButton(onClick = onPreviousItem) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.msr_skip_previous_24),
+                        contentDescription = "Previous item",
+                    )
+                }
             }
             IconButton(onClick = onPreviousSegment, enabled = canMoveBackward) {
                 Icon(
@@ -1060,11 +1078,13 @@ private fun PlayerControlBar(
                     contentDescription = "Next segment",
                 )
             }
-            IconButton(onClick = onNextItem) {
-                Icon(
-                    painter = painterResource(id = R.drawable.msr_skip_next_24),
-                    contentDescription = "Next item",
-                )
+            if (!minimal) {
+                IconButton(onClick = onNextItem) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.msr_skip_next_24),
+                        contentDescription = "Next item",
+                    )
+                }
             }
         }
     }

@@ -151,6 +151,22 @@ data class ArticleSummary(
 )
 
 @Serializable
+enum class PlayerControlsMode {
+    FULL,
+    MINIMAL,
+    NUB,
+}
+
+@Serializable
+enum class PlayerChevronSnapEdge {
+    LEFT,
+    RIGHT,
+    TOP,
+    BOTTOM,
+    HOME,
+}
+
+@Serializable
 data class AppSettings(
     val baseUrl: String = "http://10.0.2.2:8000",
     val apiToken: String = "",
@@ -167,6 +183,9 @@ data class AppSettings(
     val readingLineHeightPercent: Int = 160,
     val readingMaxWidthDp: Int = 720,
     val readingParagraphSpacing: ParagraphSpacingOption = ParagraphSpacingOption.MEDIUM,
+    val playerControlsMode: PlayerControlsMode = PlayerControlsMode.FULL,
+    val playerChevronSnapEdge: PlayerChevronSnapEdge = PlayerChevronSnapEdge.HOME,
+    val playerChevronEdgeOffset: Float = 0.5f,
 )
 
 @Serializable
