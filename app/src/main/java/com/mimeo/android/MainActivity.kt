@@ -7,11 +7,12 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Build
 import android.util.Log
-import androidx.annotation.DrawableRes
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,7 +27,6 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -48,7 +48,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -126,7 +125,6 @@ private const val DEBUG_TARGET_ITEM_ID = 409
 private data class BottomNavDestination(
     val route: String,
     val label: String,
-    @DrawableRes val iconRes: Int,
 )
 
 data class UiSnackbarMessage(
@@ -1227,12 +1225,13 @@ private fun MimeoApp(vm: AppViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     val currentRoute = navBackStack?.destination?.route.orEmpty()
     val navItems = listOf(
-        BottomNavDestination(ROUTE_UP_NEXT, "Up Next", android.R.drawable.ic_media_next),
-        BottomNavDestination(ROUTE_LOCUS, "Locus", android.R.drawable.ic_menu_view),
-        BottomNavDestination(ROUTE_COLLECTIONS, "Collections", android.R.drawable.ic_menu_agenda),
-        BottomNavDestination(ROUTE_SETTINGS, "Settings", android.R.drawable.ic_menu_preferences),
+        BottomNavDestination(ROUTE_UP_NEXT, "Up Next"),
+        BottomNavDestination(ROUTE_LOCUS, "Locus"),
+        BottomNavDestination(ROUTE_COLLECTIONS, "Collections"),
+        BottomNavDestination(ROUTE_SETTINGS, "Settings"),
     )
     val settings by vm.settings.collectAsState()
+    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val pendingNavigationRoute by vm.pendingNavigationRoute.collectAsState()
@@ -1243,6 +1242,15 @@ private fun MimeoApp(vm: AppViewModel) {
         else -> ROUTE_UP_NEXT
     }
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
+    val nowPlayingStripText = nowPlayingSession
+        ?.currentItem
+        ?.let { current ->
+            val title = current.title?.takeIf { it.isNotBlank() }
+                ?: current.url.takeIf { it.isNotBlank() }
+                ?: "Item ${current.itemId}"
+            val host = current.host?.takeIf { it.isNotBlank() }
+            if (host == null) title else "$title  ·  $host"
+        }
     val baseUrlHint = vm.baseUrlHintForDevice(isLikelyPhysicalDevice())
     val baseAddress = settings.baseUrl.trim().removePrefix("http://").removePrefix("https://")
     val statusLooksError = statusMessage?.let { message ->
@@ -1313,12 +1321,7 @@ private fun MimeoApp(vm: AppViewModel) {
                             nav.navigate(destination.route) { launchSingleTop = true }
                         },
                         label = { Text(destination.label) },
-                        icon = {
-                            Icon(
-                                painter = painterResource(destination.iconRes),
-                                contentDescription = destination.label,
-                            )
-                        },
+                        icon = {},
                         alwaysShowLabel = true,
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = MaterialTheme.colorScheme.primary,
@@ -1337,11 +1340,11 @@ private fun MimeoApp(vm: AppViewModel) {
                 .fillMaxSize()
                 .padding(innerPadding)
                 .statusBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
             Column(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 if (showGlobalBanner) {
                     StatusBanner(
@@ -1351,6 +1354,9 @@ private fun MimeoApp(vm: AppViewModel) {
                         onRetry = { vm.loadQueue() },
                         onDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                     )
+                }
+                if (nowPlayingStripText != null) {
+                    PersistentNowPlayingStrip(text = nowPlayingStripText)
                 }
                 NavHost(
                     navController = nav,
@@ -1473,6 +1479,26 @@ private fun MimeoApp(vm: AppViewModel) {
                     .padding(bottom = 76.dp),
             )
         }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PersistentNowPlayingStrip(text: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier
+                .fillMaxWidth()
+                .basicMarquee(),
+            maxLines = 1,
+            style = MaterialTheme.typography.labelMedium,
+        )
     }
 }
 

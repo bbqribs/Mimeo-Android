@@ -1,9 +1,7 @@
 package com.mimeo.android.ui.player
 
 import android.os.Build
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -44,7 +43,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
@@ -81,7 +79,6 @@ private fun debugLog(message: String) {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PlayerScreen(
     vm: AppViewModel,
@@ -106,7 +103,6 @@ fun PlayerScreen(
     var pendingDoneEvent by remember { mutableStateOf<PlaybackDoneEvent?>(null) }
     var lastHandledDoneUtteranceId by remember { mutableStateOf<String?>(null) }
     var autoPlayAfterLoad by remember { mutableStateOf(false) }
-    var showClearSessionDialog by remember { mutableStateOf(false) }
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
@@ -527,13 +523,13 @@ fun PlayerScreen(
 
     Column(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f, fill = true),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             ExpandedPlayerTopBar(
                 speedLabel = formatPlaybackSpeed(settings.playbackSpeed),
@@ -591,25 +587,6 @@ fun PlayerScreen(
                             overflowExpanded = false
                             vm.refreshPlaylists()
                             showPlaylistPicker = true
-                        },
-                        onBackToQueue = {
-                            overflowExpanded = false
-                            onBackToQueue(currentItemId)
-                        },
-                        onRestartSession = {
-                            overflowExpanded = false
-                            actionScope.launch {
-                                vm.restartNowPlayingSession()
-                                onShowSnackbar("Now Playing session restarted.", null, null)
-                            }
-                        },
-                        onClearSession = {
-                            overflowExpanded = false
-                            showClearSessionDialog = true
-                        },
-                        onOpenDiagnostics = {
-                            overflowExpanded = false
-                            onOpenDiagnostics()
                         },
                         isExpanded = isExpanded,
                         onToggleExpanded = {
@@ -710,9 +687,6 @@ fun PlayerScreen(
                 }
             }
         }
-        PlayerTitleMarqueeRow(
-            title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
-        )
         PlayerControlBar(
             progressPercent = currentPercent,
             canSeek = chunks.isNotEmpty(),
@@ -868,33 +842,6 @@ fun PlayerScreen(
         )
     }
 
-    if (showClearSessionDialog) {
-        AlertDialog(
-            onDismissRequest = { showClearSessionDialog = false },
-            title = { Text("Clear session?") },
-            text = { Text("This removes the persisted Now Playing snapshot and returns to queue.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showClearSessionDialog = false
-                        actionScope.launch {
-                            stopSpeaking(forceSync = true)
-                            vm.clearNowPlayingSessionNow()
-                            onShowSnackbar("Now Playing session cleared.", null, null)
-                            onBackToQueue(null)
-                        }
-                    },
-                ) {
-                    Text("Clear")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearSessionDialog = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
-    }
 }
 
 @Composable
@@ -911,6 +858,7 @@ private fun ExpandedPlayerTopBar(
     overflowMenuContent: @Composable () -> Unit,
 ) {
     TopAppBar(
+        modifier = Modifier.heightIn(min = 48.dp),
         title = {},
         actions = {
             IconToggleButton(
@@ -944,29 +892,6 @@ private fun ExpandedPlayerTopBar(
             )
         },
     )
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun PlayerTitleMarqueeRow(
-    title: String,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            modifier = Modifier
-                .fillMaxWidth()
-                .basicMarquee(),
-            text = title,
-            maxLines = 1,
-            overflow = TextOverflow.Clip,
-            fontSize = 12.sp,
-        )
-    }
 }
 
 @Composable
@@ -1022,10 +947,6 @@ private fun LocusOverflowMenu(
 @Composable
 private fun LocusOverflowMenuItems(
     onOpenPlaylists: () -> Unit,
-    onBackToQueue: () -> Unit,
-    onRestartSession: () -> Unit,
-    onClearSession: () -> Unit,
-    onOpenDiagnostics: () -> Unit,
     isExpanded: Boolean,
     onToggleExpanded: () -> Unit,
 ) {
@@ -1036,22 +957,6 @@ private fun LocusOverflowMenuItems(
     DropdownMenuItem(
         text = { Text(if (isExpanded) "Collapse player" else "Expand player") },
         onClick = onToggleExpanded,
-    )
-    DropdownMenuItem(
-        text = { Text("Back to queue") },
-        onClick = onBackToQueue,
-    )
-    DropdownMenuItem(
-        text = { Text("Restart session") },
-        onClick = onRestartSession,
-    )
-    DropdownMenuItem(
-        text = { Text("Clear session") },
-        onClick = onClearSession,
-    )
-    DropdownMenuItem(
-        text = { Text("Diagnostics") },
-        onClick = onOpenDiagnostics,
     )
 }
 
@@ -1073,7 +978,7 @@ private fun PlayerControlBar(
     var sliderValue by remember(progressPercent) { mutableStateOf(progressPercent.coerceIn(0, 100) / 100f) }
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         Slider(
             value = sliderValue,
@@ -1084,12 +989,12 @@ private fun PlayerControlBar(
             enabled = canSeek,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 28.dp),
+                .padding(horizontal = 18.dp),
         )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 2.dp),
+                .padding(vertical = 0.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
             IconButton(onClick = onPreviousItem) {
