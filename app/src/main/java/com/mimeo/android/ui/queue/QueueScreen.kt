@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -156,7 +157,10 @@ fun QueueScreen(
         }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
         playlistMutationMessage?.let { message ->
             StatusBanner(
                 stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
@@ -167,7 +171,9 @@ fun QueueScreen(
             )
         }
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             IconButton(onClick = { searchExpanded = !searchExpanded }) {
@@ -205,13 +211,13 @@ fun QueueScreen(
                     }
                 }
             }
-            Text(
-                modifier = Modifier.weight(1f),
-                text = "Sync: $syncLabel  Pending: $pendingCount",
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
+        Text(
+            modifier = Modifier.fillMaxWidth(),
+            text = "Sync: $syncLabel  Pending: $pendingCount",
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         if (BuildConfig.DEBUG && lastQueueFetchDebug.statusCode != null) {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
@@ -348,6 +354,9 @@ fun QueueScreen(
         }
 
         LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = true),
             state = listState,
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
