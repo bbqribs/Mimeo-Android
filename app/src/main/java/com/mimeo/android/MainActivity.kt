@@ -13,6 +13,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -1410,7 +1411,9 @@ private fun MimeoApp(vm: AppViewModel) {
                     NavHost(
                         navController = nav,
                         startDestination = ROUTE_UP_NEXT,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background),
                     ) {
                         composable(ROUTE_COLLECTIONS) {
                             CollectionsScreen(
