@@ -2,6 +2,7 @@ package com.mimeo.android.ui.player
 
 import android.os.Build
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -90,6 +91,7 @@ fun PlayerScreen(
     onOpenItem: (Int) -> Unit,
     onOpenDiagnostics: () -> Unit,
     stopPlaybackOnDispose: Boolean = false,
+    compactControlsOnly: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     var currentItemId by rememberSaveable { mutableIntStateOf(initialItemId) }
@@ -534,19 +536,123 @@ fun PlayerScreen(
         )
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .then(modifier),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
+    val renderPlayerControlBar: @Composable () -> Unit = {
+        PlayerControlBar(
+            progressPercent = currentPercent,
+            canSeek = chunks.isNotEmpty(),
+            canMoveBackward = chunks.size > 1 && safePosition.chunkIndex > 0,
+            canMoveForward = chunks.size > 1 && safePosition.chunkIndex < chunks.lastIndex,
+            canPlay = chunks.isNotEmpty(),
+            isPlaying = isSpeaking || isAutoPlaying,
+            onSeekToPercent = { targetPercent ->
+                if (chunks.isEmpty()) return@PlayerControlBar
+                localDonePercentOverride = targetPercent
+                if (targetPercent < DONE_PERCENT_THRESHOLD) {
+                    nearEndForcedForItemId = -1
+                    lastObservedPercent = targetPercent
+                }
+                val targetPosition = positionForPercent(targetPercent)
+                setPlaybackPosition(targetPosition.chunkIndex, targetPosition.offsetInChunkChars)
+                if (isSpeaking || isAutoPlaying) {
+                    isAutoPlaying = true
+                    playChunk(targetPosition.chunkIndex, targetPosition.offsetInChunkChars)
+                }
+            },
+            onPreviousSegment = {
+                if (chunks.isNotEmpty() && safePosition.chunkIndex > 0) {
+                    val target = safePosition.chunkIndex - 1
+                    setPlaybackPosition(target, 0)
+                    if (isSpeaking || isAutoPlaying) {
+                        isAutoPlaying = true
+                        playChunk(target, 0)
+                    }
+                }
+            },
+            onPlayPause = {
+                if (isSpeaking || isAutoPlaying) {
+                    stopSpeaking(forceSync = true)
+                } else if (chunks.isNotEmpty()) {
+                    val restartFromStart = safePosition.chunkIndex == chunks.lastIndex &&
+                        safePosition.offsetInChunkChars >= chunks.last().length
+                    if (restartFromStart) {
+                        setPlaybackPosition(0, 0)
+                        nearEndForcedForItemId = -1
+                        lastObservedPercent = 0
+                    }
+                    isAutoPlaying = true
+                    val positionToPlay = if (restartFromStart) {
+                        PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
+                    } else {
+                        safePosition
+                    }
+                    readerScrollTriggerSignal += 1
+                    playChunk(positionToPlay.chunkIndex, positionToPlay.offsetInChunkChars)
+                }
+            },
+            onNextSegment = {
+                if (chunks.isNotEmpty() && safePosition.chunkIndex < chunks.lastIndex) {
+                    val target = safePosition.chunkIndex + 1
+                    setPlaybackPosition(target, 0)
+                    if (isSpeaking || isAutoPlaying) {
+                        isAutoPlaying = true
+                        playChunk(target, 0)
+                    }
+                }
+            },
+            onPreviousItem = {
+                actionScope.launch {
+                    val prevId = vm.prevSessionItemId(currentItemId)
+                    if (prevId == null) {
+                        uiMessage = "No previous item"
+                    } else {
+                        stopSpeaking(forceSync = true)
+                        currentItemId = prevId
+                        vm.setPlaybackPosition(prevId, 0, 0)
+                        autoPlayAfterLoad = true
+                        onOpenItem(prevId)
+                    }
+                }
+            },
+            onNextItem = {
+                actionScope.launch {
+                    val nextId = vm.nextSessionItemId(currentItemId)
+                    if (nextId == null) {
+                        uiMessage = "No next item"
+                    } else {
+                        stopSpeaking(forceSync = true)
+                        currentItemId = nextId
+                        vm.setPlaybackPosition(nextId, 0, 0)
+                        autoPlayAfterLoad = true
+                        onOpenItem(nextId)
+                    }
+                }
+            },
+        )
+    }
+
+    if (compactControlsOnly) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f, fill = true),
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f))
+                .then(modifier),
+        ) {
+            renderPlayerControlBar()
+        }
+    } else {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(modifier),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            ExpandedPlayerTopBar(
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = true),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                ExpandedPlayerTopBar(
                 speedLabel = formatPlaybackSpeed(settings.playbackSpeed),
                 overflowExpanded = overflowExpanded,
                 canMarkDone = textPayload != null,
@@ -702,97 +808,8 @@ fun PlayerScreen(
                 }
             }
         }
-        PlayerControlBar(
-            progressPercent = currentPercent,
-            canSeek = chunks.isNotEmpty(),
-            canMoveBackward = chunks.size > 1 && safePosition.chunkIndex > 0,
-            canMoveForward = chunks.size > 1 && safePosition.chunkIndex < chunks.lastIndex,
-            canPlay = chunks.isNotEmpty(),
-            isPlaying = isSpeaking || isAutoPlaying,
-            onSeekToPercent = { targetPercent ->
-                if (chunks.isEmpty()) return@PlayerControlBar
-                localDonePercentOverride = targetPercent
-                if (targetPercent < DONE_PERCENT_THRESHOLD) {
-                    nearEndForcedForItemId = -1
-                    lastObservedPercent = targetPercent
-                }
-                val targetPosition = positionForPercent(targetPercent)
-                setPlaybackPosition(targetPosition.chunkIndex, targetPosition.offsetInChunkChars)
-                if (isSpeaking || isAutoPlaying) {
-                    isAutoPlaying = true
-                    playChunk(targetPosition.chunkIndex, targetPosition.offsetInChunkChars)
-                }
-            },
-            onPreviousSegment = {
-                if (chunks.isNotEmpty() && safePosition.chunkIndex > 0) {
-                    val target = safePosition.chunkIndex - 1
-                    setPlaybackPosition(target, 0)
-                    if (isSpeaking || isAutoPlaying) {
-                        isAutoPlaying = true
-                        playChunk(target, 0)
-                    }
-                }
-            },
-            onPlayPause = {
-                if (isSpeaking || isAutoPlaying) {
-                    stopSpeaking(forceSync = true)
-                } else if (chunks.isNotEmpty()) {
-                    val restartFromStart = safePosition.chunkIndex == chunks.lastIndex &&
-                        safePosition.offsetInChunkChars >= chunks.last().length
-                    if (restartFromStart) {
-                        setPlaybackPosition(0, 0)
-                        nearEndForcedForItemId = -1
-                        lastObservedPercent = 0
-                    }
-                    isAutoPlaying = true
-                    val positionToPlay = if (restartFromStart) {
-                        PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
-                    } else {
-                        safePosition
-                    }
-                    readerScrollTriggerSignal += 1
-                    playChunk(positionToPlay.chunkIndex, positionToPlay.offsetInChunkChars)
-                }
-            },
-            onNextSegment = {
-                if (chunks.isNotEmpty() && safePosition.chunkIndex < chunks.lastIndex) {
-                    val target = safePosition.chunkIndex + 1
-                    setPlaybackPosition(target, 0)
-                    if (isSpeaking || isAutoPlaying) {
-                        isAutoPlaying = true
-                        playChunk(target, 0)
-                    }
-                }
-            },
-            onPreviousItem = {
-                actionScope.launch {
-                    val prevId = vm.prevSessionItemId(currentItemId)
-                    if (prevId == null) {
-                        uiMessage = "No previous item"
-                    } else {
-                        stopSpeaking(forceSync = true)
-                        currentItemId = prevId
-                        vm.setPlaybackPosition(prevId, 0, 0)
-                        autoPlayAfterLoad = true
-                        onOpenItem(prevId)
-                    }
-                }
-            },
-            onNextItem = {
-                actionScope.launch {
-                    val nextId = vm.nextSessionItemId(currentItemId)
-                    if (nextId == null) {
-                        uiMessage = "No next item"
-                    } else {
-                        stopSpeaking(forceSync = true)
-                        currentItemId = nextId
-                        vm.setPlaybackPosition(nextId, 0, 0)
-                        autoPlayAfterLoad = true
-                        onOpenItem(nextId)
-                    }
-                }
-            },
-        )
+            renderPlayerControlBar()
+        }
     }
 
     if (showPlaylistPicker) {

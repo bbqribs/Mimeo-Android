@@ -1265,6 +1265,7 @@ private fun MimeoApp(vm: AppViewModel) {
     val isOnLocusRoute = currentRoute.startsWith(ROUTE_LOCUS)
     val keepPersistentPlayerAlive = settings.persistentPlayerEnabled && requestedPlayerItemId != null
     val shouldComposePlayer = isOnLocusRoute || keepPersistentPlayerAlive
+    val showPersistentPlayerOverlay = !isOnLocusRoute && shouldComposePlayer && requestedPlayerItemId != null
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
     val nowPlayingStripText = nowPlayingSession
@@ -1396,23 +1397,6 @@ private fun MimeoApp(vm: AppViewModel) {
                         .fillMaxWidth()
                         .weight(1f, fill = true),
                 ) {
-                    if (!isOnLocusRoute && shouldComposePlayer && requestedPlayerItemId != null) {
-                        PlayerScreen(
-                            vm = vm,
-                            onShowSnackbar = { message, actionLabel, actionKey ->
-                                vm.showSnackbar(message, actionLabel, actionKey)
-                            },
-                            initialItemId = requestedPlayerItemId,
-                            requestedItemId = requestedPlayerItemId,
-                            startExpanded = false,
-                            locusTapSignal = locusTabTapSignal,
-                            onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
-                            onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
-                            stopPlaybackOnDispose = !settings.persistentPlayerEnabled,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
-
                     NavHost(
                         navController = nav,
                         startDestination = ROUTE_UP_NEXT,
@@ -1489,6 +1473,26 @@ private fun MimeoApp(vm: AppViewModel) {
                         ) {
                             Box(modifier = Modifier.fillMaxSize())
                         }
+                    }
+
+                    if (showPersistentPlayerOverlay) {
+                        PlayerScreen(
+                            vm = vm,
+                            onShowSnackbar = { message, actionLabel, actionKey ->
+                                vm.showSnackbar(message, actionLabel, actionKey)
+                            },
+                            initialItemId = requestedPlayerItemId,
+                            requestedItemId = requestedPlayerItemId,
+                            startExpanded = false,
+                            locusTapSignal = locusTabTapSignal,
+                            onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
+                            onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
+                            stopPlaybackOnDispose = !settings.persistentPlayerEnabled,
+                            compactControlsOnly = true,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth(),
+                        )
                     }
 
                     if (isOnLocusRoute && shouldComposePlayer && requestedPlayerItemId != null) {
