@@ -142,4 +142,16 @@ class SettingsStore(private val context: Context) {
             prefs[forceSentenceHighlightFallbackKey] = forceSentenceHighlightFallback
         }
     }
+
+    suspend fun savePersistentPlayerEnabled(persistentPlayerEnabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[persistentPlayerEnabledKey] = persistentPlayerEnabled
+        }
+    }
+
+    suspend fun saveContinuousNowPlayingMarquee(continuousNowPlayingMarquee: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[continuousNowPlayingMarqueeKey] = continuousNowPlayingMarquee
+        }
+    }
 }

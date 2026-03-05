@@ -272,7 +272,7 @@ fun SettingsScreen(
                         checked = persistentPlayerEnabled,
                         onCheckedChange = {
                             persistentPlayerEnabled = it
-                            saveCurrent()
+                            vm.savePersistentPlayerEnabled(it)
                         },
                     )
                 }
@@ -297,7 +297,7 @@ fun SettingsScreen(
                         checked = continuousNowPlayingMarquee,
                         onCheckedChange = {
                             continuousNowPlayingMarquee = it
-                            saveCurrent()
+                            vm.saveContinuousNowPlayingMarquee(it)
                         },
                     )
                 }

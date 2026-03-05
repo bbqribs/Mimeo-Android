@@ -389,6 +389,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun savePersistentPlayerEnabled(enabled: Boolean) {
+        val current = settings.value
+        _settings.value = current.copy(persistentPlayerEnabled = enabled)
+        viewModelScope.launch {
+            settingsStore.savePersistentPlayerEnabled(enabled)
+        }
+    }
+
+    fun saveContinuousNowPlayingMarquee(enabled: Boolean) {
+        val current = settings.value
+        _settings.value = current.copy(continuousNowPlayingMarquee = enabled)
+        viewModelScope.launch {
+            settingsStore.saveContinuousNowPlayingMarquee(enabled)
+        }
+    }
+
     fun showSnackbar(
         message: String,
         actionLabel: String? = null,
