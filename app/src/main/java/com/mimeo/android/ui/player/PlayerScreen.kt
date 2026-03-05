@@ -119,7 +119,7 @@ fun PlayerScreen(
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
     var lastObservedPercent by remember { mutableIntStateOf(-1) }
     var nearEndForcedForItemId by remember { mutableIntStateOf(-1) }
-    var isExpanded by rememberSaveable(initialItemId, startExpanded) { mutableStateOf(startExpanded) }
+    var isExpanded by rememberSaveable { mutableStateOf(true) }
     val playbackPositionByItem by vm.playbackPositionByItem.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
@@ -528,11 +528,8 @@ fun PlayerScreen(
             ExpandedPlayerTopBar(
                 speedLabel = formatPlaybackSpeed(settings.playbackSpeed),
                 overflowExpanded = overflowExpanded,
-                isExpanded = isExpanded,
                 canMarkDone = textPayload != null,
                 isDone = showCompleted,
-                onCollapse = { isExpanded = false },
-                onExpand = { isExpanded = true },
                 onRefresh = {
                     if (isRefreshing) return@ExpandedPlayerTopBar
                     actionScope.launch {
@@ -603,6 +600,11 @@ fun PlayerScreen(
                         onOpenDiagnostics = {
                             overflowExpanded = false
                             onOpenDiagnostics()
+                        },
+                        isExpanded = isExpanded,
+                        onToggleExpanded = {
+                            overflowExpanded = false
+                            isExpanded = !isExpanded
                         },
                     )
                 },
@@ -888,11 +890,8 @@ fun PlayerScreen(
 private fun ExpandedPlayerTopBar(
     speedLabel: String,
     overflowExpanded: Boolean,
-    isExpanded: Boolean,
     canMarkDone: Boolean,
     isDone: Boolean,
-    onCollapse: () -> Unit,
-    onExpand: () -> Unit,
     onRefresh: () -> Unit,
     onMarkDone: () -> Unit,
     onSpeed: () -> Unit,
@@ -916,9 +915,6 @@ private fun ExpandedPlayerTopBar(
                     contentDescription = if (isDone) "Mark as not done" else "Mark as done",
                     tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                 )
-            }
-            TextButton(onClick = if (isExpanded) onCollapse else onExpand) {
-                Text(if (isExpanded) "Collapse" else "Expand")
             }
             IconButton(onClick = onRefresh) {
                 Icon(
@@ -1018,10 +1014,16 @@ private fun LocusOverflowMenuItems(
     onRestartSession: () -> Unit,
     onClearSession: () -> Unit,
     onOpenDiagnostics: () -> Unit,
+    isExpanded: Boolean,
+    onToggleExpanded: () -> Unit,
 ) {
     DropdownMenuItem(
         text = { Text("Playlists...") },
         onClick = onOpenPlaylists,
+    )
+    DropdownMenuItem(
+        text = { Text(if (isExpanded) "Collapse player" else "Expand player") },
+        onClick = onToggleExpanded,
     )
     DropdownMenuItem(
         text = { Text("Back to queue") },

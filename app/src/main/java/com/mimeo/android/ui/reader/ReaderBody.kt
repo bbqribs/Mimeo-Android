@@ -35,7 +35,7 @@ import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
 import kotlin.math.roundToInt
 
-private val READER_SCROLL_TOP_PADDING = 24.dp
+private val READER_SCROLL_TOP_PADDING = 8.dp
 private val READER_SCROLL_BOTTOM_PADDING = 120.dp
 
 @Composable
@@ -183,14 +183,10 @@ fun ReaderBody(
         val bottom = endBox.bottom
         val visibleTop = scrollState.value.toFloat()
         val visibleBottom = visibleTop + viewportSize.height.toFloat()
-        val desiredTop = visibleTop + topComfortPx
         val desiredBottom = visibleBottom - bottomComfortPx
 
-        val target = when {
-            top < desiredTop -> (top - topComfortPx).roundToInt()
-            bottom > desiredBottom -> (bottom - viewportSize.height + bottomComfortPx).roundToInt()
-            else -> return@LaunchedEffect
-        }.coerceIn(0, scrollState.maxValue)
+        if (bottom <= desiredBottom) return@LaunchedEffect
+        val target = (top - topComfortPx).roundToInt().coerceIn(0, scrollState.maxValue)
 
         if (target != scrollState.value) {
             scrollState.animateScrollTo(target)
