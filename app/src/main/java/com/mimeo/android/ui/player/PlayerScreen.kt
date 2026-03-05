@@ -92,6 +92,7 @@ fun PlayerScreen(
     onOpenDiagnostics: () -> Unit,
     stopPlaybackOnDispose: Boolean = false,
     compactControlsOnly: Boolean = false,
+    showCompactControls: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     var currentItemId by rememberSaveable { mutableIntStateOf(initialItemId) }
@@ -631,13 +632,17 @@ fun PlayerScreen(
     }
 
     if (compactControlsOnly) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f))
-                .then(modifier),
-        ) {
-            renderPlayerControlBar()
+        if (showCompactControls) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f))
+                    .then(modifier),
+            ) {
+                renderPlayerControlBar()
+            }
+        } else {
+            Box(modifier = modifier)
         }
     } else {
         Column(

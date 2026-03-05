@@ -1279,8 +1279,7 @@ private fun MimeoApp(vm: AppViewModel) {
         else -> ROUTE_UP_NEXT
     }
     val isOnLocusRoute = currentRoute.startsWith(ROUTE_LOCUS)
-    val keepPersistentPlayerAlive = settings.persistentPlayerEnabled && requestedPlayerItemId != null
-    val shouldComposePlayer = isOnLocusRoute || keepPersistentPlayerAlive
+    val showPersistentPlayerOverlay = !isOnLocusRoute && settings.persistentPlayerEnabled
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
     val nowPlayingStripText = nowPlayingSession
@@ -1490,7 +1489,7 @@ private fun MimeoApp(vm: AppViewModel) {
                         }
                     }
 
-                    if (shouldComposePlayer && requestedPlayerItemId != null) {
+                    if (requestedPlayerItemId != null) {
                         val compactControlsOnly = !isOnLocusRoute
                         PlayerScreen(
                             vm = vm,
@@ -1505,6 +1504,7 @@ private fun MimeoApp(vm: AppViewModel) {
                             onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                             stopPlaybackOnDispose = !settings.persistentPlayerEnabled,
                             compactControlsOnly = compactControlsOnly,
+                            showCompactControls = showPersistentPlayerOverlay,
                             modifier = if (compactControlsOnly) {
                                 Modifier
                                     .align(Alignment.BottomCenter)
