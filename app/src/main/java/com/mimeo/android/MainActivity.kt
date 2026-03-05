@@ -23,12 +23,10 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -40,7 +38,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -53,7 +50,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -1264,7 +1260,7 @@ private fun MimeoApp(vm: AppViewModel) {
     val keepPersistentPlayerAlive = settings.persistentPlayerEnabled && requestedPlayerItemId != null
     val shouldComposePlayer = isOnLocusRoute || keepPersistentPlayerAlive
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
-    var showNowPlayingTitleDialog by rememberSaveable { mutableStateOf(false) }
+    var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
     val nowPlayingStripText = nowPlayingSession
         ?.currentItem
         ?.let { current ->
@@ -1382,13 +1378,31 @@ private fun MimeoApp(vm: AppViewModel) {
                 PersistentNowPlayingStrip(
                     text = nowPlayingStripText,
                     continuous = settings.continuousNowPlayingMarquee,
+                    expanded = isNowPlayingStripExpanded,
                     onTap = {
                         if (canExpandNowPlayingTitle) {
-                            showNowPlayingTitleDialog = true
+                            isNowPlayingStripExpanded = !isNowPlayingStripExpanded
                         }
                     },
                 )
                 Box(modifier = Modifier.fillMaxSize()) {
+                    if (!isOnLocusRoute && shouldComposePlayer && requestedPlayerItemId != null) {
+                        PlayerScreen(
+                            vm = vm,
+                            onShowSnackbar = { message, actionLabel, actionKey ->
+                                vm.showSnackbar(message, actionLabel, actionKey)
+                            },
+                            initialItemId = requestedPlayerItemId,
+                            requestedItemId = requestedPlayerItemId,
+                            startExpanded = false,
+                            locusTapSignal = locusTabTapSignal,
+                            onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
+                            onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
+                            stopPlaybackOnDispose = !settings.persistentPlayerEnabled,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+
                     NavHost(
                         navController = nav,
                         startDestination = ROUTE_UP_NEXT,
@@ -1465,7 +1479,7 @@ private fun MimeoApp(vm: AppViewModel) {
                         }
                     }
 
-                    if (shouldComposePlayer && requestedPlayerItemId != null) {
+                    if (isOnLocusRoute && shouldComposePlayer && requestedPlayerItemId != null) {
                         PlayerScreen(
                             vm = vm,
                             onShowSnackbar = { message, actionLabel, actionKey ->
@@ -1478,13 +1492,7 @@ private fun MimeoApp(vm: AppViewModel) {
                             onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
                             onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                             stopPlaybackOnDispose = !settings.persistentPlayerEnabled,
-                            modifier = if (isOnLocusRoute) {
-                                Modifier.fillMaxSize()
-                            } else {
-                                Modifier
-                                    .size(1.dp)
-                                    .alpha(0f)
-                            },
+                            modifier = Modifier.fillMaxSize(),
                         )
                     }
                 }
@@ -1498,19 +1506,6 @@ private fun MimeoApp(vm: AppViewModel) {
                     .padding(bottom = 76.dp),
             )
         }
-
-        if (showNowPlayingTitleDialog && canExpandNowPlayingTitle) {
-            AlertDialog(
-                onDismissRequest = { showNowPlayingTitleDialog = false },
-                title = { Text("Now playing") },
-                text = { Text(nowPlayingStripText) },
-                confirmButton = {
-                    TextButton(onClick = { showNowPlayingTitleDialog = false }) {
-                        Text("Close")
-                    }
-                },
-            )
-        }
     }
 }
 
@@ -1519,6 +1514,7 @@ private fun MimeoApp(vm: AppViewModel) {
 private fun PersistentNowPlayingStrip(
     text: String,
     continuous: Boolean,
+    expanded: Boolean,
     onTap: () -> Unit,
 ) {
     Row(
@@ -1532,10 +1528,14 @@ private fun PersistentNowPlayingStrip(
             text = text,
             modifier = Modifier
                 .fillMaxWidth()
-                .basicMarquee(
-                    iterations = if (continuous) Int.MAX_VALUE else 1,
-                ),
-            maxLines = 1,
+                .let { base ->
+                    if (!expanded) {
+                        base.basicMarquee(iterations = if (continuous) Int.MAX_VALUE else 1)
+                    } else {
+                        base
+                    }
+                },
+            maxLines = if (expanded) 5 else 1,
             style = MaterialTheme.typography.labelMedium,
         )
     }

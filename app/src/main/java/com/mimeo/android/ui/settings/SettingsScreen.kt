@@ -270,7 +270,10 @@ fun SettingsScreen(
                     Text("Persistent player across tabs")
                     Switch(
                         checked = persistentPlayerEnabled,
-                        onCheckedChange = { persistentPlayerEnabled = it },
+                        onCheckedChange = {
+                            persistentPlayerEnabled = it
+                            saveCurrent()
+                        },
                     )
                 }
                 Row(
@@ -292,7 +295,10 @@ fun SettingsScreen(
                     Text("Continuous now-playing marquee")
                     Switch(
                         checked = continuousNowPlayingMarquee,
-                        onCheckedChange = { continuousNowPlayingMarquee = it },
+                        onCheckedChange = {
+                            continuousNowPlayingMarquee = it
+                            saveCurrent()
+                        },
                     )
                 }
                 Text("Emulator default: http://10.0.2.2:8000")
