@@ -88,6 +88,7 @@ fun PlayerScreen(
     onShowSnackbar: (String, String?, String?) -> Unit,
     initialItemId: Int,
     startExpanded: Boolean = false,
+    locusTapSignal: Int = 0,
     onOpenItem: (Int) -> Unit,
     onBackToQueue: (Int?) -> Unit,
     onOpenDiagnostics: () -> Unit,
@@ -115,6 +116,7 @@ fun PlayerScreen(
     val readerScrollState = rememberSaveable(currentItemId, saver = ScrollState.Saver) { ScrollState(0) }
     var activeChunkRange by remember { mutableStateOf<IntRange?>(null) }
     var readerScrollTriggerSignal by rememberSaveable { mutableIntStateOf(0) }
+    var lastHandledLocusTapSignal by rememberSaveable { mutableIntStateOf(locusTapSignal) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
@@ -319,6 +321,12 @@ fun PlayerScreen(
         val resolvedId = vm.resolveInitialPlayerItemId(initialItemId)
         currentItemId = resolvedId
         resolvedInitial = true
+    }
+
+    LaunchedEffect(locusTapSignal) {
+        if (locusTapSignal == lastHandledLocusTapSignal) return@LaunchedEffect
+        lastHandledLocusTapSignal = locusTapSignal
+        readerScrollTriggerSignal += 1
     }
 
     LaunchedEffect(currentItemId, resolvedInitial, reloadNonce) {

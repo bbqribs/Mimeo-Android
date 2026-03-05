@@ -42,7 +42,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -1239,6 +1242,7 @@ private fun MimeoApp(vm: AppViewModel) {
         currentRoute.startsWith(ROUTE_SETTINGS) -> ROUTE_SETTINGS
         else -> ROUTE_UP_NEXT
     }
+    var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     val baseUrlHint = vm.baseUrlHintForDevice(isLikelyPhysicalDevice())
     val baseAddress = settings.baseUrl.trim().removePrefix("http://").removePrefix("https://")
     val statusLooksError = statusMessage?.let { message ->
@@ -1302,7 +1306,12 @@ private fun MimeoApp(vm: AppViewModel) {
                 navItems.forEach { destination ->
                     NavigationBarItem(
                         selected = selectedTab == destination.route,
-                        onClick = { nav.navigate(destination.route) { launchSingleTop = true } },
+                        onClick = {
+                            if (destination.route == ROUTE_LOCUS) {
+                                locusTabTapSignal += 1
+                            }
+                            nav.navigate(destination.route) { launchSingleTop = true }
+                        },
                         label = { Text(destination.label) },
                         icon = {
                             Icon(
@@ -1396,6 +1405,7 @@ private fun MimeoApp(vm: AppViewModel) {
                                 },
                                 initialItemId = nowPlayingId,
                                 startExpanded = false,
+                                locusTapSignal = locusTabTapSignal,
                                 onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
                                 onBackToQueue = { focusId ->
                                     if (focusId == null) {
@@ -1440,6 +1450,7 @@ private fun MimeoApp(vm: AppViewModel) {
                             },
                             initialItemId = itemId,
                             startExpanded = true,
+                            locusTapSignal = locusTabTapSignal,
                             onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
                             onBackToQueue = { focusId ->
                                 if (focusId == null) {
