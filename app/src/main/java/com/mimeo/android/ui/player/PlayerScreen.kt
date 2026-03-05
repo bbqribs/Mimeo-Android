@@ -308,7 +308,8 @@ fun PlayerScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            ttsController.shutdown()
+            // Keep playback alive while navigating between tabs/screens.
+            // Lifecycle-driven shutdown remains process-level for this slice.
         }
     }
 
