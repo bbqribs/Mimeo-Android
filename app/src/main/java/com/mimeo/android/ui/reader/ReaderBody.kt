@@ -1,5 +1,6 @@
 package com.mimeo.android.ui.reader
 
+import android.os.SystemClock
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -41,7 +42,8 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private val READER_SCROLL_TOP_PADDING = 0.dp
-private val READER_SCROLL_BOTTOM_PADDING = 120.dp
+private val READER_SCROLL_BOTTOM_PADDING = 0.dp
+private const val MANUAL_SCROLL_SUPPRESS_MS = 1200L
 
 @Composable
 fun ReaderBody(
@@ -78,7 +80,7 @@ fun ReaderBody(
     var lastHandledScrollTrigger by remember { mutableIntStateOf(scrollTriggerSignal) }
     var lastObservedScrollValue by remember(scrollState) { mutableIntStateOf(scrollState.value) }
     var isProgrammaticScroll by remember { mutableStateOf(false) }
-    var suppressTransitionAutoScroll by remember { mutableStateOf(false) }
+    var suppressTransitionUntilMs by remember { mutableStateOf(0L) }
     val highlightedSentenceRange = remember(chunks, sentenceRangesByChunk, safeChunkIndex, currentChunkOffsetInChars, activeRangeInChunk) {
         chunks.getOrNull(safeChunkIndex)?.let { chunk ->
             val offsetForSentence = activeRangeInChunk?.first ?: currentChunkOffsetInChars
@@ -192,7 +194,7 @@ fun ReaderBody(
         snapshotFlow { scrollState.value }
             .collect { scrollValue ->
                 if (scrollValue != lastObservedScrollValue && !isProgrammaticScroll) {
-                    suppressTransitionAutoScroll = true
+                    suppressTransitionUntilMs = SystemClock.elapsedRealtime() + MANUAL_SCROLL_SUPPRESS_MS
                 }
                 lastObservedScrollValue = scrollValue
                 val layout = activeTextLayout ?: return@collect
@@ -242,6 +244,7 @@ fun ReaderBody(
         val fullyVisibleNow = startTopInRoot >= visibleTopInRoot && endBottomInRoot <= desiredBottomInRoot
         val desiredAnchorInRoot = visibleTopInRoot + topComfortPx
         val deltaToTopAnchor = startTopInRoot - desiredAnchorInRoot
+        val nowMs = SystemClock.elapsedRealtime()
 
         val externalTrigger = scrollTriggerSignal != lastHandledScrollTrigger
         if (externalTrigger && scrollState.maxValue == 0 && abs(deltaToTopAnchor) > 1f) {
@@ -249,10 +252,12 @@ fun ReaderBody(
         }
         val anchorChanged = lastAnchorRange != anchor
         val hiddenByBottom = endBottomInRoot > desiredBottomInRoot
-        val transitionTrigger = autoScrollWhileListening &&
-            !suppressTransitionAutoScroll &&
-            anchorChanged &&
+        val transitionCrossedBottom = anchorChanged &&
             lastAnchorWasFullyVisible == true &&
+            hiddenByBottom
+        val transitionTrigger = autoScrollWhileListening &&
+            nowMs >= suppressTransitionUntilMs &&
+            transitionCrossedBottom &&
             hiddenByBottom
         val shouldScroll = externalTrigger || transitionTrigger
         if (!shouldScroll) {
@@ -287,7 +292,7 @@ fun ReaderBody(
         }
         if (externalTrigger) {
             lastHandledScrollTrigger = scrollTriggerSignal
-            suppressTransitionAutoScroll = false
+            suppressTransitionUntilMs = 0L
         }
         lastAnchorRange = anchor
         lastAnchorWasFullyVisible = true
