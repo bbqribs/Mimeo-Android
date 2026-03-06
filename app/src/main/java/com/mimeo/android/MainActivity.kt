@@ -15,7 +15,12 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,13 +35,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.tween
 import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -1312,11 +1311,10 @@ private fun MimeoApp(vm: AppViewModel) {
         else -> ROUTE_UP_NEXT
     }
     val isOnLocusRoute = currentRoute.startsWith(ROUTE_LOCUS)
-    var playbackActive by rememberSaveable { mutableStateOf(false) }
-    var playbackProgressPercent by rememberSaveable { mutableIntStateOf(0) }
+    var readerChromeHidden by rememberSaveable { mutableStateOf(false) }
     val controlsMode = settings.playerControlsMode
     val compactControlsOnly = !isOnLocusRoute
-    val showCompactControls = controlsMode != PlayerControlsMode.NUB
+    val showCompactControls = settings.persistentPlayerEnabled
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
     val nowPlayingStripText = nowPlayingSession
@@ -1384,11 +1382,7 @@ private fun MimeoApp(vm: AppViewModel) {
 
     Scaffold(
         bottomBar = {
-            Column {
-                PlayerProgressLine(
-                    visible = playbackActive && controlsMode == PlayerControlsMode.NUB,
-                    progressPercent = playbackProgressPercent,
-                )
+            AnimatedVisibility(visible = !(isOnLocusRoute && readerChromeHidden)) {
                 NavigationBar(
                     modifier = Modifier.height(68.dp),
                     tonalElevation = 0.dp,
@@ -1409,7 +1403,7 @@ private fun MimeoApp(vm: AppViewModel) {
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = MaterialTheme.colorScheme.primary,
                                 selectedTextColor = MaterialTheme.colorScheme.primary,
-                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
+                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.36f),
                                 unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                 unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             ),
@@ -1430,7 +1424,7 @@ private fun MimeoApp(vm: AppViewModel) {
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                if (showGlobalBanner) {
+                if (showGlobalBanner && !(isOnLocusRoute && readerChromeHidden)) {
                     StatusBanner(
                         stateLabel = bannerStateLabel,
                         summary = bannerSummary,
@@ -1548,9 +1542,15 @@ private fun MimeoApp(vm: AppViewModel) {
                             compactControlsOnly = compactControlsOnly,
                             showCompactControls = showCompactControls,
                             controlsMode = controlsMode,
-                            onPlaybackActiveChange = { active -> playbackActive = active },
-                            onPlaybackProgressPercentChange = { percent ->
-                                playbackProgressPercent = percent.coerceIn(0, 100)
+                            chevronSnapEdge = settings.playerChevronSnapEdge,
+                            onControlsModeChange = { mode ->
+                                vm.savePlayerControlsMode(mode)
+                            },
+                            onReaderChromeVisibilityChange = { hidden ->
+                                readerChromeHidden = hidden
+                            },
+                            onChevronSnapChange = { edge ->
+                                vm.savePlayerChevronSnap(edge, 0.5f)
                             },
                             modifier = if (compactControlsOnly) {
                                 Modifier
@@ -1561,26 +1561,6 @@ private fun MimeoApp(vm: AppViewModel) {
                             },
                         )
                     }
-
-                    val chevronDescription = when (controlsMode) {
-                        PlayerControlsMode.FULL -> "Collapse player controls"
-                        PlayerControlsMode.MINIMAL -> "Expand player controls. Long press to hide player controls"
-                        PlayerControlsMode.NUB -> "Show player controls"
-                    }
-                    if (requestedPlayerItemId != null && playbackActive) {
-                        FixedChevronControl(
-                            contentDescription = chevronDescription,
-                            onTap = {
-                                vm.savePlayerControlsMode(nextPlayerControlsModeOnTap(controlsMode))
-                            },
-                            onLongPress = {
-                                vm.savePlayerControlsMode(nextPlayerControlsModeOnLongPress(controlsMode))
-                            },
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(end = 14.dp, bottom = 84.dp),
-                        )
-                    }
                 }
             }
 
@@ -1589,7 +1569,7 @@ private fun MimeoApp(vm: AppViewModel) {
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.ime)
-                    .padding(bottom = 76.dp),
+                    .padding(bottom = if (isOnLocusRoute && readerChromeHidden) 12.dp else 76.dp),
             )
         }
     }
@@ -1633,70 +1613,6 @@ private fun PersistentNowPlayingStrip(
                 style = MaterialTheme.typography.labelMedium,
             )
         }
-    }
-}
-
-private fun nextPlayerControlsModeOnTap(current: PlayerControlsMode): PlayerControlsMode {
-    return when (current) {
-        PlayerControlsMode.FULL -> PlayerControlsMode.MINIMAL
-        PlayerControlsMode.MINIMAL -> PlayerControlsMode.FULL
-        PlayerControlsMode.NUB -> PlayerControlsMode.MINIMAL
-    }
-}
-
-private fun nextPlayerControlsModeOnLongPress(current: PlayerControlsMode): PlayerControlsMode {
-    return when (current) {
-        PlayerControlsMode.FULL -> PlayerControlsMode.MINIMAL
-        PlayerControlsMode.MINIMAL -> PlayerControlsMode.NUB
-        PlayerControlsMode.NUB -> PlayerControlsMode.MINIMAL
-    }
-}
-
-@Composable
-private fun PlayerProgressLine(visible: Boolean, progressPercent: Int) {
-    if (!visible) return
-    val clamped = progressPercent.coerceIn(0, 100)
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(3.dp)
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(clamped / 100f)
-                .height(3.dp)
-                .background(MaterialTheme.colorScheme.primary),
-        )
-    }
-}
-
-@Composable
-@OptIn(ExperimentalFoundationApi::class)
-private fun FixedChevronControl(
-    contentDescription: String,
-    onTap: () -> Unit,
-    onLongPress: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .size(48.dp)
-            .combinedClickable(
-                onClick = onTap,
-                onLongClick = onLongPress,
-            )
-            .background(
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f),
-                shape = androidx.compose.foundation.shape.CircleShape,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            painter = androidx.compose.ui.res.painterResource(id = R.drawable.msr_chevron_right_24),
-            contentDescription = contentDescription,
-            tint = MaterialTheme.colorScheme.primary,
-        )
     }
 }
 

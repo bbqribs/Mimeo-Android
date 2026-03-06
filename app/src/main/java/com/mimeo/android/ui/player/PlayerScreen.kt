@@ -1,8 +1,16 @@
 package com.mimeo.android.ui.player
 
 import android.os.Build
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,9 +20,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -36,14 +46,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
@@ -53,6 +66,7 @@ import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.PlaybackPosition
+import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.model.absoluteCharOffset
@@ -67,6 +81,7 @@ import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import com.mimeo.android.ui.reader.ReaderBody
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 private const val DEBUG_PLAYBACK = false
 private const val PROGRESS_SYNC_DEBOUNCE_MS = 2_000L
@@ -95,8 +110,12 @@ fun PlayerScreen(
     compactControlsOnly: Boolean = false,
     showCompactControls: Boolean = true,
     controlsMode: PlayerControlsMode = PlayerControlsMode.FULL,
+    chevronSnapEdge: PlayerChevronSnapEdge = PlayerChevronSnapEdge.RIGHT,
+    onControlsModeChange: (PlayerControlsMode) -> Unit = {},
     onPlaybackActiveChange: (Boolean) -> Unit = {},
     onPlaybackProgressPercentChange: (Int) -> Unit = {},
+    onReaderChromeVisibilityChange: (Boolean) -> Unit = {},
+    onChevronSnapChange: (PlayerChevronSnapEdge) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var currentItemId by rememberSaveable { mutableIntStateOf(initialItemId) }
@@ -128,6 +147,7 @@ fun PlayerScreen(
     var lastObservedPercent by remember { mutableIntStateOf(-1) }
     var nearEndForcedForItemId by remember { mutableIntStateOf(-1) }
     var isExpanded by rememberSaveable { mutableStateOf(true) }
+    var readerModeEnabled by rememberSaveable { mutableStateOf(false) }
     val playbackPositionByItem by vm.playbackPositionByItem.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
@@ -140,6 +160,18 @@ fun PlayerScreen(
     val context = LocalContext.current
     val isPhysicalDevice = remember { isLikelyPhysicalDevice() }
     val baseUrlHint = vm.baseUrlHintForDevice(isPhysicalDevice)
+    val chevronSide = remember(chevronSnapEdge) {
+        when (chevronSnapEdge) {
+            PlayerChevronSnapEdge.LEFT -> PlayerChevronSnapEdge.LEFT
+            else -> PlayerChevronSnapEdge.RIGHT
+        }
+    }
+    val chevronDescription = when (controlsMode) {
+        PlayerControlsMode.FULL -> "Collapse player controls"
+        PlayerControlsMode.MINIMAL -> "Expand player controls. Long press to hide player controls"
+        PlayerControlsMode.NUB -> "Show player controls"
+    }
+    val readerChromeHidden = !compactControlsOnly && isExpanded && readerModeEnabled
 
     val latestChunks by rememberUpdatedState(chunks)
     val latestItemId by rememberUpdatedState(currentItemId)
@@ -345,6 +377,12 @@ fun PlayerScreen(
         readerScrollTriggerSignal += 1
     }
 
+    LaunchedEffect(compactControlsOnly) {
+        if (compactControlsOnly && readerModeEnabled) {
+            readerModeEnabled = false
+        }
+    }
+
     LaunchedEffect(currentItemId, resolvedInitial, reloadNonce) {
         if (!resolvedInitial) return@LaunchedEffect
         stopSpeaking(forceSync = false)
@@ -500,6 +538,10 @@ fun PlayerScreen(
         onPlaybackProgressPercentChange(currentPercent)
     }
 
+    LaunchedEffect(readerChromeHidden) {
+        onReaderChromeVisibilityChange(readerChromeHidden)
+    }
+
     LaunchedEffect(settings.playbackSpeed, currentItemId, safePosition.chunkIndex, safePosition.offsetInChunkChars, chunks.size) {
         ttsController.setSpeechRate(settings.playbackSpeed)
         if (lastAppliedSpeed == settings.playbackSpeed) return@LaunchedEffect
@@ -547,6 +589,25 @@ fun PlayerScreen(
             playlistName = playlist.name,
             isMember = vm.isItemInPlaylist(currentItemId, playlist.id),
         )
+    }
+    val showDockChevron = isSpeaking || isAutoPlaying
+    val handleChevronTap = {
+        onControlsModeChange(nextPlayerControlsModeOnTap(controlsMode))
+    }
+    val handleChevronLongPress = {
+        onControlsModeChange(nextPlayerControlsModeOnLongPress(controlsMode))
+    }
+    val handleChevronSnap: (Float) -> Unit = { delta ->
+        if (abs(delta) >= 32f) {
+            val nextEdge = if (delta < 0f) {
+                PlayerChevronSnapEdge.LEFT
+            } else {
+                PlayerChevronSnapEdge.RIGHT
+            }
+            if (nextEdge != chevronSide) {
+                onChevronSnapChange(nextEdge)
+            }
+        }
     }
 
     val renderPlayerControlBar: @Composable () -> Unit = {
@@ -643,16 +704,49 @@ fun PlayerScreen(
             },
         )
     }
+    val renderPlayerDock: @Composable () -> Unit = {
+        when (controlsMode) {
+            PlayerControlsMode.FULL -> FullPlayerDock(
+                chevronSide = chevronSide,
+                showChevron = showDockChevron,
+                chevronContentDescription = chevronDescription,
+                onChevronTap = handleChevronTap,
+                onChevronLongPress = handleChevronLongPress,
+                onChevronSnap = handleChevronSnap,
+                content = renderPlayerControlBar,
+            )
+
+            PlayerControlsMode.MINIMAL -> MinimalPlayerDock(
+                progressPercent = currentPercent,
+                chevronSide = chevronSide,
+                showChevron = showDockChevron,
+                chevronContentDescription = chevronDescription,
+                onChevronTap = handleChevronTap,
+                onChevronLongPress = handleChevronLongPress,
+                onChevronSnap = handleChevronSnap,
+                content = renderPlayerControlBar,
+            )
+
+            PlayerControlsMode.NUB -> NubPlayerDock(
+                progressPercent = currentPercent,
+                chevronSide = chevronSide,
+                showChevron = showDockChevron,
+                chevronContentDescription = chevronDescription,
+                onChevronTap = handleChevronTap,
+                onChevronLongPress = handleChevronLongPress,
+                onChevronSnap = handleChevronSnap,
+            )
+        }
+    }
 
     if (compactControlsOnly) {
         if (showCompactControls) {
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f))
                     .then(modifier),
             ) {
-                renderPlayerControlBar()
+                renderPlayerDock()
             }
         } else {
             Box(modifier = modifier)
@@ -670,166 +764,186 @@ fun PlayerScreen(
                     .weight(1f, fill = true),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                ExpandedPlayerTopBar(
-                speedLabel = formatPlaybackSpeed(settings.playbackSpeed),
-                overflowExpanded = overflowExpanded,
-                canMarkDone = textPayload != null,
-                isDone = showCompleted,
-                onRefresh = {
-                    if (isRefreshing) return@ExpandedPlayerTopBar
-                    actionScope.launch {
-                        isRefreshing = true
-                        vm.refreshCurrentPlayerItem(currentItemId)
-                            .onSuccess {
-                                localDonePercentOverride = -1
-                                preserveVisibleContentOnReload = true
-                                reloadNonce += 1
-                            }
-                            .onFailure { error ->
-                                if (error is CancellationException) return@onFailure
-                                uiMessage = error.message ?: "Refresh failed"
-                                onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
-                            }
-                        isRefreshing = false
-                    }
-                },
-                onMarkDone = {
-                    actionScope.launch {
-                        val markDone = !showCompleted
-                        val targetPercent = if (markDone) 100 else 97
-                        val resumePercent = if (markDone) currentPercent else undoDonePercent
-                        vm.toggleCompletion(currentItemId, markDone = markDone, resumePercent = resumePercent)
-                            .onSuccess {
-                                localDonePercentOverride = targetPercent
-                                val toggleMessage = when {
-                                    showCompleted -> "Marked not done"
-                                    else -> "Marked done"
-                                }
-                                onShowSnackbar(toggleMessage, null, null)
-                                if (showCompleted && chunks.isNotEmpty()) {
-                                    nearEndForcedForItemId = -1
-                                    lastObservedPercent = targetPercent
-                                }
-                            }
-                            .onFailure { error ->
-                                if (error is CancellationException) return@onFailure
-                                uiMessage = error.message ?: "Completion update failed"
-                                onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
-                            }
-                    }
-                },
-                onSpeed = { showSpeedDialog = true },
-                onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
-                overflowMenuContent = {
-                    LocusOverflowMenuItems(
-                        onOpenPlaylists = {
-                            overflowExpanded = false
-                            vm.refreshPlaylists()
-                            showPlaylistPicker = true
-                        },
-                        isExpanded = isExpanded,
-                        onToggleExpanded = {
-                            overflowExpanded = false
-                            isExpanded = !isExpanded
-                        },
-                    )
-                },
-            )
-            if (!isExpanded) {
-                LocusPeekCard(
-                    title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
-                    statusLine = "Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability",
-                    overflowExpanded = overflowExpanded,
-                    overflowMenuContent = {
-                        Spacer(modifier = Modifier)
-                    },
-                )
-                playlistMutationMessage?.let { message ->
-                    StatusBanner(
-                        stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
-                        summary = message,
-                        detail = null,
-                        onRetry = { playlistMutationMessage = null },
-                        onDiagnostics = onOpenDiagnostics,
-                    )
-                }
-                if (showLocalPlayerBanner) {
-                    StatusBanner(
-                        stateLabel = "Status",
-                        summary = uiMessage ?: "Player status",
-                        detail = null,
-                        onRetry = {
-                            uiMessage = null
-                            if (textPayload == null) {
-                                reloadNonce += 1
-                            } else if (chunks.isNotEmpty()) {
-                                isAutoPlaying = true
-                                playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
-                            }
-                        },
-                        onDiagnostics = null,
-                    )
-                }
-                if (isLoading) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                playlistMutationMessage?.let { message ->
-                    StatusBanner(
-                        stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
-                        summary = message,
-                        detail = null,
-                        onRetry = { playlistMutationMessage = null },
-                        onDiagnostics = onOpenDiagnostics,
-                    )
-                }
-                if (showLocalPlayerBanner) {
-                    StatusBanner(
-                        stateLabel = "Status",
-                        summary = uiMessage ?: "Player status",
-                        detail = null,
-                        onRetry = {
-                            uiMessage = null
-                            if (textPayload == null) {
-                                reloadNonce += 1
-                            } else if (chunks.isNotEmpty()) {
-                                isAutoPlaying = true
-                                playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
-                            }
-                        },
-                        onDiagnostics = null,
-                    )
-                }
-                if (isLoading) {
-                    CircularProgressIndicator()
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f, fill = true),
+                AnimatedVisibility(
+                    visible = !readerChromeHidden,
+                    enter = fadeIn(animationSpec = tween(150)),
+                    exit = fadeOut(animationSpec = tween(120)),
                 ) {
-                    ReaderBody(
-                        fullText = textPayload?.text,
-                        chunks = chunks,
-                        currentChunkIndex = safePosition.chunkIndex,
-                        currentChunkOffsetInChars = safePosition.offsetInChunkChars,
-                        activeRangeInChunk = activeChunkRange,
-                        scrollTriggerSignal = readerScrollTriggerSignal,
-                        autoScrollWhileListening = settings.autoScrollWhileListening,
-                        readingFontSizeSp = settings.readingFontSizeSp,
-                        readingLineHeightPercent = settings.readingLineHeightPercent,
-                        readingMaxWidthDp = settings.readingMaxWidthDp,
-                        paragraphSpacing = settings.readingParagraphSpacing,
-                        scrollState = readerScrollState,
-                        modifier = Modifier.fillMaxSize(),
+                    ExpandedPlayerTopBar(
+                        speedLabel = formatPlaybackSpeed(settings.playbackSpeed),
+                        overflowExpanded = overflowExpanded,
+                        canMarkDone = textPayload != null,
+                        isDone = showCompleted,
+                        onRefresh = {
+                            if (isRefreshing) return@ExpandedPlayerTopBar
+                            actionScope.launch {
+                                isRefreshing = true
+                                vm.refreshCurrentPlayerItem(currentItemId)
+                                    .onSuccess {
+                                        localDonePercentOverride = -1
+                                        preserveVisibleContentOnReload = true
+                                        reloadNonce += 1
+                                    }
+                                    .onFailure { error ->
+                                        if (error is CancellationException) return@onFailure
+                                        uiMessage = error.message ?: "Refresh failed"
+                                        onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
+                                    }
+                                isRefreshing = false
+                            }
+                        },
+                        onMarkDone = {
+                            actionScope.launch {
+                                val markDone = !showCompleted
+                                val targetPercent = if (markDone) 100 else 97
+                                val resumePercent = if (markDone) currentPercent else undoDonePercent
+                                vm.toggleCompletion(currentItemId, markDone = markDone, resumePercent = resumePercent)
+                                    .onSuccess {
+                                        localDonePercentOverride = targetPercent
+                                        val toggleMessage = when {
+                                            showCompleted -> "Marked not done"
+                                            else -> "Marked done"
+                                        }
+                                        onShowSnackbar(toggleMessage, null, null)
+                                        if (showCompleted && chunks.isNotEmpty()) {
+                                            nearEndForcedForItemId = -1
+                                            lastObservedPercent = targetPercent
+                                        }
+                                    }
+                                    .onFailure { error ->
+                                        if (error is CancellationException) return@onFailure
+                                        uiMessage = error.message ?: "Completion update failed"
+                                        onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
+                                    }
+                            }
+                        },
+                        onSpeed = { showSpeedDialog = true },
+                        onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
+                        overflowMenuContent = {
+                            LocusOverflowMenuItems(
+                                onOpenPlaylists = {
+                                    overflowExpanded = false
+                                    vm.refreshPlaylists()
+                                    showPlaylistPicker = true
+                                },
+                                isExpanded = isExpanded,
+                                onToggleExpanded = {
+                                    overflowExpanded = false
+                                    isExpanded = !isExpanded
+                                },
+                            )
+                        },
                     )
                 }
+                if (!isExpanded) {
+                    LocusPeekCard(
+                        title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
+                        statusLine = "Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability",
+                        overflowExpanded = overflowExpanded,
+                        overflowMenuContent = {
+                            Spacer(modifier = Modifier)
+                        },
+                    )
+                    playlistMutationMessage?.let { message ->
+                        StatusBanner(
+                            stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
+                            summary = message,
+                            detail = null,
+                            onRetry = { playlistMutationMessage = null },
+                            onDiagnostics = onOpenDiagnostics,
+                        )
+                    }
+                    if (showLocalPlayerBanner) {
+                        StatusBanner(
+                            stateLabel = "Status",
+                            summary = uiMessage ?: "Player status",
+                            detail = null,
+                            onRetry = {
+                                uiMessage = null
+                                if (textPayload == null) {
+                                    reloadNonce += 1
+                                } else if (chunks.isNotEmpty()) {
+                                    isAutoPlaying = true
+                                    playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
+                                }
+                            },
+                            onDiagnostics = null,
+                        )
+                    }
+                    if (isLoading) {
+                        CircularProgressIndicator()
+                    }
+                } else {
+                    playlistMutationMessage?.let { message ->
+                        StatusBanner(
+                            stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
+                            summary = message,
+                            detail = null,
+                            onRetry = { playlistMutationMessage = null },
+                            onDiagnostics = onOpenDiagnostics,
+                        )
+                    }
+                    if (showLocalPlayerBanner) {
+                        StatusBanner(
+                            stateLabel = "Status",
+                            summary = uiMessage ?: "Player status",
+                            detail = null,
+                            onRetry = {
+                                uiMessage = null
+                                if (textPayload == null) {
+                                    reloadNonce += 1
+                                } else if (chunks.isNotEmpty()) {
+                                    isAutoPlaying = true
+                                    playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
+                                }
+                            },
+                            onDiagnostics = null,
+                        )
+                    }
+                    if (isLoading) {
+                        CircularProgressIndicator()
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = true),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .pointerInput(readerModeEnabled) {
+                                    detectTapGestures {
+                                        readerModeEnabled = !readerModeEnabled
+                                    }
+                                },
+                        ) {
+                            ReaderBody(
+                                fullText = textPayload?.text,
+                                chunks = chunks,
+                                currentChunkIndex = safePosition.chunkIndex,
+                                currentChunkOffsetInChars = safePosition.offsetInChunkChars,
+                                activeRangeInChunk = activeChunkRange,
+                                scrollTriggerSignal = readerScrollTriggerSignal,
+                                autoScrollWhileListening = settings.autoScrollWhileListening,
+                                readingFontSizeSp = settings.readingFontSizeSp,
+                                readingLineHeightPercent = settings.readingLineHeightPercent,
+                                readingMaxWidthDp = settings.readingMaxWidthDp,
+                                paragraphSpacing = settings.readingParagraphSpacing,
+                                scrollState = readerScrollState,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    }
+                }
+            AnimatedVisibility(
+                visible = !readerChromeHidden,
+                enter = fadeIn(animationSpec = tween(150)),
+                exit = fadeOut(animationSpec = tween(120)),
+            ) {
+                renderPlayerDock()
             }
         }
-            if (controlsMode != PlayerControlsMode.NUB) {
-                renderPlayerControlBar()
-            }
-        }
+    }
     }
 
     if (showPlaylistPicker) {
@@ -1012,6 +1126,216 @@ private fun LocusOverflowMenuItems(
     )
 }
 
+private fun nextPlayerControlsModeOnTap(current: PlayerControlsMode): PlayerControlsMode {
+    return when (current) {
+        PlayerControlsMode.FULL -> PlayerControlsMode.MINIMAL
+        PlayerControlsMode.MINIMAL -> PlayerControlsMode.FULL
+        PlayerControlsMode.NUB -> PlayerControlsMode.MINIMAL
+    }
+}
+
+private fun nextPlayerControlsModeOnLongPress(current: PlayerControlsMode): PlayerControlsMode {
+    return when (current) {
+        PlayerControlsMode.FULL -> PlayerControlsMode.MINIMAL
+        PlayerControlsMode.MINIMAL -> PlayerControlsMode.NUB
+        PlayerControlsMode.NUB -> PlayerControlsMode.MINIMAL
+    }
+}
+
+@Composable
+private fun FullPlayerDock(
+    chevronSide: PlayerChevronSnapEdge,
+    showChevron: Boolean,
+    chevronContentDescription: String,
+    onChevronTap: () -> Unit,
+    onChevronLongPress: () -> Unit,
+    onChevronSnap: (Float) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+    ) {
+        content()
+        if (showChevron) {
+            PlayerChromeChevron(
+                contentDescription = chevronContentDescription,
+                pointLeft = chevronSide == PlayerChevronSnapEdge.LEFT,
+                onTap = onChevronTap,
+                onLongPress = onChevronLongPress,
+                onSnap = onChevronSnap,
+                modifier = Modifier
+                    .align(
+                        if (chevronSide == PlayerChevronSnapEdge.LEFT) {
+                            Alignment.TopStart
+                        } else {
+                            Alignment.TopEnd
+                        },
+                    )
+                    .padding(horizontal = 18.dp)
+                    .offset(y = (-22).dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MinimalPlayerDock(
+    progressPercent: Int,
+    chevronSide: PlayerChevronSnapEdge,
+    showChevron: Boolean,
+    chevronContentDescription: String,
+    onChevronTap: () -> Unit,
+    onChevronLongPress: () -> Unit,
+    onChevronSnap: (Float) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 58.dp),
+        ) {
+            content()
+            if (showChevron) {
+                PlayerChromeChevron(
+                    contentDescription = chevronContentDescription,
+                    pointLeft = chevronSide == PlayerChevronSnapEdge.LEFT,
+                    onTap = onChevronTap,
+                    onLongPress = onChevronLongPress,
+                    onSnap = onChevronSnap,
+                    modifier = Modifier
+                        .align(
+                            if (chevronSide == PlayerChevronSnapEdge.LEFT) {
+                                Alignment.CenterStart
+                            } else {
+                                Alignment.CenterEnd
+                            },
+                        )
+                        .padding(horizontal = 10.dp),
+                )
+            }
+        }
+        PlayerProgressLine(progressPercent = progressPercent)
+    }
+}
+
+@Composable
+private fun NubPlayerDock(
+    progressPercent: Int,
+    chevronSide: PlayerChevronSnapEdge,
+    showChevron: Boolean,
+    chevronContentDescription: String,
+    onChevronTap: () -> Unit,
+    onChevronLongPress: () -> Unit,
+    onChevronSnap: (Float) -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 28.dp)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+    ) {
+        PlayerProgressLine(
+            progressPercent = progressPercent,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth(),
+        )
+        if (showChevron) {
+            PlayerChromeChevron(
+                contentDescription = chevronContentDescription,
+                pointLeft = chevronSide == PlayerChevronSnapEdge.LEFT,
+                onTap = onChevronTap,
+                onLongPress = onChevronLongPress,
+                onSnap = onChevronSnap,
+                modifier = Modifier
+                    .align(
+                        if (chevronSide == PlayerChevronSnapEdge.LEFT) {
+                            Alignment.CenterStart
+                        } else {
+                            Alignment.CenterEnd
+                        },
+                    )
+                    .padding(horizontal = 10.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlayerProgressLine(
+    progressPercent: Int,
+    modifier: Modifier = Modifier,
+) {
+    val clamped = progressPercent.coerceIn(0, 100)
+    Box(
+        modifier = modifier
+            .height(3.dp)
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(clamped / 100f)
+                .height(3.dp)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.88f)),
+        )
+    }
+}
+
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
+private fun PlayerChromeChevron(
+    contentDescription: String,
+    pointLeft: Boolean,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
+    onSnap: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var dragAccumulation by remember { mutableFloatStateOf(0f) }
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        dragAccumulation += dragAmount
+                    },
+                    onDragEnd = {
+                        onSnap(dragAccumulation)
+                        dragAccumulation = 0f
+                    },
+                    onDragCancel = {
+                        dragAccumulation = 0f
+                    },
+                )
+            }
+            .combinedClickable(
+                onClick = onTap,
+                onLongClick = onLongPress,
+            )
+            .background(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                shape = MaterialTheme.shapes.large,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(id = R.drawable.msr_chevron_right_24),
+            contentDescription = contentDescription,
+            modifier = Modifier.graphicsLayer(scaleX = if (pointLeft) -1f else 1f),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
 @Composable
 private fun PlayerControlBar(
     progressPercent: Int,
@@ -1029,6 +1353,7 @@ private fun PlayerControlBar(
     onNextItem: () -> Unit,
 ) {
     var sliderValue by remember(progressPercent) { mutableStateOf(progressPercent.coerceIn(0, 100) / 100f) }
+    val minimalSideInset = if (minimal) 56.dp else 0.dp
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(0.dp),
@@ -1049,6 +1374,7 @@ private fun PlayerControlBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(start = minimalSideInset, end = minimalSideInset)
                 .padding(vertical = 0.dp),
             horizontalArrangement = if (minimal) Arrangement.spacedBy(10.dp, androidx.compose.ui.Alignment.CenterHorizontally) else Arrangement.SpaceEvenly,
         ) {
