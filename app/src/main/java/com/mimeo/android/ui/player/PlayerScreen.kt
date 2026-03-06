@@ -99,6 +99,7 @@ private val CONTROL_CLUSTER_GAP = 4.dp
 private val CONTROL_SLOT_SIZE = 48.dp
 private val PLAYER_UPPER_LANE_HEIGHT = 28.dp
 private val PLAYER_TRANSPORT_ROW_HEIGHT = 48.dp
+private val NUB_CHEVRON_BOTTOM_MARGIN = 3.dp
 private val PLAYBACK_SPEED_OPTIONS = listOf(0.8f, 0.9f, 1.0f, 1.1f, 1.25f, 1.5f, 1.75f, 2.0f)
 
 private fun debugLog(message: String) {
@@ -737,7 +738,6 @@ fun PlayerScreen(
             )
 
             PlayerControlsMode.MINIMAL -> MinimalPlayerDock(
-                progressPercent = currentPercent,
                 chevronSide = chevronSide,
                 showChevron = showDockChevron,
                 chevronContentDescription = chevronDescription,
@@ -1280,7 +1280,6 @@ private fun FullPlayerDock(
 
 @Composable
 private fun MinimalPlayerDock(
-    progressPercent: Int,
     chevronSide: PlayerChevronSnapEdge,
     showChevron: Boolean,
     chevronContentDescription: String,
@@ -1289,36 +1288,30 @@ private fun MinimalPlayerDock(
     onChevronSnap: (Float) -> Unit,
     content: @Composable () -> Unit,
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 58.dp),
-        ) {
-            content()
-            if (showChevron) {
-                PlayerChromeChevron(
-                    contentDescription = chevronContentDescription,
-                    pointLeft = chevronSide == PlayerChevronSnapEdge.LEFT,
-                    onTap = onChevronTap,
-                    onLongPress = onChevronLongPress,
-                    onSnap = onChevronSnap,
-                    modifier = Modifier
-                        .align(
-                            if (chevronSide == PlayerChevronSnapEdge.LEFT) {
-                                Alignment.BottomStart
-                            } else {
-                                Alignment.BottomEnd
-                            },
-                        )
-                        .padding(horizontal = CHEVRON_DOCK_HORIZONTAL_PADDING)
-                        .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET),
-                )
-            }
+        content()
+        if (showChevron) {
+            PlayerChromeChevron(
+                contentDescription = chevronContentDescription,
+                pointLeft = chevronSide == PlayerChevronSnapEdge.LEFT,
+                onTap = onChevronTap,
+                onLongPress = onChevronLongPress,
+                onSnap = onChevronSnap,
+                modifier = Modifier
+                    .align(
+                        if (chevronSide == PlayerChevronSnapEdge.LEFT) {
+                            Alignment.BottomStart
+                        } else {
+                            Alignment.BottomEnd
+                        },
+                    )
+                    .padding(horizontal = CHEVRON_DOCK_HORIZONTAL_PADDING)
+                    .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET),
+            )
         }
     }
 }
@@ -1341,26 +1334,31 @@ private fun NubPlayerDock(
         PlayerProgressLine(
             progressPercent = progressPercent,
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter),
         )
-        PlayerChromeChevron(
-            contentDescription = chevronContentDescription,
-            pointLeft = chevronSide == PlayerChevronSnapEdge.LEFT,
-            onTap = onChevronTap,
-            onLongPress = onChevronLongPress,
-            onSnap = onChevronSnap,
-            modifier = Modifier
-                .align(
-                    if (chevronSide == PlayerChevronSnapEdge.LEFT) {
-                        Alignment.BottomStart
-                    } else {
-                        Alignment.BottomEnd
-                    },
-                )
-                .padding(horizontal = CHEVRON_DOCK_HORIZONTAL_PADDING)
-                .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET),
-        )
+        if (showChevron) {
+            PlayerChromeChevron(
+                contentDescription = chevronContentDescription,
+                pointLeft = chevronSide == PlayerChevronSnapEdge.LEFT,
+                onTap = onChevronTap,
+                onLongPress = onChevronLongPress,
+                onSnap = onChevronSnap,
+                modifier = Modifier
+                    .align(
+                        if (chevronSide == PlayerChevronSnapEdge.LEFT) {
+                            Alignment.BottomStart
+                        } else {
+                            Alignment.BottomEnd
+                        },
+                    )
+                    .padding(
+                        start = CHEVRON_DOCK_HORIZONTAL_PADDING,
+                        end = CHEVRON_DOCK_HORIZONTAL_PADDING,
+                        bottom = NUB_CHEVRON_BOTTOM_MARGIN,
+                    )
+            )
+        }
     }
 }
 
@@ -1453,12 +1451,12 @@ private fun PlayerControlBar(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(PLAYER_UPPER_LANE_HEIGHT),
-        ) {
-            if (!minimal) {
+        if (!minimal) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(PLAYER_UPPER_LANE_HEIGHT),
+            ) {
                 Slider(
                     value = sliderValue,
                     onValueChange = { sliderValue = it.coerceIn(0f, 1f) },
@@ -1471,14 +1469,14 @@ private fun PlayerControlBar(
                         .align(Alignment.Center)
                         .padding(horizontal = 18.dp),
                 )
-            } else {
-                PlayerProgressLine(
-                    progressPercent = progressPercent,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .fillMaxWidth(),
-                )
             }
+        } else {
+            PlayerProgressLine(
+                progressPercent = progressPercent,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp),
+            )
         }
         Row(
             modifier = Modifier
