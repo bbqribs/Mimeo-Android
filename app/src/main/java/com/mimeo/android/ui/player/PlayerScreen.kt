@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -90,6 +91,10 @@ private const val PROGRESS_SYNC_DEBOUNCE_MS = 2_000L
 private const val PROGRESS_CHAR_STEP = 120
 private const val FALLBACK_CHUNK_MAX_CHARS = 900
 private const val DONE_PERCENT_THRESHOLD = 98
+private val CHEVRON_DOCK_HORIZONTAL_PADDING = 8.dp
+private val CHEVRON_DOCK_VERTICAL_OFFSET = 2.dp
+private val CHEVRON_RESERVED_SPACE = 52.dp
+private val CONTROL_CLUSTER_GAP = 6.dp
 private val PLAYBACK_SPEED_OPTIONS = listOf(0.8f, 0.9f, 1.0f, 1.1f, 1.25f, 1.5f, 1.75f, 2.0f)
 
 private fun debugLog(message: String) {
@@ -1257,13 +1262,13 @@ private fun FullPlayerDock(
                 modifier = Modifier
                     .align(
                         if (chevronSide == PlayerChevronSnapEdge.LEFT) {
-                            Alignment.TopStart
+                            Alignment.CenterStart
                         } else {
-                            Alignment.TopEnd
+                            Alignment.CenterEnd
                         },
                     )
-                    .padding(horizontal = 18.dp)
-                    .offset(y = (-44).dp),
+                    .padding(horizontal = CHEVRON_DOCK_HORIZONTAL_PADDING)
+                    .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET),
             )
         }
     }
@@ -1306,7 +1311,8 @@ private fun MinimalPlayerDock(
                                 Alignment.CenterEnd
                             },
                         )
-                        .padding(horizontal = 10.dp),
+                        .padding(horizontal = CHEVRON_DOCK_HORIZONTAL_PADDING)
+                        .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET),
                 )
             }
         }
@@ -1344,13 +1350,13 @@ private fun NubPlayerDock(
             modifier = Modifier
                 .align(
                     if (chevronSide == PlayerChevronSnapEdge.LEFT) {
-                        Alignment.BottomStart
+                        Alignment.CenterStart
                     } else {
-                        Alignment.BottomEnd
+                        Alignment.CenterEnd
                     },
                 )
-                .padding(horizontal = 10.dp)
-                .offset(y = (-8).dp),
+                .padding(horizontal = CHEVRON_DOCK_HORIZONTAL_PADDING)
+                .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET),
         )
     }
 }
@@ -1409,7 +1415,7 @@ private fun PlayerChromeChevron(
                 onLongClick = onLongPress,
             )
             .background(
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                color = androidx.compose.ui.graphics.Color(0xFFB8D9FF).copy(alpha = 0.62f),
                 shape = MaterialTheme.shapes.large,
             ),
         contentAlignment = Alignment.Center,
@@ -1418,7 +1424,7 @@ private fun PlayerChromeChevron(
             painter = painterResource(id = R.drawable.msr_chevron_right_24),
             contentDescription = contentDescription,
             modifier = Modifier.graphicsLayer(scaleX = if (pointLeft) -1f else 1f),
-            tint = MaterialTheme.colorScheme.primary,
+            tint = androidx.compose.ui.graphics.Color(0xFF2F5E9F),
         )
     }
 }
@@ -1440,7 +1446,6 @@ private fun PlayerControlBar(
     onNextItem: () -> Unit,
 ) {
     var sliderValue by remember(progressPercent) { mutableStateOf(progressPercent.coerceIn(0, 100) / 100f) }
-    val minimalSideInset = if (minimal) 56.dp else 0.dp
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(0.dp),
@@ -1455,15 +1460,16 @@ private fun PlayerControlBar(
                 enabled = canSeek,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 18.dp),
+                    .padding(horizontal = 24.dp),
             )
         }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = minimalSideInset, end = minimalSideInset)
+                .padding(start = CHEVRON_RESERVED_SPACE, end = CHEVRON_RESERVED_SPACE)
                 .padding(vertical = 0.dp),
-            horizontalArrangement = if (minimal) Arrangement.spacedBy(10.dp, androidx.compose.ui.Alignment.CenterHorizontally) else Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
         ) {
             if (!minimal) {
                 IconButton(onClick = onPreviousItem) {
@@ -1472,6 +1478,7 @@ private fun PlayerControlBar(
                         contentDescription = "Previous item",
                     )
                 }
+                Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
             }
             IconButton(onClick = onPreviousSegment, enabled = canMoveBackward) {
                 Icon(
@@ -1494,6 +1501,7 @@ private fun PlayerControlBar(
                 )
             }
             if (!minimal) {
+                Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
                 IconButton(onClick = onNextItem) {
                     Icon(
                         painter = painterResource(id = R.drawable.msr_skip_next_24),
