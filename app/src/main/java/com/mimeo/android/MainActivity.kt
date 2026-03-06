@@ -15,6 +15,14 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,13 +34,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.tween
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -80,6 +84,8 @@ import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.model.PlayerChevronSnapEdge
+import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.repository.ItemTextResult
@@ -335,6 +341,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 readingLineHeightPercent = settings.value.readingLineHeightPercent,
                 readingMaxWidthDp = settings.value.readingMaxWidthDp,
                 readingParagraphSpacing = settings.value.readingParagraphSpacing,
+                playerControlsMode = settings.value.playerControlsMode,
+                playerLastNonNubMode = settings.value.playerLastNonNubMode,
+                playerChevronSnapEdge = settings.value.playerChevronSnapEdge,
+                playerChevronEdgeOffset = settings.value.playerChevronEdgeOffset,
             )
             _statusMessage.value = "Settings saved"
         }
@@ -363,6 +373,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 readingLineHeightPercent = readingLineHeightPercent,
                 readingMaxWidthDp = readingMaxWidthDp,
                 readingParagraphSpacing = readingParagraphSpacing,
+                playerControlsMode = settings.value.playerControlsMode,
+                playerLastNonNubMode = settings.value.playerLastNonNubMode,
+                playerChevronSnapEdge = settings.value.playerChevronSnapEdge,
+                playerChevronEdgeOffset = settings.value.playerChevronEdgeOffset,
             )
         }
     }
@@ -385,6 +399,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 readingLineHeightPercent = settings.value.readingLineHeightPercent,
                 readingMaxWidthDp = settings.value.readingMaxWidthDp,
                 readingParagraphSpacing = settings.value.readingParagraphSpacing,
+                playerControlsMode = settings.value.playerControlsMode,
+                playerLastNonNubMode = settings.value.playerLastNonNubMode,
+                playerChevronSnapEdge = settings.value.playerChevronSnapEdge,
+                playerChevronEdgeOffset = settings.value.playerChevronEdgeOffset,
             )
         }
     }
@@ -402,6 +420,43 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _settings.value = current.copy(continuousNowPlayingMarquee = enabled)
         viewModelScope.launch {
             settingsStore.saveContinuousNowPlayingMarquee(enabled)
+        }
+    }
+
+    fun savePlayerControlsMode(mode: PlayerControlsMode) {
+        val current = settings.value
+        _settings.value = current.copy(
+            playerControlsMode = mode,
+            playerLastNonNubMode = if (mode == PlayerControlsMode.NUB) {
+                current.playerLastNonNubMode
+            } else {
+                mode
+            },
+        )
+        viewModelScope.launch {
+            settingsStore.savePlayerControlsMode(mode)
+        }
+    }
+
+    fun savePlayerControlsState(mode: PlayerControlsMode, lastNonNubMode: PlayerControlsMode) {
+        val safeLastMode = lastNonNubMode.takeIf { it != PlayerControlsMode.NUB } ?: PlayerControlsMode.FULL
+        _settings.value = settings.value.copy(
+            playerControlsMode = mode,
+            playerLastNonNubMode = safeLastMode,
+        )
+        viewModelScope.launch {
+            settingsStore.savePlayerControlsState(mode, safeLastMode)
+        }
+    }
+
+    fun savePlayerChevronSnap(edge: PlayerChevronSnapEdge, edgeOffset: Float) {
+        val current = settings.value
+        _settings.value = current.copy(
+            playerChevronSnapEdge = edge,
+            playerChevronEdgeOffset = edgeOffset.coerceIn(0f, 1f),
+        )
+        viewModelScope.launch {
+            settingsStore.savePlayerChevronSnap(edge, edgeOffset)
         }
     }
 
@@ -1279,7 +1334,24 @@ private fun MimeoApp(vm: AppViewModel) {
         else -> ROUTE_UP_NEXT
     }
     val isOnLocusRoute = currentRoute.startsWith(ROUTE_LOCUS)
-    val showPersistentPlayerOverlay = !isOnLocusRoute && settings.persistentPlayerEnabled
+    var playbackActive by rememberSaveable { mutableStateOf(false) }
+    var readerChromeHidden by rememberSaveable { mutableStateOf(false) }
+    val controlsMode = settings.playerControlsMode
+    val storedLastNonNubMode = settings.playerLastNonNubMode
+        .takeIf { it != PlayerControlsMode.NUB }
+        ?: PlayerControlsMode.FULL
+    var previousRoute by rememberSaveable { mutableStateOf(currentRoute) }
+    var lastLocusMode by rememberSaveable {
+        mutableStateOf(
+            if (settings.playerControlsMode == PlayerControlsMode.NUB) {
+                storedLastNonNubMode
+            } else {
+                settings.playerControlsMode
+            },
+        )
+    }
+    val compactControlsOnly = !isOnLocusRoute
+    val showCompactControls = settings.persistentPlayerEnabled
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
     val nowPlayingStripText = nowPlayingSession
@@ -1345,33 +1417,66 @@ private fun MimeoApp(vm: AppViewModel) {
         }
     }
 
+    LaunchedEffect(currentRoute) {
+        if (currentRoute == previousRoute) return@LaunchedEffect
+        val wasOnLocus = previousRoute.startsWith(ROUTE_LOCUS)
+        val nowOnLocus = currentRoute.startsWith(ROUTE_LOCUS)
+        val currentMode = settings.playerControlsMode
+
+        if (wasOnLocus && !nowOnLocus) {
+            lastLocusMode = currentMode
+            if (!playbackActive && currentMode != PlayerControlsMode.NUB) {
+                val nextLastNonNub = currentMode.takeIf { it != PlayerControlsMode.NUB } ?: storedLastNonNubMode
+                vm.savePlayerControlsState(PlayerControlsMode.NUB, nextLastNonNub)
+            }
+        } else if (!wasOnLocus && nowOnLocus) {
+            val restoreMode = lastLocusMode
+            val restoreLastNonNub = restoreMode.takeIf { it != PlayerControlsMode.NUB } ?: storedLastNonNubMode
+            if (currentMode != restoreMode || settings.playerLastNonNubMode != restoreLastNonNub) {
+                vm.savePlayerControlsState(restoreMode, restoreLastNonNub)
+            }
+        } else if (!wasOnLocus && !nowOnLocus) {
+            if (!playbackActive && currentMode != PlayerControlsMode.NUB) {
+                val nextLastNonNub = lastLocusMode.takeIf { it != PlayerControlsMode.NUB } ?: storedLastNonNubMode
+                vm.savePlayerControlsState(PlayerControlsMode.NUB, nextLastNonNub)
+            }
+        }
+        previousRoute = currentRoute
+    }
+
     Scaffold(
         bottomBar = {
-            NavigationBar(
-                modifier = Modifier.height(68.dp),
-                tonalElevation = 0.dp,
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+            AnimatedVisibility(
+                visible = !(isOnLocusRoute && readerChromeHidden),
+                enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(150)),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
             ) {
-                navItems.forEach { destination ->
-                    NavigationBarItem(
-                        selected = selectedTab == destination.route,
-                        onClick = {
-                            if (destination.route == ROUTE_LOCUS) {
-                                locusTabTapSignal += 1
-                            }
-                            nav.navigate(destination.route) { launchSingleTop = true }
-                        },
-                        label = { Text(destination.label) },
-                        icon = {},
-                        alwaysShowLabel = true,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
+                NavigationBar(
+                    modifier = Modifier.height(68.dp),
+                    tonalElevation = 0.dp,
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                ) {
+                    navItems.forEach { destination ->
+                        NavigationBarItem(
+                            selected = selectedTab == destination.route,
+                            onClick = {
+                                if (destination.route == ROUTE_LOCUS) {
+                                    locusTabTapSignal += 1
+                                }
+                                nav.navigate(destination.route) { launchSingleTop = true }
+                            },
+                            label = { Text(destination.label) },
+                            icon = {},
+                            alwaysShowLabel = true,
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.36f),
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                        )
+                    }
                 }
             }
         },
@@ -1387,7 +1492,7 @@ private fun MimeoApp(vm: AppViewModel) {
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                if (showGlobalBanner) {
+                if (showGlobalBanner && !(isOnLocusRoute && readerChromeHidden)) {
                     StatusBanner(
                         stateLabel = bannerStateLabel,
                         summary = bannerSummary,
@@ -1490,7 +1595,6 @@ private fun MimeoApp(vm: AppViewModel) {
                     }
 
                     if (requestedPlayerItemId != null) {
-                        val compactControlsOnly = !isOnLocusRoute
                         PlayerScreen(
                             vm = vm,
                             onShowSnackbar = { message, actionLabel, actionKey ->
@@ -1502,9 +1606,27 @@ private fun MimeoApp(vm: AppViewModel) {
                             locusTapSignal = locusTabTapSignal,
                             onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
                             onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
-                            stopPlaybackOnDispose = !settings.persistentPlayerEnabled,
+                            stopPlaybackOnDispose = true,
                             compactControlsOnly = compactControlsOnly,
-                            showCompactControls = showPersistentPlayerOverlay,
+                            showCompactControls = showCompactControls,
+                            controlsMode = controlsMode,
+                            lastNonNubMode = settings.playerLastNonNubMode,
+                            chevronSnapEdge = settings.playerChevronSnapEdge,
+                            onControlsModeChange = { mode, lastNonNubMode ->
+                                vm.savePlayerControlsState(mode, lastNonNubMode)
+                                if (isOnLocusRoute) {
+                                    lastLocusMode = mode
+                                }
+                            },
+                            onPlaybackActiveChange = { active ->
+                                playbackActive = active
+                            },
+                            onReaderChromeVisibilityChange = { hidden ->
+                                readerChromeHidden = hidden
+                            },
+                            onChevronSnapChange = { edge ->
+                                vm.savePlayerChevronSnap(edge, 0.5f)
+                            },
                             modifier = if (compactControlsOnly) {
                                 Modifier
                                     .align(Alignment.BottomCenter)
@@ -1522,7 +1644,7 @@ private fun MimeoApp(vm: AppViewModel) {
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.ime)
-                    .padding(bottom = 76.dp),
+                    .padding(bottom = if (isOnLocusRoute && readerChromeHidden) 12.dp else 76.dp),
             )
         }
     }

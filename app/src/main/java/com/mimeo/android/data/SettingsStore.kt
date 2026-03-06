@@ -10,6 +10,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ParagraphSpacingOption
+import com.mimeo.android.model.PlayerChevronSnapEdge
+import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.decodeSelectedPlaylistId
 import com.mimeo.android.model.encodeSelectedPlaylistId
 import kotlinx.coroutines.flow.Flow
@@ -46,6 +48,14 @@ class SettingsStore(private val context: Context) {
         intPreferencesKey("reading_max_width_dp")
     private val readingParagraphSpacingKey: Preferences.Key<String> =
         stringPreferencesKey("reading_paragraph_spacing")
+    private val playerControlsModeKey: Preferences.Key<String> =
+        stringPreferencesKey("player_controls_mode")
+    private val playerLastNonNubModeKey: Preferences.Key<String> =
+        stringPreferencesKey("player_last_non_nub_mode")
+    private val playerChevronSnapEdgeKey: Preferences.Key<String> =
+        stringPreferencesKey("player_chevron_snap_edge")
+    private val playerChevronEdgeOffsetKey: Preferences.Key<Float> =
+        floatPreferencesKey("player_chevron_edge_offset")
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->
         AppSettings(
@@ -66,6 +76,17 @@ class SettingsStore(private val context: Context) {
             readingParagraphSpacing = prefs[readingParagraphSpacingKey]
                 ?.let { runCatching { ParagraphSpacingOption.valueOf(it) }.getOrNull() }
                 ?: ParagraphSpacingOption.MEDIUM,
+            playerControlsMode = prefs[playerControlsModeKey]
+                ?.let { runCatching { PlayerControlsMode.valueOf(it) }.getOrNull() }
+                ?: PlayerControlsMode.FULL,
+            playerLastNonNubMode = prefs[playerLastNonNubModeKey]
+                ?.let { runCatching { PlayerControlsMode.valueOf(it) }.getOrNull() }
+                ?.takeIf { it != PlayerControlsMode.NUB }
+                ?: PlayerControlsMode.FULL,
+            playerChevronSnapEdge = prefs[playerChevronSnapEdgeKey]
+                ?.let { runCatching { PlayerChevronSnapEdge.valueOf(it) }.getOrNull() }
+                ?: PlayerChevronSnapEdge.HOME,
+            playerChevronEdgeOffset = (prefs[playerChevronEdgeOffsetKey] ?: 0.5f).coerceIn(0f, 1f),
         )
     }
 
@@ -85,6 +106,10 @@ class SettingsStore(private val context: Context) {
         readingLineHeightPercent: Int,
         readingMaxWidthDp: Int,
         readingParagraphSpacing: ParagraphSpacingOption,
+        playerControlsMode: PlayerControlsMode,
+        playerLastNonNubMode: PlayerControlsMode = PlayerControlsMode.FULL,
+        playerChevronSnapEdge: PlayerChevronSnapEdge,
+        playerChevronEdgeOffset: Float,
     ) {
         context.dataStore.edit { prefs ->
             prefs[baseUrlKey] = baseUrl.trim()
@@ -102,6 +127,13 @@ class SettingsStore(private val context: Context) {
             prefs[readingLineHeightPercentKey] = readingLineHeightPercent
             prefs[readingMaxWidthDpKey] = readingMaxWidthDp
             prefs[readingParagraphSpacingKey] = readingParagraphSpacing.name
+            prefs[playerControlsModeKey] = playerControlsMode.name
+            prefs[playerLastNonNubModeKey] = playerLastNonNubMode
+                .takeIf { it != PlayerControlsMode.NUB }
+                ?.name
+                ?: PlayerControlsMode.FULL.name
+            prefs[playerChevronSnapEdgeKey] = playerChevronSnapEdge.name
+            prefs[playerChevronEdgeOffsetKey] = playerChevronEdgeOffset.coerceIn(0f, 1f)
         }
     }
 
@@ -152,6 +184,32 @@ class SettingsStore(private val context: Context) {
     suspend fun saveContinuousNowPlayingMarquee(continuousNowPlayingMarquee: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[continuousNowPlayingMarqueeKey] = continuousNowPlayingMarquee
+        }
+    }
+
+    suspend fun savePlayerControlsMode(playerControlsMode: PlayerControlsMode) {
+        context.dataStore.edit { prefs ->
+            prefs[playerControlsModeKey] = playerControlsMode.name
+            if (playerControlsMode != PlayerControlsMode.NUB) {
+                prefs[playerLastNonNubModeKey] = playerControlsMode.name
+            }
+        }
+    }
+
+    suspend fun savePlayerControlsState(playerControlsMode: PlayerControlsMode, playerLastNonNubMode: PlayerControlsMode) {
+        context.dataStore.edit { prefs ->
+            prefs[playerControlsModeKey] = playerControlsMode.name
+            prefs[playerLastNonNubModeKey] = playerLastNonNubMode
+                .takeIf { it != PlayerControlsMode.NUB }
+                ?.name
+                ?: PlayerControlsMode.FULL.name
+        }
+    }
+
+    suspend fun savePlayerChevronSnap(playerChevronSnapEdge: PlayerChevronSnapEdge, playerChevronEdgeOffset: Float) {
+        context.dataStore.edit { prefs ->
+            prefs[playerChevronSnapEdgeKey] = playerChevronSnapEdge.name
+            prefs[playerChevronEdgeOffsetKey] = playerChevronEdgeOffset.coerceIn(0f, 1f)
         }
     }
 }
