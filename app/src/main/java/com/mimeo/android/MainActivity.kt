@@ -1417,12 +1417,6 @@ private fun MimeoApp(vm: AppViewModel) {
         }
     }
 
-    LaunchedEffect(isOnLocusRoute, settings.playerControlsMode) {
-        if (isOnLocusRoute) {
-            lastLocusMode = settings.playerControlsMode
-        }
-    }
-
     LaunchedEffect(currentRoute) {
         if (currentRoute == previousRoute) return@LaunchedEffect
         val wasOnLocus = previousRoute.startsWith(ROUTE_LOCUS)
@@ -1620,6 +1614,9 @@ private fun MimeoApp(vm: AppViewModel) {
                             chevronSnapEdge = settings.playerChevronSnapEdge,
                             onControlsModeChange = { mode, lastNonNubMode ->
                                 vm.savePlayerControlsState(mode, lastNonNubMode)
+                                if (isOnLocusRoute) {
+                                    lastLocusMode = mode
+                                }
                             },
                             onPlaybackActiveChange = { active ->
                                 playbackActive = active
