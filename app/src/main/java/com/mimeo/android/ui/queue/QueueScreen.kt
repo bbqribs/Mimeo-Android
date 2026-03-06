@@ -198,13 +198,11 @@ fun QueueScreen(
                         refreshActionState = if (result.isSuccess) {
                             RefreshActionVisualState.Success
                         } else {
-                            RefreshActionVisualState.Idle
+                            RefreshActionVisualState.Failure
                         }
-                        if (result.isSuccess) {
-                            delay(700)
-                            if (refreshActionState == RefreshActionVisualState.Success) {
-                                refreshActionState = RefreshActionVisualState.Idle
-                            }
+                        delay(700)
+                        if (refreshActionState == RefreshActionVisualState.Success || refreshActionState == RefreshActionVisualState.Failure) {
+                            refreshActionState = RefreshActionVisualState.Idle
                         }
                     }
                 },

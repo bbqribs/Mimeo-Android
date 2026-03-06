@@ -538,12 +538,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             Result.success(Unit)
         } catch (e: ApiException) {
             _queueOffline.value = false
-            _statusMessage.value = if (e.statusCode == 401) "Unauthorized-check token" else e.message
+            _statusMessage.value = userFacingRequestErrorMessage(e, fallback = "Refresh failed")
             updateSyncBadgeState()
             Result.failure(e)
         } catch (e: Exception) {
             _queueOffline.value = isNetworkError(e)
-            _statusMessage.value = e.message ?: "Failed to load queue"
+            _statusMessage.value = userFacingRequestErrorMessage(e, fallback = "Couldn't refresh queue")
             updateSyncBadgeState()
             Result.failure(e)
         } finally {
@@ -1213,6 +1213,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun isNetworkError(error: Exception): Boolean = error is IOException
+
+    private fun userFacingRequestErrorMessage(error: Throwable, fallback: String): String {
+        if (error is ApiException) {
+            return when {
+                error.statusCode == 401 -> "Check your API token"
+                error.statusCode >= 500 -> "Server error. Try again."
+                !error.message.isNullOrBlank() -> error.message!!
+                else -> fallback
+            }
+        }
+        if (error is IOException) {
+            return "Couldn't reach server"
+        }
+        val message = error.message?.trim()
+        if (message.isNullOrEmpty()) return fallback
+        if (message.contains("java.", ignoreCase = true) || message.length > 180) {
+            return fallback
+        }
+        return message
+    }
 
     private fun updatePlaylistEntriesLocally(playlistId: Int, itemId: Int, added: Boolean) {
         _playlists.update { rows ->

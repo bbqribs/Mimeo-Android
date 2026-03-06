@@ -1,6 +1,5 @@
 package com.mimeo.android.ui.components
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -25,6 +24,7 @@ enum class RefreshActionVisualState {
     Idle,
     Refreshing,
     Success,
+    Failure,
 }
 
 @Composable
@@ -49,6 +49,7 @@ fun RefreshActionButton(
         targetValue = when (state) {
             RefreshActionVisualState.Success -> MaterialTheme.colorScheme.primary
             RefreshActionVisualState.Refreshing -> MaterialTheme.colorScheme.primary
+            RefreshActionVisualState.Failure -> MaterialTheme.colorScheme.error
             RefreshActionVisualState.Idle -> MaterialTheme.colorScheme.onSurfaceVariant
         },
         animationSpec = tween(durationMillis = 180),
@@ -65,25 +66,22 @@ fun RefreshActionButton(
         enabled = enabled && state != RefreshActionVisualState.Refreshing,
         modifier = modifier,
     ) {
-        AnimatedContent(
-            targetState = state,
-            label = "refreshIconSwap",
-        ) { target ->
-            val isSuccess = target == RefreshActionVisualState.Success
-            Icon(
-                painter = painterResource(
-                    id = if (isSuccess) R.drawable.msr_check_circle_24 else R.drawable.msr_refresh_24,
-                ),
-                contentDescription = contentDescription,
-                tint = tint,
-                modifier = Modifier
-                    .size(22.dp)
-                    .graphicsLayer(
-                        rotationZ = if (target == RefreshActionVisualState.Refreshing) spinDegrees else 0f,
-                        scaleX = scale,
-                        scaleY = scale,
-                    ),
-            )
+        val iconRes = when (state) {
+            RefreshActionVisualState.Success -> R.drawable.msr_check_circle_24
+            RefreshActionVisualState.Failure -> R.drawable.msr_error_circle_24
+            else -> R.drawable.msr_refresh_24
         }
+        Icon(
+            painter = painterResource(id = iconRes),
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier
+                .size(22.dp)
+                .graphicsLayer(
+                    rotationZ = if (state == RefreshActionVisualState.Refreshing) spinDegrees else 0f,
+                    scaleX = scale,
+                    scaleY = scale,
+                ),
+        )
     }
 }

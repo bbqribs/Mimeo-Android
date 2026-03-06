@@ -402,11 +402,12 @@ fun PlayerScreen(
 
     LaunchedEffect(currentItemId, resolvedInitial, reloadNonce) {
         if (!resolvedInitial) return@LaunchedEffect
+        val preservingVisibleContent = preserveVisibleContentOnReload
         stopSpeaking(forceSync = false)
         vm.setNowPlayingCurrentItem(currentItemId)
-        isLoading = true
+        isLoading = !preservingVisibleContent
         uiMessage = null
-        if (!preserveVisibleContentOnReload) {
+        if (!preservingVisibleContent) {
             textPayload = null
             usingCachedText = false
             chunks = emptyList()
@@ -427,7 +428,9 @@ fun PlayerScreen(
                 usingCachedText = loaded.usingCache
                 chunks = buildChunks(payload)
                 preserveVisibleContentOnReload = false
-                readerScrollTriggerSignal += 1
+                if (!preservingVisibleContent) {
+                    readerScrollTriggerSignal += 1
+                }
 
                 val saved = vm.getPlaybackPosition(currentItemId)
                 val knownProgress = vm.knownProgressForItem(currentItemId)
@@ -811,19 +814,20 @@ fun PlayerScreen(
                                         }
                                         .onFailure { error ->
                                             if (error is CancellationException) return@onFailure
-                                            uiMessage = error.message ?: "Refresh failed"
+                                            uiMessage = friendlyRefreshFailureMessage(error)
                                             onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
                                         }
                                     refreshActionState = if (refreshResult.isSuccess) {
                                         RefreshActionVisualState.Success
                                     } else {
-                                        RefreshActionVisualState.Idle
+                                        RefreshActionVisualState.Failure
                                     }
-                                    if (refreshResult.isSuccess) {
-                                        delay(700)
-                                        if (refreshActionState == RefreshActionVisualState.Success) {
-                                            refreshActionState = RefreshActionVisualState.Idle
-                                        }
+                                    delay(700)
+                                    if (
+                                        refreshActionState == RefreshActionVisualState.Success ||
+                                        refreshActionState == RefreshActionVisualState.Failure
+                                    ) {
+                                        refreshActionState = RefreshActionVisualState.Idle
                                     }
                                 }
                             },
@@ -992,19 +996,20 @@ fun PlayerScreen(
                                                 }
                                                 .onFailure { error ->
                                                     if (error is CancellationException) return@onFailure
-                                                    uiMessage = error.message ?: "Refresh failed"
+                                                    uiMessage = friendlyRefreshFailureMessage(error)
                                                     onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
                                                 }
                                             refreshActionState = if (refreshResult.isSuccess) {
                                                 RefreshActionVisualState.Success
                                             } else {
-                                                RefreshActionVisualState.Idle
+                                                RefreshActionVisualState.Failure
                                             }
-                                            if (refreshResult.isSuccess) {
-                                                delay(700)
-                                                if (refreshActionState == RefreshActionVisualState.Success) {
-                                                    refreshActionState = RefreshActionVisualState.Idle
-                                                }
+                                            delay(700)
+                                            if (
+                                                refreshActionState == RefreshActionVisualState.Success ||
+                                                refreshActionState == RefreshActionVisualState.Failure
+                                            ) {
+                                                refreshActionState = RefreshActionVisualState.Idle
                                             }
                                         }
                                     },
@@ -1647,6 +1652,25 @@ private fun splitByLength(value: String, maxChars: Int): List<String> {
         result += sb.toString().trim()
     }
     return result
+}
+
+private fun friendlyRefreshFailureMessage(error: Throwable): String {
+    if (error is ApiException) {
+        return when {
+            error.statusCode == 401 -> "Check your API token"
+            error.statusCode >= 500 -> "Server error. Try again."
+            else -> error.message ?: "Refresh failed"
+        }
+    }
+    if (isNetworkError(error)) {
+        return "Couldn't reach server"
+    }
+    val message = error.message?.trim()
+    if (message.isNullOrEmpty()) return "Refresh failed"
+    if (message.contains("java.", ignoreCase = true) || message.length > 180) {
+        return "Refresh failed"
+    }
+    return message
 }
 
 private fun isNetworkError(error: Throwable): Boolean {
