@@ -79,11 +79,14 @@ import com.mimeo.android.model.positionFromAbsoluteOffset
 import com.mimeo.android.player.TtsChunkDoneEvent
 import com.mimeo.android.player.TtsChunkProgressEvent
 import com.mimeo.android.player.TtsController
+import com.mimeo.android.ui.components.RefreshActionButton
+import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import com.mimeo.android.ui.reader.ReaderBody
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -147,7 +150,7 @@ fun PlayerScreen(
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
-    var isRefreshing by remember { mutableStateOf(false) }
+    var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
     var preserveVisibleContentOnReload by remember { mutableStateOf(false) }
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     val readerScrollState = rememberSaveable(currentItemId, saver = ScrollState.Saver) { ScrollState(0) }
@@ -795,11 +798,12 @@ fun PlayerScreen(
                             overflowExpanded = overflowExpanded,
                             canMarkDone = textPayload != null,
                             isDone = showCompleted,
+                            refreshState = refreshActionState,
                             onRefresh = {
-                                if (isRefreshing) return@ExpandedPlayerTopBar
+                                if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
                                 actionScope.launch {
-                                    isRefreshing = true
-                                    vm.refreshCurrentPlayerItem(currentItemId)
+                                    refreshActionState = RefreshActionVisualState.Refreshing
+                                    val refreshResult = vm.refreshCurrentPlayerItem(currentItemId)
                                         .onSuccess {
                                             localDonePercentOverride = -1
                                             preserveVisibleContentOnReload = true
@@ -810,7 +814,17 @@ fun PlayerScreen(
                                             uiMessage = error.message ?: "Refresh failed"
                                             onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
                                         }
-                                    isRefreshing = false
+                                    refreshActionState = if (refreshResult.isSuccess) {
+                                        RefreshActionVisualState.Success
+                                    } else {
+                                        RefreshActionVisualState.Idle
+                                    }
+                                    if (refreshResult.isSuccess) {
+                                        delay(700)
+                                        if (refreshActionState == RefreshActionVisualState.Success) {
+                                            refreshActionState = RefreshActionVisualState.Idle
+                                        }
+                                    }
                                 }
                             },
                             onMarkDone = {
@@ -965,11 +979,12 @@ fun PlayerScreen(
                                     overflowExpanded = overflowExpanded,
                                     canMarkDone = textPayload != null,
                                     isDone = showCompleted,
+                                    refreshState = refreshActionState,
                                     onRefresh = {
-                                        if (isRefreshing) return@ExpandedPlayerTopBar
+                                        if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
                                         actionScope.launch {
-                                            isRefreshing = true
-                                            vm.refreshCurrentPlayerItem(currentItemId)
+                                            refreshActionState = RefreshActionVisualState.Refreshing
+                                            val refreshResult = vm.refreshCurrentPlayerItem(currentItemId)
                                                 .onSuccess {
                                                     localDonePercentOverride = -1
                                                     preserveVisibleContentOnReload = true
@@ -980,7 +995,17 @@ fun PlayerScreen(
                                                     uiMessage = error.message ?: "Refresh failed"
                                                     onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
                                                 }
-                                            isRefreshing = false
+                                            refreshActionState = if (refreshResult.isSuccess) {
+                                                RefreshActionVisualState.Success
+                                            } else {
+                                                RefreshActionVisualState.Idle
+                                            }
+                                            if (refreshResult.isSuccess) {
+                                                delay(700)
+                                                if (refreshActionState == RefreshActionVisualState.Success) {
+                                                    refreshActionState = RefreshActionVisualState.Idle
+                                                }
+                                            }
                                         }
                                     },
                                     onMarkDone = {
@@ -1123,6 +1148,7 @@ private fun ExpandedPlayerTopBar(
     overflowExpanded: Boolean,
     canMarkDone: Boolean,
     isDone: Boolean,
+    refreshState: RefreshActionVisualState,
     onRefresh: () -> Unit,
     onMarkDone: () -> Unit,
     onSpeed: () -> Unit,
@@ -1148,12 +1174,11 @@ private fun ExpandedPlayerTopBar(
                     tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                 )
             }
-            IconButton(onClick = onRefresh) {
-                Icon(
-                    painter = painterResource(id = R.drawable.msr_refresh_24),
-                    contentDescription = "Refresh item",
-                )
-            }
+            RefreshActionButton(
+                state = refreshState,
+                onClick = onRefresh,
+                contentDescription = "Refresh item",
+            )
             TextButton(onClick = onSpeed) {
                 Text(speedLabel)
             }

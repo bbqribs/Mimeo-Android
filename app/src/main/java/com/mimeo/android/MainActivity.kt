@@ -499,80 +499,91 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun loadQueue() {
+    suspend fun loadQueueOnce(): Result<Unit> {
         val current = settings.value
         if (current.apiToken.isBlank()) {
             _statusMessage.value = "Token required"
-            return
+            return Result.failure(IllegalStateException("Token required"))
         }
+        _queueLoading.value = true
+        return try {
+            runCatching {
+                repository.listPlaylists(current.baseUrl, current.apiToken)
+            }.getOrNull()?.let { loaded ->
+                _playlists.value = loaded
+            }
+            val queueResult = repository.loadQueueAndPrefetch(
+                current.baseUrl,
+                current.apiToken,
+                playlistId = current.selectedPlaylistId,
+            )
+            val queue = queueResult.payload
+            _queueItems.value = queue.items
+            val appliedSnapshot = queueResult.debugSnapshot.copy(
+                appliedItemCount = _queueItems.value.size,
+                appliedContains409 = _queueItems.value.any { it.itemId == DEBUG_TARGET_ITEM_ID },
+                lastFetchAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()),
+            )
+            _lastQueueFetchDebug.value = appliedSnapshot
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    QUEUE_DEBUG_TAG,
+                    "viewModelApply playlistId=${appliedSnapshot.selectedPlaylistId} uiCount=${appliedSnapshot.appliedItemCount} uiContains409=${appliedSnapshot.appliedContains409} requestUrl=${appliedSnapshot.requestUrl}",
+                )
+            }
+            _cachedItemIds.value = repository.getCachedItemIds(queue.items.map { it.itemId })
+            _queueOffline.value = false
+            _statusMessage.value = "Queue loaded (${queue.count})"
+            flushPendingProgress()
+            Result.success(Unit)
+        } catch (e: ApiException) {
+            _queueOffline.value = false
+            _statusMessage.value = if (e.statusCode == 401) "Unauthorized-check token" else e.message
+            updateSyncBadgeState()
+            Result.failure(e)
+        } catch (e: Exception) {
+            _queueOffline.value = isNetworkError(e)
+            _statusMessage.value = e.message ?: "Failed to load queue"
+            updateSyncBadgeState()
+            Result.failure(e)
+        } finally {
+            _queueLoading.value = false
+            refreshPendingCount()
+        }
+    }
+
+    fun loadQueue() {
         viewModelScope.launch {
-            _queueLoading.value = true
-            try {
-                runCatching {
-                    repository.listPlaylists(current.baseUrl, current.apiToken)
-                }.getOrNull()?.let { loaded ->
-                    _playlists.value = loaded
-                }
-                val queueResult = repository.loadQueueAndPrefetch(
-                    current.baseUrl,
-                    current.apiToken,
-                    playlistId = current.selectedPlaylistId,
-                )
-                val queue = queueResult.payload
-                _queueItems.value = queue.items
-                val appliedSnapshot = queueResult.debugSnapshot.copy(
-                    appliedItemCount = _queueItems.value.size,
-                    appliedContains409 = _queueItems.value.any { it.itemId == DEBUG_TARGET_ITEM_ID },
-                    lastFetchAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()),
-                )
-                _lastQueueFetchDebug.value = appliedSnapshot
-                if (BuildConfig.DEBUG) {
-                    Log.d(
-                        QUEUE_DEBUG_TAG,
-                        "viewModelApply playlistId=${appliedSnapshot.selectedPlaylistId} uiCount=${appliedSnapshot.appliedItemCount} uiContains409=${appliedSnapshot.appliedContains409} requestUrl=${appliedSnapshot.requestUrl}",
-                    )
-                }
-                _cachedItemIds.value = repository.getCachedItemIds(queue.items.map { it.itemId })
-                _queueOffline.value = false
-                _statusMessage.value = "Queue loaded (${queue.count})"
-                flushPendingProgress()
-            } catch (e: ApiException) {
-                _queueOffline.value = false
-                _statusMessage.value = if (e.statusCode == 401) "Unauthorized-check token" else e.message
-                updateSyncBadgeState()
-            } catch (e: Exception) {
-                _queueOffline.value = isNetworkError(e)
-                _statusMessage.value = e.message ?: "Failed to load queue"
-                updateSyncBadgeState()
-            } finally {
-                _queueLoading.value = false
-                refreshPendingCount()
+            loadQueueOnce()
+        }
+    }
+
+    suspend fun refreshPlaylistsOnce(): Result<Unit> {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        return runCatching {
+            val loaded = repository.listPlaylists(current.baseUrl, current.apiToken)
+            _playlists.value = loaded
+            val selected = current.selectedPlaylistId
+            if (selected != null && loaded.none { it.id == selected }) {
+                _settings.update { it.copy(selectedPlaylistId = null) }
+                settingsStore.saveSelectedPlaylistId(null)
+                _statusMessage.value = "Selected playlist removed; switched to Smart queue"
+            }
+            val defaultSave = current.defaultSavePlaylistId
+            if (defaultSave != null && loaded.none { it.id == defaultSave }) {
+                _settings.update { it.copy(defaultSavePlaylistId = null) }
+                settingsStore.saveDefaultSavePlaylistId(null)
+                _statusMessage.value = "Default save playlist removed; switched to Smart queue"
             }
         }
     }
 
     fun refreshPlaylists() {
-        val current = settings.value
-        if (current.apiToken.isBlank()) return
         viewModelScope.launch {
-            try {
-                val loaded = repository.listPlaylists(current.baseUrl, current.apiToken)
-                _playlists.value = loaded
-                val selected = current.selectedPlaylistId
-                if (selected != null && loaded.none { it.id == selected }) {
-                    _settings.update { it.copy(selectedPlaylistId = null) }
-                    settingsStore.saveSelectedPlaylistId(null)
-                    _statusMessage.value = "Selected playlist removed; switched to Smart queue"
-                }
-                val defaultSave = current.defaultSavePlaylistId
-                if (defaultSave != null && loaded.none { it.id == defaultSave }) {
-                    _settings.update { it.copy(defaultSavePlaylistId = null) }
-                    settingsStore.saveDefaultSavePlaylistId(null)
-                    _statusMessage.value = "Default save playlist removed; switched to Smart queue"
-                }
-            } catch (_: Exception) {
-                // Keep prior value; queue still works with Smart mode fallback.
-            }
+            refreshPlaylistsOnce()
         }
     }
 
