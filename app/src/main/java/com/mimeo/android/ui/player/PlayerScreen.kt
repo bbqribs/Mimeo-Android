@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -92,9 +93,11 @@ private const val PROGRESS_CHAR_STEP = 120
 private const val FALLBACK_CHUNK_MAX_CHARS = 900
 private const val DONE_PERCENT_THRESHOLD = 98
 private val CHEVRON_DOCK_HORIZONTAL_PADDING = 8.dp
-private val CHEVRON_DOCK_VERTICAL_OFFSET = 2.dp
+private val CHEVRON_DOCK_VERTICAL_OFFSET_FULL = 20.dp
+private val CHEVRON_DOCK_VERTICAL_OFFSET_COMPACT = 2.dp
 private val CHEVRON_RESERVED_SPACE = 52.dp
-private val CONTROL_CLUSTER_GAP = 6.dp
+private val CONTROL_CLUSTER_GAP = 4.dp
+private val CONTROL_SLOT_SIZE = 48.dp
 private val PLAYBACK_SPEED_OPTIONS = listOf(0.8f, 0.9f, 1.0f, 1.1f, 1.25f, 1.5f, 1.75f, 2.0f)
 
 private fun debugLog(message: String) {
@@ -1268,7 +1271,7 @@ private fun FullPlayerDock(
                         },
                     )
                     .padding(horizontal = CHEVRON_DOCK_HORIZONTAL_PADDING)
-                    .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET),
+                    .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET_FULL),
             )
         }
     }
@@ -1312,7 +1315,7 @@ private fun MinimalPlayerDock(
                             },
                         )
                         .padding(horizontal = CHEVRON_DOCK_HORIZONTAL_PADDING)
-                        .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET),
+                        .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET_COMPACT),
                 )
             }
         }
@@ -1356,7 +1359,7 @@ private fun NubPlayerDock(
                     },
                 )
                 .padding(horizontal = CHEVRON_DOCK_HORIZONTAL_PADDING)
-                .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET),
+                .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET_COMPACT),
         )
     }
 }
@@ -1415,8 +1418,8 @@ private fun PlayerChromeChevron(
                 onLongClick = onLongPress,
             )
             .background(
-                color = androidx.compose.ui.graphics.Color(0xFFB8D9FF).copy(alpha = 0.62f),
-                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.78f),
+                shape = CircleShape,
             ),
         contentAlignment = Alignment.Center,
     ) {
@@ -1424,7 +1427,7 @@ private fun PlayerChromeChevron(
             painter = painterResource(id = R.drawable.msr_chevron_right_24),
             contentDescription = contentDescription,
             modifier = Modifier.graphicsLayer(scaleX = if (pointLeft) -1f else 1f),
-            tint = androidx.compose.ui.graphics.Color(0xFF2F5E9F),
+            tint = MaterialTheme.colorScheme.onPrimary,
         )
     }
 }
@@ -1460,33 +1463,37 @@ private fun PlayerControlBar(
                 enabled = canSeek,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = 18.dp),
             )
         }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = CHEVRON_RESERVED_SPACE, end = CHEVRON_RESERVED_SPACE)
+                .heightIn(min = 48.dp)
                 .padding(vertical = 0.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
             if (!minimal) {
-                IconButton(onClick = onPreviousItem) {
+                IconButton(onClick = onPreviousItem, modifier = Modifier.size(CONTROL_SLOT_SIZE)) {
                     Icon(
                         painter = painterResource(id = R.drawable.msr_skip_previous_24),
                         contentDescription = "Previous item",
                     )
                 }
-                Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
+            } else {
+                Spacer(modifier = Modifier.size(CONTROL_SLOT_SIZE))
             }
-            IconButton(onClick = onPreviousSegment, enabled = canMoveBackward) {
+            Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
+            IconButton(onClick = onPreviousSegment, enabled = canMoveBackward, modifier = Modifier.size(CONTROL_SLOT_SIZE)) {
                 Icon(
                     painter = painterResource(id = R.drawable.msr_fast_rewind_24),
                     contentDescription = "Previous segment",
                 )
             }
-            IconButton(onClick = onPlayPause, enabled = canPlay) {
+            Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
+            IconButton(onClick = onPlayPause, enabled = canPlay, modifier = Modifier.size(CONTROL_SLOT_SIZE)) {
                 Icon(
                     painter = painterResource(
                         id = if (isPlaying) R.drawable.msr_pause_24 else R.drawable.msr_play_arrow_24,
@@ -1494,20 +1501,23 @@ private fun PlayerControlBar(
                     contentDescription = if (isPlaying) "Pause playback" else "Play",
                 )
             }
-            IconButton(onClick = onNextSegment, enabled = canMoveForward) {
+            Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
+            IconButton(onClick = onNextSegment, enabled = canMoveForward, modifier = Modifier.size(CONTROL_SLOT_SIZE)) {
                 Icon(
                     painter = painterResource(id = R.drawable.msr_fast_forward_24),
                     contentDescription = "Next segment",
                 )
             }
+            Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
             if (!minimal) {
-                Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
-                IconButton(onClick = onNextItem) {
+                IconButton(onClick = onNextItem, modifier = Modifier.size(CONTROL_SLOT_SIZE)) {
                     Icon(
                         painter = painterResource(id = R.drawable.msr_skip_next_24),
                         contentDescription = "Next item",
                     )
                 }
+            } else {
+                Spacer(modifier = Modifier.size(CONTROL_SLOT_SIZE))
             }
         }
     }

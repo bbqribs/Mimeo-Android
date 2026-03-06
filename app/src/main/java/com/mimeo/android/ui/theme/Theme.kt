@@ -6,12 +6,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val MimeoDarkColors = darkColorScheme(
-    primary = Color(0xFF9C27B0),
-    onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFF1F0A25),
-    onPrimaryContainer = Color(0xFFF6D6FF),
-    secondary = Color(0xFFC48AE0),
-    onSecondary = Color(0xFF1A1020),
+    primary = Color(0xFFC6A7FF),
+    onPrimary = Color(0xFF24143D),
+    primaryContainer = Color(0xFF2C1A45),
+    onPrimaryContainer = Color(0xFFF2E6FF),
+    secondary = Color(0xFFD6BFFF),
+    onSecondary = Color(0xFF2A1B40),
     background = Color(0xFF000000),
     onBackground = Color(0xFFF4F1F8),
     surface = Color(0xFF0A0A0A),
