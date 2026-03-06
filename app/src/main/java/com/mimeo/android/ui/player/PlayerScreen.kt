@@ -93,11 +93,12 @@ private const val PROGRESS_CHAR_STEP = 120
 private const val FALLBACK_CHUNK_MAX_CHARS = 900
 private const val DONE_PERCENT_THRESHOLD = 98
 private val CHEVRON_DOCK_HORIZONTAL_PADDING = 8.dp
-private val CHEVRON_DOCK_VERTICAL_OFFSET_FULL = 20.dp
-private val CHEVRON_DOCK_VERTICAL_OFFSET_COMPACT = 2.dp
+private val CHEVRON_DOCK_VERTICAL_OFFSET = (-2).dp
 private val CHEVRON_RESERVED_SPACE = 52.dp
 private val CONTROL_CLUSTER_GAP = 4.dp
 private val CONTROL_SLOT_SIZE = 48.dp
+private val PLAYER_UPPER_LANE_HEIGHT = 28.dp
+private val PLAYER_TRANSPORT_ROW_HEIGHT = 48.dp
 private val PLAYBACK_SPEED_OPTIONS = listOf(0.8f, 0.9f, 1.0f, 1.1f, 1.25f, 1.5f, 1.75f, 2.0f)
 
 private fun debugLog(message: String) {
@@ -1265,13 +1266,13 @@ private fun FullPlayerDock(
                 modifier = Modifier
                     .align(
                         if (chevronSide == PlayerChevronSnapEdge.LEFT) {
-                            Alignment.CenterStart
+                            Alignment.BottomStart
                         } else {
-                            Alignment.CenterEnd
+                            Alignment.BottomEnd
                         },
                     )
                     .padding(horizontal = CHEVRON_DOCK_HORIZONTAL_PADDING)
-                    .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET_FULL),
+                    .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET),
             )
         }
     }
@@ -1309,17 +1310,16 @@ private fun MinimalPlayerDock(
                     modifier = Modifier
                         .align(
                             if (chevronSide == PlayerChevronSnapEdge.LEFT) {
-                                Alignment.CenterStart
+                                Alignment.BottomStart
                             } else {
-                                Alignment.CenterEnd
+                                Alignment.BottomEnd
                             },
                         )
                         .padding(horizontal = CHEVRON_DOCK_HORIZONTAL_PADDING)
-                        .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET_COMPACT),
+                        .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET),
                 )
             }
         }
-        PlayerProgressLine(progressPercent = progressPercent)
     }
 }
 
@@ -1336,12 +1336,12 @@ private fun NubPlayerDock(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 40.dp),
+            .height(PLAYER_TRANSPORT_ROW_HEIGHT),
     ) {
         PlayerProgressLine(
             progressPercent = progressPercent,
             modifier = Modifier
-                .align(Alignment.BottomCenter)
+                .align(Alignment.TopCenter)
                 .fillMaxWidth(),
         )
         PlayerChromeChevron(
@@ -1353,13 +1353,13 @@ private fun NubPlayerDock(
             modifier = Modifier
                 .align(
                     if (chevronSide == PlayerChevronSnapEdge.LEFT) {
-                        Alignment.CenterStart
+                        Alignment.BottomStart
                     } else {
-                        Alignment.CenterEnd
+                        Alignment.BottomEnd
                     },
                 )
                 .padding(horizontal = CHEVRON_DOCK_HORIZONTAL_PADDING)
-                .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET_COMPACT),
+                .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET),
         )
     }
 }
@@ -1453,24 +1453,38 @@ private fun PlayerControlBar(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
-        if (!minimal) {
-            Slider(
-                value = sliderValue,
-                onValueChange = { sliderValue = it.coerceIn(0f, 1f) },
-                onValueChangeFinished = {
-                    onSeekToPercent((sliderValue * 100).toInt().coerceIn(0, 100))
-                },
-                enabled = canSeek,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 18.dp),
-            )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(PLAYER_UPPER_LANE_HEIGHT),
+        ) {
+            if (!minimal) {
+                Slider(
+                    value = sliderValue,
+                    onValueChange = { sliderValue = it.coerceIn(0f, 1f) },
+                    onValueChangeFinished = {
+                        onSeekToPercent((sliderValue * 100).toInt().coerceIn(0, 100))
+                    },
+                    enabled = canSeek,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.Center)
+                        .padding(horizontal = 18.dp),
+                )
+            } else {
+                PlayerProgressLine(
+                    progressPercent = progressPercent,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth(),
+                )
+            }
         }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = CHEVRON_RESERVED_SPACE, end = CHEVRON_RESERVED_SPACE)
-                .heightIn(min = 48.dp)
+                .height(PLAYER_TRANSPORT_ROW_HEIGHT)
                 .padding(vertical = 0.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
