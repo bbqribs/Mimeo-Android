@@ -57,7 +57,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,7 +90,6 @@ private const val PROGRESS_SYNC_DEBOUNCE_MS = 2_000L
 private const val PROGRESS_CHAR_STEP = 120
 private const val FALLBACK_CHUNK_MAX_CHARS = 900
 private const val DONE_PERCENT_THRESHOLD = 98
-private val READER_CHROME_TOP_OFFSET = 56.dp
 private val PLAYBACK_SPEED_OPTIONS = listOf(0.8f, 0.9f, 1.0f, 1.1f, 1.25f, 1.5f, 1.75f, 2.0f)
 
 private fun debugLog(message: String) {
@@ -162,7 +160,6 @@ fun PlayerScreen(
     val currentPosition = playbackPositionByItem[currentItemId] ?: PlaybackPosition()
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
-    val density = LocalDensity.current
     val isPhysicalDevice = remember { isLikelyPhysicalDevice() }
     val baseUrlHint = vm.baseUrlHintForDevice(isPhysicalDevice)
     val chevronSide = remember(chevronSnapEdge) {
@@ -177,7 +174,6 @@ fun PlayerScreen(
         PlayerControlsMode.NUB -> "Show player controls"
     }
     val readerChromeHidden = !compactControlsOnly && isExpanded && readerModeEnabled
-    val readerChromeScrollCompensationPx = with(density) { READER_CHROME_TOP_OFFSET.roundToPx() }
 
     val latestChunks by rememberUpdatedState(chunks)
     val latestItemId by rememberUpdatedState(currentItemId)
@@ -615,19 +611,7 @@ fun PlayerScreen(
             }
         }
     }
-    val toggleReaderMode = {
-        val nextReaderMode = !readerModeEnabled
-        readerModeEnabled = nextReaderMode
-        actionScope.launch {
-            val delta = if (nextReaderMode) {
-                readerChromeScrollCompensationPx
-            } else {
-                -readerChromeScrollCompensationPx
-            }
-            val target = (readerScrollState.value + delta).coerceIn(0, readerScrollState.maxValue)
-            readerScrollState.scrollTo(target)
-        }
-    }
+    val toggleReaderMode = { readerModeEnabled = !readerModeEnabled }
 
     val renderPlayerControlBar: @Composable () -> Unit = {
         PlayerControlBar(
@@ -1279,7 +1263,7 @@ private fun FullPlayerDock(
                         },
                     )
                     .padding(horizontal = 18.dp)
-                    .offset(y = (-30).dp),
+                    .offset(y = (-44).dp),
             )
         }
     }
