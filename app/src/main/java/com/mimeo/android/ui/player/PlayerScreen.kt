@@ -151,6 +151,7 @@ fun PlayerScreen(
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
+    var hasRefreshIssue by remember { mutableStateOf(false) }
     var preserveVisibleContentOnReload by remember { mutableStateOf(false) }
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     val readerScrollState = rememberSaveable(currentItemId, saver = ScrollState.Saver) { ScrollState(0) }
@@ -802,6 +803,7 @@ fun PlayerScreen(
                             canMarkDone = textPayload != null,
                             isDone = showCompleted,
                             refreshState = refreshActionState,
+                            showRefreshIssue = hasRefreshIssue,
                             onRefresh = {
                                 if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
                                 actionScope.launch {
@@ -811,11 +813,14 @@ fun PlayerScreen(
                                             localDonePercentOverride = -1
                                             preserveVisibleContentOnReload = true
                                             reloadNonce += 1
+                                            hasRefreshIssue = false
                                         }
                                         .onFailure { error ->
                                             if (error is CancellationException) return@onFailure
-                                            uiMessage = friendlyRefreshFailureMessage(error)
-                                            onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
+                                            val failureMessage = friendlyRefreshFailureMessage(error)
+                                            val (actionLabel, actionKey) = refreshFailureAction(failureMessage)
+                                            hasRefreshIssue = true
+                                            onShowSnackbar(failureMessage, actionLabel, actionKey)
                                         }
                                     refreshActionState = if (refreshResult.isSuccess) {
                                         RefreshActionVisualState.Success
@@ -830,6 +835,9 @@ fun PlayerScreen(
                                         refreshActionState = RefreshActionVisualState.Idle
                                     }
                                 }
+                            },
+                            onRefreshIssueTap = {
+                                onShowSnackbar("Connection issue while refreshing", "Diagnostics", "open_diagnostics")
                             },
                             onMarkDone = {
                                 actionScope.launch {
@@ -984,6 +992,7 @@ fun PlayerScreen(
                                     canMarkDone = textPayload != null,
                                     isDone = showCompleted,
                                     refreshState = refreshActionState,
+                                    showRefreshIssue = hasRefreshIssue,
                                     onRefresh = {
                                         if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
                                         actionScope.launch {
@@ -993,11 +1002,14 @@ fun PlayerScreen(
                                                     localDonePercentOverride = -1
                                                     preserveVisibleContentOnReload = true
                                                     reloadNonce += 1
+                                                    hasRefreshIssue = false
                                                 }
                                                 .onFailure { error ->
                                                     if (error is CancellationException) return@onFailure
-                                                    uiMessage = friendlyRefreshFailureMessage(error)
-                                                    onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
+                                                    val failureMessage = friendlyRefreshFailureMessage(error)
+                                                    val (actionLabel, actionKey) = refreshFailureAction(failureMessage)
+                                                    hasRefreshIssue = true
+                                                    onShowSnackbar(failureMessage, actionLabel, actionKey)
                                                 }
                                             refreshActionState = if (refreshResult.isSuccess) {
                                                 RefreshActionVisualState.Success
@@ -1012,6 +1024,9 @@ fun PlayerScreen(
                                                 refreshActionState = RefreshActionVisualState.Idle
                                             }
                                         }
+                                    },
+                                    onRefreshIssueTap = {
+                                        onShowSnackbar("Connection issue while refreshing", "Diagnostics", "open_diagnostics")
                                     },
                                     onMarkDone = {
                                         actionScope.launch {
@@ -1154,7 +1169,9 @@ private fun ExpandedPlayerTopBar(
     canMarkDone: Boolean,
     isDone: Boolean,
     refreshState: RefreshActionVisualState,
+    showRefreshIssue: Boolean,
     onRefresh: () -> Unit,
+    onRefreshIssueTap: () -> Unit,
     onMarkDone: () -> Unit,
     onSpeed: () -> Unit,
     onOverflowExpandedChange: (Boolean) -> Unit,
@@ -1184,6 +1201,15 @@ private fun ExpandedPlayerTopBar(
                 onClick = onRefresh,
                 contentDescription = "Refresh item",
             )
+            if (showRefreshIssue) {
+                IconButton(onClick = onRefreshIssueTap) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.msr_error_circle_24),
+                        contentDescription = "Refresh issue",
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
             TextButton(onClick = onSpeed) {
                 Text(speedLabel)
             }
@@ -1671,6 +1697,14 @@ private fun friendlyRefreshFailureMessage(error: Throwable): String {
         return "Refresh failed"
     }
     return message
+}
+
+private fun refreshFailureAction(message: String): Pair<String, String> {
+    return if (message.equals("Check your API token", ignoreCase = true)) {
+        "Settings" to "open_settings"
+    } else {
+        "Diagnostics" to "open_diagnostics"
+    }
 }
 
 private fun isNetworkError(error: Throwable): Boolean {

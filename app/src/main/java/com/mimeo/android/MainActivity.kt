@@ -133,6 +133,7 @@ private const val ROUTE_COLLECTIONS_FOLDER = "collections/folder/{folderId}"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_DIAGNOSTICS = "settings/diagnostics"
 private const val ACTION_KEY_OPEN_DIAGNOSTICS = "open_diagnostics"
+private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
 private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
 private const val DEBUG_TARGET_ITEM_ID = 409
 
@@ -1436,6 +1437,7 @@ private fun MimeoApp(vm: AppViewModel) {
             if (result == SnackbarResult.ActionPerformed) {
                 when (message.actionKey) {
                     ACTION_KEY_OPEN_DIAGNOSTICS -> nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) { launchSingleTop = true }
+                    ACTION_KEY_OPEN_SETTINGS -> nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true }
                 }
             }
         }
@@ -1523,7 +1525,7 @@ private fun MimeoApp(vm: AppViewModel) {
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                if (showGlobalBanner && !(isOnLocusRoute && readerChromeHidden)) {
+                if (showGlobalBanner && !isOnLocusRoute) {
                     StatusBanner(
                         stateLabel = bannerStateLabel,
                         summary = bannerSummary,
