@@ -1334,8 +1334,22 @@ private fun MimeoApp(vm: AppViewModel) {
         else -> ROUTE_UP_NEXT
     }
     val isOnLocusRoute = currentRoute.startsWith(ROUTE_LOCUS)
+    var playbackActive by rememberSaveable { mutableStateOf(false) }
     var readerChromeHidden by rememberSaveable { mutableStateOf(false) }
     val controlsMode = settings.playerControlsMode
+    val storedLastNonNubMode = settings.playerLastNonNubMode
+        .takeIf { it != PlayerControlsMode.NUB }
+        ?: PlayerControlsMode.FULL
+    var previousRoute by rememberSaveable { mutableStateOf(currentRoute) }
+    var lastLocusMode by rememberSaveable {
+        mutableStateOf(
+            if (settings.playerControlsMode == PlayerControlsMode.NUB) {
+                storedLastNonNubMode
+            } else {
+                settings.playerControlsMode
+            },
+        )
+    }
     val compactControlsOnly = !isOnLocusRoute
     val showCompactControls = settings.persistentPlayerEnabled
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
@@ -1401,6 +1415,39 @@ private fun MimeoApp(vm: AppViewModel) {
             nav.navigate(route) { launchSingleTop = true }
             vm.consumePendingNavigation(route)
         }
+    }
+
+    LaunchedEffect(isOnLocusRoute, settings.playerControlsMode) {
+        if (isOnLocusRoute) {
+            lastLocusMode = settings.playerControlsMode
+        }
+    }
+
+    LaunchedEffect(currentRoute) {
+        if (currentRoute == previousRoute) return@LaunchedEffect
+        val wasOnLocus = previousRoute.startsWith(ROUTE_LOCUS)
+        val nowOnLocus = currentRoute.startsWith(ROUTE_LOCUS)
+        val currentMode = settings.playerControlsMode
+
+        if (wasOnLocus && !nowOnLocus) {
+            lastLocusMode = currentMode
+            if (!playbackActive && currentMode != PlayerControlsMode.NUB) {
+                val nextLastNonNub = currentMode.takeIf { it != PlayerControlsMode.NUB } ?: storedLastNonNubMode
+                vm.savePlayerControlsState(PlayerControlsMode.NUB, nextLastNonNub)
+            }
+        } else if (!wasOnLocus && nowOnLocus) {
+            val restoreMode = lastLocusMode
+            val restoreLastNonNub = restoreMode.takeIf { it != PlayerControlsMode.NUB } ?: storedLastNonNubMode
+            if (currentMode != restoreMode || settings.playerLastNonNubMode != restoreLastNonNub) {
+                vm.savePlayerControlsState(restoreMode, restoreLastNonNub)
+            }
+        } else if (!wasOnLocus && !nowOnLocus) {
+            if (!playbackActive && currentMode != PlayerControlsMode.NUB) {
+                val nextLastNonNub = lastLocusMode.takeIf { it != PlayerControlsMode.NUB } ?: storedLastNonNubMode
+                vm.savePlayerControlsState(PlayerControlsMode.NUB, nextLastNonNub)
+            }
+        }
+        previousRoute = currentRoute
     }
 
     Scaffold(
@@ -1573,6 +1620,9 @@ private fun MimeoApp(vm: AppViewModel) {
                             chevronSnapEdge = settings.playerChevronSnapEdge,
                             onControlsModeChange = { mode, lastNonNubMode ->
                                 vm.savePlayerControlsState(mode, lastNonNubMode)
+                            },
+                            onPlaybackActiveChange = { active ->
+                                playbackActive = active
                             },
                             onReaderChromeVisibilityChange = { hidden ->
                                 readerChromeHidden = hidden
