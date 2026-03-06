@@ -67,3 +67,14 @@ Use this for PRs that touch `MainActivity`, `PlayerScreen`, or settings toggles:
 - With toggle ON: controls are visible and interactive on non-Locus tabs.
 - With toggle OFF: controls are hidden on non-Locus tabs, but playback continues and remains controllable when returning to Locus.
 - Switching tabs does not create overlapping/invisible full-screen player layers or block tab interaction.
+
+## 3-state player controls invariants
+
+Use this for PRs that touch player bar sizing, mode transitions, or chevron docking:
+
+- Full mode keeps the full progress slider lane; transport button geometry does not shift.
+- Minimal mode does not reuse the full upper lane; it renders a thin progress line at the top edge of the minimal panel.
+- Nub mode shows only chevron + thin progress line at the nav top boundary.
+- Chevron remains circular (no vertical squash) and does not visibly overlap the nub/minimal progress line.
+- Tap chevron toggles Full <-> Minimal (and NUB -> last non-nub mode); long-press toggles into/out of NUB.
+- Chevron side snap (left/right) persists across tab switches and app relaunch.

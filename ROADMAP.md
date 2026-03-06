@@ -22,6 +22,8 @@
 - [x] UX follow-ups: root snackbar visibility, stable player status/banner placement, and denser player control bar without reducing tap targets.
 - [x] Player chrome reliability follow-up: non-Locus player controls render as a bottom overlay without tab hit-test conflicts; settings toggles persist correctly; playback remains alive across tab switches even when persistent controls are hidden.
 - [x] Up Next controls cleanup: single Refresh action remains and covers queue reload plus queued-progress sync path; standalone Sync button removed.
+- [x] Reader chrome/fullscreen interaction pass: tapping reader text toggles chrome visibility with directional slide transitions while preserving visible text position.
+- [x] Player controls minimization (D-lite): Full/Minimal/Nub modes with persisted mode+side, stable chevron placement, and mode-specific progress lanes (full slider, minimal thin top line, nub thin line at nav boundary).
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
@@ -57,9 +59,10 @@
 11. [ ] Next: folder badges in playlist list and optional nested folders.
 12. [x] Locus expand/collapse on `main`: explicit buttons only, collapsed tab entry, expanded resume/direct entry, title ellipsis fix, and TESTING.md invariants checklist.
 13. [ ] Player completion icon follow-up: evaluate open-book/closed-book completion iconography for Locus as a separate ticket after the current player banding work settles.
-13. [ ] Shared pinned PlayerBar on `main` remains a separate architecture ticket, not part of playback-speed follow-up.
-14. [ ] Player screen banding: TopAppBar + reader body + pinned controls above bottom nav + title marquee row.
-15. [ ] Highlight currently spoken sentence/word as a refinement of the existing reader playback highlight.
+14. [ ] Shared pinned PlayerBar on `main` remains a separate architecture ticket, not part of playback-speed follow-up.
+15. [~] Player screen banding foundation: TopAppBar + reader body + pinned controls above bottom nav are shipped; ongoing polish is focused on chrome density/behavior only.
+16. [x] Reader highlight progression: sentence-level highlighting with range-level (TTS `onRangeStart`) support and sentence fallback.
+17. [x] Player chrome compression slice: persistent title strip + 3-state controls with chevron mode transitions and persisted settings.
 
 ## Later
 - [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.
