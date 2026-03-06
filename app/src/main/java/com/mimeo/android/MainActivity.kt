@@ -37,7 +37,10 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -60,6 +63,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -110,6 +114,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -141,6 +146,12 @@ private data class BottomNavDestination(
     val route: String,
     val label: String,
 )
+
+private enum class ConnectivityBadgeState {
+    HIDDEN,
+    OFFLINE,
+    RECOVERED,
+}
 
 data class UiSnackbarMessage(
     val message: String,
@@ -564,7 +575,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (current.apiToken.isBlank()) {
             return Result.failure(IllegalStateException("Token required"))
         }
-        return runCatching {
+        return try {
             val loaded = repository.listPlaylists(current.baseUrl, current.apiToken)
             _playlists.value = loaded
             val selected = current.selectedPlaylistId
@@ -579,6 +590,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 settingsStore.saveDefaultSavePlaylistId(null)
                 _statusMessage.value = "Default save playlist removed; switched to Smart queue"
             }
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(Unit)
+        } catch (error: Exception) {
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                updateSyncBadgeState()
+            }
+            Result.failure(error)
         }
     }
 
@@ -1426,6 +1446,8 @@ private fun MimeoApp(vm: AppViewModel) {
         else -> null
     }
     val showGlobalBanner = queueOffline || baseUrlHint != null || statusLooksError
+    var connectivityBadgeState by rememberSaveable { mutableStateOf(ConnectivityBadgeState.HIDDEN) }
+    var previousOfflineState by rememberSaveable { mutableStateOf(queueOffline) }
 
     LaunchedEffect(vm, snackbarHostState) {
         vm.snackbarMessages.collect { message ->
@@ -1448,6 +1470,21 @@ private fun MimeoApp(vm: AppViewModel) {
             nav.navigate(route) { launchSingleTop = true }
             vm.consumePendingNavigation(route)
         }
+    }
+
+    LaunchedEffect(queueOffline) {
+        if (queueOffline) {
+            connectivityBadgeState = ConnectivityBadgeState.OFFLINE
+        } else if (previousOfflineState) {
+            connectivityBadgeState = ConnectivityBadgeState.RECOVERED
+            delay(1600)
+            if (!queueOffline && connectivityBadgeState == ConnectivityBadgeState.RECOVERED) {
+                connectivityBadgeState = ConnectivityBadgeState.HIDDEN
+            }
+        } else {
+            connectivityBadgeState = ConnectivityBadgeState.HIDDEN
+        }
+        previousOfflineState = queueOffline
     }
 
     LaunchedEffect(currentRoute) {
@@ -1525,6 +1562,11 @@ private fun MimeoApp(vm: AppViewModel) {
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                GlobalConnectivityBadge(
+                    state = connectivityBadgeState,
+                    onClick = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) { launchSingleTop = true } },
+                    modifier = Modifier.align(Alignment.End),
+                )
                 if (showGlobalBanner && !isOnLocusRoute) {
                     StatusBanner(
                         stateLabel = bannerStateLabel,
@@ -1678,6 +1720,51 @@ private fun MimeoApp(vm: AppViewModel) {
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.ime)
                     .padding(bottom = if (isOnLocusRoute && readerChromeHidden) 12.dp else 76.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun GlobalConnectivityBadge(
+    state: ConnectivityBadgeState,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AnimatedVisibility(
+        visible = state != ConnectivityBadgeState.HIDDEN,
+        enter = slideInVertically(initialOffsetY = { -it / 2 }) + fadeIn(animationSpec = tween(140)),
+        exit = slideOutVertically(targetOffsetY = { -it / 2 }) + fadeOut(animationSpec = tween(140)),
+        modifier = modifier,
+    ) {
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier
+                .size(34.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
+                    shape = CircleShape,
+                ),
+        ) {
+            val iconRes = if (state == ConnectivityBadgeState.RECOVERED) {
+                R.drawable.msr_wifi_24
+            } else {
+                R.drawable.msr_wifi_off_24
+            }
+            val tint = if (state == ConnectivityBadgeState.RECOVERED) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.error
+            }
+            val description = if (state == ConnectivityBadgeState.RECOVERED) {
+                "Connection restored"
+            } else {
+                "Network unavailable"
+            }
+            Icon(
+                painter = painterResource(id = iconRes),
+                contentDescription = description,
+                tint = tint,
             )
         }
     }
