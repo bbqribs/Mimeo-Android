@@ -112,8 +112,9 @@ fun PlayerScreen(
     compactControlsOnly: Boolean = false,
     showCompactControls: Boolean = true,
     controlsMode: PlayerControlsMode = PlayerControlsMode.FULL,
+    lastNonNubMode: PlayerControlsMode = PlayerControlsMode.FULL,
     chevronSnapEdge: PlayerChevronSnapEdge = PlayerChevronSnapEdge.RIGHT,
-    onControlsModeChange: (PlayerControlsMode) -> Unit = {},
+    onControlsModeChange: (PlayerControlsMode, PlayerControlsMode) -> Unit = { _, _ -> },
     onPlaybackActiveChange: (Boolean) -> Unit = {},
     onPlaybackProgressPercentChange: (Int) -> Unit = {},
     onReaderChromeVisibilityChange: (Boolean) -> Unit = {},
@@ -168,10 +169,11 @@ fun PlayerScreen(
             else -> PlayerChevronSnapEdge.RIGHT
         }
     }
+    val storedLastNonNubMode = lastNonNubMode.takeIf { it != PlayerControlsMode.NUB } ?: PlayerControlsMode.FULL
     val chevronDescription = when (controlsMode) {
-        PlayerControlsMode.FULL -> "Collapse player controls"
+        PlayerControlsMode.FULL -> "Collapse player controls. Long press to hide player controls"
         PlayerControlsMode.MINIMAL -> "Expand player controls. Long press to hide player controls"
-        PlayerControlsMode.NUB -> "Show player controls"
+        PlayerControlsMode.NUB -> "Restore player controls"
     }
     val readerChromeHidden = !compactControlsOnly && isExpanded && readerModeEnabled
 
@@ -594,10 +596,16 @@ fun PlayerScreen(
     }
     val showDockChevron = true
     val handleChevronTap = {
-        onControlsModeChange(nextPlayerControlsModeOnTap(controlsMode))
+        val nextMode = nextPlayerControlsModeOnTap(controlsMode)
+        val nextLastNonNub = if (nextMode == PlayerControlsMode.NUB) storedLastNonNubMode else nextMode
+        onControlsModeChange(nextMode, nextLastNonNub)
     }
     val handleChevronLongPress = {
-        onControlsModeChange(nextPlayerControlsModeOnLongPress(controlsMode))
+        if (controlsMode == PlayerControlsMode.NUB) {
+            onControlsModeChange(storedLastNonNubMode, storedLastNonNubMode)
+        } else {
+            onControlsModeChange(PlayerControlsMode.NUB, controlsMode)
+        }
     }
     val handleChevronSnap: (Float) -> Unit = { delta ->
         if (abs(delta) >= 32f) {
@@ -1219,14 +1227,6 @@ private fun nextPlayerControlsModeOnTap(current: PlayerControlsMode): PlayerCont
     return when (current) {
         PlayerControlsMode.FULL -> PlayerControlsMode.MINIMAL
         PlayerControlsMode.MINIMAL -> PlayerControlsMode.FULL
-        PlayerControlsMode.NUB -> PlayerControlsMode.MINIMAL
-    }
-}
-
-private fun nextPlayerControlsModeOnLongPress(current: PlayerControlsMode): PlayerControlsMode {
-    return when (current) {
-        PlayerControlsMode.FULL -> PlayerControlsMode.MINIMAL
-        PlayerControlsMode.MINIMAL -> PlayerControlsMode.NUB
         PlayerControlsMode.NUB -> PlayerControlsMode.MINIMAL
     }
 }

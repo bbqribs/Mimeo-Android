@@ -342,6 +342,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 readingMaxWidthDp = settings.value.readingMaxWidthDp,
                 readingParagraphSpacing = settings.value.readingParagraphSpacing,
                 playerControlsMode = settings.value.playerControlsMode,
+                playerLastNonNubMode = settings.value.playerLastNonNubMode,
                 playerChevronSnapEdge = settings.value.playerChevronSnapEdge,
                 playerChevronEdgeOffset = settings.value.playerChevronEdgeOffset,
             )
@@ -373,6 +374,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 readingMaxWidthDp = readingMaxWidthDp,
                 readingParagraphSpacing = readingParagraphSpacing,
                 playerControlsMode = settings.value.playerControlsMode,
+                playerLastNonNubMode = settings.value.playerLastNonNubMode,
                 playerChevronSnapEdge = settings.value.playerChevronSnapEdge,
                 playerChevronEdgeOffset = settings.value.playerChevronEdgeOffset,
             )
@@ -398,6 +400,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 readingMaxWidthDp = settings.value.readingMaxWidthDp,
                 readingParagraphSpacing = settings.value.readingParagraphSpacing,
                 playerControlsMode = settings.value.playerControlsMode,
+                playerLastNonNubMode = settings.value.playerLastNonNubMode,
                 playerChevronSnapEdge = settings.value.playerChevronSnapEdge,
                 playerChevronEdgeOffset = settings.value.playerChevronEdgeOffset,
             )
@@ -422,9 +425,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun savePlayerControlsMode(mode: PlayerControlsMode) {
         val current = settings.value
-        _settings.value = current.copy(playerControlsMode = mode)
+        _settings.value = current.copy(
+            playerControlsMode = mode,
+            playerLastNonNubMode = if (mode == PlayerControlsMode.NUB) {
+                current.playerLastNonNubMode
+            } else {
+                mode
+            },
+        )
         viewModelScope.launch {
             settingsStore.savePlayerControlsMode(mode)
+        }
+    }
+
+    fun savePlayerControlsState(mode: PlayerControlsMode, lastNonNubMode: PlayerControlsMode) {
+        val safeLastMode = lastNonNubMode.takeIf { it != PlayerControlsMode.NUB } ?: PlayerControlsMode.FULL
+        _settings.value = settings.value.copy(
+            playerControlsMode = mode,
+            playerLastNonNubMode = safeLastMode,
+        )
+        viewModelScope.launch {
+            settingsStore.savePlayerControlsState(mode, safeLastMode)
         }
     }
 
@@ -1548,9 +1569,10 @@ private fun MimeoApp(vm: AppViewModel) {
                             compactControlsOnly = compactControlsOnly,
                             showCompactControls = showCompactControls,
                             controlsMode = controlsMode,
+                            lastNonNubMode = settings.playerLastNonNubMode,
                             chevronSnapEdge = settings.playerChevronSnapEdge,
-                            onControlsModeChange = { mode ->
-                                vm.savePlayerControlsMode(mode)
+                            onControlsModeChange = { mode, lastNonNubMode ->
+                                vm.savePlayerControlsState(mode, lastNonNubMode)
                             },
                             onReaderChromeVisibilityChange = { hidden ->
                                 readerChromeHidden = hidden

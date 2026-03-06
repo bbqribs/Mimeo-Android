@@ -184,6 +184,7 @@ data class AppSettings(
     val readingMaxWidthDp: Int = 720,
     val readingParagraphSpacing: ParagraphSpacingOption = ParagraphSpacingOption.MEDIUM,
     val playerControlsMode: PlayerControlsMode = PlayerControlsMode.FULL,
+    val playerLastNonNubMode: PlayerControlsMode = PlayerControlsMode.FULL,
     val playerChevronSnapEdge: PlayerChevronSnapEdge = PlayerChevronSnapEdge.HOME,
     val playerChevronEdgeOffset: Float = 0.5f,
 )
