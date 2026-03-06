@@ -19,6 +19,8 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
@@ -1382,7 +1384,11 @@ private fun MimeoApp(vm: AppViewModel) {
 
     Scaffold(
         bottomBar = {
-            AnimatedVisibility(visible = !(isOnLocusRoute && readerChromeHidden)) {
+            AnimatedVisibility(
+                visible = !(isOnLocusRoute && readerChromeHidden),
+                enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(150)),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
+            ) {
                 NavigationBar(
                     modifier = Modifier.height(68.dp),
                     tonalElevation = 0.dp,
