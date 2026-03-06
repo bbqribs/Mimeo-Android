@@ -783,78 +783,78 @@ fun PlayerScreen(
                     .weight(1f, fill = true),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                AnimatedVisibility(
-                    visible = !readerChromeHidden,
-                    enter = slideInVertically(initialOffsetY = { -it / 2 }) + fadeIn(animationSpec = tween(150)),
-                    exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(animationSpec = tween(120)),
-                ) {
-                    ExpandedPlayerTopBar(
-                        speedLabel = formatPlaybackSpeed(settings.playbackSpeed),
-                        overflowExpanded = overflowExpanded,
-                        canMarkDone = textPayload != null,
-                        isDone = showCompleted,
-                        onRefresh = {
-                            if (isRefreshing) return@ExpandedPlayerTopBar
-                            actionScope.launch {
-                                isRefreshing = true
-                                vm.refreshCurrentPlayerItem(currentItemId)
-                                    .onSuccess {
-                                        localDonePercentOverride = -1
-                                        preserveVisibleContentOnReload = true
-                                        reloadNonce += 1
-                                    }
-                                    .onFailure { error ->
-                                        if (error is CancellationException) return@onFailure
-                                        uiMessage = error.message ?: "Refresh failed"
-                                        onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
-                                    }
-                                isRefreshing = false
-                            }
-                        },
-                        onMarkDone = {
-                            actionScope.launch {
-                                val markDone = !showCompleted
-                                val targetPercent = if (markDone) 100 else 97
-                                val resumePercent = if (markDone) currentPercent else undoDonePercent
-                                vm.toggleCompletion(currentItemId, markDone = markDone, resumePercent = resumePercent)
-                                    .onSuccess {
-                                        localDonePercentOverride = targetPercent
-                                        val toggleMessage = when {
-                                            showCompleted -> "Marked not done"
-                                            else -> "Marked done"
-                                        }
-                                        onShowSnackbar(toggleMessage, null, null)
-                                        if (showCompleted && chunks.isNotEmpty()) {
-                                            nearEndForcedForItemId = -1
-                                            lastObservedPercent = targetPercent
-                                        }
-                                    }
-                                    .onFailure { error ->
-                                        if (error is CancellationException) return@onFailure
-                                        uiMessage = error.message ?: "Completion update failed"
-                                        onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
-                                    }
-                            }
-                        },
-                        onSpeed = { showSpeedDialog = true },
-                        onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
-                        overflowMenuContent = {
-                            LocusOverflowMenuItems(
-                                onOpenPlaylists = {
-                                    overflowExpanded = false
-                                    vm.refreshPlaylists()
-                                    showPlaylistPicker = true
-                                },
-                                isExpanded = isExpanded,
-                                onToggleExpanded = {
-                                    overflowExpanded = false
-                                    isExpanded = !isExpanded
-                                },
-                            )
-                        },
-                    )
-                }
                 if (!isExpanded) {
+                    AnimatedVisibility(
+                        visible = !readerChromeHidden,
+                        enter = slideInVertically(initialOffsetY = { -it / 2 }) + fadeIn(animationSpec = tween(150)),
+                        exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(animationSpec = tween(120)),
+                    ) {
+                        ExpandedPlayerTopBar(
+                            speedLabel = formatPlaybackSpeed(settings.playbackSpeed),
+                            overflowExpanded = overflowExpanded,
+                            canMarkDone = textPayload != null,
+                            isDone = showCompleted,
+                            onRefresh = {
+                                if (isRefreshing) return@ExpandedPlayerTopBar
+                                actionScope.launch {
+                                    isRefreshing = true
+                                    vm.refreshCurrentPlayerItem(currentItemId)
+                                        .onSuccess {
+                                            localDonePercentOverride = -1
+                                            preserveVisibleContentOnReload = true
+                                            reloadNonce += 1
+                                        }
+                                        .onFailure { error ->
+                                            if (error is CancellationException) return@onFailure
+                                            uiMessage = error.message ?: "Refresh failed"
+                                            onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
+                                        }
+                                    isRefreshing = false
+                                }
+                            },
+                            onMarkDone = {
+                                actionScope.launch {
+                                    val markDone = !showCompleted
+                                    val targetPercent = if (markDone) 100 else 97
+                                    val resumePercent = if (markDone) currentPercent else undoDonePercent
+                                    vm.toggleCompletion(currentItemId, markDone = markDone, resumePercent = resumePercent)
+                                        .onSuccess {
+                                            localDonePercentOverride = targetPercent
+                                            val toggleMessage = when {
+                                                showCompleted -> "Marked not done"
+                                                else -> "Marked done"
+                                            }
+                                            onShowSnackbar(toggleMessage, null, null)
+                                            if (showCompleted && chunks.isNotEmpty()) {
+                                                nearEndForcedForItemId = -1
+                                                lastObservedPercent = targetPercent
+                                            }
+                                        }
+                                        .onFailure { error ->
+                                            if (error is CancellationException) return@onFailure
+                                            uiMessage = error.message ?: "Completion update failed"
+                                            onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
+                                        }
+                                }
+                            },
+                            onSpeed = { showSpeedDialog = true },
+                            onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
+                            overflowMenuContent = {
+                                LocusOverflowMenuItems(
+                                    onOpenPlaylists = {
+                                        overflowExpanded = false
+                                        vm.refreshPlaylists()
+                                        showPlaylistPicker = true
+                                    },
+                                    isExpanded = isExpanded,
+                                    onToggleExpanded = {
+                                        overflowExpanded = false
+                                        isExpanded = !isExpanded
+                                    },
+                                )
+                            },
+                        )
+                    }
                     LocusPeekCard(
                         title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
                         statusLine = "Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability",
@@ -951,18 +951,104 @@ fun PlayerScreen(
                                 scrollState = readerScrollState,
                                 modifier = Modifier.fillMaxSize(),
                             )
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = !readerChromeHidden,
+                                enter = slideInVertically(initialOffsetY = { -it / 2 }) + fadeIn(animationSpec = tween(150)),
+                                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(animationSpec = tween(120)),
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .fillMaxWidth(),
+                            ) {
+                                ExpandedPlayerTopBar(
+                                    speedLabel = formatPlaybackSpeed(settings.playbackSpeed),
+                                    overflowExpanded = overflowExpanded,
+                                    canMarkDone = textPayload != null,
+                                    isDone = showCompleted,
+                                    onRefresh = {
+                                        if (isRefreshing) return@ExpandedPlayerTopBar
+                                        actionScope.launch {
+                                            isRefreshing = true
+                                            vm.refreshCurrentPlayerItem(currentItemId)
+                                                .onSuccess {
+                                                    localDonePercentOverride = -1
+                                                    preserveVisibleContentOnReload = true
+                                                    reloadNonce += 1
+                                                }
+                                                .onFailure { error ->
+                                                    if (error is CancellationException) return@onFailure
+                                                    uiMessage = error.message ?: "Refresh failed"
+                                                    onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
+                                                }
+                                            isRefreshing = false
+                                        }
+                                    },
+                                    onMarkDone = {
+                                        actionScope.launch {
+                                            val markDone = !showCompleted
+                                            val targetPercent = if (markDone) 100 else 97
+                                            val resumePercent = if (markDone) currentPercent else undoDonePercent
+                                            vm.toggleCompletion(currentItemId, markDone = markDone, resumePercent = resumePercent)
+                                                .onSuccess {
+                                                    localDonePercentOverride = targetPercent
+                                                    val toggleMessage = when {
+                                                        showCompleted -> "Marked not done"
+                                                        else -> "Marked done"
+                                                    }
+                                                    onShowSnackbar(toggleMessage, null, null)
+                                                    if (showCompleted && chunks.isNotEmpty()) {
+                                                        nearEndForcedForItemId = -1
+                                                        lastObservedPercent = targetPercent
+                                                    }
+                                                }
+                                                .onFailure { error ->
+                                                    if (error is CancellationException) return@onFailure
+                                                    uiMessage = error.message ?: "Completion update failed"
+                                                    onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
+                                                }
+                                        }
+                                    },
+                                    onSpeed = { showSpeedDialog = true },
+                                    onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
+                                    overflowMenuContent = {
+                                        LocusOverflowMenuItems(
+                                            onOpenPlaylists = {
+                                                overflowExpanded = false
+                                                vm.refreshPlaylists()
+                                                showPlaylistPicker = true
+                                            },
+                                            isExpanded = isExpanded,
+                                            onToggleExpanded = {
+                                                overflowExpanded = false
+                                                isExpanded = !isExpanded
+                                            },
+                                        )
+                                    },
+                                )
+                            }
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = !readerChromeHidden,
+                                enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(150)),
+                                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .fillMaxWidth(),
+                            ) {
+                                renderPlayerDock()
+                            }
                         }
                     }
                 }
-            AnimatedVisibility(
-                visible = !readerChromeHidden,
-                enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(150)),
-                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
-            ) {
-                renderPlayerDock()
+                if (!isExpanded) {
+                    AnimatedVisibility(
+                        visible = !readerChromeHidden,
+                        enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(150)),
+                        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
+                    ) {
+                        renderPlayerDock()
+                    }
+                }
             }
         }
-    }
     }
 
     if (showPlaylistPicker) {
