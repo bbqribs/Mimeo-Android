@@ -75,7 +75,7 @@ fun RefreshActionButton(
             RefreshActionVisualState.Success -> R.drawable.msr_check_circle_24
             RefreshActionVisualState.Failure -> R.drawable.msr_error_circle_24
             RefreshActionVisualState.Idle -> if (showConnectivityIssue) {
-                R.drawable.msr_refresh_alert_24
+                R.drawable.msr_sync_problem_24
             } else {
                 R.drawable.msr_refresh_24
             }

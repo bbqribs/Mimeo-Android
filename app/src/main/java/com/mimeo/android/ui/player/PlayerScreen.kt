@@ -151,6 +151,7 @@ fun PlayerScreen(
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
+    var hasRefreshProblem by rememberSaveable { mutableStateOf(false) }
     var preserveVisibleContentOnReload by remember { mutableStateOf(false) }
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     val readerScrollState = rememberSaveable(currentItemId, saver = ScrollState.Saver) { ScrollState(0) }
@@ -802,7 +803,7 @@ fun PlayerScreen(
                             canMarkDone = textPayload != null,
                             isDone = showCompleted,
                             refreshState = refreshActionState,
-                            showConnectivityIssue = queueOffline,
+                            showConnectivityIssue = queueOffline || hasRefreshProblem,
                             onRefresh = {
                                 if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
                                 actionScope.launch {
@@ -812,11 +813,13 @@ fun PlayerScreen(
                                             localDonePercentOverride = -1
                                             preserveVisibleContentOnReload = true
                                             reloadNonce += 1
+                                            hasRefreshProblem = false
                                         }
                                         .onFailure { error ->
                                             if (error is CancellationException) return@onFailure
                                             val failureMessage = friendlyRefreshFailureMessage(error)
                                             val (actionLabel, actionKey) = refreshFailureAction(failureMessage)
+                                            hasRefreshProblem = true
                                             onShowSnackbar(failureMessage, actionLabel, actionKey)
                                         }
                                     refreshActionState = if (refreshResult.isSuccess) {
@@ -986,7 +989,7 @@ fun PlayerScreen(
                                     canMarkDone = textPayload != null,
                                     isDone = showCompleted,
                                     refreshState = refreshActionState,
-                                    showConnectivityIssue = queueOffline,
+                                    showConnectivityIssue = queueOffline || hasRefreshProblem,
                                     onRefresh = {
                                         if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
                                         actionScope.launch {
@@ -996,11 +999,13 @@ fun PlayerScreen(
                                                     localDonePercentOverride = -1
                                                     preserveVisibleContentOnReload = true
                                                     reloadNonce += 1
+                                                    hasRefreshProblem = false
                                                 }
                                                 .onFailure { error ->
                                                     if (error is CancellationException) return@onFailure
                                                     val failureMessage = friendlyRefreshFailureMessage(error)
                                                     val (actionLabel, actionKey) = refreshFailureAction(failureMessage)
+                                                    hasRefreshProblem = true
                                                     onShowSnackbar(failureMessage, actionLabel, actionKey)
                                                 }
                                             refreshActionState = if (refreshResult.isSuccess) {

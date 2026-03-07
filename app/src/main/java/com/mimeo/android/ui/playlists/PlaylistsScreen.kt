@@ -50,6 +50,7 @@ fun PlaylistsScreen(vm: AppViewModel) {
     var deleteTarget by remember { mutableStateOf<PlaylistSummary?>(null) }
     var renameText by remember { mutableStateOf("") }
     var menuForPlaylistId by remember { mutableIntStateOf(-1) }
+    var hasRefreshProblem by remember { mutableStateOf(false) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
     val actionScope = rememberCoroutineScope()
 
@@ -82,12 +83,13 @@ fun PlaylistsScreen(vm: AppViewModel) {
             }
             RefreshActionButton(
                 state = refreshActionState,
-                showConnectivityIssue = offline,
+                showConnectivityIssue = offline || hasRefreshProblem,
                 onClick = {
                     if (refreshActionState == RefreshActionVisualState.Refreshing) return@RefreshActionButton
                     actionScope.launch {
                         refreshActionState = RefreshActionVisualState.Refreshing
                         val result = vm.refreshPlaylistsOnce()
+                        hasRefreshProblem = result.isFailure
                         refreshActionState = if (result.isSuccess) {
                             RefreshActionVisualState.Success
                         } else {

@@ -98,6 +98,7 @@ fun QueueScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedFilter by rememberSaveable { mutableStateOf(QueueFilterChip.ALL) }
     var showQueueFetchDebug by rememberSaveable { mutableStateOf(false) }
+    var hasRefreshProblem by rememberSaveable { mutableStateOf(false) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
 
     LaunchedEffect(Unit) {
@@ -190,12 +191,13 @@ fun QueueScreen(
             }
             RefreshActionButton(
                 state = refreshActionState,
-                showConnectivityIssue = offline,
+                showConnectivityIssue = offline || hasRefreshProblem,
                 onClick = {
                     if (refreshActionState == RefreshActionVisualState.Refreshing) return@RefreshActionButton
                     actionScope.launch {
                         refreshActionState = RefreshActionVisualState.Refreshing
                         val result = vm.loadQueueOnce()
+                        hasRefreshProblem = result.isFailure
                         refreshActionState = if (result.isSuccess) {
                             RefreshActionVisualState.Success
                         } else {
