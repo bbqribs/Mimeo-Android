@@ -30,6 +30,7 @@ enum class RefreshActionVisualState {
 @Composable
 fun RefreshActionButton(
     state: RefreshActionVisualState,
+    showConnectivityIssue: Boolean,
     onClick: () -> Unit,
     contentDescription: String,
     modifier: Modifier = Modifier,
@@ -50,7 +51,11 @@ fun RefreshActionButton(
             RefreshActionVisualState.Success -> MaterialTheme.colorScheme.primary
             RefreshActionVisualState.Refreshing -> MaterialTheme.colorScheme.primary
             RefreshActionVisualState.Failure -> MaterialTheme.colorScheme.error
-            RefreshActionVisualState.Idle -> MaterialTheme.colorScheme.onSurfaceVariant
+            RefreshActionVisualState.Idle -> if (showConnectivityIssue) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
         },
         animationSpec = tween(durationMillis = 180),
         label = "refreshTint",
@@ -69,6 +74,11 @@ fun RefreshActionButton(
         val iconRes = when (state) {
             RefreshActionVisualState.Success -> R.drawable.msr_check_circle_24
             RefreshActionVisualState.Failure -> R.drawable.msr_error_circle_24
+            RefreshActionVisualState.Idle -> if (showConnectivityIssue) {
+                R.drawable.msr_refresh_alert_24
+            } else {
+                R.drawable.msr_refresh_24
+            }
             else -> R.drawable.msr_refresh_24
         }
         Icon(

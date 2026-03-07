@@ -802,6 +802,7 @@ fun PlayerScreen(
                             canMarkDone = textPayload != null,
                             isDone = showCompleted,
                             refreshState = refreshActionState,
+                            showConnectivityIssue = queueOffline,
                             onRefresh = {
                                 if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
                                 actionScope.launch {
@@ -985,6 +986,7 @@ fun PlayerScreen(
                                     canMarkDone = textPayload != null,
                                     isDone = showCompleted,
                                     refreshState = refreshActionState,
+                                    showConnectivityIssue = queueOffline,
                                     onRefresh = {
                                         if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
                                         actionScope.launch {
@@ -1156,6 +1158,7 @@ private fun ExpandedPlayerTopBar(
     canMarkDone: Boolean,
     isDone: Boolean,
     refreshState: RefreshActionVisualState,
+    showConnectivityIssue: Boolean,
     onRefresh: () -> Unit,
     onMarkDone: () -> Unit,
     onSpeed: () -> Unit,
@@ -1183,6 +1186,7 @@ private fun ExpandedPlayerTopBar(
             }
             RefreshActionButton(
                 state = refreshState,
+                showConnectivityIssue = showConnectivityIssue,
                 onClick = onRefresh,
                 contentDescription = "Refresh item",
             )

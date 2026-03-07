@@ -44,6 +44,7 @@ data class PlaylistPickerChoice(
 fun PlaylistsScreen(vm: AppViewModel) {
     val playlists by vm.playlists.collectAsState()
     val settings by vm.settings.collectAsState()
+    val offline by vm.queueOffline.collectAsState()
     var newName by remember { mutableStateOf("") }
     var renameTarget by remember { mutableStateOf<PlaylistSummary?>(null) }
     var deleteTarget by remember { mutableStateOf<PlaylistSummary?>(null) }
@@ -81,6 +82,7 @@ fun PlaylistsScreen(vm: AppViewModel) {
             }
             RefreshActionButton(
                 state = refreshActionState,
+                showConnectivityIssue = offline,
                 onClick = {
                     if (refreshActionState == RefreshActionVisualState.Refreshing) return@RefreshActionButton
                     actionScope.launch {

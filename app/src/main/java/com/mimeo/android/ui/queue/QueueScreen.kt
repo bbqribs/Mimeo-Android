@@ -190,6 +190,7 @@ fun QueueScreen(
             }
             RefreshActionButton(
                 state = refreshActionState,
+                showConnectivityIssue = offline,
                 onClick = {
                     if (refreshActionState == RefreshActionVisualState.Refreshing) return@RefreshActionButton
                     actionScope.launch {
