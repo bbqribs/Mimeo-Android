@@ -151,8 +151,12 @@ fun SettingsScreen(
         modifier = Modifier
             .verticalScroll(rememberScrollState())
             .padding(bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        SettingsSectionHeader(
+            title = "Connection / Server",
+            subtitle = "Set your backend address and token, then verify connectivity.",
+        )
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier
@@ -191,11 +195,14 @@ fun SettingsScreen(
                             }
                         },
                     ) { Text(if (testingConnection) "Testing..." else "Test") }
-                    Button(onClick = onOpenDiagnostics) { Text("Diagnostics") }
                 }
             }
         }
 
+        SettingsSectionHeader(
+            title = "Saving / Share-sheet",
+            subtitle = "Control where shared links go and how share results are shown.",
+        )
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier
@@ -243,6 +250,10 @@ fun SettingsScreen(
             }
         }
 
+        SettingsSectionHeader(
+            title = "Playback",
+            subtitle = "Session and listening behavior across tabs and reading mode.",
+        )
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier
@@ -305,43 +316,10 @@ fun SettingsScreen(
             }
         }
 
-        if (BuildConfig.DEBUG) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text("Debug")
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text("Force sentence highlight fallback")
-                            Text(
-                                text = "Disables TTS range-level highlighting so you can verify the sentence-level fallback path.",
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked = forceSentenceHighlightFallback,
-                            onCheckedChange = {
-                                forceSentenceHighlightFallback = it
-                                vm.saveForceSentenceHighlightFallback(it)
-                            },
-                        )
-                    }
-                }
-            }
-        }
-
+        SettingsSectionHeader(
+            title = "Reader / Appearance",
+            subtitle = "Tune typography and layout for reading comfort.",
+        )
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier
@@ -432,6 +410,64 @@ fun SettingsScreen(
                 }
             }
         }
+
+        SettingsSectionHeader(
+            title = "Diagnostics / Advanced",
+            subtitle = "Troubleshooting and advanced verification controls.",
+        )
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text("Connectivity diagnostics")
+                        Text(
+                            text = "Run backend health and environment checks.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Button(onClick = onOpenDiagnostics) { Text("Open") }
+                }
+                if (BuildConfig.DEBUG) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text("Force sentence highlight fallback")
+                            Text(
+                                text = "Disable range-level highlighting and verify sentence-level fallback.",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = forceSentenceHighlightFallback,
+                            onCheckedChange = {
+                                forceSentenceHighlightFallback = it
+                                vm.saveForceSentenceHighlightFallback(it)
+                            },
+                        )
+                    }
+                }
+            }
+        }
     }
 
     if (showDefaultSavePlaylistDialog) {
@@ -468,5 +504,30 @@ fun SettingsScreen(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun SettingsSectionHeader(
+    title: String,
+    subtitle: String? = null,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            text = title,
+            style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+        )
+        if (!subtitle.isNullOrBlank()) {
+            Text(
+                text = subtitle,
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
