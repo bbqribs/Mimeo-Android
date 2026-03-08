@@ -1669,6 +1669,12 @@ private fun MimeoApp(vm: AppViewModel) {
                             startExpanded = isOnLocusRoute && routeItemId != null,
                             locusTapSignal = locusTabTapSignal,
                             onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
+                            onRequestBack = {
+                                val popped = nav.popBackStack()
+                                if (!popped) {
+                                    nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
+                                }
+                            },
                             onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                             stopPlaybackOnDispose = true,
                             compactControlsOnly = compactControlsOnly,

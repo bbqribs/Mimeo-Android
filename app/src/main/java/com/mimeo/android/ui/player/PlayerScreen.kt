@@ -2,7 +2,6 @@ package com.mimeo.android.ui.player
 
 import android.os.Build
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -145,6 +144,7 @@ fun PlayerScreen(
     startExpanded: Boolean = false,
     locusTapSignal: Int = 0,
     onOpenItem: (Int) -> Unit,
+    onRequestBack: () -> Unit = {},
     onOpenDiagnostics: () -> Unit,
     stopPlaybackOnDispose: Boolean = false,
     compactControlsOnly: Boolean = false,
@@ -201,10 +201,8 @@ fun PlayerScreen(
     val currentPosition = playbackPositionByItem[currentItemId] ?: PlaybackPosition()
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
-    val onBackPressedDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     val textToolbar = LocalTextToolbar.current
     val hasActiveSelection = textToolbar.status == TextToolbarStatus.Shown
-    var backInterceptEnabled by remember { mutableStateOf(true) }
     val chevronSide = remember(chevronSnapEdge) {
         when (chevronSnapEdge) {
             PlayerChevronSnapEdge.LEFT -> PlayerChevronSnapEdge.LEFT
@@ -230,13 +228,11 @@ fun PlayerScreen(
         readerSelectionResetSignal += 1
         selectionClearArmed = false
     }
-    BackHandler(enabled = backInterceptEnabled && !compactControlsOnly && isExpanded) {
+    BackHandler(enabled = !compactControlsOnly && isExpanded) {
         if (selectionClearArmed || hasActiveSelection) {
             clearActiveSelection()
         } else {
-            backInterceptEnabled = false
-            onBackPressedDispatcher?.onBackPressed()
-            backInterceptEnabled = true
+            onRequestBack()
         }
     }
 
