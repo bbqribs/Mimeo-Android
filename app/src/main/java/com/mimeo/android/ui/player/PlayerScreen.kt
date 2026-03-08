@@ -179,6 +179,8 @@ fun PlayerScreen(
     val readerScrollState = rememberSaveable(currentItemId, saver = ScrollState.Saver) { ScrollState(0) }
     var activeChunkRange by remember { mutableStateOf<IntRange?>(null) }
     var readerScrollTriggerSignal by rememberSaveable { mutableIntStateOf(0) }
+    var readerSelectionResetSignal by rememberSaveable { mutableIntStateOf(0) }
+    var selectionClearArmed by rememberSaveable { mutableStateOf(false) }
     var lastHandledLocusTapSignal by rememberSaveable { mutableIntStateOf(locusTapSignal) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
@@ -212,8 +214,18 @@ fun PlayerScreen(
         PlayerControlsMode.NUB -> "Restore player controls"
     }
     val readerChromeHidden = !compactControlsOnly && isExpanded && readerModeEnabled
-    BackHandler(enabled = hasActiveSelection) {
+    LaunchedEffect(textToolbar.status) {
+        if (textToolbar.status == TextToolbarStatus.Shown) {
+            selectionClearArmed = true
+        }
+    }
+    fun clearActiveSelection() {
         textToolbar.hide()
+        readerSelectionResetSignal += 1
+        selectionClearArmed = false
+    }
+    BackHandler(enabled = selectionClearArmed || hasActiveSelection) {
+        clearActiveSelection()
     }
 
     val latestChunks by rememberUpdatedState(chunks)
@@ -922,10 +934,10 @@ fun PlayerScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .pointerInput(readerModeEnabled, hasActiveSelection) {
+                                .pointerInput(readerModeEnabled, hasActiveSelection, selectionClearArmed) {
                                     detectTapGestures {
-                                        if (textToolbar.status == TextToolbarStatus.Shown) {
-                                            textToolbar.hide()
+                                        if (textToolbar.status == TextToolbarStatus.Shown || selectionClearArmed) {
+                                            clearActiveSelection()
                                         } else {
                                             toggleReaderMode()
                                         }
@@ -945,6 +957,7 @@ fun PlayerScreen(
                                 readingLineHeightPercent = settings.readingLineHeightPercent,
                                 readingMaxWidthDp = settings.readingMaxWidthDp,
                                 paragraphSpacing = settings.readingParagraphSpacing,
+                                selectionResetSignal = readerSelectionResetSignal,
                                 scrollState = readerScrollState,
                                 modifier = Modifier.fillMaxSize(),
                             )

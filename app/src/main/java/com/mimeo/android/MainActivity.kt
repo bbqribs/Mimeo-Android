@@ -275,6 +275,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val sessionIssueMessage: StateFlow<String?> = _sessionIssueMessage.asStateFlow()
     private val _pendingNavigationRoute = MutableStateFlow<String?>(null)
     val pendingNavigationRoute: StateFlow<String?> = _pendingNavigationRoute.asStateFlow()
+    private val _settingsScrollOffset = MutableStateFlow(0)
+    val settingsScrollOffset: StateFlow<Int> = _settingsScrollOffset.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -632,6 +634,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _settings.update { current -> current.copy(forceSentenceHighlightFallback = enabled) }
             settingsStore.saveForceSentenceHighlightFallback(enabled)
         }
+    }
+
+    fun setSettingsScrollOffset(offset: Int) {
+        _settingsScrollOffset.value = offset.coerceAtLeast(0)
     }
 
     fun createPlaylist(name: String) {

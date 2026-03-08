@@ -1,6 +1,6 @@
 package com.mimeo.android.ui.settings
 
-import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -26,7 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,10 +50,12 @@ fun SettingsScreen(
     onOpenDiagnostics: () -> Unit,
 ) {
     val settings by vm.settings.collectAsState()
+    val settingsScrollOffset by vm.settingsScrollOffset.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val testingConnection by vm.testingConnection.collectAsState()
     val playlists by vm.playlists.collectAsState()
-    val scrollState = rememberSaveable(saver = ScrollState.Saver) { ScrollState(0) }
+    val scrollState = rememberScrollState()
+    var restoredScrollOffset by remember { mutableStateOf(false) }
     var baseUrl by remember(settings.baseUrl) { mutableStateOf(settings.baseUrl) }
     var token by remember(settings.apiToken) { mutableStateOf(settings.apiToken) }
     var autoAdvance by remember(settings.autoAdvanceOnCompletion) {
@@ -148,6 +150,16 @@ fun SettingsScreen(
         vm.refreshPlaylists()
     }
 
+    LaunchedEffect(settingsScrollOffset) {
+        if (restoredScrollOffset) return@LaunchedEffect
+        scrollState.scrollTo(settingsScrollOffset)
+        restoredScrollOffset = true
+    }
+
+    LaunchedEffect(scrollState) {
+        snapshotFlow { scrollState.value }.collect { vm.setSettingsScrollOffset(it) }
+    }
+
     val defaultSavePlaylistName = playlists.firstOrNull { it.id == settings.defaultSavePlaylistId }?.name ?: "Smart Queue"
 
     val previewTextStyle = TextStyle(
@@ -205,7 +217,7 @@ fun SettingsScreen(
                             }
                         },
                     ) { Text(if (testingConnection) "Testing..." else "Test") }
-                    TextButton(onClick = onOpenDiagnostics) { Text("Diagnostics") }
+                    Button(onClick = onOpenDiagnostics) { Text("Diagnostics") }
                 }
             }
         }
