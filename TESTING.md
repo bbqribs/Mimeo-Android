@@ -22,6 +22,16 @@ Use this for PRs that touch Locus top-bar actions (`done`, `refresh`, `speed`, o
 - Speed panel keeps the expected structure (presets, slider, stepper) and values stay clamped to the supported range.
 - Speed changes preserve existing playback semantics (no backend/API behavior changes).
 
+## Shared top chrome checklist
+
+Use this for PRs that touch the persistent now-playing strip or top action bar density:
+
+- Title strip title remains bold and readable for long strings (marquee/truncation behavior remains clean).
+- Domain text remains italic, uses highlight color, and opens the source URL only when a valid URL exists.
+- The centered title-strip divider remains present and visually aligned (currently about 75% width).
+- No divider is rendered beneath the top action bar.
+- Top action bar keeps compact vertical density without shrinking actionable touch targets below expected usability.
+
 ## Player screen layout sanity
 
 Copy this checklist into any PR that changes `PlayerScreen` or the Locus playback layout:
