@@ -60,6 +60,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -1395,15 +1398,21 @@ private fun MimeoApp(vm: AppViewModel) {
     val showCompactControls = settings.persistentPlayerEnabled
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
-    val nowPlayingStripText = nowPlayingSession
+    val nowPlayingStripTitle = nowPlayingSession
         ?.currentItem
         ?.let { current ->
-            val title = current.title?.takeIf { it.isNotBlank() }
+            current.title?.takeIf { it.isNotBlank() }
                 ?: current.url.takeIf { it.isNotBlank() }
                 ?: "Item ${current.itemId}"
-            val host = current.host?.takeIf { it.isNotBlank() }
-            if (host == null) title else "$title  ·  $host"
         } ?: "No active playback"
+    val nowPlayingStripDomain = nowPlayingSession
+        ?.currentItem
+        ?.host
+        ?.takeIf { it.isNotBlank() }
+    val nowPlayingStripSourceUrl = nowPlayingSession
+        ?.currentItem
+        ?.url
+        ?.takeIf { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
     val canExpandNowPlayingTitle = nowPlayingSession?.currentItem != null
     val baseUrlHint = vm.baseUrlHintForDevice(isLikelyPhysicalDevice())
     val baseAddress = settings.baseUrl.trim().removePrefix("http://").removePrefix("https://")
@@ -1528,11 +1537,11 @@ private fun MimeoApp(vm: AppViewModel) {
                 .fillMaxSize()
                 .padding(innerPadding)
                 .statusBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 12.dp, vertical = 4.dp),
         ) {
             Column(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 if (showGlobalBanner && !isOnLocusRoute) {
                     StatusBanner(
@@ -1544,7 +1553,9 @@ private fun MimeoApp(vm: AppViewModel) {
                     )
                 }
                 PersistentNowPlayingStrip(
-                    text = nowPlayingStripText,
+                    title = nowPlayingStripTitle,
+                    domain = nowPlayingStripDomain,
+                    sourceUrl = nowPlayingStripSourceUrl,
                     continuous = settings.continuousNowPlayingMarquee,
                     expanded = isNowPlayingStripExpanded,
                     onTap = {
@@ -1696,39 +1707,62 @@ private fun MimeoApp(vm: AppViewModel) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PersistentNowPlayingStrip(
-    text: String,
+    title: String,
+    domain: String?,
+    sourceUrl: String?,
     continuous: Boolean,
     expanded: Boolean,
     onTap: () -> Unit,
 ) {
-    Row(
+    val uriHandler = LocalUriHandler.current
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onTap)
-            .padding(horizontal = 2.dp, vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(horizontal = 2.dp, vertical = 1.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
-        AnimatedContent(
-            targetState = expanded,
-            transitionSpec = {
-                fadeIn(animationSpec = tween(150)) togetherWith
-                    fadeOut(animationSpec = tween(120))
-            },
-            label = "nowPlayingStripExpand",
-        ) { isExpanded ->
-            Text(
-                text = text,
-                modifier = Modifier
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onTap),
+        ) {
+            AnimatedContent(
+                targetState = expanded,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(150)) togetherWith
+                        fadeOut(animationSpec = tween(120))
+                },
+                label = "nowPlayingStripExpand",
+            ) { isExpanded ->
+                Text(
+                    text = title,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .let { base ->
+                            if (!isExpanded) {
+                                base.basicMarquee(iterations = if (continuous) Int.MAX_VALUE else 1)
+                            } else {
+                                base
+                            }
+                        },
+                    maxLines = if (isExpanded) 5 else 1,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                )
+            }
+        }
+        if (!domain.isNullOrBlank()) {
+            val domainModifier = if (sourceUrl != null) {
+                Modifier
                     .fillMaxWidth()
-                    .let { base ->
-                        if (!isExpanded) {
-                            base.basicMarquee(iterations = if (continuous) Int.MAX_VALUE else 1)
-                        } else {
-                            base
-                        }
-                    },
-                maxLines = if (isExpanded) 5 else 1,
-                style = MaterialTheme.typography.labelMedium,
+                    .clickable { uriHandler.openUri(sourceUrl) }
+            } else {
+                Modifier.fillMaxWidth()
+            }
+            Text(
+                text = domain,
+                modifier = domainModifier,
+                maxLines = 1,
+                style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
             )
         }
     }

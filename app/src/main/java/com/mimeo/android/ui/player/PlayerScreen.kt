@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -1156,7 +1157,10 @@ private fun ExpandedPlayerTopBar(
     overflowMenuContent: @Composable () -> Unit,
 ) {
     TopAppBar(
-        modifier = Modifier.heightIn(min = 48.dp),
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .height(56.dp),
+        windowInsets = WindowInsets(0, 0, 0, 0),
         title = {},
         actions = {
             IconToggleButton(
