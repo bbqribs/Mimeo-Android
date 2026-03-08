@@ -24,6 +24,8 @@
 - [x] Up Next controls cleanup: single Refresh action remains and covers queue reload plus queued-progress sync path; standalone Sync button removed.
 - [x] Reader chrome/fullscreen interaction pass: tapping reader text toggles chrome visibility with directional slide transitions while preserving visible text position.
 - [x] Player controls minimization (D-lite): Full/Minimal/Nub modes with persisted mode+side, stable chevron placement, and mode-specific progress lanes (full slider, minimal thin top line, nub thin line at nav boundary).
+- [x] Refresh affordance polish: unified Material refresh action states (idle/spin/success/failure + sync-problem warning) across Queue, Playlists, and Locus with reduced error clutter.
+- [x] Locus speed control polish: compact icon-led trigger + preset capsules + custom slider + stepper row, with tuned icon/typography sizing and consistent narrow-screen layout.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
@@ -63,6 +65,7 @@
 15. [~] Player screen banding foundation: TopAppBar + reader body + pinned controls above bottom nav are shipped; ongoing polish is focused on chrome density/behavior only.
 16. [x] Reader highlight progression: sentence-level highlighting with range-level (TTS `onRangeStart`) support and sentence fallback.
 17. [x] Player chrome compression slice: persistent title strip + 3-state controls with chevron mode transitions and persisted settings.
+18. [x] Header action polish: refresh visual states unified and speed control updated to compact panel styling with preserved speed semantics.
 
 ## Later
 - [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.

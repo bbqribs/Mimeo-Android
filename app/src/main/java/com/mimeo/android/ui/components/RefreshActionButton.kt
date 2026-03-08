@@ -86,7 +86,7 @@ fun RefreshActionButton(
             contentDescription = contentDescription,
             tint = tint,
             modifier = Modifier
-                .size(22.dp)
+                .size(24.dp)
                 .graphicsLayer(
                     rotationZ = if (state == RefreshActionVisualState.Refreshing) spinDegrees else 0f,
                     scaleX = scale,
