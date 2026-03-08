@@ -1,6 +1,7 @@
 package com.mimeo.android.ui.queue
 
 import android.os.Build
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -9,12 +10,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -37,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -79,15 +81,11 @@ fun QueueScreen(
     val loading by vm.queueLoading.collectAsState()
     val offline by vm.queueOffline.collectAsState()
     val pendingCount by vm.pendingProgressCount.collectAsState()
-    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
-    val sessionIssueMessage by vm.sessionIssueMessage.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
-    val statusMessage by vm.statusMessage.collectAsState()
     val lastQueueFetchDebug by vm.lastQueueFetchDebug.collectAsState()
     val actionScope = rememberCoroutineScope()
 
-    var showClearSessionDialog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     var pendingFocusId by remember { mutableIntStateOf(-1) }
     var playlistMenuExpanded by remember { mutableStateOf(false) }
@@ -120,8 +118,6 @@ fun QueueScreen(
         ProgressSyncBadgeState.QUEUED -> "Queued"
         ProgressSyncBadgeState.OFFLINE -> "Offline"
     }
-    val resumeSummary = vm.nowPlayingSummaryText()
-    val resumeItemId = vm.currentNowPlayingItemId()
     val playlistChoices = playlistPickerItem?.let { target ->
         playlists.map { playlist ->
             PlaylistPickerChoice(
@@ -396,55 +392,6 @@ fun QueueScreen(
             }
         }
 
-        nowPlayingSession?.let { session ->
-            val current = session.currentItem ?: session.items.firstOrNull()
-            val title = current?.title?.ifBlank { null } ?: current?.url ?: "Session item"
-            val progress = current?.itemId?.let { vm.knownProgressForItem(it) } ?: 0
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text("Now Playing ${session.currentIndex + 1}/${session.items.size} - $progress%")
-                    Text(
-                        text = title,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TextButton(
-                            onClick = { resumeItemId?.let { onOpenPlayer(it) } },
-                            enabled = resumeItemId != null,
-                        ) { Text("Resume") }
-                        TextButton(
-                            onClick = {
-                                vm.restartNowPlayingSession()
-                                onShowSnackbar("Now Playing session restarted.", null, null)
-                            },
-                        ) { Text("Restart") }
-                        TextButton(onClick = { showClearSessionDialog = true }) { Text("Clear") }
-                    }
-                    if (resumeSummary != null && resumeItemId != null && displayedItems.none { it.itemId == resumeItemId }) {
-                        Text(
-                            text = "Current item hidden by queue filters; Resume still works.",
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
-        }
-
-        sessionIssueMessage?.let {
-            Text(
-                text = it,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-
         if (loading) {
             CircularProgressIndicator()
         }
@@ -463,9 +410,12 @@ fun QueueScreen(
                 .fillMaxWidth()
                 .weight(1f, fill = true),
             state = listState,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
-            items(displayedItems, key = { it.itemId }) { item ->
+            itemsIndexed(
+                items = displayedItems,
+                key = { _, item -> item.itemId },
+            ) { index, item ->
                 QueueItemCard(
                     item = item,
                     cached = cachedItemIds.contains(item.itemId),
@@ -481,6 +431,19 @@ fun QueueScreen(
                     onDismissMenu = { rowMenuItemId = -1 },
                     onExpandMenu = { rowMenuItemId = item.itemId },
                 )
+                if (index < displayedItems.lastIndex) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.75f)
+                                .height(1.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f)),
+                        )
+                    }
+                }
             }
         }
     }
@@ -514,29 +477,6 @@ fun QueueScreen(
         )
     }
 
-    if (showClearSessionDialog) {
-        AlertDialog(
-            onDismissRequest = { showClearSessionDialog = false },
-            title = { Text("Clear session?") },
-            text = { Text("This removes the persisted Now Playing snapshot.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        vm.clearNowPlayingSession()
-                        onShowSnackbar("Now Playing session cleared.", null, null)
-                        showClearSessionDialog = false
-                    },
-                ) {
-                    Text("Clear")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearSessionDialog = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
-    }
 }
 
 private fun normalizeSearchText(value: String): String {
@@ -571,8 +511,8 @@ private fun QueueItemCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+                .padding(horizontal = 8.dp, vertical = 5.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -582,7 +522,7 @@ private fun QueueItemCard(
                     modifier = Modifier.weight(1f),
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Box {
