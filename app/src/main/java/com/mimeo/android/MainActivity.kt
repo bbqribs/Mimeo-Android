@@ -133,6 +133,7 @@ private const val ROUTE_COLLECTIONS_FOLDER = "collections/folder/{folderId}"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_DIAGNOSTICS = "settings/diagnostics"
 private const val ACTION_KEY_OPEN_DIAGNOSTICS = "open_diagnostics"
+private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
 private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
 private const val DEBUG_TARGET_ITEM_ID = 409
 
@@ -499,80 +500,100 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun loadQueue() {
+    suspend fun loadQueueOnce(): Result<Unit> {
         val current = settings.value
         if (current.apiToken.isBlank()) {
             _statusMessage.value = "Token required"
-            return
+            return Result.failure(IllegalStateException("Token required"))
         }
-        viewModelScope.launch {
-            _queueLoading.value = true
-            try {
-                runCatching {
-                    repository.listPlaylists(current.baseUrl, current.apiToken)
-                }.getOrNull()?.let { loaded ->
-                    _playlists.value = loaded
-                }
-                val queueResult = repository.loadQueueAndPrefetch(
-                    current.baseUrl,
-                    current.apiToken,
-                    playlistId = current.selectedPlaylistId,
-                )
-                val queue = queueResult.payload
-                _queueItems.value = queue.items
-                val appliedSnapshot = queueResult.debugSnapshot.copy(
-                    appliedItemCount = _queueItems.value.size,
-                    appliedContains409 = _queueItems.value.any { it.itemId == DEBUG_TARGET_ITEM_ID },
-                    lastFetchAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()),
-                )
-                _lastQueueFetchDebug.value = appliedSnapshot
-                if (BuildConfig.DEBUG) {
-                    Log.d(
-                        QUEUE_DEBUG_TAG,
-                        "viewModelApply playlistId=${appliedSnapshot.selectedPlaylistId} uiCount=${appliedSnapshot.appliedItemCount} uiContains409=${appliedSnapshot.appliedContains409} requestUrl=${appliedSnapshot.requestUrl}",
-                    )
-                }
-                _cachedItemIds.value = repository.getCachedItemIds(queue.items.map { it.itemId })
-                _queueOffline.value = false
-                _statusMessage.value = "Queue loaded (${queue.count})"
-                flushPendingProgress()
-            } catch (e: ApiException) {
-                _queueOffline.value = false
-                _statusMessage.value = if (e.statusCode == 401) "Unauthorized-check token" else e.message
-                updateSyncBadgeState()
-            } catch (e: Exception) {
-                _queueOffline.value = isNetworkError(e)
-                _statusMessage.value = e.message ?: "Failed to load queue"
-                updateSyncBadgeState()
-            } finally {
-                _queueLoading.value = false
-                refreshPendingCount()
+        _queueLoading.value = true
+        return try {
+            runCatching {
+                repository.listPlaylists(current.baseUrl, current.apiToken)
+            }.getOrNull()?.let { loaded ->
+                _playlists.value = loaded
             }
+            val queueResult = repository.loadQueueAndPrefetch(
+                current.baseUrl,
+                current.apiToken,
+                playlistId = current.selectedPlaylistId,
+            )
+            val queue = queueResult.payload
+            _queueItems.value = queue.items
+            val appliedSnapshot = queueResult.debugSnapshot.copy(
+                appliedItemCount = _queueItems.value.size,
+                appliedContains409 = _queueItems.value.any { it.itemId == DEBUG_TARGET_ITEM_ID },
+                lastFetchAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()),
+            )
+            _lastQueueFetchDebug.value = appliedSnapshot
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    QUEUE_DEBUG_TAG,
+                    "viewModelApply playlistId=${appliedSnapshot.selectedPlaylistId} uiCount=${appliedSnapshot.appliedItemCount} uiContains409=${appliedSnapshot.appliedContains409} requestUrl=${appliedSnapshot.requestUrl}",
+                )
+            }
+            _cachedItemIds.value = repository.getCachedItemIds(queue.items.map { it.itemId })
+            _queueOffline.value = false
+            _statusMessage.value = "Queue loaded (${queue.count})"
+            flushPendingProgress()
+            Result.success(Unit)
+        } catch (e: ApiException) {
+            _queueOffline.value = false
+            _statusMessage.value = userFacingRequestErrorMessage(e, fallback = "Refresh failed")
+            updateSyncBadgeState()
+            Result.failure(e)
+        } catch (e: Exception) {
+            _queueOffline.value = isNetworkError(e)
+            _statusMessage.value = userFacingRequestErrorMessage(e, fallback = "Couldn't refresh queue")
+            updateSyncBadgeState()
+            Result.failure(e)
+        } finally {
+            _queueLoading.value = false
+            refreshPendingCount()
+        }
+    }
+
+    fun loadQueue() {
+        viewModelScope.launch {
+            loadQueueOnce()
+        }
+    }
+
+    suspend fun refreshPlaylistsOnce(): Result<Unit> {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        return try {
+            val loaded = repository.listPlaylists(current.baseUrl, current.apiToken)
+            _playlists.value = loaded
+            val selected = current.selectedPlaylistId
+            if (selected != null && loaded.none { it.id == selected }) {
+                _settings.update { it.copy(selectedPlaylistId = null) }
+                settingsStore.saveSelectedPlaylistId(null)
+                _statusMessage.value = "Selected playlist removed; switched to Smart queue"
+            }
+            val defaultSave = current.defaultSavePlaylistId
+            if (defaultSave != null && loaded.none { it.id == defaultSave }) {
+                _settings.update { it.copy(defaultSavePlaylistId = null) }
+                settingsStore.saveDefaultSavePlaylistId(null)
+                _statusMessage.value = "Default save playlist removed; switched to Smart queue"
+            }
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(Unit)
+        } catch (error: Exception) {
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                updateSyncBadgeState()
+            }
+            Result.failure(error)
         }
     }
 
     fun refreshPlaylists() {
-        val current = settings.value
-        if (current.apiToken.isBlank()) return
         viewModelScope.launch {
-            try {
-                val loaded = repository.listPlaylists(current.baseUrl, current.apiToken)
-                _playlists.value = loaded
-                val selected = current.selectedPlaylistId
-                if (selected != null && loaded.none { it.id == selected }) {
-                    _settings.update { it.copy(selectedPlaylistId = null) }
-                    settingsStore.saveSelectedPlaylistId(null)
-                    _statusMessage.value = "Selected playlist removed; switched to Smart queue"
-                }
-                val defaultSave = current.defaultSavePlaylistId
-                if (defaultSave != null && loaded.none { it.id == defaultSave }) {
-                    _settings.update { it.copy(defaultSavePlaylistId = null) }
-                    settingsStore.saveDefaultSavePlaylistId(null)
-                    _statusMessage.value = "Default save playlist removed; switched to Smart queue"
-                }
-            } catch (_: Exception) {
-                // Keep prior value; queue still works with Smart mode fallback.
-            }
+            refreshPlaylistsOnce()
         }
     }
 
@@ -1203,6 +1224,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun isNetworkError(error: Exception): Boolean = error is IOException
 
+    private fun userFacingRequestErrorMessage(error: Throwable, fallback: String): String {
+        if (error is ApiException) {
+            return when {
+                error.statusCode == 401 -> "Check your API token"
+                error.statusCode >= 500 -> "Server error. Try again."
+                !error.message.isNullOrBlank() -> error.message!!
+                else -> fallback
+            }
+        }
+        if (error is IOException) {
+            return "Couldn't reach server"
+        }
+        val message = error.message?.trim()
+        if (message.isNullOrEmpty()) return fallback
+        if (message.contains("java.", ignoreCase = true) || message.length > 180) {
+            return fallback
+        }
+        return message
+    }
+
     private fun updatePlaylistEntriesLocally(playlistId: Int, itemId: Int, added: Boolean) {
         _playlists.update { rows ->
             rows.map { playlist ->
@@ -1405,6 +1446,7 @@ private fun MimeoApp(vm: AppViewModel) {
             if (result == SnackbarResult.ActionPerformed) {
                 when (message.actionKey) {
                     ACTION_KEY_OPEN_DIAGNOSTICS -> nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) { launchSingleTop = true }
+                    ACTION_KEY_OPEN_SETTINGS -> nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true }
                 }
             }
         }
@@ -1492,7 +1534,7 @@ private fun MimeoApp(vm: AppViewModel) {
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                if (showGlobalBanner && !(isOnLocusRoute && readerChromeHidden)) {
+                if (showGlobalBanner && !isOnLocusRoute) {
                     StatusBanner(
                         stateLabel = bannerStateLabel,
                         summary = bannerSummary,
@@ -1649,6 +1691,7 @@ private fun MimeoApp(vm: AppViewModel) {
         }
     }
 }
+
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

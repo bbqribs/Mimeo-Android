@@ -46,9 +46,12 @@ import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.ProgressSyncBadgeState
+import com.mimeo.android.ui.components.RefreshActionButton
+import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val DONE_PERCENT_THRESHOLD = 98
@@ -95,6 +98,8 @@ fun QueueScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedFilter by rememberSaveable { mutableStateOf(QueueFilterChip.ALL) }
     var showQueueFetchDebug by rememberSaveable { mutableStateOf(false) }
+    var hasRefreshProblem by rememberSaveable { mutableStateOf(false) }
+    var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
 
     LaunchedEffect(Unit) {
         vm.refreshPlaylists()
@@ -184,12 +189,28 @@ fun QueueScreen(
                     contentDescription = if (searchExpanded) "Close search" else "Search queue",
                 )
             }
-            IconButton(onClick = { vm.loadQueue() }) {
-                Icon(
-                    painter = painterResource(id = R.drawable.msr_refresh_24),
-                    contentDescription = "Refresh queue and sync progress",
-                )
-            }
+            RefreshActionButton(
+                state = refreshActionState,
+                showConnectivityIssue = offline || hasRefreshProblem,
+                onClick = {
+                    if (refreshActionState == RefreshActionVisualState.Refreshing) return@RefreshActionButton
+                    actionScope.launch {
+                        refreshActionState = RefreshActionVisualState.Refreshing
+                        val result = vm.loadQueueOnce()
+                        hasRefreshProblem = result.isFailure
+                        refreshActionState = if (result.isSuccess) {
+                            RefreshActionVisualState.Success
+                        } else {
+                            RefreshActionVisualState.Failure
+                        }
+                        delay(700)
+                        if (refreshActionState == RefreshActionVisualState.Success || refreshActionState == RefreshActionVisualState.Failure) {
+                            refreshActionState = RefreshActionVisualState.Idle
+                        }
+                    }
+                },
+                contentDescription = "Refresh queue and sync progress",
+            )
             Box {
                 AssistChip(
                     onClick = { playlistMenuExpanded = true },

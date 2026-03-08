@@ -12,6 +12,16 @@ Copy this checklist into any PR that changes Locus or player UI:
 - Playback speed remains in the expanded Locus header unless a separate decision changes it.
 - Run manual sanity on a narrow-width device or emulator before merging.
 
+## Header action polish checklist
+
+Use this for PRs that touch Locus top-bar actions (`done`, `refresh`, `speed`, overflow):
+
+- Top-bar icon sizing remains consistent (24dp for refresh/overflow; done icon follows current ticketed size).
+- Refresh action behavior remains: idle, spinning while refreshing, success/failure feedback, and sync-problem warning when connectivity/auth issues persist.
+- Speed trigger remains compact and readable on narrow widths (icon + value without overlap).
+- Speed panel keeps the expected structure (presets, slider, stepper) and values stay clamped to the supported range.
+- Speed changes preserve existing playback semantics (no backend/API behavior changes).
+
 ## Player screen layout sanity
 
 Copy this checklist into any PR that changes `PlayerScreen` or the Locus playback layout:

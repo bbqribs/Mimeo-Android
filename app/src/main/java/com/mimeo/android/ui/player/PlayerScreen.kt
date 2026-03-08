@@ -10,9 +10,14 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,11 +29,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -36,12 +42,15 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -61,8 +70,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
@@ -79,13 +93,18 @@ import com.mimeo.android.model.positionFromAbsoluteOffset
 import com.mimeo.android.player.TtsChunkDoneEvent
 import com.mimeo.android.player.TtsChunkProgressEvent
 import com.mimeo.android.player.TtsController
+import com.mimeo.android.ui.components.RefreshActionButton
+import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import com.mimeo.android.ui.reader.ReaderBody
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.roundToInt
+import java.util.Locale
 
 private const val DEBUG_PLAYBACK = false
 private const val PROGRESS_SYNC_DEBOUNCE_MS = 2_000L
@@ -100,7 +119,11 @@ private val CONTROL_SLOT_SIZE = 48.dp
 private val PLAYER_UPPER_LANE_HEIGHT = 28.dp
 private val PLAYER_TRANSPORT_ROW_HEIGHT = 48.dp
 private val NUB_CHEVRON_BOTTOM_MARGIN = 3.dp
-private val PLAYBACK_SPEED_OPTIONS = listOf(0.8f, 0.9f, 1.0f, 1.1f, 1.25f, 1.5f, 1.75f, 2.0f)
+private const val PLAYBACK_SPEED_MIN = 0.5f
+private const val PLAYBACK_SPEED_MAX = 4.0f
+private const val PLAYBACK_SPEED_STEP = 0.05f
+private const val PLAYBACK_SPEED_STEPS = 69
+private val PLAYBACK_SPEED_PILLS = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
 
 private fun debugLog(message: String) {
     if (DEBUG_PLAYBACK) {
@@ -144,10 +167,10 @@ fun PlayerScreen(
     var pendingDoneEvent by remember { mutableStateOf<PlaybackDoneEvent?>(null) }
     var lastHandledDoneUtteranceId by remember { mutableStateOf<String?>(null) }
     var autoPlayAfterLoad by remember { mutableStateOf(false) }
-    var showSpeedDialog by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
-    var isRefreshing by remember { mutableStateOf(false) }
+    var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
+    var hasRefreshProblem by rememberSaveable { mutableStateOf(false) }
     var preserveVisibleContentOnReload by remember { mutableStateOf(false) }
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     val readerScrollState = rememberSaveable(currentItemId, saver = ScrollState.Saver) { ScrollState(0) }
@@ -399,11 +422,12 @@ fun PlayerScreen(
 
     LaunchedEffect(currentItemId, resolvedInitial, reloadNonce) {
         if (!resolvedInitial) return@LaunchedEffect
+        val preservingVisibleContent = preserveVisibleContentOnReload
         stopSpeaking(forceSync = false)
         vm.setNowPlayingCurrentItem(currentItemId)
-        isLoading = true
+        isLoading = !preservingVisibleContent
         uiMessage = null
-        if (!preserveVisibleContentOnReload) {
+        if (!preservingVisibleContent) {
             textPayload = null
             usingCachedText = false
             chunks = emptyList()
@@ -424,7 +448,9 @@ fun PlayerScreen(
                 usingCachedText = loaded.usingCache
                 chunks = buildChunks(payload)
                 preserveVisibleContentOnReload = false
-                readerScrollTriggerSignal += 1
+                if (!preservingVisibleContent) {
+                    readerScrollTriggerSignal += 1
+                }
 
                 val saved = vm.getPlaybackPosition(currentItemId)
                 val knownProgress = vm.knownProgressForItem(currentItemId)
@@ -564,7 +590,6 @@ fun PlayerScreen(
             stopSpeaking(forceSync = false)
             isAutoPlaying = true
             playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
-            uiMessage = "Speed ${formatPlaybackSpeed(settings.playbackSpeed)}"
         }
     }
 
@@ -791,26 +816,42 @@ fun PlayerScreen(
                         exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(animationSpec = tween(120)),
                     ) {
                         ExpandedPlayerTopBar(
-                            speedLabel = formatPlaybackSpeed(settings.playbackSpeed),
+                            playbackSpeed = settings.playbackSpeed,
                             overflowExpanded = overflowExpanded,
                             canMarkDone = textPayload != null,
                             isDone = showCompleted,
+                            refreshState = refreshActionState,
+                            showConnectivityIssue = queueOffline || hasRefreshProblem,
                             onRefresh = {
-                                if (isRefreshing) return@ExpandedPlayerTopBar
+                                if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
                                 actionScope.launch {
-                                    isRefreshing = true
-                                    vm.refreshCurrentPlayerItem(currentItemId)
+                                    refreshActionState = RefreshActionVisualState.Refreshing
+                                    val refreshResult = vm.refreshCurrentPlayerItem(currentItemId)
                                         .onSuccess {
                                             localDonePercentOverride = -1
                                             preserveVisibleContentOnReload = true
                                             reloadNonce += 1
+                                            hasRefreshProblem = false
                                         }
                                         .onFailure { error ->
                                             if (error is CancellationException) return@onFailure
-                                            uiMessage = error.message ?: "Refresh failed"
-                                            onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
+                                            val failureMessage = friendlyRefreshFailureMessage(error)
+                                            val (actionLabel, actionKey) = refreshFailureAction(failureMessage)
+                                            hasRefreshProblem = true
+                                            onShowSnackbar(failureMessage, actionLabel, actionKey)
                                         }
-                                    isRefreshing = false
+                                    refreshActionState = if (refreshResult.isSuccess) {
+                                        RefreshActionVisualState.Success
+                                    } else {
+                                        RefreshActionVisualState.Failure
+                                    }
+                                    delay(700)
+                                    if (
+                                        refreshActionState == RefreshActionVisualState.Success ||
+                                        refreshActionState == RefreshActionVisualState.Failure
+                                    ) {
+                                        refreshActionState = RefreshActionVisualState.Idle
+                                    }
                                 }
                             },
                             onMarkDone = {
@@ -835,10 +876,10 @@ fun PlayerScreen(
                                             if (error is CancellationException) return@onFailure
                                             uiMessage = error.message ?: "Completion update failed"
                                             onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
-                                        }
+                                    }
                                 }
                             },
-                            onSpeed = { showSpeedDialog = true },
+                            onSpeedChange = { speed -> vm.savePlaybackSpeed(speed) },
                             onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
                             overflowMenuContent = {
                                 LocusOverflowMenuItems(
@@ -961,26 +1002,42 @@ fun PlayerScreen(
                                     .fillMaxWidth(),
                             ) {
                                 ExpandedPlayerTopBar(
-                                    speedLabel = formatPlaybackSpeed(settings.playbackSpeed),
+                                    playbackSpeed = settings.playbackSpeed,
                                     overflowExpanded = overflowExpanded,
                                     canMarkDone = textPayload != null,
                                     isDone = showCompleted,
+                                    refreshState = refreshActionState,
+                                    showConnectivityIssue = queueOffline || hasRefreshProblem,
                                     onRefresh = {
-                                        if (isRefreshing) return@ExpandedPlayerTopBar
+                                        if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
                                         actionScope.launch {
-                                            isRefreshing = true
-                                            vm.refreshCurrentPlayerItem(currentItemId)
+                                            refreshActionState = RefreshActionVisualState.Refreshing
+                                            val refreshResult = vm.refreshCurrentPlayerItem(currentItemId)
                                                 .onSuccess {
                                                     localDonePercentOverride = -1
                                                     preserveVisibleContentOnReload = true
                                                     reloadNonce += 1
+                                                    hasRefreshProblem = false
                                                 }
                                                 .onFailure { error ->
                                                     if (error is CancellationException) return@onFailure
-                                                    uiMessage = error.message ?: "Refresh failed"
-                                                    onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
+                                                    val failureMessage = friendlyRefreshFailureMessage(error)
+                                                    val (actionLabel, actionKey) = refreshFailureAction(failureMessage)
+                                                    hasRefreshProblem = true
+                                                    onShowSnackbar(failureMessage, actionLabel, actionKey)
                                                 }
-                                            isRefreshing = false
+                                            refreshActionState = if (refreshResult.isSuccess) {
+                                                RefreshActionVisualState.Success
+                                            } else {
+                                                RefreshActionVisualState.Failure
+                                            }
+                                            delay(700)
+                                            if (
+                                                refreshActionState == RefreshActionVisualState.Success ||
+                                                refreshActionState == RefreshActionVisualState.Failure
+                                            ) {
+                                                refreshActionState = RefreshActionVisualState.Idle
+                                            }
                                         }
                                     },
                                     onMarkDone = {
@@ -1005,10 +1062,10 @@ fun PlayerScreen(
                                                     if (error is CancellationException) return@onFailure
                                                     uiMessage = error.message ?: "Completion update failed"
                                                     onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
-                                                }
+                                            }
                                         }
                                     },
-                                    onSpeed = { showSpeedDialog = true },
+                                    onSpeedChange = { speed -> vm.savePlaybackSpeed(speed) },
                                     onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
                                     overflowMenuContent = {
                                         LocusOverflowMenuItems(
@@ -1081,51 +1138,20 @@ fun PlayerScreen(
         )
     }
 
-    if (showSpeedDialog) {
-        AlertDialog(
-            onDismissRequest = { showSpeedDialog = false },
-            title = { Text("Playback speed") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    PLAYBACK_SPEED_OPTIONS.forEach { speed ->
-                        TextButton(
-                            onClick = {
-                                showSpeedDialog = false
-                                vm.savePlaybackSpeed(speed)
-                            },
-                        ) {
-                            Text(
-                                text = if (speed == settings.playbackSpeed) {
-                                    "${formatPlaybackSpeed(speed)} (current)"
-                                } else {
-                                    formatPlaybackSpeed(speed)
-                                },
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showSpeedDialog = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
-    }
-
 }
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun ExpandedPlayerTopBar(
-    speedLabel: String,
+    playbackSpeed: Float,
     overflowExpanded: Boolean,
     canMarkDone: Boolean,
     isDone: Boolean,
+    refreshState: RefreshActionVisualState,
+    showConnectivityIssue: Boolean,
     onRefresh: () -> Unit,
     onMarkDone: () -> Unit,
-    onSpeed: () -> Unit,
+    onSpeedChange: (Float) -> Unit,
     onOverflowExpandedChange: (Boolean) -> Unit,
     overflowMenuContent: @Composable () -> Unit,
 ) {
@@ -1146,17 +1172,19 @@ private fun ExpandedPlayerTopBar(
                     painter = painterResource(id = if (isDone) R.drawable.ic_book_closed_24 else R.drawable.ic_book_open_24),
                     contentDescription = if (isDone) "Mark as not done" else "Mark as done",
                     tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.size(22.dp),
                 )
             }
-            IconButton(onClick = onRefresh) {
-                Icon(
-                    painter = painterResource(id = R.drawable.msr_refresh_24),
-                    contentDescription = "Refresh item",
-                )
-            }
-            TextButton(onClick = onSpeed) {
-                Text(speedLabel)
-            }
+            RefreshActionButton(
+                state = refreshState,
+                showConnectivityIssue = showConnectivityIssue,
+                onClick = onRefresh,
+                contentDescription = "Refresh item",
+            )
+            SpeedControlButton(
+                speed = playbackSpeed,
+                onSpeedChange = onSpeedChange,
+            )
             LocusOverflowMenu(
                 expanded = overflowExpanded,
                 onExpandedChange = onOverflowExpandedChange,
@@ -1164,6 +1192,325 @@ private fun ExpandedPlayerTopBar(
             )
         },
     )
+}
+
+@Composable
+private fun SpeedControlButton(
+    speed: Float,
+    onSpeedChange: (Float) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var draftSpeed by remember { mutableFloatStateOf(normalizePlaybackSpeed(speed)) }
+    val shape = RoundedCornerShape(10.dp)
+    val highlightColor = MaterialTheme.colorScheme.primary
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val emphasize = pressed || expanded
+    val backgroundColor by animateColorAsState(
+        targetValue = if (emphasize) highlightColor.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface.copy(alpha = 0f),
+        animationSpec = tween(durationMillis = 150),
+        label = "speedTriggerBackground",
+    )
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (emphasize) 0.12f else 0f,
+        animationSpec = tween(durationMillis = 150),
+        label = "speedTriggerGlowAlpha",
+    )
+    val triggerDisplaySpeed = if (expanded) draftSpeed else speed
+
+    Box {
+        Box(
+            modifier = Modifier
+                .shadow(
+                    elevation = if (emphasize) 6.dp else 0.dp,
+                    shape = shape,
+                    ambientColor = highlightColor.copy(alpha = glowAlpha),
+                    spotColor = highlightColor.copy(alpha = glowAlpha),
+                )
+                .background(backgroundColor, shape)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                ) {
+                    if (expanded) {
+                        expanded = false
+                    } else {
+                        val normalizedCurrent = normalizePlaybackSpeed(speed)
+                        draftSpeed = normalizedCurrent
+                        expanded = true
+                    }
+                }
+                .padding(start = 8.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_speed_20),
+                    contentDescription = "Playback speed",
+                    tint = highlightColor,
+                    modifier = Modifier.size(24.dp),
+                )
+                Row(
+                    modifier = Modifier.requiredWidth(58.dp),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    Text(
+                        text = String.format(Locale.US, "%.2f", normalizePlaybackSpeed(triggerDisplaySpeed)),
+                        color = highlightColor,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 18.sp,
+                        textAlign = TextAlign.End,
+                    )
+                    Text(
+                        text = "×",
+                        color = highlightColor.copy(alpha = 0.75f),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 14.sp,
+                    )
+                }
+            }
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.requiredWidth(248.dp),
+        ) {
+            SpeedControlPanel(
+                speed = draftSpeed,
+                onSpeedChange = { updated ->
+                    val normalized = normalizePlaybackSpeed(updated)
+                    draftSpeed = normalized
+                    onSpeedChange(normalized)
+                },
+            )
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun SpeedControlPanel(
+    speed: Float,
+    onSpeedChange: (Float) -> Unit,
+) {
+    val highlightColor = MaterialTheme.colorScheme.primary
+    val inactiveTrack = MaterialTheme.colorScheme.outlineVariant
+    val sliderInteractionSource = remember { MutableInteractionSource() }
+    val thumbHovered by sliderInteractionSource.collectIsHoveredAsState()
+    val thumbScale by animateFloatAsState(
+        targetValue = if (thumbHovered) 1.12f else 1f,
+        animationSpec = tween(durationMillis = 150),
+        label = "speedThumbScale",
+    )
+    var sliderSpeed by remember { mutableFloatStateOf(normalizePlaybackSpeed(speed)) }
+
+    LaunchedEffect(speed) {
+        sliderSpeed = normalizePlaybackSpeed(speed)
+    }
+
+    Column(
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PLAYBACK_SPEED_PILLS.forEach { preset ->
+                SpeedPresetPill(
+                    speed = preset,
+                    selected = normalizePlaybackSpeed(sliderSpeed) == normalizePlaybackSpeed(preset),
+                    onClick = {
+                        val updated = normalizePlaybackSpeed(preset)
+                        sliderSpeed = updated
+                        onSpeedChange(updated)
+                    },
+                )
+            }
+        }
+        HorizontalDivider(
+            modifier = Modifier.fillMaxWidth(),
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+        )
+        Slider(
+            value = sliderSpeed,
+            onValueChange = { value ->
+                val updated = normalizePlaybackSpeed(value)
+                sliderSpeed = updated
+                onSpeedChange(updated)
+            },
+            onValueChangeFinished = {},
+            valueRange = PLAYBACK_SPEED_MIN..PLAYBACK_SPEED_MAX,
+            steps = PLAYBACK_SPEED_STEPS,
+            interactionSource = sliderInteractionSource,
+            colors = SliderDefaults.colors(
+                thumbColor = highlightColor,
+                activeTrackColor = highlightColor,
+                inactiveTrackColor = inactiveTrack,
+                activeTickColor = androidx.compose.ui.graphics.Color.Transparent,
+                inactiveTickColor = androidx.compose.ui.graphics.Color.Transparent,
+            ),
+            thumb = {
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .background(highlightColor.copy(alpha = 0.2f), CircleShape)
+                        .padding(3.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .graphicsLayer(
+                                scaleX = thumbScale,
+                                scaleY = thumbScale,
+                            )
+                            .background(highlightColor, CircleShape),
+                    )
+                }
+            },
+            track = { sliderState ->
+                SliderDefaults.Track(
+                    sliderState = sliderState,
+                    modifier = Modifier
+                        .height(4.dp)
+                        .background(
+                            color = androidx.compose.ui.graphics.Color.Transparent,
+                            shape = RoundedCornerShape(999.dp),
+                        ),
+                    colors = SliderDefaults.colors(
+                        activeTrackColor = highlightColor,
+                        inactiveTrackColor = inactiveTrack,
+                        activeTickColor = androidx.compose.ui.graphics.Color.Transparent,
+                        inactiveTickColor = androidx.compose.ui.graphics.Color.Transparent,
+                    ),
+                )
+            },
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SpeedStepperButton(
+                label = "-",
+                onClick = {
+                    val updated = normalizePlaybackSpeed(sliderSpeed - PLAYBACK_SPEED_STEP)
+                    sliderSpeed = updated
+                    onSpeedChange(updated)
+                },
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = String.format(Locale.US, "%.2f", sliderSpeed),
+                    color = highlightColor,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 23.sp,
+                )
+                Text(
+                    text = "×",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 15.sp,
+                )
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            SpeedStepperButton(
+                label = "+",
+                onClick = {
+                    val updated = normalizePlaybackSpeed(sliderSpeed + PLAYBACK_SPEED_STEP)
+                    sliderSpeed = updated
+                    onSpeedChange(updated)
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun SpeedPresetPill(
+    speed: Float,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(999.dp)
+    val highlightColor = MaterialTheme.colorScheme.primary
+    val borderColor = if (selected) highlightColor else MaterialTheme.colorScheme.outline
+    val labelColor = if (selected) highlightColor else MaterialTheme.colorScheme.onSurfaceVariant
+    Box(
+        modifier = Modifier
+            .requiredWidth(40.dp)
+            .height(28.dp)
+            .border(1.dp, borderColor, shape)
+            .background(
+                color = if (selected) highlightColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface.copy(alpha = 0f),
+                shape = shape,
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = formatPlaybackSpeedPresetLabel(speed),
+            color = labelColor,
+            style = MaterialTheme.typography.labelSmall,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 11.sp,
+        )
+    }
+}
+
+@Composable
+private fun SpeedStepperButton(
+    label: String,
+    onClick: () -> Unit,
+) {
+    val shape = CircleShape
+    val highlightColor = MaterialTheme.colorScheme.primary
+    val defaultBorder = MaterialTheme.colorScheme.outline
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val pressed by interactionSource.collectIsPressedAsState()
+    val emphasize = hovered || pressed
+    val borderColor by animateColorAsState(
+        targetValue = if (emphasize) highlightColor else defaultBorder,
+        animationSpec = tween(durationMillis = 150),
+        label = "speedStepperBorder",
+    )
+    val labelColor by animateColorAsState(
+        targetValue = if (emphasize) highlightColor else MaterialTheme.colorScheme.onSurface,
+        animationSpec = tween(durationMillis = 150),
+        label = "speedStepperLabel",
+    )
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .border(1.dp, borderColor, shape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = labelColor,
+            style = MaterialTheme.typography.labelMedium,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 14.sp,
+        )
+    }
 }
 
 @Composable
@@ -1205,6 +1552,7 @@ private fun LocusOverflowMenu(
             Icon(
                 painter = painterResource(id = R.drawable.msr_more_vert_24),
                 contentDescription = "More actions",
+                modifier = Modifier.size(24.dp),
             )
         }
         DropdownMenu(
@@ -1395,7 +1743,7 @@ private fun PlayerChromeChevron(
     var dragAccumulation by remember { mutableFloatStateOf(0f) }
     Box(
         modifier = modifier
-            .size(44.dp)
+            .size(40.dp)
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
                     onHorizontalDrag = { change, dragAmount ->
@@ -1424,7 +1772,9 @@ private fun PlayerChromeChevron(
         Icon(
             painter = painterResource(id = R.drawable.msr_chevron_right_24),
             contentDescription = contentDescription,
-            modifier = Modifier.graphicsLayer(scaleX = if (pointLeft) -1f else 1f),
+            modifier = Modifier
+                .size(24.dp)
+                .graphicsLayer(scaleX = if (pointLeft) -1f else 1f),
             tint = MaterialTheme.colorScheme.onPrimary,
         )
     }
@@ -1492,6 +1842,7 @@ private fun PlayerControlBar(
                     Icon(
                         painter = painterResource(id = R.drawable.msr_skip_previous_24),
                         contentDescription = "Previous item",
+                        modifier = Modifier.size(24.dp),
                     )
                 }
             } else {
@@ -1502,6 +1853,7 @@ private fun PlayerControlBar(
                 Icon(
                     painter = painterResource(id = R.drawable.msr_fast_rewind_24),
                     contentDescription = "Previous segment",
+                    modifier = Modifier.size(24.dp),
                 )
             }
             Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
@@ -1511,6 +1863,7 @@ private fun PlayerControlBar(
                         id = if (isPlaying) R.drawable.msr_pause_24 else R.drawable.msr_play_arrow_24,
                     ),
                     contentDescription = if (isPlaying) "Pause playback" else "Play",
+                    modifier = Modifier.size(32.dp),
                 )
             }
             Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
@@ -1518,6 +1871,7 @@ private fun PlayerControlBar(
                 Icon(
                     painter = painterResource(id = R.drawable.msr_fast_forward_24),
                     contentDescription = "Next segment",
+                    modifier = Modifier.size(24.dp),
                 )
             }
             Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
@@ -1526,6 +1880,7 @@ private fun PlayerControlBar(
                     Icon(
                         painter = painterResource(id = R.drawable.msr_skip_next_24),
                         contentDescription = "Next item",
+                        modifier = Modifier.size(24.dp),
                     )
                 }
             } else {
@@ -1624,6 +1979,33 @@ private fun splitByLength(value: String, maxChars: Int): List<String> {
     return result
 }
 
+private fun friendlyRefreshFailureMessage(error: Throwable): String {
+    if (error is ApiException) {
+        return when {
+            error.statusCode == 401 -> "Check your API token"
+            error.statusCode >= 500 -> "Server error. Try again."
+            else -> error.message ?: "Refresh failed"
+        }
+    }
+    if (isNetworkError(error)) {
+        return "Couldn't reach server"
+    }
+    val message = error.message?.trim()
+    if (message.isNullOrEmpty()) return "Refresh failed"
+    if (message.contains("java.", ignoreCase = true) || message.length > 180) {
+        return "Refresh failed"
+    }
+    return message
+}
+
+private fun refreshFailureAction(message: String): Pair<String, String> {
+    return if (message.equals("Check your API token", ignoreCase = true)) {
+        "Settings" to "open_settings"
+    } else {
+        "Diagnostics" to "open_diagnostics"
+    }
+}
+
 private fun isNetworkError(error: Throwable): Boolean {
     return error is java.io.IOException
 }
@@ -1637,14 +2019,31 @@ private fun isNetworkErrorMessage(message: String): Boolean {
 }
 
 private fun formatPlaybackSpeed(speed: Float): String {
-    val text = if ((speed * 100).toInt() % 100 == 0) {
-        speed.toInt().toString()
-    } else if ((speed * 100).toInt() % 10 == 0) {
-        String.format("%.1f", speed)
+    val normalized = normalizePlaybackSpeed(speed)
+    val text = if ((normalized * 100).toInt() % 100 == 0) {
+        normalized.toInt().toString()
+    } else if ((normalized * 100).toInt() % 10 == 0) {
+        String.format(Locale.US, "%.1f", normalized)
     } else {
-        String.format("%.2f", speed)
+        String.format(Locale.US, "%.2f", normalized)
     }
-    return "${text}x"
+    return "${text}×"
+}
+
+private fun formatPlaybackSpeedPresetLabel(speed: Float): String {
+    val normalized = normalizePlaybackSpeed(speed)
+    return when {
+        normalized % 1f == 0f -> normalized.toInt().toString()
+        (normalized * 100).toInt() % 10 == 0 -> String.format(Locale.US, "%.1f", normalized)
+        else -> String.format(Locale.US, "%.2f", normalized)
+    }
+}
+
+private fun normalizePlaybackSpeed(value: Float): Float {
+    val clamped = value.coerceIn(PLAYBACK_SPEED_MIN, PLAYBACK_SPEED_MAX)
+    val stepsFromMin = ((clamped - PLAYBACK_SPEED_MIN) / PLAYBACK_SPEED_STEP).roundToInt()
+    return (PLAYBACK_SPEED_MIN + (stepsFromMin * PLAYBACK_SPEED_STEP))
+        .coerceIn(PLAYBACK_SPEED_MIN, PLAYBACK_SPEED_MAX)
 }
 
 private fun friendlyPlaylistError(error: Throwable): String {

@@ -22,12 +22,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.PlaylistSummary
+import com.mimeo.android.ui.components.RefreshActionButton
+import com.mimeo.android.ui.components.RefreshActionVisualState
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 data class PlaylistPickerChoice(
     val playlistId: Int,
@@ -39,11 +44,15 @@ data class PlaylistPickerChoice(
 fun PlaylistsScreen(vm: AppViewModel) {
     val playlists by vm.playlists.collectAsState()
     val settings by vm.settings.collectAsState()
+    val offline by vm.queueOffline.collectAsState()
     var newName by remember { mutableStateOf("") }
     var renameTarget by remember { mutableStateOf<PlaylistSummary?>(null) }
     var deleteTarget by remember { mutableStateOf<PlaylistSummary?>(null) }
     var renameText by remember { mutableStateOf("") }
     var menuForPlaylistId by remember { mutableIntStateOf(-1) }
+    var hasRefreshProblem by remember { mutableStateOf(false) }
+    var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
+    val actionScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         vm.refreshPlaylists()
@@ -72,7 +81,28 @@ fun PlaylistsScreen(vm: AppViewModel) {
             ) {
                 Text("Add")
             }
-            TextButton(onClick = { vm.refreshPlaylists() }) { Text("Refresh") }
+            RefreshActionButton(
+                state = refreshActionState,
+                showConnectivityIssue = offline || hasRefreshProblem,
+                onClick = {
+                    if (refreshActionState == RefreshActionVisualState.Refreshing) return@RefreshActionButton
+                    actionScope.launch {
+                        refreshActionState = RefreshActionVisualState.Refreshing
+                        val result = vm.refreshPlaylistsOnce()
+                        hasRefreshProblem = result.isFailure
+                        refreshActionState = if (result.isSuccess) {
+                            RefreshActionVisualState.Success
+                        } else {
+                            RefreshActionVisualState.Failure
+                        }
+                        delay(700)
+                        if (refreshActionState == RefreshActionVisualState.Success || refreshActionState == RefreshActionVisualState.Failure) {
+                            refreshActionState = RefreshActionVisualState.Idle
+                        }
+                    }
+                },
+                contentDescription = "Refresh playlists",
+            )
         }
 
         TextButton(
