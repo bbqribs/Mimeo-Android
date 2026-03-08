@@ -253,7 +253,7 @@ fun QueueScreen(
                         Box {
                             IconButton(onClick = { playlistMenuExpanded = true }) {
                                 Icon(
-                                    painter = painterResource(id = R.drawable.msr_view_list_24),
+                                    painter = painterResource(id = R.drawable.msr_list_layers_24),
                                     contentDescription = "Switch queue",
                                     modifier = Modifier.size(24.dp),
                                 )
@@ -283,7 +283,7 @@ fun QueueScreen(
                         Box {
                             IconButton(onClick = { sortMenuExpanded = true }) {
                                 Icon(
-                                    painter = painterResource(id = R.drawable.msr_height_24),
+                                    painter = painterResource(id = R.drawable.msr_sort_layers_24),
                                     contentDescription = "Sort queue: ${selectedSort.label}",
                                     modifier = Modifier.size(24.dp),
                                 )
@@ -519,6 +519,16 @@ private fun QueueItemCard(
     val source = item.host?.ifBlank { null } ?: "Unknown source"
     val progress = item.progressPercent
     val isDone = item.furthestPercent >= DONE_PERCENT_THRESHOLD
+    val primaryTextColor = if (cached) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f)
+    }
+    val secondaryTextColor = if (cached) {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
+    }
 
     ElevatedCard(
         modifier = Modifier
@@ -539,6 +549,7 @@ private fun QueueItemCard(
                     modifier = Modifier.weight(1f),
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
+                    color = primaryTextColor,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -550,6 +561,7 @@ private fun QueueItemCard(
                         Icon(
                             painter = painterResource(id = R.drawable.msr_more_vert_24),
                             contentDescription = "Item actions",
+                            tint = secondaryTextColor,
                             modifier = Modifier.size(20.dp),
                         )
                     }
@@ -575,7 +587,7 @@ private fun QueueItemCard(
                     modifier = Modifier.weight(1f),
                     text = source,
                     style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = secondaryTextColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -586,28 +598,15 @@ private fun QueueItemCard(
                     Text(
                         text = "$progress%",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = secondaryTextColor,
                     )
                     Icon(
                         painter = painterResource(
                             id = if (isDone) R.drawable.ic_book_closed_24 else R.drawable.ic_book_open_24,
                         ),
                         contentDescription = if (isDone) "Done" else "Not done",
-                        tint = if (isDone) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
-                        },
+                        tint = secondaryTextColor,
                         modifier = Modifier.size(16.dp),
-                    )
-                    Text(
-                        text = if (cached) "Offline ready" else "Needs network",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (cached) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                        },
                     )
                 }
             }
