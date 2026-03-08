@@ -1770,6 +1770,17 @@ private fun PersistentNowPlayingStrip(
                 ),
             )
         }
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Spacer(
+                modifier = Modifier
+                    .fillMaxWidth(0.5f)
+                    .height(1.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
+            )
+        }
     }
 }
 

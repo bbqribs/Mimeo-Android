@@ -1156,45 +1156,59 @@ private fun ExpandedPlayerTopBar(
     onOverflowExpandedChange: (Boolean) -> Unit,
     overflowMenuContent: @Composable () -> Unit,
 ) {
-    TopAppBar(
-        modifier = Modifier
-            .height(48.dp),
-        windowInsets = WindowInsets(0, 0, 0, 0),
-        title = {},
-        actions = {
-            IconToggleButton(
-                checked = isDone,
-                enabled = canMarkDone,
-                onCheckedChange = { checked ->
-                    if (checked != isDone) {
-                        onMarkDone()
-                    }
-                },
-            ) {
-                Icon(
-                    painter = painterResource(id = if (isDone) R.drawable.ic_book_closed_24 else R.drawable.ic_book_open_24),
-                    contentDescription = if (isDone) "Mark as not done" else "Mark as done",
-                    tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.size(22.dp),
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        TopAppBar(
+            modifier = Modifier.height(48.dp),
+            windowInsets = WindowInsets(0, 0, 0, 0),
+            title = {},
+            actions = {
+                IconToggleButton(
+                    checked = isDone,
+                    enabled = canMarkDone,
+                    onCheckedChange = { checked ->
+                        if (checked != isDone) {
+                            onMarkDone()
+                        }
+                    },
+                ) {
+                    Icon(
+                        painter = painterResource(id = if (isDone) R.drawable.ic_book_closed_24 else R.drawable.ic_book_open_24),
+                        contentDescription = if (isDone) "Mark as not done" else "Mark as done",
+                        tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+                RefreshActionButton(
+                    state = refreshState,
+                    showConnectivityIssue = showConnectivityIssue,
+                    onClick = onRefresh,
+                    contentDescription = "Refresh item",
                 )
-            }
-            RefreshActionButton(
-                state = refreshState,
-                showConnectivityIssue = showConnectivityIssue,
-                onClick = onRefresh,
-                contentDescription = "Refresh item",
+                SpeedControlButton(
+                    speed = playbackSpeed,
+                    onSpeedChange = onSpeedChange,
+                )
+                LocusOverflowMenu(
+                    expanded = overflowExpanded,
+                    onExpandedChange = onOverflowExpandedChange,
+                    content = overflowMenuContent,
+                )
+            },
+        )
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            HorizontalDivider(
+                modifier = Modifier.fillMaxWidth(0.5f),
+                thickness = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f),
             )
-            SpeedControlButton(
-                speed = playbackSpeed,
-                onSpeedChange = onSpeedChange,
-            )
-            LocusOverflowMenu(
-                expanded = overflowExpanded,
-                onExpandedChange = onOverflowExpandedChange,
-                content = overflowMenuContent,
-            )
-        },
-    )
+        }
+    }
 }
 
 @Composable
