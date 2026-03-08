@@ -9,6 +9,13 @@ enum class ParagraphSpacingOption {
     LARGE,
 }
 
+enum class ReaderFontOption {
+    LITERATA,
+    SERIF,
+    SANS_SERIF,
+    MONOSPACE,
+}
+
 enum class ConnectivityDiagnosticOutcome {
     PASS,
     FAIL,
@@ -180,6 +187,7 @@ data class AppSettings(
     val selectedPlaylistId: Int? = null,
     val defaultSavePlaylistId: Int? = null,
     val readingFontSizeSp: Int = 18,
+    val readingFontOption: ReaderFontOption = ReaderFontOption.LITERATA,
     val readingLineHeightPercent: Int = 160,
     val readingMaxWidthDp: Int = 720,
     val readingParagraphSpacing: ParagraphSpacingOption = ParagraphSpacingOption.MEDIUM,

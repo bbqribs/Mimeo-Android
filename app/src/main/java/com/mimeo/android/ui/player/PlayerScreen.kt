@@ -929,6 +929,7 @@ fun PlayerScreen(
                                 scrollTriggerSignal = readerScrollTriggerSignal,
                                 autoScrollWhileListening = settings.autoScrollWhileListening,
                                 readingFontSizeSp = settings.readingFontSizeSp,
+                                readingFontOption = settings.readingFontOption,
                                 readingLineHeightPercent = settings.readingLineHeightPercent,
                                 readingMaxWidthDp = settings.readingMaxWidthDp,
                                 paragraphSpacing = settings.readingParagraphSpacing,

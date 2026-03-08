@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
+import com.mimeo.android.model.ReaderFontOption
+import com.mimeo.android.ui.theme.toFontFamily
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -55,6 +57,7 @@ fun ReaderBody(
     scrollTriggerSignal: Int,
     autoScrollWhileListening: Boolean,
     readingFontSizeSp: Int,
+    readingFontOption: ReaderFontOption,
     readingLineHeightPercent: Int,
     readingMaxWidthDp: Int,
     paragraphSpacing: ParagraphSpacingOption,
@@ -93,6 +96,7 @@ fun ReaderBody(
     }
     val readingTextStyle = MaterialTheme.typography.bodyMedium.merge(
         TextStyle(
+            fontFamily = readingFontOption.toFontFamily(),
             fontSize = readingFontSizeSp.sp,
             lineHeight = (readingFontSizeSp * (readingLineHeightPercent / 100f)).sp,
         ),
