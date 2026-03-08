@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -129,6 +130,17 @@ fun QueueScreen(
         ProgressSyncBadgeState.QUEUED -> "Queued"
         ProgressSyncBadgeState.OFFLINE -> "Offline"
     }
+    val syncStatusIconRes = if (syncBadgeState == ProgressSyncBadgeState.SYNCED) {
+        R.drawable.msr_check_circle_24
+    } else {
+        R.drawable.msr_sync_problem_24
+    }
+    val syncStatusIconTint = when (syncBadgeState) {
+        ProgressSyncBadgeState.SYNCED -> MaterialTheme.colorScheme.primary
+        ProgressSyncBadgeState.QUEUED -> MaterialTheme.colorScheme.tertiary
+        ProgressSyncBadgeState.OFFLINE -> MaterialTheme.colorScheme.error
+    }
+    val syncStatusDescription = "Sync $syncLabel, pending $pendingCount"
     val playlistChoices = playlistPickerItem?.let { target ->
         playlists.map { playlist ->
             PlaylistPickerChoice(
@@ -255,10 +267,12 @@ fun QueueScreen(
                         contentDescription = "Refresh queue and sync progress",
                     )
                     Box {
-                        AssistChip(
-                            onClick = { playlistMenuExpanded = true },
-                            label = { Text("Switch queue") },
-                        )
+                        IconButton(onClick = { playlistMenuExpanded = true }) {
+                            Icon(
+                                painter = painterResource(android.R.drawable.ic_menu_manage),
+                                contentDescription = "Switch queue",
+                            )
+                        }
                         DropdownMenu(
                             expanded = playlistMenuExpanded,
                             onDismissRequest = { playlistMenuExpanded = false },
@@ -282,10 +296,12 @@ fun QueueScreen(
                         }
                     }
                     Box {
-                        AssistChip(
-                            onClick = { sortMenuExpanded = true },
-                            label = { Text("Sort: ${selectedSort.label}") },
-                        )
+                        IconButton(onClick = { sortMenuExpanded = true }) {
+                            Icon(
+                                painter = painterResource(android.R.drawable.ic_menu_sort_by_size),
+                                contentDescription = "Sort queue: ${selectedSort.label}",
+                            )
+                        }
                         DropdownMenu(
                             expanded = sortMenuExpanded,
                             onDismissRequest = { sortMenuExpanded = false },
@@ -331,15 +347,15 @@ fun QueueScreen(
                             }
                         }
                     }
+                    Icon(
+                        painter = painterResource(id = syncStatusIconRes),
+                        contentDescription = syncStatusDescription,
+                        tint = syncStatusIconTint,
+                        modifier = Modifier
+                            .padding(start = 6.dp, end = 2.dp)
+                            .size(20.dp),
+                    )
                 }
-                Text(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = "Sync: $syncLabel  •  Pending: $pendingCount",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
         }
         if (BuildConfig.DEBUG && showQueueFetchDebug && lastQueueFetchDebug.statusCode != null) {
@@ -522,12 +538,7 @@ private fun QueueItemCard(
     val title = item.title?.ifBlank { null } ?: item.url
     val source = item.host?.ifBlank { null } ?: "Unknown source"
     val progress = item.progressPercent
-    val progressState = when {
-        item.furthestPercent >= DONE_PERCENT_THRESHOLD -> "Done"
-        item.furthestPercent <= 0 -> "Unread"
-        else -> "In progress"
-    }
-    val cacheMarker = if (cached) "Offline ready" else "Needs network"
+    val isDone = item.furthestPercent >= DONE_PERCENT_THRESHOLD
 
     ElevatedCard(
         modifier = Modifier
@@ -552,10 +563,14 @@ private fun QueueItemCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Box {
-                    IconButton(onClick = onExpandMenu) {
+                    IconButton(
+                        modifier = Modifier.size(40.dp),
+                        onClick = onExpandMenu,
+                    ) {
                         Icon(
                             painter = painterResource(id = R.drawable.msr_more_vert_24),
                             contentDescription = "Item actions",
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                     DropdownMenu(
@@ -572,17 +587,49 @@ private fun QueueItemCard(
                     }
                 }
             }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    modifier = Modifier.weight(1f),
+                    text = source,
+                    style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Row(
+                    modifier = Modifier.padding(start = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = "$progress%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Icon(
+                        painter = painterResource(
+                            id = if (isDone) R.drawable.ic_book_closed_24 else R.drawable.ic_book_open_24,
+                        ),
+                        contentDescription = if (isDone) "Done" else "Not done",
+                        tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    if (cached) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.msr_check_circle_24),
+                            contentDescription = "Downloaded",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
+            }
             Text(
-                text = source,
-                style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "$progress%  •  $progressState  •  $cacheMarker",
+                text = item.url,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
