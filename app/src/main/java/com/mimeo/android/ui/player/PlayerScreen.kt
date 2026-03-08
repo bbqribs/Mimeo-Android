@@ -96,7 +96,6 @@ import com.mimeo.android.player.TtsChunkProgressEvent
 import com.mimeo.android.player.TtsController
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
-import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import com.mimeo.android.ui.reader.ReaderBody
@@ -195,8 +194,6 @@ fun PlayerScreen(
     val currentPosition = playbackPositionByItem[currentItemId] ?: PlaybackPosition()
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
-    val isPhysicalDevice = remember { isLikelyPhysicalDevice() }
-    val baseUrlHint = vm.baseUrlHintForDevice(isPhysicalDevice)
     val chevronSide = remember(chevronSnapEdge) {
         when (chevronSnapEdge) {
             PlayerChevronSnapEdge.LEFT -> PlayerChevronSnapEdge.LEFT
@@ -618,10 +615,6 @@ fun PlayerScreen(
                 uiMessage = error.message ?: "Near-end completion sync failed"
             }
     }
-    val isRecoverableNetworkError = isNetworkErrorMessage(uiMessage.orEmpty())
-    val showRecoveryActions = uiMessage != null && (isRecoverableNetworkError || textPayload == null)
-    val showDiagnosticsHint = showRecoveryActions && baseUrlHint != null
-    val showLocalPlayerBanner = uiMessage != null && !showRecoveryActions && !showDiagnosticsHint
     var overflowExpanded by remember { mutableStateOf(false) }
     val playlistChoices = playlists.map { playlist ->
         PlaylistPickerChoice(
@@ -906,62 +899,10 @@ fun PlayerScreen(
                             Spacer(modifier = Modifier)
                         },
                     )
-                    playlistMutationMessage?.let { message ->
-                        StatusBanner(
-                            stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
-                            summary = message,
-                            detail = null,
-                            onRetry = { playlistMutationMessage = null },
-                            onDiagnostics = onOpenDiagnostics,
-                        )
-                    }
-                    if (showLocalPlayerBanner) {
-                        StatusBanner(
-                            stateLabel = "Status",
-                            summary = uiMessage ?: "Player status",
-                            detail = null,
-                            onRetry = {
-                                uiMessage = null
-                                if (textPayload == null) {
-                                    reloadNonce += 1
-                                } else if (chunks.isNotEmpty()) {
-                                    isAutoPlaying = true
-                                    playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
-                                }
-                            },
-                            onDiagnostics = null,
-                        )
-                    }
                     if (isLoading) {
                         CircularProgressIndicator()
                     }
                 } else {
-                    playlistMutationMessage?.let { message ->
-                        StatusBanner(
-                            stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
-                            summary = message,
-                            detail = null,
-                            onRetry = { playlistMutationMessage = null },
-                            onDiagnostics = onOpenDiagnostics,
-                        )
-                    }
-                    if (showLocalPlayerBanner) {
-                        StatusBanner(
-                            stateLabel = "Status",
-                            summary = uiMessage ?: "Player status",
-                            detail = null,
-                            onRetry = {
-                                uiMessage = null
-                                if (textPayload == null) {
-                                    reloadNonce += 1
-                                } else if (chunks.isNotEmpty()) {
-                                    isAutoPlaying = true
-                                    playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
-                                }
-                            },
-                            onDiagnostics = null,
-                        )
-                    }
                     if (isLoading) {
                         CircularProgressIndicator()
                     }

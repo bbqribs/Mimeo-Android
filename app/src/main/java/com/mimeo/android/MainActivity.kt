@@ -1715,6 +1715,7 @@ private fun PersistentNowPlayingStrip(
     onTap: () -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
+    val displayTitle = if (title.isBlank()) title else "❯ $title"
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1735,7 +1736,7 @@ private fun PersistentNowPlayingStrip(
                 label = "nowPlayingStripExpand",
             ) { isExpanded ->
                 Text(
-                    text = title,
+                    text = displayTitle,
                     modifier = Modifier
                         .fillMaxWidth()
                         .let { base ->
