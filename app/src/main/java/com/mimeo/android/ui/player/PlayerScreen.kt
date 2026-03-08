@@ -67,6 +67,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
@@ -214,9 +215,11 @@ fun PlayerScreen(
         PlayerControlsMode.NUB -> "Restore player controls"
     }
     val readerChromeHidden = !compactControlsOnly && isExpanded && readerModeEnabled
-    LaunchedEffect(textToolbar.status) {
-        if (textToolbar.status == TextToolbarStatus.Shown) {
-            selectionClearArmed = true
+    LaunchedEffect(textToolbar) {
+        snapshotFlow { textToolbar.status }.collect { status ->
+            if (status == TextToolbarStatus.Shown) {
+                selectionClearArmed = true
+            }
         }
     }
     fun clearActiveSelection() {
