@@ -1764,7 +1764,10 @@ private fun PersistentNowPlayingStrip(
                 text = domain,
                 modifier = domainModifier,
                 maxLines = 1,
-                style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontStyle = FontStyle.Italic,
+                    color = MaterialTheme.colorScheme.primary,
+                ),
             )
         }
     }
