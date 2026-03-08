@@ -50,7 +50,6 @@ import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.PlaybackQueueItem
-import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.components.StatusBanner
@@ -90,9 +89,7 @@ fun QueueScreen(
     val settings by vm.settings.collectAsState()
     val loading by vm.queueLoading.collectAsState()
     val offline by vm.queueOffline.collectAsState()
-    val pendingCount by vm.pendingProgressCount.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
-    val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val lastQueueFetchDebug by vm.lastQueueFetchDebug.collectAsState()
     val actionScope = rememberCoroutineScope()
 
@@ -125,22 +122,6 @@ fun QueueScreen(
     val selectedPlaylistName = settings.selectedPlaylistId?.let { id ->
         playlists.firstOrNull { it.id == id }?.name
     } ?: "Smart queue"
-    val syncLabel = when (syncBadgeState) {
-        ProgressSyncBadgeState.SYNCED -> "Synced"
-        ProgressSyncBadgeState.QUEUED -> "Queued"
-        ProgressSyncBadgeState.OFFLINE -> "Offline"
-    }
-    val syncStatusIconRes = if (syncBadgeState == ProgressSyncBadgeState.SYNCED) {
-        R.drawable.msr_check_circle_24
-    } else {
-        R.drawable.msr_sync_problem_24
-    }
-    val syncStatusIconTint = when (syncBadgeState) {
-        ProgressSyncBadgeState.SYNCED -> MaterialTheme.colorScheme.primary
-        ProgressSyncBadgeState.QUEUED -> MaterialTheme.colorScheme.tertiary
-        ProgressSyncBadgeState.OFFLINE -> MaterialTheme.colorScheme.error
-    }
-    val syncStatusDescription = "Sync $syncLabel, pending $pendingCount"
     val playlistChoices = playlistPickerItem?.let { target ->
         playlists.map { playlist ->
             PlaylistPickerChoice(
@@ -229,132 +210,131 @@ fun QueueScreen(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.CenterEnd,
                 ) {
-                    IconButton(onClick = { searchExpanded = !searchExpanded }) {
-                        Icon(
-                            painter = painterResource(android.R.drawable.ic_menu_search),
-                            contentDescription = if (searchExpanded) "Close search" else "Search queue",
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        IconButton(onClick = { searchExpanded = !searchExpanded }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.msr_search_24),
+                                contentDescription = if (searchExpanded) "Close search" else "Search queue",
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                        RefreshActionButton(
+                            state = refreshActionState,
+                            showConnectivityIssue = offline || hasRefreshProblem,
+                            onClick = {
+                                if (refreshActionState == RefreshActionVisualState.Refreshing) return@RefreshActionButton
+                                actionScope.launch {
+                                    refreshActionState = RefreshActionVisualState.Refreshing
+                                    val result = vm.loadQueueOnce()
+                                    hasRefreshProblem = result.isFailure
+                                    refreshActionState = if (result.isSuccess) {
+                                        RefreshActionVisualState.Success
+                                    } else {
+                                        RefreshActionVisualState.Failure
+                                    }
+                                    delay(700)
+                                    if (
+                                        refreshActionState == RefreshActionVisualState.Success ||
+                                        refreshActionState == RefreshActionVisualState.Failure
+                                    ) {
+                                        refreshActionState = RefreshActionVisualState.Idle
+                                    }
+                                }
+                            },
+                            contentDescription = "Refresh queue and sync progress",
                         )
-                    }
-                    RefreshActionButton(
-                        state = refreshActionState,
-                        showConnectivityIssue = offline || hasRefreshProblem,
-                        onClick = {
-                            if (refreshActionState == RefreshActionVisualState.Refreshing) return@RefreshActionButton
-                            actionScope.launch {
-                                refreshActionState = RefreshActionVisualState.Refreshing
-                                val result = vm.loadQueueOnce()
-                                hasRefreshProblem = result.isFailure
-                                refreshActionState = if (result.isSuccess) {
-                                    RefreshActionVisualState.Success
-                                } else {
-                                    RefreshActionVisualState.Failure
-                                }
-                                delay(700)
-                                if (
-                                    refreshActionState == RefreshActionVisualState.Success ||
-                                    refreshActionState == RefreshActionVisualState.Failure
-                                ) {
-                                    refreshActionState = RefreshActionVisualState.Idle
-                                }
-                            }
-                        },
-                        contentDescription = "Refresh queue and sync progress",
-                    )
-                    Box {
-                        IconButton(onClick = { playlistMenuExpanded = true }) {
-                            Icon(
-                                painter = painterResource(android.R.drawable.ic_menu_manage),
-                                contentDescription = "Switch queue",
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = playlistMenuExpanded,
-                            onDismissRequest = { playlistMenuExpanded = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Smart queue") },
-                                onClick = {
-                                    playlistMenuExpanded = false
-                                    vm.selectPlaylist(null)
-                                },
-                            )
-                            playlists.forEach { playlist ->
-                                DropdownMenuItem(
-                                    text = { Text(playlist.name) },
-                                    onClick = {
-                                        playlistMenuExpanded = false
-                                        vm.selectPlaylist(playlist.id)
-                                    },
-                                )
-                            }
-                        }
-                    }
-                    Box {
-                        IconButton(onClick = { sortMenuExpanded = true }) {
-                            Icon(
-                                painter = painterResource(android.R.drawable.ic_menu_sort_by_size),
-                                contentDescription = "Sort queue: ${selectedSort.label}",
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = sortMenuExpanded,
-                            onDismissRequest = { sortMenuExpanded = false },
-                        ) {
-                            QueueSortOption.entries.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text(option.label) },
-                                    onClick = {
-                                        selectedSort = option
-                                        sortMenuExpanded = false
-                                    },
-                                )
-                            }
-                        }
-                    }
-                    if (BuildConfig.DEBUG) {
                         Box {
-                            IconButton(onClick = { topActionsMenuExpanded = true }) {
+                            IconButton(onClick = { playlistMenuExpanded = true }) {
                                 Icon(
-                                    painter = painterResource(id = R.drawable.msr_more_vert_24),
-                                    contentDescription = "Queue actions",
+                                    painter = painterResource(id = R.drawable.msr_swap_horiz_24),
+                                    contentDescription = "Switch queue",
+                                    modifier = Modifier.size(24.dp),
                                 )
                             }
                             DropdownMenu(
-                                expanded = topActionsMenuExpanded,
-                                onDismissRequest = { topActionsMenuExpanded = false },
+                                expanded = playlistMenuExpanded,
+                                onDismissRequest = { playlistMenuExpanded = false },
                             ) {
                                 DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            if (showQueueFetchDebug) {
-                                                "Hide debug fetch"
-                                            } else {
-                                                "Show debug fetch"
-                                            },
-                                        )
-                                    },
+                                    text = { Text("Smart queue") },
                                     onClick = {
-                                        showQueueFetchDebug = !showQueueFetchDebug
-                                        topActionsMenuExpanded = false
+                                        playlistMenuExpanded = false
+                                        vm.selectPlaylist(null)
                                     },
                                 )
+                                playlists.forEach { playlist ->
+                                    DropdownMenuItem(
+                                        text = { Text(playlist.name) },
+                                        onClick = {
+                                            playlistMenuExpanded = false
+                                            vm.selectPlaylist(playlist.id)
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        Box {
+                            IconButton(onClick = { sortMenuExpanded = true }) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.msr_sort_24),
+                                    contentDescription = "Sort queue: ${selectedSort.label}",
+                                    modifier = Modifier.size(24.dp),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = sortMenuExpanded,
+                                onDismissRequest = { sortMenuExpanded = false },
+                            ) {
+                                QueueSortOption.entries.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option.label) },
+                                        onClick = {
+                                            selectedSort = option
+                                            sortMenuExpanded = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        if (BuildConfig.DEBUG) {
+                            Box {
+                                IconButton(onClick = { topActionsMenuExpanded = true }) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.msr_more_vert_24),
+                                        contentDescription = "Queue actions",
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = topActionsMenuExpanded,
+                                    onDismissRequest = { topActionsMenuExpanded = false },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                if (showQueueFetchDebug) {
+                                                    "Hide debug fetch"
+                                                } else {
+                                                    "Show debug fetch"
+                                                },
+                                            )
+                                        },
+                                        onClick = {
+                                            showQueueFetchDebug = !showQueueFetchDebug
+                                            topActionsMenuExpanded = false
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
-                    Icon(
-                        painter = painterResource(id = syncStatusIconRes),
-                        contentDescription = syncStatusDescription,
-                        tint = syncStatusIconTint,
-                        modifier = Modifier
-                            .padding(start = 6.dp, end = 2.dp)
-                            .size(20.dp),
-                    )
                 }
             }
         }
@@ -626,13 +606,6 @@ private fun QueueItemCard(
                     }
                 }
             }
-            Text(
-                text = item.url,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
     }
 }
