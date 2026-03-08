@@ -9,8 +9,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -23,21 +26,23 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.ParagraphSpacingOption
-import com.mimeo.android.ui.theme.ReaderLiterataFontFamily
+import com.mimeo.android.model.ReaderFontOption
+import com.mimeo.android.ui.theme.toFontFamily
 
-private const val PREVIEW_PARAGRAPH = "Mimeo now remembers your reading layout so Locus feels like a calm, bookish surface instead of a raw text dump."
+private const val PREVIEW_PARAGRAPH_1 = "Mimeo now remembers your reading layout so Locus feels like a calm, bookish surface instead of a raw text dump."
+private const val PREVIEW_PARAGRAPH_2 = "Use this preview to check rhythm, paragraph spacing, and readability before returning to long-form listening sessions."
 
 @Composable
 fun SettingsScreen(
@@ -45,10 +50,12 @@ fun SettingsScreen(
     onOpenDiagnostics: () -> Unit,
 ) {
     val settings by vm.settings.collectAsState()
+    val settingsScrollOffset by vm.settingsScrollOffset.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val testingConnection by vm.testingConnection.collectAsState()
     val playlists by vm.playlists.collectAsState()
-    val configuration = LocalConfiguration.current
+    val scrollState = rememberScrollState()
+    var restoredScrollOffset by remember { mutableStateOf(false) }
     var baseUrl by remember(settings.baseUrl) { mutableStateOf(settings.baseUrl) }
     var token by remember(settings.apiToken) { mutableStateOf(settings.apiToken) }
     var autoAdvance by remember(settings.autoAdvanceOnCompletion) {
@@ -72,6 +79,9 @@ fun SettingsScreen(
     var readingFontSizeSp by remember(settings.readingFontSizeSp) {
         mutableIntStateOf(settings.readingFontSizeSp)
     }
+    var readingFontOption by remember(settings.readingFontOption) {
+        mutableStateOf(settings.readingFontOption)
+    }
     var readingLineHeightPercent by remember(settings.readingLineHeightPercent) {
         mutableIntStateOf(settings.readingLineHeightPercent)
     }
@@ -83,6 +93,7 @@ fun SettingsScreen(
     }
     var testRequested by remember { mutableStateOf(false) }
     var showDefaultSavePlaylistDialog by remember { mutableStateOf(false) }
+    var showFontMenu by remember { mutableStateOf(false) }
 
     fun saveCurrent() {
         vm.saveSettings(
@@ -99,12 +110,14 @@ fun SettingsScreen(
 
     fun saveReading(
         fontSizeSp: Int = readingFontSizeSp,
+        fontOption: ReaderFontOption = readingFontOption,
         lineHeightPercent: Int = readingLineHeightPercent,
         maxWidthDp: Int = readingMaxWidthDp,
         paragraphSpacing: ParagraphSpacingOption = readingParagraphSpacing,
     ) {
         vm.saveReadingPreferences(
             readingFontSizeSp = fontSizeSp,
+            readingFontOption = fontOption,
             readingLineHeightPercent = lineHeightPercent,
             readingMaxWidthDp = maxWidthDp,
             readingParagraphSpacing = paragraphSpacing,
@@ -137,22 +150,35 @@ fun SettingsScreen(
         vm.refreshPlaylists()
     }
 
+    LaunchedEffect(settingsScrollOffset) {
+        if (restoredScrollOffset) return@LaunchedEffect
+        scrollState.scrollTo(settingsScrollOffset)
+        restoredScrollOffset = true
+    }
+
+    LaunchedEffect(scrollState) {
+        snapshotFlow { scrollState.value }.collect { vm.setSettingsScrollOffset(it) }
+    }
+
     val defaultSavePlaylistName = playlists.firstOrNull { it.id == settings.defaultSavePlaylistId }?.name ?: "Smart Queue"
 
     val previewTextStyle = TextStyle(
-        fontFamily = if (ReaderLiterataFontFamily == FontFamily.Default) FontFamily.Serif else ReaderLiterataFontFamily,
+        fontFamily = readingFontOption.toFontFamily(),
         fontSize = readingFontSizeSp.sp,
         lineHeight = (readingFontSizeSp * (readingLineHeightPercent / 100f)).sp,
         color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
     )
-    val isWideReadingSurface = configuration.screenWidthDp >= 700
 
     Column(
         modifier = Modifier
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        SettingsSectionHeader(
+            title = "Connection / Server",
+            subtitle = "Set your backend address and token, then verify connectivity.",
+        )
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier
@@ -195,7 +221,12 @@ fun SettingsScreen(
                 }
             }
         }
+        SettingsSectionSeparator()
 
+        SettingsSectionHeader(
+            title = "Saving / Share-sheet",
+            subtitle = "Control where shared links go and how share results are shown.",
+        )
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier
@@ -242,7 +273,12 @@ fun SettingsScreen(
                 }
             }
         }
+        SettingsSectionSeparator()
 
+        SettingsSectionHeader(
+            title = "Playback",
+            subtitle = "Session and listening behavior across tabs and reading mode.",
+        )
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier
@@ -304,44 +340,12 @@ fun SettingsScreen(
                 Text("Emulator default: http://10.0.2.2:8000")
             }
         }
+        SettingsSectionSeparator()
 
-        if (BuildConfig.DEBUG) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text("Debug")
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text("Force sentence highlight fallback")
-                            Text(
-                                text = "Disables TTS range-level highlighting so you can verify the sentence-level fallback path.",
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked = forceSentenceHighlightFallback,
-                            onCheckedChange = {
-                                forceSentenceHighlightFallback = it
-                                vm.saveForceSentenceHighlightFallback(it)
-                            },
-                        )
-                    }
-                }
-            }
-        }
-
+        SettingsSectionHeader(
+            title = "Reader / Appearance",
+            subtitle = "Tune typography and layout for reading comfort.",
+        )
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier
@@ -350,7 +354,33 @@ fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text("Reading")
-                Text("Font: Literata")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("Font")
+                    Column(horizontalAlignment = Alignment.End) {
+                        TextButton(onClick = { showFontMenu = true }) {
+                            Text("${readingFontOption.displayName()} ▼")
+                        }
+                        DropdownMenu(
+                            expanded = showFontMenu,
+                            onDismissRequest = { showFontMenu = false },
+                        ) {
+                            ReaderFontOption.entries.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.displayName()) },
+                                    onClick = {
+                                        showFontMenu = false
+                                        readingFontOption = option
+                                        saveReading(fontOption = option)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
 
                 Text("Font size: ${readingFontSizeSp}sp")
                 Slider(
@@ -359,8 +389,8 @@ fun SettingsScreen(
                         readingFontSizeSp = it.toInt()
                         saveReading(fontSizeSp = readingFontSizeSp)
                     },
-                    valueRange = 16f..24f,
-                    steps = 7,
+                    valueRange = 6f..40f,
+                    steps = 33,
                 )
 
                 Text("Line height: ${readingLineHeightPercent}%")
@@ -374,23 +404,16 @@ fun SettingsScreen(
                     steps = 5,
                 )
 
-                if (isWideReadingSurface) {
-                    Text("Max width: ${readingMaxWidthDp}dp")
-                    Slider(
-                        value = readingMaxWidthDp.toFloat(),
-                        onValueChange = {
-                            readingMaxWidthDp = it.toInt()
-                            saveReading(maxWidthDp = readingMaxWidthDp)
-                        },
-                        valueRange = 600f..900f,
-                        steps = 5,
-                    )
-                } else {
-                    Text(
-                        text = "Max width applies on wider screens such as tablets.",
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    )
-                }
+                Text("Margin width: ${readingMaxWidthDp}dp")
+                Slider(
+                    value = readingMaxWidthDp.toFloat(),
+                    onValueChange = {
+                        readingMaxWidthDp = it.toInt()
+                        saveReading(maxWidthDp = readingMaxWidthDp)
+                    },
+                    valueRange = 320f..1000f,
+                    steps = 16,
+                )
 
                 Text("Paragraph spacing")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -405,7 +428,6 @@ fun SettingsScreen(
                         )
                     }
                 }
-
                 ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier
@@ -421,17 +443,44 @@ fun SettingsScreen(
                     ) {
                         Text("Preview", style = androidx.compose.material3.MaterialTheme.typography.labelMedium)
                         Text(
-                            text = PREVIEW_PARAGRAPH,
+                            text = PREVIEW_PARAGRAPH_1,
                             style = previewTextStyle,
                         )
                         Text(
-                            text = "This sample reflects your current reading settings immediately.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            text = PREVIEW_PARAGRAPH_2,
+                            style = previewTextStyle,
+                        )
+                    }
+                }
+                if (BuildConfig.DEBUG) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text("Sentence highlight fallback")
+                            Text(
+                                text = "Disable range-level highlighting and verify sentence-level fallback.",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = forceSentenceHighlightFallback,
+                            onCheckedChange = {
+                                forceSentenceHighlightFallback = it
+                                vm.saveForceSentenceHighlightFallback(it)
+                            },
                         )
                     }
                 }
             }
         }
+        SettingsSectionSeparator()
     }
 
     if (showDefaultSavePlaylistDialog) {
@@ -469,4 +518,45 @@ fun SettingsScreen(
             },
         )
     }
+}
+
+@Composable
+private fun SettingsSectionHeader(
+    title: String,
+    subtitle: String? = null,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            text = title,
+            style = androidx.compose.material3.MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+        )
+        if (!subtitle.isNullOrBlank()) {
+            Text(
+                text = subtitle,
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private fun ReaderFontOption.displayName(): String = when (this) {
+    ReaderFontOption.LITERATA -> "Literata"
+    ReaderFontOption.SERIF -> "Serif"
+    ReaderFontOption.SANS_SERIF -> "Sans Serif"
+    ReaderFontOption.MONOSPACE -> "Monospace"
+}
+
+@Composable
+private fun SettingsSectionSeparator() {
+    HorizontalDivider(
+        modifier = Modifier.fillMaxWidth(),
+        color = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+        thickness = 1.dp,
+    )
 }

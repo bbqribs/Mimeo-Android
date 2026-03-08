@@ -12,6 +12,7 @@ import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.PlayerControlsMode
+import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.decodeSelectedPlaylistId
 import com.mimeo.android.model.encodeSelectedPlaylistId
 import kotlinx.coroutines.flow.Flow
@@ -42,6 +43,8 @@ class SettingsStore(private val context: Context) {
         intPreferencesKey("default_save_playlist_id")
     private val readingFontSizeSpKey: Preferences.Key<Int> =
         intPreferencesKey("reading_font_size_sp")
+    private val readingFontOptionKey: Preferences.Key<String> =
+        stringPreferencesKey("reading_font_option")
     private val readingLineHeightPercentKey: Preferences.Key<Int> =
         intPreferencesKey("reading_line_height_percent")
     private val readingMaxWidthDpKey: Preferences.Key<Int> =
@@ -71,6 +74,9 @@ class SettingsStore(private val context: Context) {
             selectedPlaylistId = decodeSelectedPlaylistId(prefs[selectedPlaylistIdKey]),
             defaultSavePlaylistId = decodeSelectedPlaylistId(prefs[defaultSavePlaylistIdKey]),
             readingFontSizeSp = prefs[readingFontSizeSpKey] ?: 18,
+            readingFontOption = prefs[readingFontOptionKey]
+                ?.let { runCatching { ReaderFontOption.valueOf(it) }.getOrNull() }
+                ?: ReaderFontOption.LITERATA,
             readingLineHeightPercent = prefs[readingLineHeightPercentKey] ?: 160,
             readingMaxWidthDp = prefs[readingMaxWidthDpKey] ?: 720,
             readingParagraphSpacing = prefs[readingParagraphSpacingKey]
@@ -103,6 +109,7 @@ class SettingsStore(private val context: Context) {
         selectedPlaylistId: Int?,
         defaultSavePlaylistId: Int?,
         readingFontSizeSp: Int,
+        readingFontOption: ReaderFontOption,
         readingLineHeightPercent: Int,
         readingMaxWidthDp: Int,
         readingParagraphSpacing: ParagraphSpacingOption,
@@ -124,6 +131,7 @@ class SettingsStore(private val context: Context) {
             prefs[selectedPlaylistIdKey] = encodeSelectedPlaylistId(selectedPlaylistId)
             prefs[defaultSavePlaylistIdKey] = encodeSelectedPlaylistId(defaultSavePlaylistId)
             prefs[readingFontSizeSpKey] = readingFontSizeSp
+            prefs[readingFontOptionKey] = readingFontOption.name
             prefs[readingLineHeightPercentKey] = readingLineHeightPercent
             prefs[readingMaxWidthDpKey] = readingMaxWidthDp
             prefs[readingParagraphSpacingKey] = readingParagraphSpacing.name
@@ -151,12 +159,14 @@ class SettingsStore(private val context: Context) {
 
     suspend fun saveReadingPreferences(
         readingFontSizeSp: Int,
+        readingFontOption: ReaderFontOption,
         readingLineHeightPercent: Int,
         readingMaxWidthDp: Int,
         readingParagraphSpacing: ParagraphSpacingOption,
     ) {
         context.dataStore.edit { prefs ->
             prefs[readingFontSizeSpKey] = readingFontSizeSp
+            prefs[readingFontOptionKey] = readingFontOption.name
             prefs[readingLineHeightPercentKey] = readingLineHeightPercent
             prefs[readingMaxWidthDpKey] = readingMaxWidthDp
             prefs[readingParagraphSpacingKey] = readingParagraphSpacing.name

@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -38,6 +39,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
+import com.mimeo.android.model.ReaderFontOption
+import com.mimeo.android.ui.theme.toFontFamily
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -55,9 +58,11 @@ fun ReaderBody(
     scrollTriggerSignal: Int,
     autoScrollWhileListening: Boolean,
     readingFontSizeSp: Int,
+    readingFontOption: ReaderFontOption,
     readingLineHeightPercent: Int,
     readingMaxWidthDp: Int,
     paragraphSpacing: ParagraphSpacingOption,
+    selectionResetSignal: Int,
     scrollState: ScrollState,
     modifier: Modifier = Modifier,
 ) {
@@ -93,6 +98,7 @@ fun ReaderBody(
     }
     val readingTextStyle = MaterialTheme.typography.bodyMedium.merge(
         TextStyle(
+            fontFamily = readingFontOption.toFontFamily(),
             fontSize = readingFontSizeSp.sp,
             lineHeight = (readingFontSizeSp * (readingLineHeightPercent / 100f)).sp,
         ),
@@ -114,78 +120,80 @@ fun ReaderBody(
             },
         contentAlignment = Alignment.TopCenter,
     ) {
-        SelectionContainer {
-            if (chunks.isNotEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .widthIn(max = readingMaxWidthDp.dp)
-                        .fillMaxWidth()
-                        .verticalScroll(scrollState),
-                ) {
-                    chunks.forEachIndexed { index, chunk ->
-                        val isHighlighted = index == safeChunkIndex
-                        val effectiveHighlightRange = if (isHighlighted) {
-                            resolveReaderHighlightRange(
-                                textLength = chunk.text.length,
-                                activeRange = activeRangeInChunk,
-                                sentenceRange = highlightedSentenceRange,
-                            )
-                        } else {
-                            null
-                        }
-                        val chunkText = if (effectiveHighlightRange != null) {
-                            buildAnnotatedString {
-                                append(chunk.text)
-                                addStyle(
-                                    style = SpanStyle(
-                                        background = highlightBg,
-                                    ),
-                                    start = effectiveHighlightRange.first,
-                                    end = (effectiveHighlightRange.last + 1).coerceAtMost(chunk.text.length),
+        key(selectionResetSignal) {
+            SelectionContainer {
+                if (chunks.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .widthIn(max = readingMaxWidthDp.dp)
+                            .fillMaxWidth()
+                            .verticalScroll(scrollState),
+                    ) {
+                        chunks.forEachIndexed { index, chunk ->
+                            val isHighlighted = index == safeChunkIndex
+                            val effectiveHighlightRange = if (isHighlighted) {
+                                resolveReaderHighlightRange(
+                                    textLength = chunk.text.length,
+                                    activeRange = activeRangeInChunk,
+                                    sentenceRange = highlightedSentenceRange,
                                 )
+                            } else {
+                                null
                             }
-                        } else {
-                            buildAnnotatedString { append(chunk.text) }
-                        }
-                        Text(
-                            text = chunkText,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .let { base ->
-                                    if (isHighlighted) {
-                                        base.onGloballyPositioned { coordinates ->
-                                            activeChunkTopInRootPx = coordinates.positionInRoot().y
+                            val chunkText = if (effectiveHighlightRange != null) {
+                                buildAnnotatedString {
+                                    append(chunk.text)
+                                    addStyle(
+                                        style = SpanStyle(
+                                            background = highlightBg,
+                                        ),
+                                        start = effectiveHighlightRange.first,
+                                        end = (effectiveHighlightRange.last + 1).coerceAtMost(chunk.text.length),
+                                    )
+                                }
+                            } else {
+                                buildAnnotatedString { append(chunk.text) }
+                            }
+                            Text(
+                                text = chunkText,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .let { base ->
+                                        if (isHighlighted) {
+                                            base.onGloballyPositioned { coordinates ->
+                                                activeChunkTopInRootPx = coordinates.positionInRoot().y
+                                            }
+                                        } else {
+                                            base
                                         }
-                                    } else {
-                                        base
                                     }
-                                }
-                                .background(
-                                    color = MaterialTheme.colorScheme.surface,
-                                    shape = MaterialTheme.shapes.medium,
-                                )
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            style = readingTextStyle,
-                            onTextLayout = { layout ->
-                                if (isHighlighted) {
-                                    activeTextLayout = layout
-                                }
-                            },
-                        )
-                        if (index < chunks.lastIndex) {
-                            ParagraphSpacer(height = paragraphSpacingDp)
+                                    .background(
+                                        color = MaterialTheme.colorScheme.surface,
+                                        shape = MaterialTheme.shapes.medium,
+                                    )
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                style = readingTextStyle,
+                                onTextLayout = { layout ->
+                                    if (isHighlighted) {
+                                        activeTextLayout = layout
+                                    }
+                                },
+                            )
+                            if (index < chunks.lastIndex) {
+                                ParagraphSpacer(height = paragraphSpacingDp)
+                            }
                         }
                     }
+                } else {
+                    Text(
+                        text = fullText?.ifBlank { "No readable text available." } ?: "No readable text available.",
+                        modifier = Modifier
+                            .widthIn(max = readingMaxWidthDp.dp)
+                            .fillMaxWidth()
+                            .verticalScroll(scrollState),
+                        style = readingTextStyle,
+                    )
                 }
-            } else {
-                Text(
-                    text = fullText?.ifBlank { "No readable text available." } ?: "No readable text available.",
-                    modifier = Modifier
-                        .widthIn(max = readingMaxWidthDp.dp)
-                        .fillMaxWidth()
-                        .verticalScroll(scrollState),
-                    style = readingTextStyle,
-                )
             }
         }
     }

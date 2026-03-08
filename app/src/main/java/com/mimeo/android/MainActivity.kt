@@ -91,6 +91,7 @@ import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.model.QueueFetchDebugSnapshot
+import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.repository.ItemTextResult
 import com.mimeo.android.repository.FoldersRepository
 import com.mimeo.android.repository.NowPlayingSession
@@ -274,6 +275,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val sessionIssueMessage: StateFlow<String?> = _sessionIssueMessage.asStateFlow()
     private val _pendingNavigationRoute = MutableStateFlow<String?>(null)
     val pendingNavigationRoute: StateFlow<String?> = _pendingNavigationRoute.asStateFlow()
+    private val _settingsScrollOffset = MutableStateFlow(0)
+    val settingsScrollOffset: StateFlow<Int> = _settingsScrollOffset.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -342,6 +345,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 selectedPlaylistId = settings.value.selectedPlaylistId,
                 defaultSavePlaylistId = settings.value.defaultSavePlaylistId,
                 readingFontSizeSp = settings.value.readingFontSizeSp,
+                readingFontOption = settings.value.readingFontOption,
                 readingLineHeightPercent = settings.value.readingLineHeightPercent,
                 readingMaxWidthDp = settings.value.readingMaxWidthDp,
                 readingParagraphSpacing = settings.value.readingParagraphSpacing,
@@ -356,6 +360,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveReadingPreferences(
         readingFontSizeSp: Int,
+        readingFontOption: ReaderFontOption,
         readingLineHeightPercent: Int,
         readingMaxWidthDp: Int,
         readingParagraphSpacing: ParagraphSpacingOption,
@@ -374,6 +379,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 selectedPlaylistId = settings.value.selectedPlaylistId,
                 defaultSavePlaylistId = settings.value.defaultSavePlaylistId,
                 readingFontSizeSp = readingFontSizeSp,
+                readingFontOption = readingFontOption,
                 readingLineHeightPercent = readingLineHeightPercent,
                 readingMaxWidthDp = readingMaxWidthDp,
                 readingParagraphSpacing = readingParagraphSpacing,
@@ -400,6 +406,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 selectedPlaylistId = settings.value.selectedPlaylistId,
                 defaultSavePlaylistId = settings.value.defaultSavePlaylistId,
                 readingFontSizeSp = settings.value.readingFontSizeSp,
+                readingFontOption = settings.value.readingFontOption,
                 readingLineHeightPercent = settings.value.readingLineHeightPercent,
                 readingMaxWidthDp = settings.value.readingMaxWidthDp,
                 readingParagraphSpacing = settings.value.readingParagraphSpacing,
@@ -627,6 +634,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _settings.update { current -> current.copy(forceSentenceHighlightFallback = enabled) }
             settingsStore.saveForceSentenceHighlightFallback(enabled)
         }
+    }
+
+    fun setSettingsScrollOffset(offset: Int) {
+        _settingsScrollOffset.value = offset.coerceAtLeast(0)
     }
 
     fun createPlaylist(name: String) {
@@ -1658,6 +1669,12 @@ private fun MimeoApp(vm: AppViewModel) {
                             startExpanded = isOnLocusRoute && routeItemId != null,
                             locusTapSignal = locusTabTapSignal,
                             onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
+                            onRequestBack = {
+                                val popped = nav.popBackStack()
+                                if (!popped) {
+                                    nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
+                                }
+                            },
                             onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                             stopPlaybackOnDispose = true,
                             compactControlsOnly = compactControlsOnly,
@@ -1715,7 +1732,7 @@ private fun PersistentNowPlayingStrip(
     onTap: () -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
-    val displayTitle = if (title.isBlank()) title else "❯ $title"
+    val displayTitle = title.ifBlank { "No active playback" }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1727,6 +1744,10 @@ private fun PersistentNowPlayingStrip(
                 .fillMaxWidth()
                 .clickable(onClick = onTap),
         ) {
+            Text(
+                text = "❯ ",
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+            )
             AnimatedContent(
                 targetState = expanded,
                 transitionSpec = {
@@ -1738,7 +1759,7 @@ private fun PersistentNowPlayingStrip(
                 Text(
                     text = displayTitle,
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .weight(1f)
                         .let { base ->
                             if (!isExpanded) {
                                 base.basicMarquee(iterations = if (continuous) Int.MAX_VALUE else 1)

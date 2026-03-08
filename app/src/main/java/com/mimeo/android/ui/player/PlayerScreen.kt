@@ -1,6 +1,8 @@
 package com.mimeo.android.ui.player
 
 import android.os.Build
+import android.os.SystemClock
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -66,9 +68,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
@@ -140,6 +145,7 @@ fun PlayerScreen(
     startExpanded: Boolean = false,
     locusTapSignal: Int = 0,
     onOpenItem: (Int) -> Unit,
+    onRequestBack: () -> Unit = {},
     onOpenDiagnostics: () -> Unit,
     stopPlaybackOnDispose: Boolean = false,
     compactControlsOnly: Boolean = false,
@@ -176,6 +182,9 @@ fun PlayerScreen(
     val readerScrollState = rememberSaveable(currentItemId, saver = ScrollState.Saver) { ScrollState(0) }
     var activeChunkRange by remember { mutableStateOf<IntRange?>(null) }
     var readerScrollTriggerSignal by rememberSaveable { mutableIntStateOf(0) }
+    var readerSelectionResetSignal by rememberSaveable { mutableIntStateOf(0) }
+    var selectionClearArmed by rememberSaveable { mutableStateOf(false) }
+    var backClearPrimedAtMs by rememberSaveable { mutableLongStateOf(0L) }
     var lastHandledLocusTapSignal by rememberSaveable { mutableIntStateOf(locusTapSignal) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
@@ -194,6 +203,8 @@ fun PlayerScreen(
     val currentPosition = playbackPositionByItem[currentItemId] ?: PlaybackPosition()
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
+    val textToolbar = LocalTextToolbar.current
+    val hasActiveSelection = textToolbar.status == TextToolbarStatus.Shown
     val chevronSide = remember(chevronSnapEdge) {
         when (chevronSnapEdge) {
             PlayerChevronSnapEdge.LEFT -> PlayerChevronSnapEdge.LEFT
@@ -207,6 +218,29 @@ fun PlayerScreen(
         PlayerControlsMode.NUB -> "Restore player controls"
     }
     val readerChromeHidden = !compactControlsOnly && isExpanded && readerModeEnabled
+    LaunchedEffect(textToolbar) {
+        snapshotFlow { textToolbar.status }.collect { status ->
+            if (status == TextToolbarStatus.Shown) {
+                selectionClearArmed = true
+            }
+        }
+    }
+    fun clearActiveSelection() {
+        textToolbar.hide()
+        readerSelectionResetSignal += 1
+        selectionClearArmed = false
+    }
+    BackHandler(enabled = !compactControlsOnly && isExpanded) {
+        val now = SystemClock.elapsedRealtime()
+        val withinSecondPressWindow = (now - backClearPrimedAtMs) <= 1500L
+        if (selectionClearArmed || hasActiveSelection || !withinSecondPressWindow) {
+            clearActiveSelection()
+            backClearPrimedAtMs = now
+        } else {
+            backClearPrimedAtMs = 0L
+            onRequestBack()
+        }
+    }
 
     val latestChunks by rememberUpdatedState(chunks)
     val latestItemId by rememberUpdatedState(currentItemId)
@@ -914,9 +948,13 @@ fun PlayerScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .pointerInput(readerModeEnabled) {
+                                .pointerInput(readerModeEnabled, hasActiveSelection, selectionClearArmed) {
                                     detectTapGestures {
-                                        toggleReaderMode()
+                                        if (textToolbar.status == TextToolbarStatus.Shown || selectionClearArmed) {
+                                            clearActiveSelection()
+                                        } else {
+                                            toggleReaderMode()
+                                        }
                                     }
                                 },
                         ) {
@@ -929,9 +967,11 @@ fun PlayerScreen(
                                 scrollTriggerSignal = readerScrollTriggerSignal,
                                 autoScrollWhileListening = settings.autoScrollWhileListening,
                                 readingFontSizeSp = settings.readingFontSizeSp,
+                                readingFontOption = settings.readingFontOption,
                                 readingLineHeightPercent = settings.readingLineHeightPercent,
                                 readingMaxWidthDp = settings.readingMaxWidthDp,
                                 paragraphSpacing = settings.readingParagraphSpacing,
+                                selectionResetSignal = readerSelectionResetSignal,
                                 scrollState = readerScrollState,
                                 modifier = Modifier.fillMaxSize(),
                             )
