@@ -1,6 +1,7 @@
 package com.mimeo.android.ui.player
 
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -69,6 +70,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
@@ -194,6 +197,8 @@ fun PlayerScreen(
     val currentPosition = playbackPositionByItem[currentItemId] ?: PlaybackPosition()
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
+    val textToolbar = LocalTextToolbar.current
+    val hasActiveSelection = textToolbar.status == TextToolbarStatus.Shown
     val chevronSide = remember(chevronSnapEdge) {
         when (chevronSnapEdge) {
             PlayerChevronSnapEdge.LEFT -> PlayerChevronSnapEdge.LEFT
@@ -207,6 +212,9 @@ fun PlayerScreen(
         PlayerControlsMode.NUB -> "Restore player controls"
     }
     val readerChromeHidden = !compactControlsOnly && isExpanded && readerModeEnabled
+    BackHandler(enabled = hasActiveSelection) {
+        textToolbar.hide()
+    }
 
     val latestChunks by rememberUpdatedState(chunks)
     val latestItemId by rememberUpdatedState(currentItemId)
@@ -914,9 +922,13 @@ fun PlayerScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .pointerInput(readerModeEnabled) {
+                                .pointerInput(readerModeEnabled, hasActiveSelection) {
                                     detectTapGestures {
-                                        toggleReaderMode()
+                                        if (textToolbar.status == TextToolbarStatus.Shown) {
+                                            textToolbar.hide()
+                                        } else {
+                                            toggleReaderMode()
+                                        }
                                     }
                                 },
                         ) {

@@ -1,6 +1,6 @@
 package com.mimeo.android.ui.settings
 
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,6 +13,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -25,11 +26,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,7 +53,7 @@ fun SettingsScreen(
     val statusMessage by vm.statusMessage.collectAsState()
     val testingConnection by vm.testingConnection.collectAsState()
     val playlists by vm.playlists.collectAsState()
-    val configuration = LocalConfiguration.current
+    val scrollState = rememberSaveable(saver = ScrollState.Saver) { ScrollState(0) }
     var baseUrl by remember(settings.baseUrl) { mutableStateOf(settings.baseUrl) }
     var token by remember(settings.apiToken) { mutableStateOf(settings.apiToken) }
     var autoAdvance by remember(settings.autoAdvanceOnCompletion) {
@@ -154,11 +156,10 @@ fun SettingsScreen(
         lineHeight = (readingFontSizeSp * (readingLineHeightPercent / 100f)).sp,
         color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
     )
-    val isWideReadingSurface = configuration.screenWidthDp >= 700
 
     Column(
         modifier = Modifier
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -204,27 +205,11 @@ fun SettingsScreen(
                             }
                         },
                     ) { Text(if (testingConnection) "Testing..." else "Test") }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text("Connectivity diagnostics")
-                        Text(
-                            text = "Run backend health and environment checks.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Button(onClick = onOpenDiagnostics) { Text("Open") }
+                    TextButton(onClick = onOpenDiagnostics) { Text("Diagnostics") }
                 }
             }
         }
+        SettingsSectionSeparator()
 
         SettingsSectionHeader(
             title = "Saving / Share-sheet",
@@ -276,6 +261,7 @@ fun SettingsScreen(
                 }
             }
         }
+        SettingsSectionSeparator()
 
         SettingsSectionHeader(
             title = "Playback",
@@ -342,6 +328,7 @@ fun SettingsScreen(
                 Text("Emulator default: http://10.0.2.2:8000")
             }
         }
+        SettingsSectionSeparator()
 
         SettingsSectionHeader(
             title = "Reader / Appearance",
@@ -390,8 +377,8 @@ fun SettingsScreen(
                         readingFontSizeSp = it.toInt()
                         saveReading(fontSizeSp = readingFontSizeSp)
                     },
-                    valueRange = 6f..30f,
-                    steps = 23,
+                    valueRange = 6f..40f,
+                    steps = 33,
                 )
 
                 Text("Line height: ${readingLineHeightPercent}%")
@@ -405,23 +392,16 @@ fun SettingsScreen(
                     steps = 5,
                 )
 
-                if (isWideReadingSurface) {
-                    Text("Max width: ${readingMaxWidthDp}dp")
-                    Slider(
-                        value = readingMaxWidthDp.toFloat(),
-                        onValueChange = {
-                            readingMaxWidthDp = it.toInt()
-                            saveReading(maxWidthDp = readingMaxWidthDp)
-                        },
-                        valueRange = 600f..900f,
-                        steps = 5,
-                    )
-                } else {
-                    Text(
-                        text = "Max width applies on wider screens such as tablets.",
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    )
-                }
+                Text("Margin width: ${readingMaxWidthDp}dp")
+                Slider(
+                    value = readingMaxWidthDp.toFloat(),
+                    onValueChange = {
+                        readingMaxWidthDp = it.toInt()
+                        saveReading(maxWidthDp = readingMaxWidthDp)
+                    },
+                    valueRange = 320f..1000f,
+                    steps = 16,
+                )
 
                 Text("Paragraph spacing")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -433,6 +413,30 @@ fun SettingsScreen(
                                 saveReading(paragraphSpacing = option)
                             },
                             label = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                        )
+                    }
+                }
+                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(
+                            when (readingParagraphSpacing) {
+                                ParagraphSpacingOption.SMALL -> 8.dp
+                                ParagraphSpacingOption.MEDIUM -> 14.dp
+                                ParagraphSpacingOption.LARGE -> 20.dp
+                            },
+                        ),
+                    ) {
+                        Text("Preview", style = androidx.compose.material3.MaterialTheme.typography.labelMedium)
+                        Text(
+                            text = PREVIEW_PARAGRAPH_1,
+                            style = previewTextStyle,
+                        )
+                        Text(
+                            text = PREVIEW_PARAGRAPH_2,
+                            style = previewTextStyle,
                         )
                     }
                 }
@@ -462,33 +466,9 @@ fun SettingsScreen(
                         )
                     }
                 }
-
-                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(
-                            when (readingParagraphSpacing) {
-                                ParagraphSpacingOption.SMALL -> 8.dp
-                                ParagraphSpacingOption.MEDIUM -> 14.dp
-                                ParagraphSpacingOption.LARGE -> 20.dp
-                            },
-                        ),
-                    ) {
-                        Text("Preview", style = androidx.compose.material3.MaterialTheme.typography.labelMedium)
-                        Text(
-                            text = PREVIEW_PARAGRAPH_1,
-                            style = previewTextStyle,
-                        )
-                        Text(
-                            text = PREVIEW_PARAGRAPH_2,
-                            style = previewTextStyle,
-                        )
-                    }
-                }
             }
         }
+        SettingsSectionSeparator()
     }
 
     if (showDefaultSavePlaylistDialog) {
@@ -541,7 +521,7 @@ private fun SettingsSectionHeader(
     ) {
         Text(
             text = title,
-            style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+            style = androidx.compose.material3.MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
         )
         if (!subtitle.isNullOrBlank()) {
             Text(
@@ -558,4 +538,13 @@ private fun ReaderFontOption.displayName(): String = when (this) {
     ReaderFontOption.SERIF -> "Serif"
     ReaderFontOption.SANS_SERIF -> "Sans Serif"
     ReaderFontOption.MONOSPACE -> "Monospace"
+}
+
+@Composable
+private fun SettingsSectionSeparator() {
+    HorizontalDivider(
+        modifier = Modifier.fillMaxWidth(),
+        color = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+        thickness = 1.dp,
+    )
 }
