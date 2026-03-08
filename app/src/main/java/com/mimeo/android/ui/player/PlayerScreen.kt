@@ -1158,8 +1158,7 @@ private fun ExpandedPlayerTopBar(
 ) {
     TopAppBar(
         modifier = Modifier
-            .heightIn(min = 48.dp)
-            .height(56.dp),
+            .height(48.dp),
         windowInsets = WindowInsets(0, 0, 0, 0),
         title = {},
         actions = {

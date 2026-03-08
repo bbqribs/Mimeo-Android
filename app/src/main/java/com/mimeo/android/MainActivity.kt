@@ -1718,8 +1718,8 @@ private fun PersistentNowPlayingStrip(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 2.dp, vertical = 1.dp),
-        verticalArrangement = Arrangement.spacedBy(1.dp),
+            .padding(horizontal = 2.dp, vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Row(
             modifier = Modifier
@@ -1746,17 +1746,19 @@ private fun PersistentNowPlayingStrip(
                             }
                         },
                     maxLines = if (isExpanded) 5 else 1,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                 )
             }
         }
         if (!domain.isNullOrBlank()) {
+            val domainBaseModifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
             val domainModifier = if (sourceUrl != null) {
-                Modifier
-                    .fillMaxWidth()
+                domainBaseModifier
                     .clickable { uriHandler.openUri(sourceUrl) }
             } else {
-                Modifier.fillMaxWidth()
+                domainBaseModifier
             }
             Text(
                 text = domain,
