@@ -68,6 +68,14 @@ private enum class QueueFilterChip(val label: String, val enabled: Boolean = tru
     ARCHIVED("Archived", enabled = false),
 }
 
+private enum class QueueSortOption(val label: String) {
+    NEWEST("Newest"),
+    OLDEST("Oldest"),
+    PROGRESS_HIGH("Progress"),
+    PROGRESS_LOW("Least progress"),
+    TITLE_AZ("Title A-Z"),
+}
+
 @Composable
 fun QueueScreen(
     vm: AppViewModel,
@@ -94,9 +102,11 @@ fun QueueScreen(
     var playlistPickerItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
     var topActionsMenuExpanded by remember { mutableStateOf(false) }
+    var sortMenuExpanded by remember { mutableStateOf(false) }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedFilter by rememberSaveable { mutableStateOf(QueueFilterChip.ALL) }
+    var selectedSort by rememberSaveable { mutableStateOf(QueueSortOption.NEWEST) }
     var showQueueFetchDebug by rememberSaveable { mutableStateOf(false) }
     var hasRefreshProblem by rememberSaveable { mutableStateOf(false) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
@@ -128,7 +138,7 @@ fun QueueScreen(
             )
         }
     }.orEmpty()
-    val displayedItems = items.filter { item ->
+    val filteredItems = items.filter { item ->
         val matchesSearch = if (searchQuery.isBlank()) {
             true
         } else {
@@ -151,6 +161,13 @@ fun QueueScreen(
             QueueFilterChip.ARCHIVED -> false
         }
         matchesSearch && matchesFilter
+    }
+    val displayedItems = when (selectedSort) {
+        QueueSortOption.NEWEST -> filteredItems.sortedByDescending { it.createdAt ?: "" }
+        QueueSortOption.OLDEST -> filteredItems.sortedBy { it.createdAt ?: "" }
+        QueueSortOption.PROGRESS_HIGH -> filteredItems.sortedByDescending { it.furthestPercent }
+        QueueSortOption.PROGRESS_LOW -> filteredItems.sortedBy { it.furthestPercent }
+        QueueSortOption.TITLE_AZ -> filteredItems.sortedBy { (it.title ?: it.url).lowercase() }
     }
     val emptyStateMessage = when {
         loading -> null
@@ -270,6 +287,26 @@ fun QueueScreen(
                                         onClick = {
                                             playlistMenuExpanded = false
                                             vm.selectPlaylist(playlist.id)
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        Box {
+                            AssistChip(
+                                onClick = { sortMenuExpanded = true },
+                                label = { Text("Sort: ${selectedSort.label}") },
+                            )
+                            DropdownMenu(
+                                expanded = sortMenuExpanded,
+                                onDismissRequest = { sortMenuExpanded = false },
+                            ) {
+                                QueueSortOption.entries.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option.label) },
+                                        onClick = {
+                                            selectedSort = option
+                                            sortMenuExpanded = false
                                         },
                                     )
                                 }
