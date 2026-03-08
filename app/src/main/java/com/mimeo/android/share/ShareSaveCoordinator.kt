@@ -8,6 +8,7 @@ import com.mimeo.android.model.AppSettings
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import java.io.IOException
+import java.util.LinkedHashMap
 
 data class ShareRefreshEvent(
     val playlistId: Int?,
@@ -22,15 +23,17 @@ sealed interface ShareSaveResult {
     val opensSettings: Boolean
 
     data class Saved(
-        val playlistName: String? = null,
+        val destinationLabel: String,
     ) : ShareSaveResult {
-        override val notificationText: String =
-            playlistName?.takeIf { it.isNotBlank() }?.let { "Saved to $it ✅" } ?: "Saved ✅"
+        override val notificationText: String = "Saved to $destinationLabel ✅"
         override val opensSettings: Boolean = false
     }
 
-    data object AlreadySaved : ShareSaveResult {
-        override val notificationText: String = "Already saved ✅"
+    data class AlreadySaved(
+        val destinationLabel: String? = null,
+    ) : ShareSaveResult {
+        override val notificationText: String =
+            destinationLabel?.takeIf { it.isNotBlank() }?.let { "Already in $it ✅" } ?: "Already saved ✅"
         override val opensSettings: Boolean = false
     }
 
@@ -72,34 +75,54 @@ class ShareSaveCoordinator(
 ) {
     suspend fun saveSharedText(sharedText: String?, sharedTitle: String?): ShareSaveResult {
         val url = extractFirstHttpUrl(sharedText) ?: return ShareSaveResult.NoValidUrl
+        val idempotencyKey = buildShareIdempotencyKey(url)
         val current = settingsStore.settingsFlow.first()
         if (current.apiToken.isBlank()) {
             return ShareSaveResult.MissingToken
         }
+        val destinationPlaylistId = current.defaultSavePlaylistId
+        val wasRecentDuplicate = ShareRecentDuplicateDetector.wasSeenRecently(
+            idempotencyKey = idempotencyKey,
+            playlistId = destinationPlaylistId,
+        )
 
         return try {
             val article = apiClient.createItem(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
                 url = url,
-                idempotencyKey = buildShareIdempotencyKey(url),
+                idempotencyKey = idempotencyKey,
                 title = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
             )
             val routeResult = routeSavedItem(
                 itemId = article.id,
-                playlistId = current.defaultSavePlaylistId,
+                playlistId = destinationPlaylistId,
                 current = current,
             )
-            ShareSaveRefreshBus.events.tryEmit(ShareRefreshEvent(current.defaultSavePlaylistId))
-            if (routeResult.alreadySaved) {
-                ShareSaveResult.AlreadySaved
+            ShareRecentDuplicateDetector.remember(
+                idempotencyKey = idempotencyKey,
+                playlistId = destinationPlaylistId,
+            )
+            ShareSaveRefreshBus.events.tryEmit(ShareRefreshEvent(destinationPlaylistId))
+            if (routeResult.alreadySaved || wasRecentDuplicate) {
+                ShareSaveResult.AlreadySaved(routeResult.destinationLabel)
             } else {
-                ShareSaveResult.Saved(routeResult.playlistName)
+                ShareSaveResult.Saved(routeResult.destinationLabel)
             }
         } catch (error: ApiException) {
             when {
                 error.statusCode == 401 -> ShareSaveResult.Unauthorized
-                error.statusCode == 409 -> ShareSaveResult.AlreadySaved
+                error.statusCode == 409 -> {
+                    ShareRecentDuplicateDetector.remember(
+                        idempotencyKey = idempotencyKey,
+                        playlistId = destinationPlaylistId,
+                    )
+                    if (destinationPlaylistId == null) {
+                        ShareSaveResult.AlreadySaved(destinationLabel = SMART_QUEUE_LABEL)
+                    } else {
+                        ShareSaveResult.AlreadySaved()
+                    }
+                }
                 error.statusCode in 500..599 -> ShareSaveResult.ServerError
                 else -> ShareSaveResult.SaveFailed
             }
@@ -114,7 +137,7 @@ class ShareSaveCoordinator(
 
     private suspend fun routeSavedItem(itemId: Int, playlistId: Int?, current: AppSettings): PlaylistRouteResult {
         if (playlistId == null) {
-            return PlaylistRouteResult()
+            return PlaylistRouteResult(destinationLabel = SMART_QUEUE_LABEL)
         }
 
         val playlistName = runCatching {
@@ -122,13 +145,14 @@ class ShareSaveCoordinator(
                 .firstOrNull { it.id == playlistId }
                 ?.name
         }.getOrNull()
+        val destinationLabel = playlistName?.takeIf { it.isNotBlank() } ?: "playlist #$playlistId"
 
         return try {
             apiClient.addItemToPlaylist(current.baseUrl, current.apiToken, playlistId, itemId)
-            PlaylistRouteResult(playlistName = playlistName)
+            PlaylistRouteResult(destinationLabel = destinationLabel)
         } catch (error: ApiException) {
             if (error.statusCode == 409) {
-                PlaylistRouteResult(alreadySaved = true, playlistName = playlistName)
+                PlaylistRouteResult(alreadySaved = true, destinationLabel = destinationLabel)
             } else {
                 throw error
             }
@@ -140,5 +164,64 @@ class ShareSaveCoordinator(
 
 private data class PlaylistRouteResult(
     val alreadySaved: Boolean = false,
-    val playlistName: String? = null,
+    val destinationLabel: String = SMART_QUEUE_LABEL,
 )
+
+private const val SMART_QUEUE_LABEL = "Smart Queue"
+
+internal object ShareRecentDuplicateDetector {
+    internal const val WINDOW_MILLIS: Long = 120_000L
+    private const val MAX_ENTRIES = 128
+    private val recent = LinkedHashMap<String, Long>()
+
+    @Synchronized
+    fun wasSeenRecently(
+        idempotencyKey: String,
+        playlistId: Int?,
+        nowMillis: Long = System.currentTimeMillis(),
+    ): Boolean {
+        prune(nowMillis)
+        val lastSeen = recent[keyFor(idempotencyKey, playlistId)] ?: return false
+        return nowMillis - lastSeen <= WINDOW_MILLIS
+    }
+
+    @Synchronized
+    fun remember(
+        idempotencyKey: String,
+        playlistId: Int?,
+        nowMillis: Long = System.currentTimeMillis(),
+    ) {
+        prune(nowMillis)
+        recent[keyFor(idempotencyKey, playlistId)] = nowMillis
+        trimToMaxSize()
+    }
+
+    @Synchronized
+    internal fun clearForTest() {
+        recent.clear()
+    }
+
+    private fun keyFor(idempotencyKey: String, playlistId: Int?): String {
+        val destination = playlistId?.toString() ?: "smart"
+        return "$destination|$idempotencyKey"
+    }
+
+    private fun prune(nowMillis: Long) {
+        val cutoff = nowMillis - WINDOW_MILLIS
+        val iterator = recent.entries.iterator()
+        while (iterator.hasNext()) {
+            if (iterator.next().value < cutoff) {
+                iterator.remove()
+            }
+        }
+    }
+
+    private fun trimToMaxSize() {
+        while (recent.size > MAX_ENTRIES) {
+            val iterator = recent.entries.iterator()
+            if (!iterator.hasNext()) return
+            iterator.next()
+            iterator.remove()
+        }
+    }
+}
