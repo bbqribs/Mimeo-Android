@@ -1,6 +1,7 @@
 package com.mimeo.android.ui.player
 
 import android.os.Build
+import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -183,6 +184,7 @@ fun PlayerScreen(
     var readerScrollTriggerSignal by rememberSaveable { mutableIntStateOf(0) }
     var readerSelectionResetSignal by rememberSaveable { mutableIntStateOf(0) }
     var selectionClearArmed by rememberSaveable { mutableStateOf(false) }
+    var backClearPrimedAtMs by rememberSaveable { mutableLongStateOf(0L) }
     var lastHandledLocusTapSignal by rememberSaveable { mutableIntStateOf(locusTapSignal) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
@@ -229,9 +231,13 @@ fun PlayerScreen(
         selectionClearArmed = false
     }
     BackHandler(enabled = !compactControlsOnly && isExpanded) {
-        if (selectionClearArmed || hasActiveSelection) {
+        val now = SystemClock.elapsedRealtime()
+        val withinSecondPressWindow = (now - backClearPrimedAtMs) <= 1500L
+        if (selectionClearArmed || hasActiveSelection || !withinSecondPressWindow) {
             clearActiveSelection()
+            backClearPrimedAtMs = now
         } else {
+            backClearPrimedAtMs = 0L
             onRequestBack()
         }
     }
