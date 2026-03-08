@@ -208,138 +208,126 @@ fun QueueScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 10.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
+                Text(
+                    text = "Queue: $selectedPlaylistName",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text(
-                            text = "Up Next",
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Text(
-                            text = "Queue: $selectedPlaylistName",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                    IconButton(onClick = { searchExpanded = !searchExpanded }) {
+                        Icon(
+                            painter = painterResource(android.R.drawable.ic_menu_search),
+                            contentDescription = if (searchExpanded) "Close search" else "Search queue",
                         )
                     }
-                    Row(
-                        modifier = Modifier.horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        IconButton(onClick = { searchExpanded = !searchExpanded }) {
-                            Icon(
-                                painter = painterResource(android.R.drawable.ic_menu_search),
-                                contentDescription = if (searchExpanded) "Close search" else "Search queue",
-                            )
-                        }
-                        RefreshActionButton(
-                            state = refreshActionState,
-                            showConnectivityIssue = offline || hasRefreshProblem,
-                            onClick = {
-                                if (refreshActionState == RefreshActionVisualState.Refreshing) return@RefreshActionButton
-                                actionScope.launch {
-                                    refreshActionState = RefreshActionVisualState.Refreshing
-                                    val result = vm.loadQueueOnce()
-                                    hasRefreshProblem = result.isFailure
-                                    refreshActionState = if (result.isSuccess) {
-                                        RefreshActionVisualState.Success
-                                    } else {
-                                        RefreshActionVisualState.Failure
-                                    }
-                                    delay(700)
-                                    if (
-                                        refreshActionState == RefreshActionVisualState.Success ||
-                                        refreshActionState == RefreshActionVisualState.Failure
-                                    ) {
-                                        refreshActionState = RefreshActionVisualState.Idle
-                                    }
+                    RefreshActionButton(
+                        state = refreshActionState,
+                        showConnectivityIssue = offline || hasRefreshProblem,
+                        onClick = {
+                            if (refreshActionState == RefreshActionVisualState.Refreshing) return@RefreshActionButton
+                            actionScope.launch {
+                                refreshActionState = RefreshActionVisualState.Refreshing
+                                val result = vm.loadQueueOnce()
+                                hasRefreshProblem = result.isFailure
+                                refreshActionState = if (result.isSuccess) {
+                                    RefreshActionVisualState.Success
+                                } else {
+                                    RefreshActionVisualState.Failure
                                 }
-                            },
-                            contentDescription = "Refresh queue and sync progress",
+                                delay(700)
+                                if (
+                                    refreshActionState == RefreshActionVisualState.Success ||
+                                    refreshActionState == RefreshActionVisualState.Failure
+                                ) {
+                                    refreshActionState = RefreshActionVisualState.Idle
+                                }
+                            }
+                        },
+                        contentDescription = "Refresh queue and sync progress",
+                    )
+                    Box {
+                        AssistChip(
+                            onClick = { playlistMenuExpanded = true },
+                            label = { Text("Switch queue") },
                         )
-                        Box {
-                            AssistChip(
-                                onClick = { playlistMenuExpanded = true },
-                                label = { Text("Switch queue") },
+                        DropdownMenu(
+                            expanded = playlistMenuExpanded,
+                            onDismissRequest = { playlistMenuExpanded = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Smart queue") },
+                                onClick = {
+                                    playlistMenuExpanded = false
+                                    vm.selectPlaylist(null)
+                                },
                             )
-                            DropdownMenu(
-                                expanded = playlistMenuExpanded,
-                                onDismissRequest = { playlistMenuExpanded = false },
-                            ) {
+                            playlists.forEach { playlist ->
                                 DropdownMenuItem(
-                                    text = { Text("Smart queue") },
+                                    text = { Text(playlist.name) },
                                     onClick = {
                                         playlistMenuExpanded = false
-                                        vm.selectPlaylist(null)
+                                        vm.selectPlaylist(playlist.id)
                                     },
                                 )
-                                playlists.forEach { playlist ->
-                                    DropdownMenuItem(
-                                        text = { Text(playlist.name) },
-                                        onClick = {
-                                            playlistMenuExpanded = false
-                                            vm.selectPlaylist(playlist.id)
-                                        },
-                                    )
-                                }
                             }
                         }
+                    }
+                    Box {
+                        AssistChip(
+                            onClick = { sortMenuExpanded = true },
+                            label = { Text("Sort: ${selectedSort.label}") },
+                        )
+                        DropdownMenu(
+                            expanded = sortMenuExpanded,
+                            onDismissRequest = { sortMenuExpanded = false },
+                        ) {
+                            QueueSortOption.entries.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.label) },
+                                    onClick = {
+                                        selectedSort = option
+                                        sortMenuExpanded = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    if (BuildConfig.DEBUG) {
                         Box {
-                            AssistChip(
-                                onClick = { sortMenuExpanded = true },
-                                label = { Text("Sort: ${selectedSort.label}") },
-                            )
-                            DropdownMenu(
-                                expanded = sortMenuExpanded,
-                                onDismissRequest = { sortMenuExpanded = false },
-                            ) {
-                                QueueSortOption.entries.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = { Text(option.label) },
-                                        onClick = {
-                                            selectedSort = option
-                                            sortMenuExpanded = false
-                                        },
-                                    )
-                                }
+                            IconButton(onClick = { topActionsMenuExpanded = true }) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.msr_more_vert_24),
+                                    contentDescription = "Queue actions",
+                                )
                             }
-                        }
-                        if (BuildConfig.DEBUG) {
-                            Box {
-                                IconButton(onClick = { topActionsMenuExpanded = true }) {
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.msr_more_vert_24),
-                                        contentDescription = "Queue actions",
-                                    )
-                                }
-                                DropdownMenu(
-                                    expanded = topActionsMenuExpanded,
-                                    onDismissRequest = { topActionsMenuExpanded = false },
-                                ) {
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                if (showQueueFetchDebug) {
-                                                    "Hide debug fetch"
-                                                } else {
-                                                    "Show debug fetch"
-                                                },
-                                            )
-                                        },
-                                        onClick = {
-                                            showQueueFetchDebug = !showQueueFetchDebug
-                                            topActionsMenuExpanded = false
-                                        },
-                                    )
-                                }
+                            DropdownMenu(
+                                expanded = topActionsMenuExpanded,
+                                onDismissRequest = { topActionsMenuExpanded = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            if (showQueueFetchDebug) {
+                                                "Hide debug fetch"
+                                            } else {
+                                                "Show debug fetch"
+                                            },
+                                        )
+                                    },
+                                    onClick = {
+                                        showQueueFetchDebug = !showQueueFetchDebug
+                                        topActionsMenuExpanded = false
+                                    },
+                                )
                             }
                         }
                     }
