@@ -253,7 +253,7 @@ fun QueueScreen(
                         Box {
                             IconButton(onClick = { playlistMenuExpanded = true }) {
                                 Icon(
-                                    painter = painterResource(id = R.drawable.msr_swap_horiz_24),
+                                    painter = painterResource(id = R.drawable.msr_view_list_24),
                                     contentDescription = "Switch queue",
                                     modifier = Modifier.size(24.dp),
                                 )
@@ -283,7 +283,7 @@ fun QueueScreen(
                         Box {
                             IconButton(onClick = { sortMenuExpanded = true }) {
                                 Icon(
-                                    painter = painterResource(id = R.drawable.msr_sort_24),
+                                    painter = painterResource(id = R.drawable.msr_height_24),
                                     contentDescription = "Sort queue: ${selectedSort.label}",
                                     modifier = Modifier.size(24.dp),
                                 )
@@ -593,17 +593,22 @@ private fun QueueItemCard(
                             id = if (isDone) R.drawable.ic_book_closed_24 else R.drawable.ic_book_open_24,
                         ),
                         contentDescription = if (isDone) "Done" else "Not done",
-                        tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                        tint = if (isDone) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                        },
                         modifier = Modifier.size(16.dp),
                     )
-                    if (cached) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.msr_check_circle_24),
-                            contentDescription = "Downloaded",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
+                    Text(
+                        text = if (cached) "Offline ready" else "Needs network",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (cached) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                        },
+                    )
                 }
             }
         }
