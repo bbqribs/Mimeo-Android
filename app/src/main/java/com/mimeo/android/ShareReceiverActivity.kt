@@ -3,6 +3,8 @@ package com.mimeo.android
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -86,8 +88,10 @@ private class ShareResultNotifications(
 
         val settings = SettingsStore(context.applicationContext).settingsFlow.first()
         ensureChannel()
+        val largeIcon = buildBrandLargeIcon()
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.msr_check_circle_24)
+            .setSmallIcon(R.drawable.msr_view_list_24)
+            .setLargeIcon(largeIcon)
             .setContentTitle(result.notificationTitle)
             .setContentText(result.notificationText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(result.notificationText))
@@ -153,6 +157,17 @@ private class ShareResultNotifications(
     }
 
     private fun nextNotificationId(): Int = notificationIds.incrementAndGet()
+
+    private fun buildBrandLargeIcon(): Bitmap? {
+        val drawable = ContextCompat.getDrawable(context, R.drawable.msr_view_list_24) ?: return null
+        val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 72
+        val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 72
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        drawable.setBounds(0, 0, canvas.width, canvas.height)
+        drawable.draw(canvas)
+        return bitmap
+    }
 
     companion object {
         private const val CHANNEL_ID = "share_saving_heads_up"
