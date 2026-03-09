@@ -127,6 +127,7 @@ class ApiClient(
         title: String? = null,
         canonicalUrl: String? = null,
         siteName: String? = null,
+        timeoutMs: Long? = null,
     ): ArticleSummary = withContext(Dispatchers.IO) {
         val body = json.encodeToString(
             CreateItemPayload(
@@ -142,7 +143,17 @@ class ApiClient(
             .header("Idempotency-Key", idempotencyKey)
             .post(body)
             .build()
-        executeJson(request) { payload -> json.decodeFromString<ArticleSummary>(payload) }
+        val client = if (timeoutMs != null) {
+            okHttpClient.newBuilder()
+                .callTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                .connectTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                .readTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                .writeTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                .build()
+        } else {
+            okHttpClient
+        }
+        executeJson(request, client = client) { payload -> json.decodeFromString<ArticleSummary>(payload) }
     }
 
     suspend fun renamePlaylist(baseUrl: String, token: String, playlistId: Int, name: String): PlaylistSummary = withContext(Dispatchers.IO) {
@@ -275,8 +286,12 @@ class ApiClient(
         return "$cleanBase$cleanPath"
     }
 
-    private inline fun <T> executeJson(request: Request, parser: (String) -> T): T {
-        okHttpClient.newCall(request).execute().use { response ->
+    private inline fun <T> executeJson(
+        request: Request,
+        client: OkHttpClient = okHttpClient,
+        parser: (String) -> T,
+    ): T {
+        client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
                 throwApiException(response.code, body)
