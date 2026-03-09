@@ -35,6 +35,8 @@ class SettingsStore(private val context: Context) {
         booleanPreferencesKey("force_sentence_highlight_fallback")
     private val keepShareResultNotificationsKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("keep_share_result_notifications")
+    private val autoDownloadSavedArticlesKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("auto_download_saved_articles")
     private val playbackSpeedKey: Preferences.Key<Float> =
         floatPreferencesKey("playback_speed")
     private val selectedPlaylistIdKey: Preferences.Key<Int> =
@@ -70,6 +72,7 @@ class SettingsStore(private val context: Context) {
             continuousNowPlayingMarquee = prefs[continuousNowPlayingMarqueeKey] ?: true,
             forceSentenceHighlightFallback = prefs[forceSentenceHighlightFallbackKey] ?: false,
             keepShareResultNotifications = prefs[keepShareResultNotificationsKey] ?: false,
+            autoDownloadSavedArticles = prefs[autoDownloadSavedArticlesKey] ?: false,
             playbackSpeed = prefs[playbackSpeedKey] ?: 1.0f,
             selectedPlaylistId = decodeSelectedPlaylistId(prefs[selectedPlaylistIdKey]),
             defaultSavePlaylistId = decodeSelectedPlaylistId(prefs[defaultSavePlaylistIdKey]),
@@ -105,6 +108,7 @@ class SettingsStore(private val context: Context) {
         continuousNowPlayingMarquee: Boolean,
         forceSentenceHighlightFallback: Boolean,
         keepShareResultNotifications: Boolean,
+        autoDownloadSavedArticles: Boolean,
         playbackSpeed: Float,
         selectedPlaylistId: Int?,
         defaultSavePlaylistId: Int?,
@@ -127,6 +131,7 @@ class SettingsStore(private val context: Context) {
             prefs[continuousNowPlayingMarqueeKey] = continuousNowPlayingMarquee
             prefs[forceSentenceHighlightFallbackKey] = forceSentenceHighlightFallback
             prefs[keepShareResultNotificationsKey] = keepShareResultNotifications
+            prefs[autoDownloadSavedArticlesKey] = autoDownloadSavedArticles
             prefs[playbackSpeedKey] = playbackSpeed
             prefs[selectedPlaylistIdKey] = encodeSelectedPlaylistId(selectedPlaylistId)
             prefs[defaultSavePlaylistIdKey] = encodeSelectedPlaylistId(defaultSavePlaylistId)

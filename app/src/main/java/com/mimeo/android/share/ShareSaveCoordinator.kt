@@ -3,10 +3,12 @@ package com.mimeo.android.share
 import android.content.Context
 import android.util.Log
 import com.mimeo.android.BuildConfig
+import com.mimeo.android.data.AppDatabase
 import com.mimeo.android.data.ApiClient
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
+import com.mimeo.android.repository.PlaybackRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import java.net.ConnectException
@@ -83,6 +85,11 @@ class ShareSaveCoordinator(
     context: Context,
     private val apiClient: ApiClient = ApiClient(),
     private val settingsStore: SettingsStore = SettingsStore(context.applicationContext),
+    private val playbackRepository: PlaybackRepository = PlaybackRepository(
+        apiClient = apiClient,
+        database = AppDatabase.getInstance(context.applicationContext),
+        appContext = context.applicationContext,
+    ),
 ) {
     suspend fun saveSharedText(sharedText: String?, sharedTitle: String?): ShareSaveResult {
         val attemptId = ShareSaveDebugState.nextAttemptId()
@@ -138,6 +145,11 @@ class ShareSaveCoordinator(
                 playlistId = current.defaultSavePlaylistId,
                 current = current,
             )
+            val autoDownloadSucceeded = autoDownloadIfEnabled(
+                itemId = article.id,
+                current = current,
+                attemptId = attemptId,
+            )
             ShareSaveRefreshBus.events.tryEmit(ShareRefreshEvent(current.defaultSavePlaylistId))
             val result = if (routeResult.alreadySaved) {
                 ShareSaveResult.AlreadySaved
@@ -151,6 +163,8 @@ class ShareSaveCoordinator(
                 destination = destination,
                 requestUrls = requestUrls,
                 result = result,
+                autoDownloadEnabled = current.autoDownloadSavedArticles,
+                autoDownloadSucceeded = autoDownloadSucceeded,
             )
             result
         } catch (error: ApiException) {
@@ -261,6 +275,34 @@ class ShareSaveCoordinator(
         return current
     }
 
+    private suspend fun autoDownloadIfEnabled(
+        itemId: Int,
+        current: AppSettings,
+        attemptId: Int,
+    ): Boolean? {
+        if (!current.autoDownloadSavedArticles) {
+            return null
+        }
+        return runCatching {
+            playbackRepository.getItemText(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                itemId = itemId,
+                expectedActiveVersionId = null,
+            )
+            true
+        }.getOrElse { error ->
+            val root = rootCause(error)
+            if (BuildConfig.DEBUG) {
+                Log.w(
+                    "MimeoShareSave",
+                    "attempt=$attemptId autoDownloadFailed itemId=$itemId exceptionClass=${root.javaClass.name} exceptionMessage=${root.message ?: "none"}",
+                )
+            }
+            false
+        }
+    }
+
     private fun recordSnapshot(
         attemptId: Int,
         baseUrl: String?,
@@ -270,6 +312,8 @@ class ShareSaveCoordinator(
         result: ShareSaveResult,
         error: Throwable? = null,
         phase: String = "done",
+        autoDownloadEnabled: Boolean? = null,
+        autoDownloadSucceeded: Boolean? = null,
     ) {
         val root = error?.let { rootCause(it) }
         ShareSaveDebugState.record(
@@ -286,6 +330,8 @@ class ShareSaveCoordinator(
                 result = result::class.java.simpleName,
                 exceptionClass = root?.javaClass?.name,
                 exceptionMessage = root?.message,
+                autoDownloadEnabled = autoDownloadEnabled,
+                autoDownloadSucceeded = autoDownloadSucceeded,
             )
         )
     }
@@ -309,6 +355,8 @@ internal data class ShareSaveDebugSnapshot(
     val result: String,
     val exceptionClass: String?,
     val exceptionMessage: String?,
+    val autoDownloadEnabled: Boolean?,
+    val autoDownloadSucceeded: Boolean?,
 )
 
 internal object ShareSaveDebugState {
@@ -327,7 +375,7 @@ internal object ShareSaveDebugState {
         val requests = if (snapshot.requestUrls.isEmpty()) "none" else snapshot.requestUrls.joinToString(",")
         Log.d(
             TAG,
-            "attempt=${snapshot.attemptId} phase=${snapshot.phase} result=${snapshot.result} baseUrl=${snapshot.baseUrl ?: "unset"} tokenPresent=${snapshot.tokenPresent} destination=${snapshot.destination} apiClientReady=${snapshot.apiClientReady} repositoryReady=${snapshot.repositoryReady ?: "n/a"} settingsStoreReady=${snapshot.settingsStoreReady} requestUrls=$requests exceptionClass=${snapshot.exceptionClass ?: "none"} exceptionMessage=${snapshot.exceptionMessage ?: "none"}",
+            "attempt=${snapshot.attemptId} phase=${snapshot.phase} result=${snapshot.result} baseUrl=${snapshot.baseUrl ?: "unset"} tokenPresent=${snapshot.tokenPresent} destination=${snapshot.destination} apiClientReady=${snapshot.apiClientReady} repositoryReady=${snapshot.repositoryReady ?: "n/a"} settingsStoreReady=${snapshot.settingsStoreReady} autoDownloadEnabled=${snapshot.autoDownloadEnabled ?: "n/a"} autoDownloadSucceeded=${snapshot.autoDownloadSucceeded ?: "n/a"} requestUrls=$requests exceptionClass=${snapshot.exceptionClass ?: "none"} exceptionMessage=${snapshot.exceptionMessage ?: "none"}",
         )
     }
 }

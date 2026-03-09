@@ -333,6 +333,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         continuousNowPlayingMarquee: Boolean,
         forceSentenceHighlightFallback: Boolean,
         keepShareResultNotifications: Boolean,
+        autoDownloadSavedArticles: Boolean,
     ) {
         viewModelScope.launch {
             settingsStore.save(
@@ -344,6 +345,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 continuousNowPlayingMarquee = continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = forceSentenceHighlightFallback,
                 keepShareResultNotifications = keepShareResultNotifications,
+                autoDownloadSavedArticles = autoDownloadSavedArticles,
                 playbackSpeed = settings.value.playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
                 defaultSavePlaylistId = settings.value.defaultSavePlaylistId,
@@ -378,6 +380,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
+                autoDownloadSavedArticles = settings.value.autoDownloadSavedArticles,
                 playbackSpeed = settings.value.playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
                 defaultSavePlaylistId = settings.value.defaultSavePlaylistId,
@@ -405,6 +408,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
+                autoDownloadSavedArticles = settings.value.autoDownloadSavedArticles,
                 playbackSpeed = playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
                 defaultSavePlaylistId = settings.value.defaultSavePlaylistId,
