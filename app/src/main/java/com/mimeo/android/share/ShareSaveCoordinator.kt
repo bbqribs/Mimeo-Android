@@ -1,13 +1,22 @@
 package com.mimeo.android.share
 
 import android.content.Context
+import android.util.Log
+import com.mimeo.android.BuildConfig
 import com.mimeo.android.data.ApiClient
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
-import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import java.util.concurrent.atomic.AtomicInteger
+import javax.net.ssl.SSLException
+
+private const val SHARE_CREATE_TIMEOUT_MS = 45_000L
 
 data class ShareRefreshEvent(
     val playlistId: Int?,
@@ -54,6 +63,11 @@ sealed interface ShareSaveResult {
         override val opensSettings: Boolean = false
     }
 
+    data object TimedOut : ShareSaveResult {
+        override val notificationText: String = "Save timed out. Try again."
+        override val opensSettings: Boolean = false
+    }
+
     data object ServerError : ShareSaveResult {
         override val notificationText: String = "Server error. Try again."
         override val opensSettings: Boolean = false
@@ -71,9 +85,42 @@ class ShareSaveCoordinator(
     private val settingsStore: SettingsStore = SettingsStore(context.applicationContext),
 ) {
     suspend fun saveSharedText(sharedText: String?, sharedTitle: String?): ShareSaveResult {
-        val url = extractFirstHttpUrl(sharedText) ?: return ShareSaveResult.NoValidUrl
+        val attemptId = ShareSaveDebugState.nextAttemptId()
+        val url = extractFirstHttpUrl(sharedText)
+        if (url == null) {
+            recordSnapshot(
+                attemptId = attemptId,
+                baseUrl = null,
+                tokenPresent = false,
+                destination = "unknown",
+                requestUrls = emptyList(),
+                result = ShareSaveResult.NoValidUrl,
+            )
+            return ShareSaveResult.NoValidUrl
+        }
+
         val current = settingsStore.settingsFlow.first()
+        val destination = destinationLabel(current.defaultSavePlaylistId)
+        val requestUrls = buildRequestUrls(current.baseUrl, current.defaultSavePlaylistId)
+        recordSnapshot(
+            attemptId = attemptId,
+            baseUrl = current.baseUrl,
+            tokenPresent = current.apiToken.isNotBlank(),
+            destination = destination,
+            requestUrls = requestUrls,
+            result = ShareSaveResult.SaveFailed,
+            phase = "started",
+        )
+
         if (current.apiToken.isBlank()) {
+            recordSnapshot(
+                attemptId = attemptId,
+                baseUrl = current.baseUrl,
+                tokenPresent = false,
+                destination = destination,
+                requestUrls = requestUrls,
+                result = ShareSaveResult.MissingToken,
+            )
             return ShareSaveResult.MissingToken
         }
 
@@ -84,6 +131,7 @@ class ShareSaveCoordinator(
                 url = url,
                 idempotencyKey = buildShareIdempotencyKey(url),
                 title = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
+                timeoutMs = SHARE_CREATE_TIMEOUT_MS,
             )
             val routeResult = routeSavedItem(
                 itemId = article.id,
@@ -91,24 +139,56 @@ class ShareSaveCoordinator(
                 current = current,
             )
             ShareSaveRefreshBus.events.tryEmit(ShareRefreshEvent(current.defaultSavePlaylistId))
-            if (routeResult.alreadySaved) {
+            val result = if (routeResult.alreadySaved) {
                 ShareSaveResult.AlreadySaved
             } else {
                 ShareSaveResult.Saved(routeResult.playlistName)
             }
+            recordSnapshot(
+                attemptId = attemptId,
+                baseUrl = current.baseUrl,
+                tokenPresent = true,
+                destination = destination,
+                requestUrls = requestUrls,
+                result = result,
+            )
+            result
         } catch (error: ApiException) {
-            when {
+            val result = when {
                 error.statusCode == 401 -> ShareSaveResult.Unauthorized
+                error.statusCode == 403 -> ShareSaveResult.Unauthorized
                 error.statusCode == 409 -> ShareSaveResult.AlreadySaved
                 error.statusCode in 500..599 -> ShareSaveResult.ServerError
                 else -> ShareSaveResult.SaveFailed
             }
+            recordSnapshot(
+                attemptId = attemptId,
+                baseUrl = current.baseUrl,
+                tokenPresent = true,
+                destination = destination,
+                requestUrls = requestUrls,
+                result = result,
+                error = error,
+                phase = "api_exception",
+            )
+            result
         } catch (error: Exception) {
-            if (isNetworkError(error)) {
-                ShareSaveResult.NetworkError
-            } else {
-                ShareSaveResult.SaveFailed
+            val result = when {
+                isTimeoutError(error) -> ShareSaveResult.TimedOut
+                isNetworkError(error) -> ShareSaveResult.NetworkError
+                else -> ShareSaveResult.SaveFailed
             }
+            recordSnapshot(
+                attemptId = attemptId,
+                baseUrl = current.baseUrl,
+                tokenPresent = true,
+                destination = destination,
+                requestUrls = requestUrls,
+                result = result,
+                error = error,
+                phase = "exception",
+            )
+            result
         }
     }
 
@@ -135,10 +215,119 @@ class ShareSaveCoordinator(
         }
     }
 
-    private fun isNetworkError(error: Exception): Boolean = error is IOException
+    private fun buildRequestUrls(baseUrl: String, playlistId: Int?): List<String> {
+        val urls = mutableListOf(resolveApiUrl(baseUrl, "/items"))
+        if (playlistId != null) {
+            urls += resolveApiUrl(baseUrl, "/playlists")
+            urls += resolveApiUrl(baseUrl, "/playlists/$playlistId/items")
+        }
+        return urls
+    }
+
+    private fun destinationLabel(playlistId: Int?): String {
+        return if (playlistId == null) {
+            "Smart Queue"
+        } else {
+            "Playlist($playlistId)"
+        }
+    }
+
+    private fun resolveApiUrl(baseUrl: String, path: String): String {
+        val cleanBase = baseUrl.trim().trimEnd('/')
+        val cleanPath = if (path.startsWith('/')) path else "/$path"
+        return "$cleanBase$cleanPath"
+    }
+
+    private fun isTimeoutError(error: Exception): Boolean {
+        return rootCause(error) is SocketTimeoutException
+    }
+
+    private fun isNetworkError(error: Exception): Boolean {
+        return when (val root = rootCause(error)) {
+            is ConnectException,
+            is UnknownHostException,
+            is SocketException,
+            is SSLException,
+            -> true
+            else -> false
+        }
+    }
+
+    private fun rootCause(error: Throwable): Throwable {
+        var current: Throwable = error
+        while (current.cause != null && current.cause !== current) {
+            current = current.cause!!
+        }
+        return current
+    }
+
+    private fun recordSnapshot(
+        attemptId: Int,
+        baseUrl: String?,
+        tokenPresent: Boolean,
+        destination: String,
+        requestUrls: List<String>,
+        result: ShareSaveResult,
+        error: Throwable? = null,
+        phase: String = "done",
+    ) {
+        val root = error?.let { rootCause(it) }
+        ShareSaveDebugState.record(
+            ShareSaveDebugSnapshot(
+                attemptId = attemptId,
+                phase = phase,
+                baseUrl = baseUrl,
+                tokenPresent = tokenPresent,
+                destination = destination,
+                requestUrls = requestUrls,
+                apiClientReady = true,
+                repositoryReady = null,
+                settingsStoreReady = true,
+                result = result::class.java.simpleName,
+                exceptionClass = root?.javaClass?.name,
+                exceptionMessage = root?.message,
+            )
+        )
+    }
 }
 
 private data class PlaylistRouteResult(
     val alreadySaved: Boolean = false,
     val playlistName: String? = null,
 )
+
+internal data class ShareSaveDebugSnapshot(
+    val attemptId: Int,
+    val phase: String,
+    val baseUrl: String?,
+    val tokenPresent: Boolean,
+    val destination: String,
+    val requestUrls: List<String>,
+    val apiClientReady: Boolean,
+    val repositoryReady: Boolean?,
+    val settingsStoreReady: Boolean,
+    val result: String,
+    val exceptionClass: String?,
+    val exceptionMessage: String?,
+)
+
+internal object ShareSaveDebugState {
+    private const val TAG = "MimeoShareSave"
+    private val attemptIds = AtomicInteger(0)
+
+    @Volatile
+    var lastSnapshot: ShareSaveDebugSnapshot? = null
+        private set
+
+    fun nextAttemptId(): Int = attemptIds.incrementAndGet()
+
+    fun record(snapshot: ShareSaveDebugSnapshot) {
+        if (!BuildConfig.DEBUG) return
+        lastSnapshot = snapshot
+        val requests = if (snapshot.requestUrls.isEmpty()) "none" else snapshot.requestUrls.joinToString(",")
+        Log.d(
+            TAG,
+            "attempt=${snapshot.attemptId} phase=${snapshot.phase} result=${snapshot.result} baseUrl=${snapshot.baseUrl ?: "unset"} tokenPresent=${snapshot.tokenPresent} destination=${snapshot.destination} apiClientReady=${snapshot.apiClientReady} repositoryReady=${snapshot.repositoryReady ?: "n/a"} settingsStoreReady=${snapshot.settingsStoreReady} requestUrls=$requests exceptionClass=${snapshot.exceptionClass ?: "none"} exceptionMessage=${snapshot.exceptionMessage ?: "none"}",
+        )
+    }
+}
