@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -39,10 +40,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
@@ -50,15 +55,19 @@ import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.share.extractFirstHttpUrl
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val DONE_PERCENT_THRESHOLD = 98
+private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
 
 private enum class QueueFilterChip(val label: String, val enabled: Boolean = true) {
     ALL("All"),
@@ -109,6 +118,11 @@ fun QueueScreen(
     var showQueueFetchDebug by rememberSaveable { mutableStateOf(false) }
     var hasRefreshProblem by rememberSaveable { mutableStateOf(false) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
+    var showManualUrlDialog by remember { mutableStateOf(false) }
+    var manualUrlInput by rememberSaveable { mutableStateOf("") }
+    var manualUrlError by remember { mutableStateOf<String?>(null) }
+    var manualSaveInProgress by remember { mutableStateOf(false) }
+    val manualUrlFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
         vm.refreshPlaylists()
@@ -253,6 +267,20 @@ fun QueueScreen(
                             },
                             contentDescription = "Refresh queue and sync progress",
                         )
+                        IconButton(
+                            enabled = !manualSaveInProgress,
+                            onClick = {
+                                manualUrlInput = ""
+                                manualUrlError = null
+                                showManualUrlDialog = true
+                            },
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.msr_add_24),
+                                contentDescription = "Save URL",
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
                         Box {
                             IconButton(onClick = { playlistMenuExpanded = true }) {
                                 Icon(
@@ -502,10 +530,103 @@ fun QueueScreen(
         )
     }
 
+    if (showManualUrlDialog) {
+        val canSubmitManualUrl = manualUrlInput.isNotBlank() && !manualSaveInProgress
+        suspend fun submitManualUrl() {
+            val extractedUrl = resolveManualSaveUrl(manualUrlInput)
+            if (extractedUrl == null) {
+                manualUrlError = "Enter a valid http(s) URL"
+                return
+            }
+            manualSaveInProgress = true
+            manualUrlError = null
+            val result = vm.saveUrlFromUpNext(extractedUrl)
+            manualSaveInProgress = false
+            showManualUrlDialog = false
+            manualUrlInput = ""
+            val actionLabel = if (result.opensSettings) "Open Settings" else null
+            val actionKey = if (result.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
+            onShowSnackbar(result.notificationText, actionLabel, actionKey)
+        }
+
+        LaunchedEffect(showManualUrlDialog) {
+            if (showManualUrlDialog) {
+                manualUrlFocusRequester.requestFocus()
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = {
+                if (!manualSaveInProgress) {
+                    showManualUrlDialog = false
+                    manualUrlError = null
+                }
+            },
+            title = { Text("Save URL") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = manualUrlInput,
+                        onValueChange = {
+                            manualUrlInput = it
+                            manualUrlError = null
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(manualUrlFocusRequester),
+                        singleLine = true,
+                        label = { Text("Article URL") },
+                        placeholder = { Text("https://example.com/article") },
+                        isError = manualUrlError != null,
+                        supportingText = {
+                            manualUrlError?.let { Text(it) }
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Uri,
+                            imeAction = ImeAction.Done,
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                if (canSubmitManualUrl) {
+                                    actionScope.launch { submitManualUrl() }
+                                }
+                            },
+                        ),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = canSubmitManualUrl,
+                    onClick = {
+                        actionScope.launch { submitManualUrl() }
+                    },
+                ) {
+                    Text(if (manualSaveInProgress) "Saving..." else "Save")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !manualSaveInProgress,
+                    onClick = {
+                        showManualUrlDialog = false
+                        manualUrlError = null
+                    },
+                ) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
 }
 
 private fun normalizeSearchText(value: String): String {
     return value.filter { it.isLetterOrDigit() }
+}
+
+internal fun resolveManualSaveUrl(input: String): String? {
+    return extractFirstHttpUrl(input.trim())
 }
 
 @Composable
