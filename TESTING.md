@@ -61,6 +61,10 @@ Run this checklist for PRs that touch share-sheet saving, notifications, or save
 - Confirm success/error feedback appears as heads-up notifications.
 - With `Keep share result notifications` off, confirm results auto-dismiss after about 4 seconds.
 - With `Keep share result notifications` on, confirm results remain in the tray.
+- With `Auto-download saved articles for offline reading` OFF, confirm share-save succeeds but the new item is not immediately offline-ready.
+- With `Auto-download saved articles for offline reading` ON, confirm share-save succeeds and the new item becomes offline-ready without manual download.
+- While an Up Next playlist is actively open, share into that same destination and confirm the new item appears without needing sort/search toggles.
+- Leave Settings and return; confirm the auto-download toggle still reflects the persisted value.
 - Clear the token and confirm `Configure API token in Settings` with a working `Open Settings` action.
 - Set an invalid token and confirm `Check your API token` with a working `Open Settings` action.
 - Share text without a URL and confirm `No valid URL found`.

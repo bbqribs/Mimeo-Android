@@ -40,11 +40,13 @@
 - [x] Queue verification controls restored (search + filters).
 - [x] Queue search robustness fix (raw substring + normalized fallback).
 - [x] Queue debug instrumentation is hidden behind an explicit overflow toggle (debug builds).
-- [ ] Smart Queue duplicate semantics still do not always surface `Already saved ✅`.
+- [x] Share-save can auto-download newly saved items for offline readiness via Settings toggle.
+- [x] Active Up Next context refresh now carries focus metadata so newly shared items can appear immediately in the current playlist view.
+- [ ] Share-save success-message semantics follow-up: destination-aware `Saved ...` wording only (no duplicate-specific success wording).
 - [ ] Backlog: allow sharing plain text and saving it as a readable item, not just URLs.
 
 ### Next tickets
-- [ ] Share-save duplicates follow-up: tighten Smart Queue duplicate detection and messaging without backend changes.
+- [ ] Share-save message semantics cleanup: enforce destination-only success wording for Smart Queue vs named playlists.
 - [ ] Queue debug cleanup finalization: decide whether to fully remove the debug-only fetch overlay after investigation is complete.
 - [ ] Share plain text capture: convert non-URL shared text into a readable item flow or explicitly reject it with a clearer product decision.
 
