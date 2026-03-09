@@ -100,7 +100,9 @@ import com.mimeo.android.repository.OfflineReadyCandidate
 import com.mimeo.android.repository.PlaylistMembershipToggleResult
 import com.mimeo.android.repository.PlaybackRepository
 import com.mimeo.android.repository.resolveOfflineReadyItemIds
+import com.mimeo.android.share.ShareSaveCoordinator
 import com.mimeo.android.share.ShareSaveRefreshBus
+import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.ui.collections.CollectionsScreen
 import com.mimeo.android.ui.collections.FolderDetailScreen
 import com.mimeo.android.repository.ProgressPostResult
@@ -221,6 +223,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         apiClient = apiClient,
         database = database,
         appContext = application.applicationContext,
+    )
+    private val shareSaveCoordinator = ShareSaveCoordinator(
+        context = application.applicationContext,
+        apiClient = apiClient,
+        settingsStore = settingsStore,
+        playbackRepository = repository,
     )
     private val foldersRepository = FoldersRepository(database)
 
@@ -508,6 +516,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 actionKey = actionKey,
                 duration = duration,
             ),
+        )
+    }
+
+    suspend fun saveUrlFromUpNext(rawInput: String): ShareSaveResult {
+        return shareSaveCoordinator.saveSharedText(
+            sharedText = rawInput,
+            sharedTitle = null,
         )
     }
 
