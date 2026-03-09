@@ -526,6 +526,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    suspend fun saveManualTextFromUpNext(urlInput: String, titleInput: String?, bodyInput: String): ShareSaveResult {
+        return shareSaveCoordinator.saveManualText(
+            urlInput = urlInput,
+            titleInput = titleInput,
+            bodyInput = bodyInput,
+        )
+    }
+
     fun testConnection() {
         val current = settings.value
         if (current.apiToken.isBlank()) {

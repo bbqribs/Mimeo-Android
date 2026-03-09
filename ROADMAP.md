@@ -44,6 +44,7 @@
 - [x] Active Up Next context refresh now carries focus metadata so newly shared items can appear immediately in the current playlist view.
 - [x] Share-save success-message semantics: destination-aware `Saved to Smart Queue ✅` / `Saved to <Playlist> ✅` without duplicate-specific success wording.
 - [x] Up Next top action bar supports manual URL save entry via lightweight `+` dialog, routed through existing save semantics.
+- [x] Up Next `+` flow now supports manual text submission v1 (`Save URL` / `Paste Text`) via existing `/items/manual-text` backend path.
 - [ ] Backlog: allow sharing plain text and saving it as a readable item, not just URLs.
 
 ### Next tickets

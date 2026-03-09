@@ -1,7 +1,9 @@
 package com.mimeo.android.ui.queue
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ManualUrlEntryValidationTest {
@@ -22,5 +24,20 @@ class ManualUrlEntryValidationTest {
     @Test
     fun `resolveManualSaveUrl rejects non-http input`() {
         assertNull(resolveManualSaveUrl("not a url"))
+    }
+
+    @Test
+    fun `normalizeManualTextBody trims and rejects blank text`() {
+        assertEquals("Line one", normalizeManualTextBody("  Line one  "))
+        assertNull(normalizeManualTextBody("   "))
+    }
+
+    @Test
+    fun `canSubmitManualSave enforces mode-specific required fields`() {
+        assertTrue(canSubmitManualSave(ManualSaveMode.URL, "https://example.com", "", inProgress = false))
+        assertFalse(canSubmitManualSave(ManualSaveMode.URL, "", "", inProgress = false))
+        assertFalse(canSubmitManualSave(ManualSaveMode.TEXT, "https://example.com", "", inProgress = false))
+        assertTrue(canSubmitManualSave(ManualSaveMode.TEXT, "https://example.com", "Body", inProgress = false))
+        assertFalse(canSubmitManualSave(ManualSaveMode.TEXT, "https://example.com", "Body", inProgress = true))
     }
 }

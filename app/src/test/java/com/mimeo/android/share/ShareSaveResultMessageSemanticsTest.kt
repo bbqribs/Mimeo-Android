@@ -25,4 +25,14 @@ class ShareSaveResultMessageSemanticsTest {
 
         assertFalse(result.notificationText.contains("Already", ignoreCase = true))
     }
+
+    @Test
+    fun `notification title includes saved item title when available`() {
+        val result = ShareSaveResult.Saved(
+            destinationName = "Smart Queue",
+            itemTitle = "My Saved Story",
+        )
+
+        assertEquals("Saved: My Saved Story", result.notificationTitle)
+    }
 }

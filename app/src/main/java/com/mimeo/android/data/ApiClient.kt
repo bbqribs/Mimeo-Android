@@ -47,6 +47,14 @@ private data class CreateItemPayload(
     @kotlinx.serialization.SerialName("site_name") val siteName: String? = null,
 )
 
+@Serializable
+private data class ManualTextPayload(
+    val url: String,
+    val text: String,
+    val title: String? = null,
+    @kotlinx.serialization.SerialName("site_name") val siteName: String? = null,
+)
+
 class ApiClient(
     private val okHttpClient: OkHttpClient = OkHttpClient(),
     private val json: Json = Json { ignoreUnknownKeys = true },
@@ -154,6 +162,30 @@ class ApiClient(
             okHttpClient
         }
         executeJson(request, client = client) { payload -> json.decodeFromString<ArticleSummary>(payload) }
+    }
+
+    suspend fun createManualTextItem(
+        baseUrl: String,
+        token: String,
+        url: String,
+        text: String,
+        title: String? = null,
+        siteName: String? = null,
+    ): ArticleSummary = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(
+            ManualTextPayload(
+                url = url,
+                text = text,
+                title = title,
+                siteName = siteName,
+            )
+        ).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/items/manual-text"))
+            .header("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<ArticleSummary>(payload) }
     }
 
     suspend fun renamePlaylist(baseUrl: String, token: String, playlistId: Int, name: String): PlaylistSummary = withContext(Dispatchers.IO) {
