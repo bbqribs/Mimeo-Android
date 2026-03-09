@@ -37,15 +37,9 @@ sealed interface ShareSaveResult {
     val opensSettings: Boolean
 
     data class Saved(
-        val playlistName: String? = null,
+        val destinationName: String,
     ) : ShareSaveResult {
-        override val notificationText: String =
-            playlistName?.takeIf { it.isNotBlank() }?.let { "Saved to $it ✅" } ?: "Saved ✅"
-        override val opensSettings: Boolean = false
-    }
-
-    data object AlreadySaved : ShareSaveResult {
-        override val notificationText: String = "Already saved ✅"
+        override val notificationText: String = "Saved to $destinationName ✅"
         override val opensSettings: Boolean = false
     }
 
@@ -160,11 +154,12 @@ class ShareSaveCoordinator(
                     itemId = article.id,
                 ),
             )
-            val result = if (routeResult.alreadySaved) {
-                ShareSaveResult.AlreadySaved
-            } else {
-                ShareSaveResult.Saved(routeResult.playlistName)
-            }
+            val result = ShareSaveResult.Saved(
+                destinationName = resolveDestinationName(
+                    current = current,
+                    knownPlaylistName = routeResult.playlistName,
+                ),
+            )
             recordSnapshot(
                 attemptId = attemptId,
                 baseUrl = current.baseUrl,
@@ -180,7 +175,9 @@ class ShareSaveCoordinator(
             val result = when {
                 error.statusCode == 401 -> ShareSaveResult.Unauthorized
                 error.statusCode == 403 -> ShareSaveResult.Unauthorized
-                error.statusCode == 409 -> ShareSaveResult.AlreadySaved
+                error.statusCode == 409 -> ShareSaveResult.Saved(
+                    destinationName = resolveDestinationName(current = current),
+                )
                 error.statusCode in 500..599 -> ShareSaveResult.ServerError
                 else -> ShareSaveResult.SaveFailed
             }
@@ -231,11 +228,33 @@ class ShareSaveCoordinator(
             PlaylistRouteResult(playlistName = playlistName)
         } catch (error: ApiException) {
             if (error.statusCode == 409) {
-                PlaylistRouteResult(alreadySaved = true, playlistName = playlistName)
+                PlaylistRouteResult(playlistName = playlistName)
             } else {
                 throw error
             }
         }
+    }
+
+    private suspend fun resolveDestinationName(
+        current: AppSettings,
+        knownPlaylistName: String? = null,
+    ): String {
+        val playlistId = current.defaultSavePlaylistId ?: return "Smart Queue"
+        val fromRoute = knownPlaylistName?.trim().orEmpty()
+        if (fromRoute.isNotEmpty()) {
+            return fromRoute
+        }
+        val resolved = runCatching {
+            apiClient.getPlaylists(current.baseUrl, current.apiToken)
+                .firstOrNull { it.id == playlistId }
+                ?.name
+                ?.trim()
+                .orEmpty()
+        }.getOrDefault("")
+        if (resolved.isNotEmpty()) {
+            return resolved
+        }
+        return "Playlist $playlistId"
     }
 
     private fun buildRequestUrls(baseUrl: String, playlistId: Int?): List<String> {
@@ -367,7 +386,6 @@ class ShareSaveCoordinator(
 }
 
 private data class PlaylistRouteResult(
-    val alreadySaved: Boolean = false,
     val playlistName: String? = null,
 )
 
