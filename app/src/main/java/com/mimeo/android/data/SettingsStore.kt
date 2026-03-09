@@ -202,6 +202,12 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun saveAutoDownloadSavedArticles(autoDownloadSavedArticles: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[autoDownloadSavedArticlesKey] = autoDownloadSavedArticles
+        }
+    }
+
     suspend fun savePlayerControlsMode(playerControlsMode: PlayerControlsMode) {
         context.dataStore.edit { prefs ->
             prefs[playerControlsModeKey] = playerControlsMode.name

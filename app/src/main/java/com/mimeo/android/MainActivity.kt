@@ -249,6 +249,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _cachedItemIds = MutableStateFlow<Set<Int>>(emptySet())
     val cachedItemIds: StateFlow<Set<Int>> = _cachedItemIds.asStateFlow()
+    private val _pendingQueueFocusItemId = MutableStateFlow<Int?>(null)
+    val pendingQueueFocusItemId: StateFlow<Int?> = _pendingQueueFocusItemId.asStateFlow()
 
     private val _progressSyncBadgeState = MutableStateFlow(ProgressSyncBadgeState.SYNCED)
     val progressSyncBadgeState: StateFlow<ProgressSyncBadgeState> = _progressSyncBadgeState.asStateFlow()
@@ -296,6 +298,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ShareSaveRefreshBus.events.collect { event ->
                 refreshPlaylists()
                 if (settings.value.selectedPlaylistId == event.playlistId) {
+                    _pendingQueueFocusItemId.value = event.itemId
                     loadQueue()
                 }
             }
@@ -438,6 +441,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _settings.value = current.copy(continuousNowPlayingMarquee = enabled)
         viewModelScope.launch {
             settingsStore.saveContinuousNowPlayingMarquee(enabled)
+        }
+    }
+
+    fun saveAutoDownloadSavedArticles(enabled: Boolean) {
+        val current = settings.value
+        _settings.value = current.copy(autoDownloadSavedArticles = enabled)
+        viewModelScope.launch {
+            settingsStore.saveAutoDownloadSavedArticles(enabled)
+        }
+    }
+
+    fun consumePendingQueueFocusItemId(itemId: Int) {
+        if (_pendingQueueFocusItemId.value == itemId) {
+            _pendingQueueFocusItemId.value = null
         }
     }
 

@@ -293,7 +293,10 @@ fun SettingsScreen(
                     }
                     Switch(
                         checked = autoDownloadSavedArticles,
-                        onCheckedChange = { autoDownloadSavedArticles = it },
+                        onCheckedChange = {
+                            autoDownloadSavedArticles = it
+                            vm.saveAutoDownloadSavedArticles(it)
+                        },
                     )
                 }
             }

@@ -90,6 +90,7 @@ fun QueueScreen(
     val loading by vm.queueLoading.collectAsState()
     val offline by vm.queueOffline.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
+    val pendingShareFocusItemId by vm.pendingQueueFocusItemId.collectAsState()
     val lastQueueFetchDebug by vm.lastQueueFetchDebug.collectAsState()
     val actionScope = rememberCoroutineScope()
 
@@ -115,8 +116,8 @@ fun QueueScreen(
         vm.flushPendingProgress()
     }
 
-    LaunchedEffect(focusItemId) {
-        pendingFocusId = focusItemId ?: -1
+    LaunchedEffect(focusItemId, pendingShareFocusItemId) {
+        pendingFocusId = pendingShareFocusItemId ?: (focusItemId ?: -1)
     }
 
     val selectedPlaylistName = settings.selectedPlaylistId?.let { id ->
@@ -178,7 +179,9 @@ fun QueueScreen(
         if (pendingFocusId <= 0) return@LaunchedEffect
         val index = displayedItems.indexOfFirst { it.itemId == pendingFocusId }
         if (index >= 0) {
+            val focusedItemId = pendingFocusId
             listState.animateScrollToItem(index)
+            vm.consumePendingQueueFocusItemId(focusedItemId)
             pendingFocusId = -1
         }
     }

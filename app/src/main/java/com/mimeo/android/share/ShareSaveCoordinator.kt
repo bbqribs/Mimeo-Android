@@ -9,6 +9,7 @@ import com.mimeo.android.data.ApiException
 import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.repository.PlaybackRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import java.net.ConnectException
@@ -19,9 +20,12 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.net.ssl.SSLException
 
 private const val SHARE_CREATE_TIMEOUT_MS = 45_000L
+private const val AUTO_DOWNLOAD_MAX_ATTEMPTS = 4
+private const val AUTO_DOWNLOAD_RETRY_DELAY_MS = 1200L
 
 data class ShareRefreshEvent(
     val playlistId: Int?,
+    val itemId: Int? = null,
 )
 
 object ShareSaveRefreshBus {
@@ -150,7 +154,12 @@ class ShareSaveCoordinator(
                 current = current,
                 attemptId = attemptId,
             )
-            ShareSaveRefreshBus.events.tryEmit(ShareRefreshEvent(current.defaultSavePlaylistId))
+            ShareSaveRefreshBus.events.tryEmit(
+                ShareRefreshEvent(
+                    playlistId = current.defaultSavePlaylistId,
+                    itemId = article.id,
+                ),
+            )
             val result = if (routeResult.alreadySaved) {
                 ShareSaveResult.AlreadySaved
             } else {
@@ -283,24 +292,44 @@ class ShareSaveCoordinator(
         if (!current.autoDownloadSavedArticles) {
             return null
         }
-        return runCatching {
-            playbackRepository.getItemText(
-                baseUrl = current.baseUrl,
-                token = current.apiToken,
-                itemId = itemId,
-                expectedActiveVersionId = null,
-            )
-            true
-        }.getOrElse { error ->
-            val root = rootCause(error)
-            if (BuildConfig.DEBUG) {
-                Log.w(
-                    "MimeoShareSave",
-                    "attempt=$attemptId autoDownloadFailed itemId=$itemId exceptionClass=${root.javaClass.name} exceptionMessage=${root.message ?: "none"}",
+        var lastError: Throwable? = null
+        for (attempt in 1..AUTO_DOWNLOAD_MAX_ATTEMPTS) {
+            try {
+                playbackRepository.getItemText(
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
+                    itemId = itemId,
+                    expectedActiveVersionId = null,
                 )
+                return true
+            } catch (error: Exception) {
+                lastError = error
+                if (!shouldRetryAutoDownload(error) || attempt == AUTO_DOWNLOAD_MAX_ATTEMPTS) {
+                    break
+                }
+                delay(AUTO_DOWNLOAD_RETRY_DELAY_MS)
             }
-            false
         }
+
+        val root = lastError?.let { rootCause(it) }
+        if (BuildConfig.DEBUG) {
+            Log.w(
+                "MimeoShareSave",
+                "attempt=$attemptId autoDownloadFailed itemId=$itemId exceptionClass=${root?.javaClass?.name ?: "none"} exceptionMessage=${root?.message ?: "none"}",
+            )
+        }
+        return false
+    }
+
+    private fun shouldRetryAutoDownload(error: Exception): Boolean {
+        val root = rootCause(error)
+        if (root is SocketTimeoutException || root is ConnectException || root is UnknownHostException) {
+            return true
+        }
+        if (error is ApiException) {
+            return error.statusCode in setOf(404, 409, 425, 429, 500, 502, 503, 504)
+        }
+        return false
     }
 
     private fun recordSnapshot(
