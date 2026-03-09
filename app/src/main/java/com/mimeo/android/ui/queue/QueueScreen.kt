@@ -68,6 +68,10 @@ import kotlinx.coroutines.launch
 
 private const val DONE_PERCENT_THRESHOLD = 98
 private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
+internal enum class ManualSaveMode {
+    URL,
+    TEXT,
+}
 
 private enum class QueueFilterChip(val label: String, val enabled: Boolean = true) {
     ALL("All"),
@@ -118,9 +122,13 @@ fun QueueScreen(
     var showQueueFetchDebug by rememberSaveable { mutableStateOf(false) }
     var hasRefreshProblem by rememberSaveable { mutableStateOf(false) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
-    var showManualUrlDialog by remember { mutableStateOf(false) }
+    var showSaveEntryDialog by remember { mutableStateOf(false) }
+    var manualSaveMode by rememberSaveable { mutableStateOf(ManualSaveMode.URL) }
     var manualUrlInput by rememberSaveable { mutableStateOf("") }
+    var manualTitleInput by rememberSaveable { mutableStateOf("") }
+    var manualBodyInput by rememberSaveable { mutableStateOf("") }
     var manualUrlError by remember { mutableStateOf<String?>(null) }
+    var manualBodyError by remember { mutableStateOf<String?>(null) }
     var manualSaveInProgress by remember { mutableStateOf(false) }
     val manualUrlFocusRequester = remember { FocusRequester() }
 
@@ -270,9 +278,13 @@ fun QueueScreen(
                         IconButton(
                             enabled = !manualSaveInProgress,
                             onClick = {
+                                manualSaveMode = ManualSaveMode.URL
                                 manualUrlInput = ""
+                                manualTitleInput = ""
+                                manualBodyInput = ""
                                 manualUrlError = null
-                                showManualUrlDialog = true
+                                manualBodyError = null
+                                showSaveEntryDialog = true
                             },
                         ) {
                             Icon(
@@ -530,27 +542,57 @@ fun QueueScreen(
         )
     }
 
-    if (showManualUrlDialog) {
-        val canSubmitManualUrl = manualUrlInput.isNotBlank() && !manualSaveInProgress
-        suspend fun submitManualUrl() {
+    if (showSaveEntryDialog) {
+        val canSubmit = canSubmitManualSave(
+            mode = manualSaveMode,
+            urlInput = manualUrlInput,
+            bodyInput = manualBodyInput,
+            inProgress = manualSaveInProgress,
+        )
+        suspend fun submitManualEntry() {
             val extractedUrl = resolveManualSaveUrl(manualUrlInput)
             if (extractedUrl == null) {
                 manualUrlError = "Enter a valid http(s) URL"
                 return
             }
-            manualSaveInProgress = true
             manualUrlError = null
-            val result = vm.saveUrlFromUpNext(extractedUrl)
+
+            val normalizedBody = if (manualSaveMode == ManualSaveMode.TEXT) {
+                normalizeManualTextBody(manualBodyInput).also {
+                    if (it == null) {
+                        manualBodyError = "Paste text is required"
+                    }
+                }
+            } else {
+                null
+            }
+            if (manualSaveMode == ManualSaveMode.TEXT && normalizedBody == null) {
+                return
+            }
+            manualBodyError = null
+
+            manualSaveInProgress = true
+            val result = if (manualSaveMode == ManualSaveMode.TEXT) {
+                vm.saveManualTextFromUpNext(
+                    urlInput = extractedUrl,
+                    titleInput = manualTitleInput.trim().takeIf { it.isNotEmpty() },
+                    bodyInput = normalizedBody.orEmpty(),
+                )
+            } else {
+                vm.saveUrlFromUpNext(extractedUrl)
+            }
             manualSaveInProgress = false
-            showManualUrlDialog = false
+            showSaveEntryDialog = false
             manualUrlInput = ""
+            manualTitleInput = ""
+            manualBodyInput = ""
             val actionLabel = if (result.opensSettings) "Open Settings" else null
             val actionKey = if (result.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
             onShowSnackbar(result.notificationText, actionLabel, actionKey)
         }
 
-        LaunchedEffect(showManualUrlDialog) {
-            if (showManualUrlDialog) {
+        LaunchedEffect(showSaveEntryDialog) {
+            if (showSaveEntryDialog) {
                 manualUrlFocusRequester.requestFocus()
             }
         }
@@ -558,13 +600,29 @@ fun QueueScreen(
         AlertDialog(
             onDismissRequest = {
                 if (!manualSaveInProgress) {
-                    showManualUrlDialog = false
+                    showSaveEntryDialog = false
                     manualUrlError = null
+                    manualBodyError = null
                 }
             },
-            title = { Text("Save URL") },
+            title = { Text("Save Item") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = manualSaveMode == ManualSaveMode.URL,
+                            onClick = {
+                                manualSaveMode = ManualSaveMode.URL
+                                manualBodyError = null
+                            },
+                            label = { Text("Save URL") },
+                        )
+                        FilterChip(
+                            selected = manualSaveMode == ManualSaveMode.TEXT,
+                            onClick = { manualSaveMode = ManualSaveMode.TEXT },
+                            label = { Text("Paste Text") },
+                        )
+                    }
                     OutlinedTextField(
                         value = manualUrlInput,
                         onValueChange = {
@@ -583,23 +641,49 @@ fun QueueScreen(
                         },
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Uri,
-                            imeAction = ImeAction.Done,
+                            imeAction = if (manualSaveMode == ManualSaveMode.URL) ImeAction.Done else ImeAction.Next,
                         ),
                         keyboardActions = KeyboardActions(
                             onDone = {
-                                if (canSubmitManualUrl) {
-                                    actionScope.launch { submitManualUrl() }
+                                if (canSubmit) {
+                                    actionScope.launch { submitManualEntry() }
                                 }
                             },
                         ),
                     )
+                    if (manualSaveMode == ManualSaveMode.TEXT) {
+                        OutlinedTextField(
+                            value = manualTitleInput,
+                            onValueChange = { manualTitleInput = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text("Title (optional)") },
+                        )
+                        OutlinedTextField(
+                            value = manualBodyInput,
+                            onValueChange = {
+                                manualBodyInput = it
+                                manualBodyError = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 6,
+                            maxLines = 10,
+                            label = { Text("Body text") },
+                            placeholder = { Text("Paste article text here") },
+                            isError = manualBodyError != null,
+                            supportingText = {
+                                manualBodyError?.let { Text(it) }
+                            },
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+                        )
+                    }
                 }
             },
             confirmButton = {
                 TextButton(
-                    enabled = canSubmitManualUrl,
+                    enabled = canSubmit,
                     onClick = {
-                        actionScope.launch { submitManualUrl() }
+                        actionScope.launch { submitManualEntry() }
                     },
                 ) {
                     Text(if (manualSaveInProgress) "Saving..." else "Save")
@@ -609,8 +693,9 @@ fun QueueScreen(
                 TextButton(
                     enabled = !manualSaveInProgress,
                     onClick = {
-                        showManualUrlDialog = false
+                        showSaveEntryDialog = false
                         manualUrlError = null
+                        manualBodyError = null
                     },
                 ) {
                     Text("Cancel")
@@ -627,6 +712,21 @@ private fun normalizeSearchText(value: String): String {
 
 internal fun resolveManualSaveUrl(input: String): String? {
     return extractFirstHttpUrl(input.trim())
+}
+
+internal fun normalizeManualTextBody(input: String): String? {
+    return input.trim().takeIf { it.isNotEmpty() }
+}
+
+internal fun canSubmitManualSave(
+    mode: ManualSaveMode,
+    urlInput: String,
+    bodyInput: String,
+    inProgress: Boolean,
+): Boolean {
+    if (inProgress) return false
+    if (urlInput.isBlank()) return false
+    return mode != ManualSaveMode.TEXT || bodyInput.isNotBlank()
 }
 
 @Composable

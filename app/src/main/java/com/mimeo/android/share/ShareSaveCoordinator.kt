@@ -35,12 +35,18 @@ object ShareSaveRefreshBus {
 sealed interface ShareSaveResult {
     val notificationText: String
     val opensSettings: Boolean
+    val notificationTitle: String
+        get() = "Mimeo"
 
     data class Saved(
         val destinationName: String,
+        val itemTitle: String? = null,
     ) : ShareSaveResult {
         override val notificationText: String = "Saved to $destinationName ✅"
         override val opensSettings: Boolean = false
+        override val notificationTitle: String = itemTitle?.trim().orEmpty().takeIf { it.isNotEmpty() }?.let {
+            "Saved: $it"
+        } ?: "Mimeo"
     }
 
     data object MissingToken : ShareSaveResult {
@@ -138,27 +144,11 @@ class ShareSaveCoordinator(
                 title = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
                 timeoutMs = SHARE_CREATE_TIMEOUT_MS,
             )
-            val routeResult = routeSavedItem(
+            val result = completeSavedItem(
                 itemId = article.id,
-                playlistId = current.defaultSavePlaylistId,
-                current = current,
-            )
-            val autoDownloadSucceeded = autoDownloadIfEnabled(
-                itemId = article.id,
+                itemTitle = article.title,
                 current = current,
                 attemptId = attemptId,
-            )
-            ShareSaveRefreshBus.events.tryEmit(
-                ShareRefreshEvent(
-                    playlistId = current.defaultSavePlaylistId,
-                    itemId = article.id,
-                ),
-            )
-            val result = ShareSaveResult.Saved(
-                destinationName = resolveDestinationName(
-                    current = current,
-                    knownPlaylistName = routeResult.playlistName,
-                ),
             )
             recordSnapshot(
                 attemptId = attemptId,
@@ -168,7 +158,6 @@ class ShareSaveCoordinator(
                 requestUrls = requestUrls,
                 result = result,
                 autoDownloadEnabled = current.autoDownloadSavedArticles,
-                autoDownloadSucceeded = autoDownloadSucceeded,
             )
             result
         } catch (error: ApiException) {
@@ -178,6 +167,114 @@ class ShareSaveCoordinator(
                 error.statusCode == 409 -> ShareSaveResult.Saved(
                     destinationName = resolveDestinationName(current = current),
                 )
+                error.statusCode in 500..599 -> ShareSaveResult.ServerError
+                else -> ShareSaveResult.SaveFailed
+            }
+            recordSnapshot(
+                attemptId = attemptId,
+                baseUrl = current.baseUrl,
+                tokenPresent = true,
+                destination = destination,
+                requestUrls = requestUrls,
+                result = result,
+                error = error,
+                phase = "api_exception",
+            )
+            result
+        } catch (error: Exception) {
+            val result = when {
+                isTimeoutError(error) -> ShareSaveResult.TimedOut
+                isNetworkError(error) -> ShareSaveResult.NetworkError
+                else -> ShareSaveResult.SaveFailed
+            }
+            recordSnapshot(
+                attemptId = attemptId,
+                baseUrl = current.baseUrl,
+                tokenPresent = true,
+                destination = destination,
+                requestUrls = requestUrls,
+                result = result,
+                error = error,
+                phase = "exception",
+            )
+            result
+        }
+    }
+
+    suspend fun saveManualText(urlInput: String, titleInput: String?, bodyInput: String): ShareSaveResult {
+        val attemptId = ShareSaveDebugState.nextAttemptId()
+        val normalizedUrl = extractFirstHttpUrl(urlInput)
+        if (normalizedUrl == null) {
+            recordSnapshot(
+                attemptId = attemptId,
+                baseUrl = null,
+                tokenPresent = false,
+                destination = "unknown",
+                requestUrls = emptyList(),
+                result = ShareSaveResult.NoValidUrl,
+            )
+            return ShareSaveResult.NoValidUrl
+        }
+
+        val normalizedBody = bodyInput.trim()
+        if (normalizedBody.isBlank()) {
+            return ShareSaveResult.SaveFailed
+        }
+
+        val current = settingsStore.settingsFlow.first()
+        val destination = destinationLabel(current.defaultSavePlaylistId)
+        val requestUrls = buildRequestUrls(current.baseUrl, current.defaultSavePlaylistId) +
+            resolveApiUrl(current.baseUrl, "/items/manual-text")
+        recordSnapshot(
+            attemptId = attemptId,
+            baseUrl = current.baseUrl,
+            tokenPresent = current.apiToken.isNotBlank(),
+            destination = destination,
+            requestUrls = requestUrls,
+            result = ShareSaveResult.SaveFailed,
+            phase = "started",
+        )
+
+        if (current.apiToken.isBlank()) {
+            recordSnapshot(
+                attemptId = attemptId,
+                baseUrl = current.baseUrl,
+                tokenPresent = false,
+                destination = destination,
+                requestUrls = requestUrls,
+                result = ShareSaveResult.MissingToken,
+            )
+            return ShareSaveResult.MissingToken
+        }
+
+        return try {
+            val article = apiClient.createManualTextItem(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                url = normalizedUrl,
+                text = normalizedBody,
+                title = titleInput?.trim()?.takeIf { it.isNotEmpty() },
+            )
+            val result = completeSavedItem(
+                itemId = article.id,
+                itemTitle = article.title,
+                current = current,
+                attemptId = attemptId,
+            )
+            recordSnapshot(
+                attemptId = attemptId,
+                baseUrl = current.baseUrl,
+                tokenPresent = true,
+                destination = destination,
+                requestUrls = requestUrls,
+                result = result,
+                autoDownloadEnabled = current.autoDownloadSavedArticles,
+            )
+            result
+        } catch (error: ApiException) {
+            val result = when {
+                error.statusCode == 401 -> ShareSaveResult.Unauthorized
+                error.statusCode == 403 -> ShareSaveResult.Unauthorized
                 error.statusCode in 500..599 -> ShareSaveResult.ServerError
                 else -> ShareSaveResult.SaveFailed
             }
@@ -255,6 +352,37 @@ class ShareSaveCoordinator(
             return resolved
         }
         return "Playlist $playlistId"
+    }
+
+    private suspend fun completeSavedItem(
+        itemId: Int,
+        itemTitle: String?,
+        current: AppSettings,
+        attemptId: Int,
+    ): ShareSaveResult.Saved {
+        val routeResult = routeSavedItem(
+            itemId = itemId,
+            playlistId = current.defaultSavePlaylistId,
+            current = current,
+        )
+        autoDownloadIfEnabled(
+            itemId = itemId,
+            current = current,
+            attemptId = attemptId,
+        )
+        ShareSaveRefreshBus.events.tryEmit(
+            ShareRefreshEvent(
+                playlistId = current.defaultSavePlaylistId,
+                itemId = itemId,
+            ),
+        )
+        return ShareSaveResult.Saved(
+            destinationName = resolveDestinationName(
+                current = current,
+                knownPlaylistName = routeResult.playlistName,
+            ),
+            itemTitle = itemTitle,
+        )
     }
 
     private fun buildRequestUrls(baseUrl: String, playlistId: Int?): List<String> {

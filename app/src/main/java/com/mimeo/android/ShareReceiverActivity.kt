@@ -88,7 +88,7 @@ private class ShareResultNotifications(
         ensureChannel()
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.msr_check_circle_24)
-            .setContentTitle("Mimeo")
+            .setContentTitle(result.notificationTitle)
             .setContentText(result.notificationText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(result.notificationText))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
