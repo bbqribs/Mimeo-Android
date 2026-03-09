@@ -262,6 +262,11 @@ class PlaybackRepository(
         return database.cachedItemDao().findCachedIds(itemIds.distinct()).toSet()
     }
 
+    suspend fun getCachedActiveContentVersionIds(versionIds: List<Int>): Set<Int> {
+        if (versionIds.isEmpty()) return emptySet()
+        return database.cachedItemDao().findCachedActiveContentVersionIds(versionIds.distinct()).toSet()
+    }
+
     suspend fun isItemCached(itemId: Int): Boolean {
         return database.cachedItemDao().findByItemId(itemId) != null
     }

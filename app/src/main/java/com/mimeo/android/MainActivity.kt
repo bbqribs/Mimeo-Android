@@ -95,8 +95,11 @@ import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.repository.ItemTextResult
 import com.mimeo.android.repository.FoldersRepository
 import com.mimeo.android.repository.NowPlayingSession
+import com.mimeo.android.repository.NowPlayingSessionItem
+import com.mimeo.android.repository.OfflineReadyCandidate
 import com.mimeo.android.repository.PlaylistMembershipToggleResult
 import com.mimeo.android.repository.PlaybackRepository
+import com.mimeo.android.repository.resolveOfflineReadyItemIds
 import com.mimeo.android.share.ShareSaveRefreshBus
 import com.mimeo.android.ui.collections.CollectionsScreen
 import com.mimeo.android.ui.collections.FolderDetailScreen
@@ -313,7 +316,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
                     )
                 }
-                _cachedItemIds.value = repository.getCachedItemIds(session.items.map { it.itemId })
+                _cachedItemIds.value = resolveOfflineReadyIdsForSession(session.items)
             }
         }
         viewModelScope.launch {
@@ -542,7 +545,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     "viewModelApply playlistId=${appliedSnapshot.selectedPlaylistId} uiCount=${appliedSnapshot.appliedItemCount} uiContains409=${appliedSnapshot.appliedContains409} requestUrl=${appliedSnapshot.requestUrl}",
                 )
             }
-            _cachedItemIds.value = repository.getCachedItemIds(queue.items.map { it.itemId })
+            _cachedItemIds.value = resolveOfflineReadyIds(queue.items)
             _queueOffline.value = false
             _statusMessage.value = "Queue loaded (${queue.count})"
             flushPendingProgress()
@@ -897,8 +900,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _queueOffline.value = true
             } else {
                 _queueOffline.value = false
-                _cachedItemIds.update { previous -> previous + itemId }
             }
+            val relatedIds = if (loaded.payload.activeContentVersionId != null) {
+                queueItems.value
+                    .asSequence()
+                    .filter { it.activeContentVersionId == loaded.payload.activeContentVersionId }
+                    .map { it.itemId }
+                    .toSet()
+            } else {
+                emptySet()
+            }
+            _cachedItemIds.update { previous -> previous + itemId + relatedIds }
             updateSyncBadgeState()
             Result.success(loaded)
         } catch (error: CancellationException) {
@@ -937,7 +949,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 lastFetchAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()),
             )
             _lastQueueFetchDebug.value = appliedSnapshot
-            _cachedItemIds.value = repository.getCachedItemIds(queue.items.map { it.itemId })
+            _cachedItemIds.value = resolveOfflineReadyIds(queue.items)
             repository.reconcileSessionWithQueue(queue.items)?.let { updated ->
                 _nowPlayingSession.value = updated
             }
@@ -1225,6 +1237,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val fromSession = nowPlayingSession.value?.items?.firstOrNull { it.itemId == itemId }?.activeContentVersionId
         if (fromSession != null) return fromSession
         return queueItems.value.firstOrNull { it.itemId == itemId }?.activeContentVersionId
+    }
+
+    private suspend fun resolveOfflineReadyIds(items: List<PlaybackQueueItem>): Set<Int> {
+        if (items.isEmpty()) return emptySet()
+        val candidates = items.map { item ->
+            OfflineReadyCandidate(
+                itemId = item.itemId,
+                activeContentVersionId = item.activeContentVersionId,
+            )
+        }
+        val cachedByItemId = repository.getCachedItemIds(candidates.map { it.itemId })
+        val cachedByVersion = repository.getCachedActiveContentVersionIds(
+            candidates.mapNotNull { it.activeContentVersionId },
+        )
+        return resolveOfflineReadyItemIds(candidates, cachedByItemId, cachedByVersion)
+    }
+
+    private suspend fun resolveOfflineReadyIdsForSession(sessionItems: List<NowPlayingSessionItem>): Set<Int> {
+        if (sessionItems.isEmpty()) return emptySet()
+        val candidates = sessionItems.map { item ->
+            OfflineReadyCandidate(
+                itemId = item.itemId,
+                activeContentVersionId = item.activeContentVersionId,
+            )
+        }
+        val cachedByItemId = repository.getCachedItemIds(candidates.map { it.itemId })
+        val cachedByVersion = repository.getCachedActiveContentVersionIds(
+            candidates.mapNotNull { it.activeContentVersionId },
+        )
+        return resolveOfflineReadyItemIds(candidates, cachedByItemId, cachedByVersion)
     }
 
     private fun updateSyncBadgeState(pendingCount: Int = _pendingProgressCount.value) {

@@ -16,4 +16,10 @@ interface CachedItemDao {
 
     @Query("SELECT itemId FROM cached_items WHERE itemId IN (:itemIds)")
     suspend fun findCachedIds(itemIds: List<Int>): List<Int>
+
+    @Query(
+        "SELECT activeContentVersionId FROM cached_items " +
+            "WHERE activeContentVersionId IS NOT NULL AND activeContentVersionId IN (:versionIds)"
+    )
+    suspend fun findCachedActiveContentVersionIds(versionIds: List<Int>): List<Int>
 }
