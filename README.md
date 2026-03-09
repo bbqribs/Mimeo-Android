@@ -48,6 +48,19 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
   - Queue/Player/Playlists/Settings use denser layouts and compact action rows.
   - Queue network issues are shown as a collapsible status banner (not a full-screen error block).
 
+## Share-sheet save behavior
+- Share-save runs through an off-screen receiver (`ACTION_SEND`) and reports results via notifications.
+- Save destination follows Settings `Default playlist`:
+  - `null` -> Smart queue
+  - playlist id -> that named playlist
+- Share-save emits queue refresh events so the currently open Up Next context updates immediately and can focus the newly saved item.
+- Settings includes:
+  - `Keep share result notifications`
+  - `Auto-download saved articles for offline reading`
+- Auto-download is decoupled from save success:
+  - when enabled, Android attempts to fetch/cache the saved item's text (with bounded retries for transient not-ready/network states)
+  - if caching fails, save still succeeds
+
 ## Open in Android Studio
 1. Open this repo folder in Android Studio.
 2. Let Gradle sync.
@@ -92,7 +105,7 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 9. Offline smoke:
    - disable network, open a previously cached item, confirm "Using cached text".
    - interact with playback and confirm pending sync count increases.
-   - re-enable network; pending sync should drain automatically (tap **Sync** only as optional manual trigger).
+   - re-enable network; pending sync should drain automatically.
 
 ## In-app connectivity diagnostics
 - Open **Settings** -> **Diagnostics** -> **Run diagnostics**.

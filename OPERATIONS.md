@@ -13,9 +13,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\ensure-mimeo.ps1
 3. In Settings:
    - Base URL: `http://10.0.2.2:8000` (emulator)
    - API token: value from `Mimeo/backend/.env` (`API_TOKEN`)
+   - Optional: set default save playlist + `Auto-download saved articles for offline reading`
 4. Tap **Test connection** (expects git SHA).
 5. Open Queue, select item, Play, Done.
-6. Queue screen shows `Pending sync: X`; tap **Sync** to flush queued progress updates.
+6. Queue screen shows pending sync state; queued progress flushes automatically when connectivity returns.
 
 ## Troubleshooting
 - `Unauthorized-check token`: token invalid/expired.
@@ -23,3 +24,4 @@ powershell -ExecutionPolicy Bypass -File .\scripts\ensure-mimeo.ps1
 - Network failure on emulator: verify base URL is `10.0.2.2`, not `127.0.0.1`.
 - Progress sync is best-effort; failures are queued locally and retried when network returns.
 - Player may show `Using cached text` if `/items/{id}/text` is unavailable and cached content is valid.
+- Share-save runs off-screen and reports status through Android notifications; if auto-download is ON, save success and cache fetch success are intentionally decoupled.
