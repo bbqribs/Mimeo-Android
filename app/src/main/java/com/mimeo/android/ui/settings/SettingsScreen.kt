@@ -76,6 +76,9 @@ fun SettingsScreen(
     var keepShareResultNotifications by remember(settings.keepShareResultNotifications) {
         mutableStateOf(settings.keepShareResultNotifications)
     }
+    var autoDownloadSavedArticles by remember(settings.autoDownloadSavedArticles) {
+        mutableStateOf(settings.autoDownloadSavedArticles)
+    }
     var readingFontSizeSp by remember(settings.readingFontSizeSp) {
         mutableIntStateOf(settings.readingFontSizeSp)
     }
@@ -105,6 +108,7 @@ fun SettingsScreen(
             continuousNowPlayingMarquee = continuousNowPlayingMarquee,
             forceSentenceHighlightFallback = forceSentenceHighlightFallback,
             keepShareResultNotifications = keepShareResultNotifications,
+            autoDownloadSavedArticles = autoDownloadSavedArticles,
         )
     }
 
@@ -269,6 +273,30 @@ fun SettingsScreen(
                     Switch(
                         checked = keepShareResultNotifications,
                         onCheckedChange = { keepShareResultNotifications = it },
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text("Auto-download saved articles for offline reading")
+                        Text(
+                            text = "When on, successful share-saves also fetch and cache article text for offline use.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = autoDownloadSavedArticles,
+                        onCheckedChange = {
+                            autoDownloadSavedArticles = it
+                            vm.saveAutoDownloadSavedArticles(it)
+                        },
                     )
                 }
             }

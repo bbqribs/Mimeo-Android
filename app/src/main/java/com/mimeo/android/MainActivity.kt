@@ -249,6 +249,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _cachedItemIds = MutableStateFlow<Set<Int>>(emptySet())
     val cachedItemIds: StateFlow<Set<Int>> = _cachedItemIds.asStateFlow()
+    private val _pendingQueueFocusItemId = MutableStateFlow<Int?>(null)
+    val pendingQueueFocusItemId: StateFlow<Int?> = _pendingQueueFocusItemId.asStateFlow()
 
     private val _progressSyncBadgeState = MutableStateFlow(ProgressSyncBadgeState.SYNCED)
     val progressSyncBadgeState: StateFlow<ProgressSyncBadgeState> = _progressSyncBadgeState.asStateFlow()
@@ -296,6 +298,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ShareSaveRefreshBus.events.collect { event ->
                 refreshPlaylists()
                 if (settings.value.selectedPlaylistId == event.playlistId) {
+                    _pendingQueueFocusItemId.value = event.itemId
                     loadQueue()
                 }
             }
@@ -333,6 +336,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         continuousNowPlayingMarquee: Boolean,
         forceSentenceHighlightFallback: Boolean,
         keepShareResultNotifications: Boolean,
+        autoDownloadSavedArticles: Boolean,
     ) {
         viewModelScope.launch {
             settingsStore.save(
@@ -344,6 +348,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 continuousNowPlayingMarquee = continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = forceSentenceHighlightFallback,
                 keepShareResultNotifications = keepShareResultNotifications,
+                autoDownloadSavedArticles = autoDownloadSavedArticles,
                 playbackSpeed = settings.value.playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
                 defaultSavePlaylistId = settings.value.defaultSavePlaylistId,
@@ -378,6 +383,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
+                autoDownloadSavedArticles = settings.value.autoDownloadSavedArticles,
                 playbackSpeed = settings.value.playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
                 defaultSavePlaylistId = settings.value.defaultSavePlaylistId,
@@ -405,6 +411,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
+                autoDownloadSavedArticles = settings.value.autoDownloadSavedArticles,
                 playbackSpeed = playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
                 defaultSavePlaylistId = settings.value.defaultSavePlaylistId,
@@ -434,6 +441,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _settings.value = current.copy(continuousNowPlayingMarquee = enabled)
         viewModelScope.launch {
             settingsStore.saveContinuousNowPlayingMarquee(enabled)
+        }
+    }
+
+    fun saveAutoDownloadSavedArticles(enabled: Boolean) {
+        val current = settings.value
+        _settings.value = current.copy(autoDownloadSavedArticles = enabled)
+        viewModelScope.launch {
+            settingsStore.saveAutoDownloadSavedArticles(enabled)
+        }
+    }
+
+    fun consumePendingQueueFocusItemId(itemId: Int) {
+        if (_pendingQueueFocusItemId.value == itemId) {
+            _pendingQueueFocusItemId.value = null
         }
     }
 
