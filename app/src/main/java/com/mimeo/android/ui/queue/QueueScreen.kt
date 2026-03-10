@@ -709,6 +709,13 @@ fun QueueScreen(
                             },
                         ),
                     )
+                    manualSubmitError?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                     if (manualSaveMode == ManualSaveMode.TEXT) {
                         OutlinedTextField(
                             value = manualTitleInput,
@@ -744,13 +751,6 @@ fun QueueScreen(
                                     }
                                 },
                             ),
-                        )
-                    }
-                    manualSubmitError?.let { message ->
-                        Text(
-                            text = message,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
                         )
                     }
                 }
