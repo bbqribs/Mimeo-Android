@@ -35,6 +35,7 @@ fun RefreshActionButton(
     contentDescription: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    pullProgress: Float = 0f,
 ) {
     val spinTransition = rememberInfiniteTransition(label = "refreshSpin")
     val spinDegrees by spinTransition.animateFloat(
@@ -88,7 +89,11 @@ fun RefreshActionButton(
             modifier = Modifier
                 .size(24.dp)
                 .graphicsLayer(
-                    rotationZ = if (state == RefreshActionVisualState.Refreshing) spinDegrees else 0f,
+                    rotationZ = when (state) {
+                        RefreshActionVisualState.Refreshing -> spinDegrees
+                        RefreshActionVisualState.Idle -> 360f * pullProgress.coerceIn(0f, 1f)
+                        else -> 0f
+                    },
                     scaleX = scale,
                     scaleY = scale,
                 ),

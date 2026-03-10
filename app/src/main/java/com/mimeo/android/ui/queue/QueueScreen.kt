@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,7 +24,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,12 +50,18 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
@@ -119,8 +126,12 @@ fun QueueScreen(
     val pendingShareFocusItemId by vm.pendingQueueFocusItemId.collectAsState()
     val lastQueueFetchDebug by vm.lastQueueFetchDebug.collectAsState()
     val actionScope = rememberCoroutineScope()
+    val density = LocalDensity.current
 
     val listState = rememberLazyListState()
+    val pullRefreshMaxPx = with(density) { 96.dp.toPx() }
+    val pullRefreshThresholdPx = pullRefreshMaxPx
+    var pullRefreshDistancePx by remember { mutableFloatStateOf(0f) }
     var pendingFocusId by remember { mutableIntStateOf(-1) }
     var playlistMenuExpanded by remember { mutableStateOf(false) }
     var rowMenuItemId by remember { mutableIntStateOf(-1) }
@@ -200,6 +211,7 @@ fun QueueScreen(
         QueueSortOption.PROGRESS_LOW -> filteredItems.sortedBy { it.furthestPercent }
         QueueSortOption.TITLE_AZ -> filteredItems.sortedBy { (it.title ?: it.url).lowercase() }
     }
+    val pullRefreshProgress = (pullRefreshDistancePx / pullRefreshThresholdPx).coerceIn(0f, 1f)
     val emptyStateMessage = when {
         loading -> null
         items.isEmpty() && settings.selectedPlaylistId != null -> "No items yet in \"$selectedPlaylistName\"."
@@ -210,6 +222,56 @@ fun QueueScreen(
             "No items match the ${selectedFilter.label.lowercase()} filter."
         displayedItems.isEmpty() -> "No items match the current search/filter."
         else -> null
+    }
+    suspend fun refreshQueueContent() {
+        if (refreshActionState == RefreshActionVisualState.Refreshing) return
+        refreshActionState = RefreshActionVisualState.Refreshing
+        val result = vm.loadQueueOnce()
+        hasRefreshProblem = result.isFailure
+        refreshActionState = if (result.isSuccess) {
+            RefreshActionVisualState.Success
+        } else {
+            RefreshActionVisualState.Failure
+        }
+        delay(700)
+        if (
+            refreshActionState == RefreshActionVisualState.Success ||
+            refreshActionState == RefreshActionVisualState.Failure
+        ) {
+            refreshActionState = RefreshActionVisualState.Idle
+        }
+    }
+    val pullToRefreshConnection = remember(
+        listState,
+        refreshActionState,
+        pullRefreshMaxPx,
+        pullRefreshThresholdPx,
+    ) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source != NestedScrollSource.Drag) return Offset.Zero
+                if (refreshActionState == RefreshActionVisualState.Refreshing) return Offset.Zero
+                val isAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+                if (!isAtTop) return Offset.Zero
+
+                val nextDistance = (pullRefreshDistancePx + available.y).coerceIn(0f, pullRefreshMaxPx)
+                val consumedY = nextDistance - pullRefreshDistancePx
+                if (consumedY == 0f) return Offset.Zero
+                pullRefreshDistancePx = nextDistance
+                return Offset(0f, consumedY)
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (
+                    refreshActionState != RefreshActionVisualState.Refreshing &&
+                    pullRefreshDistancePx >= pullRefreshThresholdPx
+                ) {
+                    actionScope.launch { refreshQueueContent() }
+                }
+                pullRefreshDistancePx = 0f
+                return Velocity.Zero
+            }
+        }
     }
 
     LaunchedEffect(displayedItems, pendingFocusId) {
@@ -269,26 +331,10 @@ fun QueueScreen(
                             state = refreshActionState,
                             showConnectivityIssue = offline || hasRefreshProblem,
                             onClick = {
-                                if (refreshActionState == RefreshActionVisualState.Refreshing) return@RefreshActionButton
-                                actionScope.launch {
-                                    refreshActionState = RefreshActionVisualState.Refreshing
-                                    val result = vm.loadQueueOnce()
-                                    hasRefreshProblem = result.isFailure
-                                    refreshActionState = if (result.isSuccess) {
-                                        RefreshActionVisualState.Success
-                                    } else {
-                                        RefreshActionVisualState.Failure
-                                    }
-                                    delay(700)
-                                    if (
-                                        refreshActionState == RefreshActionVisualState.Success ||
-                                        refreshActionState == RefreshActionVisualState.Failure
-                                    ) {
-                                        refreshActionState = RefreshActionVisualState.Idle
-                                    }
-                                }
+                                actionScope.launch { refreshQueueContent() }
                             },
                             contentDescription = "Refresh queue and sync progress",
+                            pullProgress = pullRefreshProgress,
                         )
                         IconButton(
                             enabled = !manualSaveInProgress,
@@ -474,56 +520,67 @@ fun QueueScreen(
             }
         }
 
-        if (loading) {
-            CircularProgressIndicator()
-        }
-        emptyStateMessage?.let { message ->
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                    text = message,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-        }
-
-        LazyColumn(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f, fill = true),
-            state = listState,
+                .fillMaxSize()
+                .weight(1f, fill = true)
+                .nestedScroll(pullToRefreshConnection),
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
-            itemsIndexed(
-                items = displayedItems,
-                key = { _, item -> item.itemId },
-            ) { index, item ->
-                QueueItemCard(
-                    item = item,
-                    cached = cachedItemIds.contains(item.itemId),
-                    onOpenPlayer = {
-                        vm.startNowPlayingSession(item.itemId)
-                        onOpenPlayer(item.itemId)
-                    },
-                    onOpenPlaylistPicker = {
-                        vm.refreshPlaylists()
-                        playlistPickerItem = item
-                    },
-                    isMenuExpanded = rowMenuItemId == item.itemId,
-                    onDismissMenu = { rowMenuItemId = -1 },
-                    onExpandMenu = { rowMenuItemId = item.itemId },
+            if (pullRefreshDistancePx > 0f) {
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(with(density) { pullRefreshDistancePx.toDp() }),
                 )
-                if (index < displayedItems.lastIndex) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center,
-                    ) {
+            }
+            emptyStateMessage?.let { message ->
+                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        text = message,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = true),
+                state = listState,
+                verticalArrangement = Arrangement.spacedBy(0.dp),
+            ) {
+                itemsIndexed(
+                    items = displayedItems,
+                    key = { _, item -> item.itemId },
+                ) { index, item ->
+                    QueueItemCard(
+                        item = item,
+                        cached = cachedItemIds.contains(item.itemId),
+                        onOpenPlayer = {
+                            vm.startNowPlayingSession(item.itemId)
+                            onOpenPlayer(item.itemId)
+                        },
+                        onOpenPlaylistPicker = {
+                            vm.refreshPlaylists()
+                            playlistPickerItem = item
+                        },
+                        isMenuExpanded = rowMenuItemId == item.itemId,
+                        onDismissMenu = { rowMenuItemId = -1 },
+                        onExpandMenu = { rowMenuItemId = item.itemId },
+                    )
+                    if (index < displayedItems.lastIndex) {
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f)),
-                        )
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f)),
+                            )
+                        }
                     }
                 }
             }
