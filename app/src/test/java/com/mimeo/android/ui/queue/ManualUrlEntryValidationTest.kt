@@ -60,4 +60,28 @@ class ManualUrlEntryValidationTest {
         assertEquals("https://example.com/source", fromUrl)
         assertTrue(fallback.startsWith("https://manual.mimeo.local/"))
     }
+
+    @Test
+    fun `buildManualSavePrefill prefers url when clipboard contains one`() {
+        val prefill = buildManualSavePrefill("Read this https://example.com/a")
+
+        assertEquals("https://example.com/a", prefill.urlInput)
+        assertEquals("", prefill.bodyInput)
+    }
+
+    @Test
+    fun `buildManualSavePrefill uses body when clipboard has non-url text`() {
+        val prefill = buildManualSavePrefill("Plain copied paragraph")
+
+        assertEquals("", prefill.urlInput)
+        assertEquals("Plain copied paragraph", prefill.bodyInput)
+    }
+
+    @Test
+    fun `buildManualSavePrefill leaves inputs empty when clipboard is blank`() {
+        val prefill = buildManualSavePrefill("   ")
+
+        assertEquals("", prefill.urlInput)
+        assertEquals("", prefill.bodyInput)
+    }
 }

@@ -1,5 +1,7 @@
 package com.mimeo.android.ui.queue
 
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -46,6 +48,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -76,6 +79,11 @@ internal enum class ManualSaveMode {
     TEXT,
 }
 
+internal data class ManualSavePrefill(
+    val urlInput: String = "",
+    val bodyInput: String = "",
+)
+
 private enum class QueueFilterChip(val label: String, val enabled: Boolean = true) {
     ALL("All"),
     UNREAD("Unread"),
@@ -100,6 +108,7 @@ fun QueueScreen(
     onOpenPlayer: (Int) -> Unit,
     onOpenDiagnostics: () -> Unit,
 ) {
+    val context = LocalContext.current
     val items by vm.queueItems.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val settings by vm.settings.collectAsState()
@@ -282,10 +291,11 @@ fun QueueScreen(
                         IconButton(
                             enabled = !manualSaveInProgress,
                             onClick = {
+                                val prefill = buildManualSavePrefill(readClipboardText(context))
                                 manualSaveMode = ManualSaveMode.URL
-                                manualUrlInput = ""
+                                manualUrlInput = prefill.urlInput
                                 manualTitleInput = ""
-                                manualBodyInput = ""
+                                manualBodyInput = prefill.bodyInput
                                 manualUrlError = null
                                 manualBodyError = null
                                 showSaveEntryDialog = true
@@ -776,6 +786,19 @@ internal fun canSubmitManualSave(
     }
 }
 
+internal fun buildManualSavePrefill(clipboardText: String?): ManualSavePrefill {
+    val raw = clipboardText?.trim().orEmpty()
+    if (raw.isEmpty()) {
+        return ManualSavePrefill()
+    }
+    val url = resolveManualSaveUrl(raw)
+    return if (url != null) {
+        ManualSavePrefill(urlInput = url)
+    } else {
+        ManualSavePrefill(bodyInput = raw)
+    }
+}
+
 internal fun resolveManualTextSaveUrl(
     urlInput: String,
     titleInput: String,
@@ -796,6 +819,12 @@ private fun buildManualTextFallbackUrl(titleInput: String, bodyInput: String): S
         .ifBlank { "manual-text" }
     val suffix = UUID.randomUUID().toString().substring(0, 8)
     return "https://manual.mimeo.local/$slug-$suffix"
+}
+
+private fun readClipboardText(context: Context): String? {
+    val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return null
+    val item = manager.primaryClip?.getItemAt(0) ?: return null
+    return item.coerceToText(context)?.toString()
 }
 
 @Composable
