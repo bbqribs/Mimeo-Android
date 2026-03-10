@@ -1,5 +1,6 @@
 package com.mimeo.android.ui.queue
 
+import com.mimeo.android.share.ShareSaveResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -83,5 +84,11 @@ class ManualUrlEntryValidationTest {
 
         assertEquals("", prefill.urlInput)
         assertEquals("", prefill.bodyInput)
+    }
+
+    @Test
+    fun `isManualSaveSuccess only returns true for saved result`() {
+        assertTrue(isManualSaveSuccess(ShareSaveResult.Saved(destinationName = "Smart Queue")))
+        assertFalse(isManualSaveSuccess(ShareSaveResult.NetworkError))
     }
 }
