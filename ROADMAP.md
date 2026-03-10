@@ -49,6 +49,8 @@
 
 ### Next tickets
 - [ ] Share-save destination trust polish: small post-save confirmation surface cleanup if any ambiguity remains after semantics cleanup.
+- [ ] Manual-save failed-attempt recovery queue: keep failed manual saves in a clearable retry queue, preserve user-entered work across offline/interrupted conditions, and auto-retry when connectivity returns.
+- [ ] Up Next pull-to-refresh affordance: add pull-down gesture parity with the refresh button, including visible content pull-from-top and spinner/refresh indicator while loading.
 - [ ] Queue debug cleanup finalization: decide whether to fully remove the debug-only fetch overlay after investigation is complete.
 - [ ] Share plain text capture: convert non-URL shared text into a readable item flow or explicitly reject it with a clearer product decision.
 
