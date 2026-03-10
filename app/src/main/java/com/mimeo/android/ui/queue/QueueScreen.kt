@@ -68,6 +68,7 @@ import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
+import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.extractFirstHttpUrl
@@ -1099,7 +1100,7 @@ private fun PendingManualRetryCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Pending manual saves (${pendingItems.size})",
+                    text = "Pending saves (${pendingItems.size})",
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1114,7 +1115,11 @@ private fun PendingManualRetryCard(
             pendingItems.forEach { item ->
                 val titleLine = when (item.type) {
                     PendingManualSaveType.TEXT -> item.titleInput?.takeIf { it.isNotBlank() } ?: "Paste Text"
-                    PendingManualSaveType.URL -> "Save URL"
+                    PendingManualSaveType.URL -> if (item.source == PendingSaveSource.SHARE) {
+                        "Shared URL"
+                    } else {
+                        "Save URL"
+                    }
                 }
                 val bodyPreview = item.bodyInput?.trim()?.take(100)?.takeIf { it.isNotEmpty() }
                 Column(
@@ -1124,6 +1129,12 @@ private fun PendingManualRetryCard(
                     Text(text = titleLine, style = MaterialTheme.typography.labelLarge)
                     Text(
                         text = item.urlInput.ifBlank { "(no URL provided)" },
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = item.destinationPlaylistId?.let { "Destination: Playlist $it" } ?: "Destination: Smart Queue",
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

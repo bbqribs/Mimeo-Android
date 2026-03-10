@@ -95,7 +95,11 @@ class ShareSaveCoordinator(
         appContext = context.applicationContext,
     ),
 ) {
-    suspend fun saveSharedText(sharedText: String?, sharedTitle: String?): ShareSaveResult {
+    suspend fun saveSharedText(
+        sharedText: String?,
+        sharedTitle: String?,
+        destinationPlaylistIdOverride: Int? = null,
+    ): ShareSaveResult {
         val attemptId = ShareSaveDebugState.nextAttemptId()
         val url = extractFirstHttpUrl(sharedText)
         if (url == null) {
@@ -111,8 +115,9 @@ class ShareSaveCoordinator(
         }
 
         val current = settingsStore.settingsFlow.first()
-        val destination = destinationLabel(current.defaultSavePlaylistId)
-        val requestUrls = buildRequestUrls(current.baseUrl, current.defaultSavePlaylistId)
+        val destinationPlaylistId = destinationPlaylistIdOverride ?: current.defaultSavePlaylistId
+        val destination = destinationLabel(destinationPlaylistId)
+        val requestUrls = buildRequestUrls(current.baseUrl, destinationPlaylistId)
         recordSnapshot(
             attemptId = attemptId,
             baseUrl = current.baseUrl,
@@ -148,6 +153,7 @@ class ShareSaveCoordinator(
                 itemId = article.id,
                 itemTitle = article.title,
                 current = current,
+                destinationPlaylistId = destinationPlaylistId,
                 attemptId = attemptId,
             )
             recordSnapshot(
@@ -167,6 +173,7 @@ class ShareSaveCoordinator(
                 error.statusCode == 409 -> resolveDuplicateSaveResult(
                     current = current,
                     url = url,
+                    destinationPlaylistId = destinationPlaylistId,
                     preferredTitle = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
                     attemptId = attemptId,
                 )
@@ -204,7 +211,12 @@ class ShareSaveCoordinator(
         }
     }
 
-    suspend fun saveManualText(urlInput: String, titleInput: String?, bodyInput: String): ShareSaveResult {
+    suspend fun saveManualText(
+        urlInput: String,
+        titleInput: String?,
+        bodyInput: String,
+        destinationPlaylistIdOverride: Int? = null,
+    ): ShareSaveResult {
         val attemptId = ShareSaveDebugState.nextAttemptId()
         val normalizedUrl = extractFirstHttpUrl(urlInput)
         if (normalizedUrl == null) {
@@ -225,8 +237,9 @@ class ShareSaveCoordinator(
         }
 
         val current = settingsStore.settingsFlow.first()
-        val destination = destinationLabel(current.defaultSavePlaylistId)
-        val requestUrls = buildRequestUrls(current.baseUrl, current.defaultSavePlaylistId) +
+        val destinationPlaylistId = destinationPlaylistIdOverride ?: current.defaultSavePlaylistId
+        val destination = destinationLabel(destinationPlaylistId)
+        val requestUrls = buildRequestUrls(current.baseUrl, destinationPlaylistId) +
             resolveApiUrl(current.baseUrl, "/items/manual-text")
         recordSnapshot(
             attemptId = attemptId,
@@ -262,6 +275,7 @@ class ShareSaveCoordinator(
                 itemId = article.id,
                 itemTitle = article.title,
                 current = current,
+                destinationPlaylistId = destinationPlaylistId,
                 attemptId = attemptId,
             )
             recordSnapshot(
@@ -281,6 +295,7 @@ class ShareSaveCoordinator(
                 error.statusCode == 409 -> resolveDuplicateSaveResult(
                     current = current,
                     url = normalizedUrl,
+                    destinationPlaylistId = destinationPlaylistId,
                     preferredTitle = titleInput?.trim()?.takeIf { it.isNotEmpty() },
                     attemptId = attemptId,
                 )
@@ -343,9 +358,10 @@ class ShareSaveCoordinator(
 
     private suspend fun resolveDestinationName(
         current: AppSettings,
+        destinationPlaylistId: Int?,
         knownPlaylistName: String? = null,
     ): String {
-        val playlistId = current.defaultSavePlaylistId ?: return "Smart Queue"
+        val playlistId = destinationPlaylistId ?: return "Smart Queue"
         val fromRoute = knownPlaylistName?.trim().orEmpty()
         if (fromRoute.isNotEmpty()) {
             return fromRoute
@@ -366,16 +382,22 @@ class ShareSaveCoordinator(
     private suspend fun resolveDuplicateSaveResult(
         current: AppSettings,
         url: String,
+        destinationPlaylistId: Int?,
         preferredTitle: String?,
         attemptId: Int,
     ): ShareSaveResult {
-        val existingItemId = resolveExistingItemIdForUrl(current = current, url = url)
+        val existingItemId = resolveExistingItemIdForUrl(
+            current = current,
+            url = url,
+            destinationPlaylistId = destinationPlaylistId,
+        )
         if (existingItemId != null) {
             val resolved = runCatching {
                 completeSavedItem(
                     itemId = existingItemId,
                     itemTitle = preferredTitle,
                     current = current,
+                    destinationPlaylistId = destinationPlaylistId,
                     attemptId = attemptId,
                 )
             }.getOrNull()
@@ -385,7 +407,10 @@ class ShareSaveCoordinator(
         }
 
         return ShareSaveResult.Saved(
-            destinationName = resolveDestinationName(current = current),
+            destinationName = resolveDestinationName(
+                current = current,
+                destinationPlaylistId = destinationPlaylistId,
+            ),
             itemTitle = preferredTitle,
         )
     }
@@ -393,10 +418,11 @@ class ShareSaveCoordinator(
     private suspend fun resolveExistingItemIdForUrl(
         current: AppSettings,
         url: String,
+        destinationPlaylistId: Int?,
     ): Int? {
         val targetUrl = url.trim()
         if (targetUrl.isBlank()) return null
-        val playlistCandidates = listOf(current.defaultSavePlaylistId, null).distinct()
+        val playlistCandidates = listOf(destinationPlaylistId, null).distinct()
         playlistCandidates.forEach { playlistId ->
             val items = runCatching {
                 apiClient.getQueue(
@@ -425,11 +451,12 @@ class ShareSaveCoordinator(
         itemId: Int,
         itemTitle: String?,
         current: AppSettings,
+        destinationPlaylistId: Int?,
         attemptId: Int,
     ): ShareSaveResult.Saved {
         val routeResult = routeSavedItem(
             itemId = itemId,
-            playlistId = current.defaultSavePlaylistId,
+            playlistId = destinationPlaylistId,
             current = current,
         )
         autoDownloadIfEnabled(
@@ -439,13 +466,14 @@ class ShareSaveCoordinator(
         )
         ShareSaveRefreshBus.events.tryEmit(
             ShareRefreshEvent(
-                playlistId = current.defaultSavePlaylistId,
+                playlistId = destinationPlaylistId,
                 itemId = itemId,
             ),
         )
         return ShareSaveResult.Saved(
             destinationName = resolveDestinationName(
                 current = current,
+                destinationPlaylistId = destinationPlaylistId,
                 knownPlaylistName = routeResult.playlistName,
             ),
             itemTitle = itemTitle,

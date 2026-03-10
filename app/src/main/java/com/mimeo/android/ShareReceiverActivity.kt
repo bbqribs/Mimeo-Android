@@ -15,8 +15,12 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.mimeo.android.data.SettingsStore
+import com.mimeo.android.model.PendingManualSaveType
+import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.share.ShareSaveCoordinator
 import com.mimeo.android.share.ShareSaveResult
+import com.mimeo.android.share.extractFirstHttpUrl
+import com.mimeo.android.share.isRetryablePendingSaveResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -50,10 +54,27 @@ class ShareReceiverActivity : ComponentActivity() {
         val sharedText = incomingIntent.getStringExtra(Intent.EXTRA_TEXT)
         val sharedTitle = incomingIntent.getStringExtra(Intent.EXTRA_SUBJECT)
         backgroundScope.launch {
+            val settingsStore = SettingsStore(applicationContext)
+            val settings = settingsStore.settingsFlow.first()
             val result = ShareSaveCoordinator(applicationContext).saveSharedText(
                 sharedText = sharedText,
                 sharedTitle = sharedTitle,
             )
+            if (isRetryablePendingSaveResult(result)) {
+                val normalizedUrl = extractFirstHttpUrl(sharedText)
+                if (normalizedUrl != null) {
+                    settingsStore.enqueuePendingManualSave(
+                        source = PendingSaveSource.SHARE,
+                        type = PendingManualSaveType.URL,
+                        urlInput = normalizedUrl,
+                        titleInput = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
+                        bodyInput = null,
+                        destinationPlaylistId = settings.defaultSavePlaylistId,
+                        lastFailureMessage = result.notificationText,
+                        autoRetryEligible = true,
+                    )
+                }
+            }
             ShareResultNotifications(applicationContext).post(result)
         }
 
