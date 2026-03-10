@@ -164,8 +164,11 @@ class ShareSaveCoordinator(
             val result = when {
                 error.statusCode == 401 -> ShareSaveResult.Unauthorized
                 error.statusCode == 403 -> ShareSaveResult.Unauthorized
-                error.statusCode == 409 -> ShareSaveResult.Saved(
-                    destinationName = resolveDestinationName(current = current),
+                error.statusCode == 409 -> resolveDuplicateSaveResult(
+                    current = current,
+                    url = url,
+                    preferredTitle = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
+                    attemptId = attemptId,
                 )
                 error.statusCode in 500..599 -> ShareSaveResult.ServerError
                 else -> ShareSaveResult.SaveFailed
@@ -275,6 +278,12 @@ class ShareSaveCoordinator(
             val result = when {
                 error.statusCode == 401 -> ShareSaveResult.Unauthorized
                 error.statusCode == 403 -> ShareSaveResult.Unauthorized
+                error.statusCode == 409 -> resolveDuplicateSaveResult(
+                    current = current,
+                    url = normalizedUrl,
+                    preferredTitle = titleInput?.trim()?.takeIf { it.isNotEmpty() },
+                    attemptId = attemptId,
+                )
                 error.statusCode in 500..599 -> ShareSaveResult.ServerError
                 else -> ShareSaveResult.SaveFailed
             }
@@ -352,6 +361,64 @@ class ShareSaveCoordinator(
             return resolved
         }
         return "Playlist $playlistId"
+    }
+
+    private suspend fun resolveDuplicateSaveResult(
+        current: AppSettings,
+        url: String,
+        preferredTitle: String?,
+        attemptId: Int,
+    ): ShareSaveResult {
+        val existingItemId = resolveExistingItemIdForUrl(current = current, url = url)
+        if (existingItemId != null) {
+            val resolved = runCatching {
+                completeSavedItem(
+                    itemId = existingItemId,
+                    itemTitle = preferredTitle,
+                    current = current,
+                    attemptId = attemptId,
+                )
+            }.getOrNull()
+            if (resolved != null) {
+                return resolved
+            }
+        }
+
+        return ShareSaveResult.Saved(
+            destinationName = resolveDestinationName(current = current),
+            itemTitle = preferredTitle,
+        )
+    }
+
+    private suspend fun resolveExistingItemIdForUrl(
+        current: AppSettings,
+        url: String,
+    ): Int? {
+        val targetUrl = url.trim()
+        if (targetUrl.isBlank()) return null
+        val playlistCandidates = listOf(current.defaultSavePlaylistId, null).distinct()
+        playlistCandidates.forEach { playlistId ->
+            val items = runCatching {
+                apiClient.getQueue(
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
+                    playlistId = playlistId,
+                ).payload.items
+            }.getOrNull().orEmpty()
+            val match = items.firstOrNull { item ->
+                matchesSavedUrl(candidateUrl = item.url, targetUrl = targetUrl)
+            }
+            if (match != null) {
+                return match.itemId
+            }
+        }
+        return null
+    }
+
+    private fun matchesSavedUrl(candidateUrl: String, targetUrl: String): Boolean {
+        return runCatching {
+            buildShareIdempotencyKey(candidateUrl) == buildShareIdempotencyKey(targetUrl)
+        }.getOrDefault(candidateUrl.trim() == targetUrl.trim())
     }
 
     private suspend fun completeSavedItem(
@@ -554,3 +621,4 @@ internal object ShareSaveDebugState {
         )
     }
 }
+

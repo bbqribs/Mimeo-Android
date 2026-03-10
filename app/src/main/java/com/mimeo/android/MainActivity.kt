@@ -87,6 +87,8 @@ import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.model.PendingManualSaveItem
+import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.ProgressSyncBadgeState
@@ -118,6 +120,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -127,6 +130,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -237,6 +242,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _queueItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
     val queueItems: StateFlow<List<PlaybackQueueItem>> = _queueItems.asStateFlow()
+    private val _pendingManualSaves = MutableStateFlow<List<PendingManualSaveItem>>(emptyList())
+    val pendingManualSaves: StateFlow<List<PendingManualSaveItem>> = _pendingManualSaves.asStateFlow()
+    private val pendingManualSaveIdCounter = AtomicLong(1L)
+    private val pendingManualRetryMutex = Mutex()
+    private val _pendingManualRetryInProgress = MutableStateFlow(false)
+    val pendingManualRetryInProgress: StateFlow<Boolean> = _pendingManualRetryInProgress.asStateFlow()
     private val _playlists = MutableStateFlow<List<PlaylistSummary>>(emptyList())
     val playlists: StateFlow<List<PlaylistSummary>> = _playlists.asStateFlow()
     private val _folders = MutableStateFlow<List<FolderSummary>>(emptyList())
@@ -246,6 +257,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _queueLoading = MutableStateFlow(false)
     val queueLoading: StateFlow<Boolean> = _queueLoading.asStateFlow()
+    private val queueLoadMutex = Mutex()
     private val _lastQueueFetchDebug = MutableStateFlow(QueueFetchDebugSnapshot())
     val lastQueueFetchDebug: StateFlow<QueueFetchDebugSnapshot> = _lastQueueFetchDebug.asStateFlow()
 
@@ -293,8 +305,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            settingsStore.settingsFlow.collect {
-                _settings.value = it
+            var previous = _settings.value
+            settingsStore.settingsFlow.collect { next ->
+                _settings.value = next
+                if (previous.apiToken.isBlank() && next.apiToken.isNotBlank()) {
+                    loadQueue()
+                }
+                previous = next
             }
         }
         WorkScheduler.enqueueProgressSync(application.applicationContext)
@@ -534,6 +551,162 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    fun queueFailedManualSave(
+        type: PendingManualSaveType,
+        urlInput: String,
+        titleInput: String?,
+        bodyInput: String?,
+        result: ShareSaveResult,
+    ) {
+        if (result is ShareSaveResult.Saved) return
+        val nextFailureMessage = result.notificationText
+        val nextAutoRetryEligible = shouldAutoRetryManualSave(result)
+        _pendingManualSaves.update { existing ->
+            val duplicateIndex = existing.indexOfFirst { pending ->
+                pending.type == type &&
+                    pending.urlInput == urlInput &&
+                    pending.titleInput == titleInput &&
+                    pending.bodyInput == bodyInput
+            }
+            if (duplicateIndex >= 0) {
+                existing.mapIndexed { index, item ->
+                    if (index == duplicateIndex) {
+                        item.copy(
+                            retryCount = item.retryCount + 1,
+                            lastFailureMessage = nextFailureMessage,
+                            autoRetryEligible = nextAutoRetryEligible,
+                        )
+                    } else {
+                        item
+                    }
+                }
+            } else {
+                listOf(
+                    PendingManualSaveItem(
+                        id = pendingManualSaveIdCounter.getAndIncrement(),
+                        type = type,
+                        urlInput = urlInput,
+                        titleInput = titleInput,
+                        bodyInput = bodyInput,
+                        lastFailureMessage = nextFailureMessage,
+                        autoRetryEligible = nextAutoRetryEligible,
+                    ),
+                ) + existing
+            }
+        }
+    }
+
+    suspend fun retryPendingManualSave(itemId: Long): ShareSaveResult? {
+        if (!pendingManualRetryMutex.tryLock()) return null
+        _pendingManualRetryInProgress.value = true
+        try {
+        val item = _pendingManualSaves.value.firstOrNull { it.id == itemId } ?: return null
+        val result = when (item.type) {
+            PendingManualSaveType.URL -> saveUrlFromUpNext(item.urlInput)
+            PendingManualSaveType.TEXT -> saveManualTextFromUpNext(
+                urlInput = item.urlInput,
+                titleInput = item.titleInput,
+                bodyInput = item.bodyInput.orEmpty(),
+            )
+        }
+        if (result is ShareSaveResult.Saved) {
+            _pendingManualSaves.update { existing -> existing.filterNot { it.id == itemId } }
+        } else {
+            _pendingManualSaves.update { existing ->
+                existing.map { queued ->
+                    if (queued.id == itemId) {
+                        queued.copy(
+                            retryCount = queued.retryCount + 1,
+                            lastFailureMessage = resolvePendingRetryFailureMessage(
+                                existingMessage = queued.lastFailureMessage,
+                                result = result,
+                            ),
+                            autoRetryEligible = shouldAutoRetryManualSave(result),
+                        )
+                    } else {
+                        queued
+                    }
+                }
+            }
+        }
+        return result
+        } finally {
+            _pendingManualRetryInProgress.value = false
+            pendingManualRetryMutex.unlock()
+        }
+    }
+
+    suspend fun retryAllPendingManualSaves(limit: Int = 20): Int {
+        if (!pendingManualRetryMutex.tryLock()) return -1
+        _pendingManualRetryInProgress.value = true
+        try {
+        val retryIds = _pendingManualSaves.value.take(limit).map { it.id }
+        var successCount = 0
+        retryIds.forEach { itemId ->
+            val item = _pendingManualSaves.value.firstOrNull { it.id == itemId } ?: return@forEach
+            val result = when (item.type) {
+                PendingManualSaveType.URL -> saveUrlFromUpNext(item.urlInput)
+                PendingManualSaveType.TEXT -> saveManualTextFromUpNext(
+                    urlInput = item.urlInput,
+                    titleInput = item.titleInput,
+                    bodyInput = item.bodyInput.orEmpty(),
+                )
+            }
+            if (result is ShareSaveResult.Saved) {
+                _pendingManualSaves.update { existing -> existing.filterNot { it.id == itemId } }
+            } else {
+                _pendingManualSaves.update { existing ->
+                    existing.map { queued ->
+                        if (queued.id == itemId) {
+                            queued.copy(
+                                retryCount = queued.retryCount + 1,
+                                lastFailureMessage = resolvePendingRetryFailureMessage(
+                                    existingMessage = queued.lastFailureMessage,
+                                    result = result,
+                                ),
+                                autoRetryEligible = shouldAutoRetryManualSave(result),
+                            )
+                        } else {
+                            queued
+                        }
+                    }
+                }
+            }
+            if (result is ShareSaveResult.Saved) {
+                successCount += 1
+            }
+        }
+        return successCount
+        } finally {
+            _pendingManualRetryInProgress.value = false
+            pendingManualRetryMutex.unlock()
+        }
+    }
+
+    fun clearPendingManualSaves() {
+        _pendingManualSaves.value = emptyList()
+    }
+
+    fun removePendingManualSave(itemId: Long) {
+        _pendingManualSaves.update { existing -> existing.filterNot { it.id == itemId } }
+    }
+
+    fun removeMatchingPendingManualSave(
+        type: PendingManualSaveType,
+        urlInput: String,
+        titleInput: String?,
+        bodyInput: String?,
+    ) {
+        _pendingManualSaves.update { existing ->
+            existing.filterNot { pending ->
+                pending.type == type &&
+                    pending.urlInput == urlInput &&
+                    pending.titleInput == titleInput &&
+                    pending.bodyInput == bodyInput
+            }
+        }
+    }
+
     fun testConnection() {
         val current = settings.value
         if (current.apiToken.isBlank()) {
@@ -557,14 +730,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    suspend fun loadQueueOnce(): Result<Unit> {
+    suspend fun loadQueueOnce(): Result<Unit> = queueLoadMutex.withLock {
         val current = settings.value
+        val snapshotPreloaded = if (_queueItems.value.isEmpty()) {
+            applySavedQueueSnapshot(
+                selectedPlaylistId = current.selectedPlaylistId,
+                markOffline = false,
+                statusMessage = null,
+            )
+        } else {
+            false
+        }
         if (current.apiToken.isBlank()) {
+            if (snapshotPreloaded) {
+                return@withLock Result.success(Unit)
+            }
             _statusMessage.value = "Token required"
-            return Result.failure(IllegalStateException("Token required"))
+            return@withLock Result.failure(IllegalStateException("Token required"))
         }
         _queueLoading.value = true
-        return try {
+        return@withLock try {
             runCatching {
                 repository.listPlaylists(current.baseUrl, current.apiToken)
             }.getOrNull()?.let { loaded ->
@@ -590,17 +775,64 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             _cachedItemIds.value = resolveOfflineReadyIds(queue.items)
+            settingsStore.saveQueueSnapshot(current.selectedPlaylistId, queue)
             _queueOffline.value = false
             _statusMessage.value = "Queue loaded (${queue.count})"
             flushPendingProgress()
+            val autoRetrySuccessCount = autoRetryPendingManualSaves(limit = 2)
+            if (autoRetrySuccessCount > 0) {
+                val refreshedQueueResult = repository.loadQueueAndPrefetch(
+                    current.baseUrl,
+                    current.apiToken,
+                    playlistId = current.selectedPlaylistId,
+                )
+                val refreshedQueue = refreshedQueueResult.payload
+                _queueItems.value = refreshedQueue.items
+                val refreshedSnapshot = refreshedQueueResult.debugSnapshot.copy(
+                    appliedItemCount = _queueItems.value.size,
+                    appliedContains409 = _queueItems.value.any { it.itemId == DEBUG_TARGET_ITEM_ID },
+                    lastFetchAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()),
+                )
+                _lastQueueFetchDebug.value = refreshedSnapshot
+                if (BuildConfig.DEBUG) {
+                    Log.d(
+                        QUEUE_DEBUG_TAG,
+                        "viewModelApply playlistId=${refreshedSnapshot.selectedPlaylistId} uiCount=${refreshedSnapshot.appliedItemCount} uiContains409=${refreshedSnapshot.appliedContains409} requestUrl=${refreshedSnapshot.requestUrl}",
+                    )
+                }
+                _cachedItemIds.value = resolveOfflineReadyIds(refreshedQueue.items)
+                settingsStore.saveQueueSnapshot(current.selectedPlaylistId, refreshedQueue)
+                _statusMessage.value = "Queue loaded (${refreshedQueue.count})"
+            }
             Result.success(Unit)
         } catch (e: ApiException) {
+            if (
+                e.statusCode in 500..599 &&
+                applySavedQueueSnapshot(
+                    selectedPlaylistId = current.selectedPlaylistId,
+                    markOffline = true,
+                    statusMessage = null,
+                )
+            ) {
+                return@withLock Result.success(Unit)
+            }
             _queueOffline.value = false
             _statusMessage.value = userFacingRequestErrorMessage(e, fallback = "Refresh failed")
             updateSyncBadgeState()
             Result.failure(e)
         } catch (e: Exception) {
-            _queueOffline.value = isNetworkError(e)
+            val networkError = isNetworkError(e)
+            if (
+                networkError &&
+                applySavedQueueSnapshot(
+                    selectedPlaylistId = current.selectedPlaylistId,
+                    markOffline = true,
+                    statusMessage = null,
+                )
+            ) {
+                return@withLock Result.success(Unit)
+            }
+            _queueOffline.value = networkError
             _statusMessage.value = userFacingRequestErrorMessage(e, fallback = "Couldn't refresh queue")
             updateSyncBadgeState()
             Result.failure(e)
@@ -613,6 +845,73 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun loadQueue() {
         viewModelScope.launch {
             loadQueueOnce()
+        }
+    }
+
+    private suspend fun autoRetryPendingManualSaves(limit: Int): Int {
+        val candidates = _pendingManualSaves.value
+            .filter { it.autoRetryEligible }
+            .take(limit)
+        var successCount = 0
+        candidates.forEach { item ->
+            val result = retryPendingManualSave(item.id)
+            if (result is ShareSaveResult.Saved) {
+                successCount += 1
+            }
+        }
+        return successCount
+    }
+
+    private suspend fun applySavedQueueSnapshot(
+        selectedPlaylistId: Int?,
+        markOffline: Boolean,
+        statusMessage: String?,
+    ): Boolean {
+        val snapshot = runCatching {
+            settingsStore.loadQueueSnapshot(selectedPlaylistId)
+        }.getOrNull() ?: return false
+
+        _queueItems.value = snapshot.items
+        _cachedItemIds.value = resolveOfflineReadyIds(snapshot.items)
+        val appliedSnapshot = QueueFetchDebugSnapshot(
+            selectedPlaylistId = selectedPlaylistId,
+            requestUrl = "local_snapshot",
+            statusCode = null,
+            responseItemCount = snapshot.items.size,
+            responseContains409 = snapshot.items.any { it.itemId == DEBUG_TARGET_ITEM_ID },
+            responseBytes = 0,
+            responseHash = "",
+            appliedItemCount = snapshot.items.size,
+            appliedContains409 = snapshot.items.any { it.itemId == DEBUG_TARGET_ITEM_ID },
+            lastFetchAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()),
+        )
+        _lastQueueFetchDebug.value = appliedSnapshot
+        if (markOffline) {
+            _queueOffline.value = true
+            _statusMessage.value = statusMessage ?: "Offline: showing saved queue snapshot (${snapshot.items.size})"
+        }
+        updateSyncBadgeState()
+        return true
+    }
+
+    private fun shouldAutoRetryManualSave(result: ShareSaveResult): Boolean {
+        return when (result) {
+            ShareSaveResult.NetworkError,
+            ShareSaveResult.TimedOut,
+            ShareSaveResult.ServerError,
+            ShareSaveResult.SaveFailed,
+            -> true
+            else -> false
+        }
+    }
+
+    private fun resolvePendingRetryFailureMessage(
+        existingMessage: String?,
+        result: ShareSaveResult,
+    ): String {
+        return when (result) {
+            ShareSaveResult.SaveFailed -> existingMessage ?: ShareSaveResult.NetworkError.notificationText
+            else -> result.notificationText
         }
     }
 
@@ -994,6 +1293,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
             _lastQueueFetchDebug.value = appliedSnapshot
             _cachedItemIds.value = resolveOfflineReadyIds(queue.items)
+            settingsStore.saveQueueSnapshot(current.selectedPlaylistId, queue)
             repository.reconcileSessionWithQueue(queue.items)?.let { updated ->
                 _nowPlayingSession.value = updated
             }
