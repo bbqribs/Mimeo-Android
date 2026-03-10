@@ -67,6 +67,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 private const val DONE_PERCENT_THRESHOLD = 98
 private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
@@ -554,7 +555,7 @@ fun QueueScreen(
         )
         suspend fun submitManualEntry() {
             val extractedUrl = resolveManualSaveUrl(manualUrlInput)
-            if (extractedUrl == null) {
+            if (manualSaveMode == ManualSaveMode.URL && extractedUrl == null) {
                 manualUrlError = "Enter a valid http(s) URL"
                 return
             }
@@ -577,12 +578,16 @@ fun QueueScreen(
             manualSaveInProgress = true
             val result = if (manualSaveMode == ManualSaveMode.TEXT) {
                 vm.saveManualTextFromUpNext(
-                    urlInput = extractedUrl,
+                    urlInput = resolveManualTextSaveUrl(
+                        urlInput = manualUrlInput,
+                        titleInput = manualTitleInput,
+                        bodyInput = normalizedBody.orEmpty(),
+                    ),
                     titleInput = manualTitleInput.trim().takeIf { it.isNotEmpty() },
                     bodyInput = normalizedBody.orEmpty(),
                 )
             } else {
-                vm.saveUrlFromUpNext(extractedUrl)
+                vm.saveUrlFromUpNext(extractedUrl.orEmpty())
             }
             manualSaveInProgress = false
             showSaveEntryDialog = false
@@ -642,8 +647,24 @@ fun QueueScreen(
                             .fillMaxWidth()
                             .focusRequester(manualUrlFocusRequester),
                         singleLine = true,
-                        label = { Text("Article URL") },
-                        placeholder = { Text("https://example.com/article") },
+                        label = {
+                            Text(
+                                if (manualSaveMode == ManualSaveMode.TEXT) {
+                                    "Article URL (optional)"
+                                } else {
+                                    "Article URL"
+                                },
+                            )
+                        },
+                        placeholder = {
+                            Text(
+                                if (manualSaveMode == ManualSaveMode.TEXT) {
+                                    "https://example.com/article (optional)"
+                                } else {
+                                    "https://example.com/article"
+                                },
+                            )
+                        },
                         isError = manualUrlError != null,
                         supportingText = {
                             manualUrlError?.let { Text(it) }
@@ -749,8 +770,32 @@ internal fun canSubmitManualSave(
     inProgress: Boolean,
 ): Boolean {
     if (inProgress) return false
-    if (resolveManualSaveUrl(urlInput) == null) return false
-    return mode != ManualSaveMode.TEXT || bodyInput.isNotBlank()
+    return when (mode) {
+        ManualSaveMode.URL -> resolveManualSaveUrl(urlInput) != null
+        ManualSaveMode.TEXT -> bodyInput.isNotBlank()
+    }
+}
+
+internal fun resolveManualTextSaveUrl(
+    urlInput: String,
+    titleInput: String,
+    bodyInput: String,
+): String {
+    return resolveManualSaveUrl(urlInput) ?: buildManualTextFallbackUrl(titleInput, bodyInput)
+}
+
+private fun buildManualTextFallbackUrl(titleInput: String, bodyInput: String): String {
+    val seedSource = titleInput.trim().ifBlank {
+        bodyInput.trim().lineSequence().firstOrNull().orEmpty()
+    }
+    val slug = seedSource
+        .lowercase()
+        .replace(Regex("[^a-z0-9]+"), "-")
+        .trim('-')
+        .take(40)
+        .ifBlank { "manual-text" }
+    val suffix = UUID.randomUUID().toString().substring(0, 8)
+    return "https://manual.mimeo.local/$slug-$suffix"
 }
 
 @Composable

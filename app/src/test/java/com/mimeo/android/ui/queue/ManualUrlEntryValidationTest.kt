@@ -38,8 +38,26 @@ class ManualUrlEntryValidationTest {
         assertFalse(canSubmitManualSave(ManualSaveMode.URL, "", "", inProgress = false))
         assertFalse(canSubmitManualSave(ManualSaveMode.URL, "not a url", "", inProgress = false))
         assertFalse(canSubmitManualSave(ManualSaveMode.TEXT, "https://example.com", "", inProgress = false))
-        assertFalse(canSubmitManualSave(ManualSaveMode.TEXT, "not a url", "Body", inProgress = false))
+        assertTrue(canSubmitManualSave(ManualSaveMode.TEXT, "not a url", "Body", inProgress = false))
+        assertTrue(canSubmitManualSave(ManualSaveMode.TEXT, "", "Body", inProgress = false))
         assertTrue(canSubmitManualSave(ManualSaveMode.TEXT, "https://example.com", "Body", inProgress = false))
         assertFalse(canSubmitManualSave(ManualSaveMode.TEXT, "https://example.com", "Body", inProgress = true))
+    }
+
+    @Test
+    fun `resolveManualTextSaveUrl keeps valid url and synthesizes one when missing`() {
+        val fromUrl = resolveManualTextSaveUrl(
+            urlInput = "https://example.com/source",
+            titleInput = "Any title",
+            bodyInput = "Any body",
+        )
+        val fallback = resolveManualTextSaveUrl(
+            urlInput = "",
+            titleInput = "Manual Title",
+            bodyInput = "Body text",
+        )
+
+        assertEquals("https://example.com/source", fromUrl)
+        assertTrue(fallback.startsWith("https://manual.mimeo.local/"))
     }
 }
