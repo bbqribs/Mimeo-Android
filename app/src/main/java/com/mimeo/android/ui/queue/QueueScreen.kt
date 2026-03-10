@@ -231,6 +231,10 @@ fun QueueScreen(
     val pullRefreshProgress = (pullRefreshDistancePx / pullRefreshThresholdPx).coerceIn(0f, 1f)
     val emptyStateMessage = when {
         loading -> null
+        items.isEmpty() && offline && settings.selectedPlaylistId != null ->
+            "Offline. Can't refresh \"$selectedPlaylistName\" right now."
+        items.isEmpty() && offline ->
+            "Offline. Can't refresh Smart Queue right now."
         items.isEmpty() && settings.selectedPlaylistId != null -> "No items yet in \"$selectedPlaylistName\"."
         items.isEmpty() -> "No items in Smart queue yet. Share a link to add one."
         displayedItems.isEmpty() && searchQuery.isNotBlank() ->

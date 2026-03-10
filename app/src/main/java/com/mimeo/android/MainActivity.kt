@@ -131,6 +131,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -256,6 +257,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _queueLoading = MutableStateFlow(false)
     val queueLoading: StateFlow<Boolean> = _queueLoading.asStateFlow()
+    private val queueLoadMutex = Mutex()
     private val _lastQueueFetchDebug = MutableStateFlow(QueueFetchDebugSnapshot())
     val lastQueueFetchDebug: StateFlow<QueueFetchDebugSnapshot> = _lastQueueFetchDebug.asStateFlow()
 
@@ -723,14 +725,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    suspend fun loadQueueOnce(): Result<Unit> {
+    suspend fun loadQueueOnce(): Result<Unit> = queueLoadMutex.withLock {
         val current = settings.value
         if (current.apiToken.isBlank()) {
             _statusMessage.value = "Token required"
-            return Result.failure(IllegalStateException("Token required"))
+            return@withLock Result.failure(IllegalStateException("Token required"))
         }
         _queueLoading.value = true
-        return try {
+        return@withLock try {
             runCatching {
                 repository.listPlaylists(current.baseUrl, current.apiToken)
             }.getOrNull()?.let { loaded ->
@@ -759,7 +761,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _queueOffline.value = false
             _statusMessage.value = "Queue loaded (${queue.count})"
             flushPendingProgress()
-            autoRetryPendingManualSaves(limit = 2)
+            val autoRetrySuccessCount = autoRetryPendingManualSaves(limit = 2)
+            if (autoRetrySuccessCount > 0) {
+                val refreshedQueueResult = repository.loadQueueAndPrefetch(
+                    current.baseUrl,
+                    current.apiToken,
+                    playlistId = current.selectedPlaylistId,
+                )
+                val refreshedQueue = refreshedQueueResult.payload
+                _queueItems.value = refreshedQueue.items
+                val refreshedSnapshot = refreshedQueueResult.debugSnapshot.copy(
+                    appliedItemCount = _queueItems.value.size,
+                    appliedContains409 = _queueItems.value.any { it.itemId == DEBUG_TARGET_ITEM_ID },
+                    lastFetchAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()),
+                )
+                _lastQueueFetchDebug.value = refreshedSnapshot
+                if (BuildConfig.DEBUG) {
+                    Log.d(
+                        QUEUE_DEBUG_TAG,
+                        "viewModelApply playlistId=${refreshedSnapshot.selectedPlaylistId} uiCount=${refreshedSnapshot.appliedItemCount} uiContains409=${refreshedSnapshot.appliedContains409} requestUrl=${refreshedSnapshot.requestUrl}",
+                    )
+                }
+                _cachedItemIds.value = resolveOfflineReadyIds(refreshedQueue.items)
+                _statusMessage.value = "Queue loaded (${refreshedQueue.count})"
+            }
             Result.success(Unit)
         } catch (e: ApiException) {
             _queueOffline.value = false
@@ -783,13 +808,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun autoRetryPendingManualSaves(limit: Int) {
+    private suspend fun autoRetryPendingManualSaves(limit: Int): Int {
         val candidates = _pendingManualSaves.value
             .filter { it.autoRetryEligible }
             .take(limit)
+        var successCount = 0
         candidates.forEach { item ->
-            retryPendingManualSave(item.id)
+            val result = retryPendingManualSave(item.id)
+            if (result is ShareSaveResult.Saved) {
+                successCount += 1
+            }
         }
+        return successCount
     }
 
     private fun shouldAutoRetryManualSave(result: ShareSaveResult): Boolean {
