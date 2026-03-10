@@ -66,6 +66,8 @@ import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
+import com.mimeo.android.model.PendingManualSaveItem
+import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.extractFirstHttpUrl
@@ -123,6 +125,7 @@ fun QueueScreen(
     val loading by vm.queueLoading.collectAsState()
     val offline by vm.queueOffline.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
+    val pendingManualSaves by vm.pendingManualSaves.collectAsState()
     val pendingShareFocusItemId by vm.pendingQueueFocusItemId.collectAsState()
     val lastQueueFetchDebug by vm.lastQueueFetchDebug.collectAsState()
     val actionScope = rememberCoroutineScope()
@@ -519,6 +522,21 @@ fun QueueScreen(
                 )
             }
         }
+        if (pendingManualSaves.isNotEmpty()) {
+            PendingManualRetryCard(
+                pendingItems = pendingManualSaves,
+                onRetry = { item ->
+                    actionScope.launch {
+                        val retryResult = vm.retryPendingManualSave(item.id) ?: return@launch
+                        val actionLabel = if (retryResult.opensSettings) "Open Settings" else null
+                        val actionKey = if (retryResult.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
+                        onShowSnackbar(retryResult.notificationText, actionLabel, actionKey)
+                    }
+                },
+                onDismiss = { item -> vm.removePendingManualSave(item.id) },
+                onClearAll = { vm.clearPendingManualSaves() },
+            )
+        }
 
         Column(
             modifier = Modifier
@@ -671,6 +689,17 @@ fun QueueScreen(
                 manualBodyInput = ""
                 manualSubmitError = null
             } else {
+                vm.queueFailedManualSave(
+                    type = if (manualSaveMode == ManualSaveMode.TEXT) {
+                        PendingManualSaveType.TEXT
+                    } else {
+                        PendingManualSaveType.URL
+                    },
+                    urlInput = manualUrlInput,
+                    titleInput = manualTitleInput,
+                    bodyInput = manualBodyInput,
+                    result = result,
+                )
                 manualSubmitError = result.notificationText
             }
         }
@@ -908,6 +937,79 @@ private fun readClipboardText(context: Context): String? {
     val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return null
     val item = manager.primaryClip?.getItemAt(0) ?: return null
     return item.coerceToText(context)?.toString()
+}
+
+@Composable
+private fun PendingManualRetryCard(
+    pendingItems: List<PendingManualSaveItem>,
+    onRetry: (PendingManualSaveItem) -> Unit,
+    onDismiss: (PendingManualSaveItem) -> Unit,
+    onClearAll: () -> Unit,
+) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Pending manual saves (${pendingItems.size})",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                TextButton(onClick = onClearAll) {
+                    Text("Clear all")
+                }
+            }
+            pendingItems.forEach { item ->
+                val titleLine = when (item.type) {
+                    PendingManualSaveType.TEXT -> item.titleInput?.takeIf { it.isNotBlank() } ?: "Paste Text"
+                    PendingManualSaveType.URL -> "Save URL"
+                }
+                val bodyPreview = item.bodyInput?.trim()?.take(100)?.takeIf { it.isNotEmpty() }
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(text = titleLine, style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        text = item.urlInput.ifBlank { "(no URL provided)" },
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    bodyPreview?.let { preview ->
+                        Text(
+                            text = preview,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Text(
+                        text = "${item.lastFailureMessage} (retries: ${item.retryCount})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TextButton(onClick = { onRetry(item) }) {
+                            Text("Retry")
+                        }
+                        TextButton(onClick = { onDismiss(item) }) {
+                            Text("Dismiss")
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

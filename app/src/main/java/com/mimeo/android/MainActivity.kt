@@ -87,6 +87,8 @@ import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.model.PendingManualSaveItem
+import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.ProgressSyncBadgeState
@@ -118,6 +120,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -237,6 +240,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _queueItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
     val queueItems: StateFlow<List<PlaybackQueueItem>> = _queueItems.asStateFlow()
+    private val _pendingManualSaves = MutableStateFlow<List<PendingManualSaveItem>>(emptyList())
+    val pendingManualSaves: StateFlow<List<PendingManualSaveItem>> = _pendingManualSaves.asStateFlow()
+    private val pendingManualSaveIdCounter = AtomicLong(1L)
     private val _playlists = MutableStateFlow<List<PlaylistSummary>>(emptyList())
     val playlists: StateFlow<List<PlaylistSummary>> = _playlists.asStateFlow()
     private val _folders = MutableStateFlow<List<FolderSummary>>(emptyList())
@@ -534,6 +540,89 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    fun queueFailedManualSave(
+        type: PendingManualSaveType,
+        urlInput: String,
+        titleInput: String?,
+        bodyInput: String?,
+        result: ShareSaveResult,
+    ) {
+        if (result is ShareSaveResult.Saved) return
+        val nextFailureMessage = result.notificationText
+        val nextAutoRetryEligible = shouldAutoRetryManualSave(result)
+        _pendingManualSaves.update { existing ->
+            val duplicateIndex = existing.indexOfFirst { pending ->
+                pending.type == type &&
+                    pending.urlInput == urlInput &&
+                    pending.titleInput == titleInput &&
+                    pending.bodyInput == bodyInput
+            }
+            if (duplicateIndex >= 0) {
+                existing.mapIndexed { index, item ->
+                    if (index == duplicateIndex) {
+                        item.copy(
+                            retryCount = item.retryCount + 1,
+                            lastFailureMessage = nextFailureMessage,
+                            autoRetryEligible = nextAutoRetryEligible,
+                        )
+                    } else {
+                        item
+                    }
+                }
+            } else {
+                listOf(
+                    PendingManualSaveItem(
+                        id = pendingManualSaveIdCounter.getAndIncrement(),
+                        type = type,
+                        urlInput = urlInput,
+                        titleInput = titleInput,
+                        bodyInput = bodyInput,
+                        lastFailureMessage = nextFailureMessage,
+                        autoRetryEligible = nextAutoRetryEligible,
+                    ),
+                ) + existing
+            }
+        }
+    }
+
+    suspend fun retryPendingManualSave(itemId: Long): ShareSaveResult? {
+        val item = _pendingManualSaves.value.firstOrNull { it.id == itemId } ?: return null
+        val result = when (item.type) {
+            PendingManualSaveType.URL -> saveUrlFromUpNext(item.urlInput)
+            PendingManualSaveType.TEXT -> saveManualTextFromUpNext(
+                urlInput = item.urlInput,
+                titleInput = item.titleInput,
+                bodyInput = item.bodyInput.orEmpty(),
+            )
+        }
+        if (result is ShareSaveResult.Saved) {
+            _pendingManualSaves.update { existing -> existing.filterNot { it.id == itemId } }
+        } else {
+            _pendingManualSaves.update { existing ->
+                existing.map { queued ->
+                    if (queued.id == itemId) {
+                        queued.copy(
+                            retryCount = queued.retryCount + 1,
+                            lastFailureMessage = result.notificationText,
+                            autoRetryEligible = shouldAutoRetryManualSave(result),
+                        )
+                    } else {
+                        queued
+                    }
+                }
+            }
+        }
+        return result
+    }
+
+    fun clearPendingManualSaves() {
+        _pendingManualSaves.value = emptyList()
+    }
+
+    fun removePendingManualSave(itemId: Long) {
+        _pendingManualSaves.update { existing -> existing.filterNot { it.id == itemId } }
+    }
+
     fun testConnection() {
         val current = settings.value
         if (current.apiToken.isBlank()) {
@@ -593,6 +682,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _queueOffline.value = false
             _statusMessage.value = "Queue loaded (${queue.count})"
             flushPendingProgress()
+            autoRetryPendingManualSaves(limit = 2)
             Result.success(Unit)
         } catch (e: ApiException) {
             _queueOffline.value = false
@@ -613,6 +703,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun loadQueue() {
         viewModelScope.launch {
             loadQueueOnce()
+        }
+    }
+
+    private suspend fun autoRetryPendingManualSaves(limit: Int) {
+        val candidates = _pendingManualSaves.value
+            .filter { it.autoRetryEligible }
+            .take(limit)
+        candidates.forEach { item ->
+            retryPendingManualSave(item.id)
+        }
+    }
+
+    private fun shouldAutoRetryManualSave(result: ShareSaveResult): Boolean {
+        return when (result) {
+            ShareSaveResult.NetworkError,
+            ShareSaveResult.TimedOut,
+            ShareSaveResult.ServerError,
+            ShareSaveResult.SaveFailed,
+            -> true
+            else -> false
         }
     }
 

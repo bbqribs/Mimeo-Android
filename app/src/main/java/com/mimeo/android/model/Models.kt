@@ -222,3 +222,20 @@ data class QueueFetchDebugSnapshot(
     val appliedContains409: Boolean = false,
     val lastFetchAt: String = "",
 )
+
+enum class PendingManualSaveType {
+    URL,
+    TEXT,
+}
+
+data class PendingManualSaveItem(
+    val id: Long,
+    val type: PendingManualSaveType,
+    val urlInput: String,
+    val titleInput: String? = null,
+    val bodyInput: String? = null,
+    val createdAtMs: Long = System.currentTimeMillis(),
+    val retryCount: Int = 0,
+    val lastFailureMessage: String,
+    val autoRetryEligible: Boolean,
+)
