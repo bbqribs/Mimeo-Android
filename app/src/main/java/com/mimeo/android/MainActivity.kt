@@ -615,6 +615,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return result
     }
 
+    suspend fun retryAllPendingManualSaves(limit: Int = 20): Int {
+        val retryIds = _pendingManualSaves.value.take(limit).map { it.id }
+        var successCount = 0
+        retryIds.forEach { itemId ->
+            val result = retryPendingManualSave(itemId)
+            if (result is ShareSaveResult.Saved) {
+                successCount += 1
+            }
+        }
+        return successCount
+    }
+
     fun clearPendingManualSaves() {
         _pendingManualSaves.value = emptyList()
     }

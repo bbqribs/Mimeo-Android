@@ -78,7 +78,10 @@ import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -158,6 +161,7 @@ fun QueueScreen(
     var manualBodyError by remember { mutableStateOf<String?>(null) }
     var manualSubmitError by remember { mutableStateOf<String?>(null) }
     var manualSaveInProgress by remember { mutableStateOf(false) }
+    var manualSaveJob by remember { mutableStateOf<Job?>(null) }
     val manualUrlFocusRequester = remember { FocusRequester() }
     val manualBodyFocusRequester = remember { FocusRequester() }
 
@@ -533,6 +537,12 @@ fun QueueScreen(
                         onShowSnackbar(retryResult.notificationText, actionLabel, actionKey)
                     }
                 },
+                onRetryAll = {
+                    actionScope.launch {
+                        val retrySuccessCount = vm.retryAllPendingManualSaves()
+                        onShowSnackbar("Retried $retrySuccessCount pending saves", null, null)
+                    }
+                },
                 onDismiss = { item -> vm.removePendingManualSave(item.id) },
                 onClearAll = { vm.clearPendingManualSaves() },
             )
@@ -643,9 +653,11 @@ fun QueueScreen(
         )
         suspend fun submitManualEntry() {
             manualSubmitError = null
+            manualSaveJob = currentCoroutineContext()[Job]
             val extractedUrl = resolveManualSaveUrl(manualUrlInput)
             if (manualSaveMode == ManualSaveMode.URL && extractedUrl == null) {
                 manualUrlError = "Enter a valid http(s) URL"
+                manualSaveJob = null
                 return
             }
             manualUrlError = null
@@ -660,35 +672,11 @@ fun QueueScreen(
                 null
             }
             if (manualSaveMode == ManualSaveMode.TEXT && normalizedBody == null) {
+                manualSaveJob = null
                 return
             }
             manualBodyError = null
-
-            manualSaveInProgress = true
-            val result = if (manualSaveMode == ManualSaveMode.TEXT) {
-                vm.saveManualTextFromUpNext(
-                    urlInput = resolveManualTextSaveUrl(
-                        urlInput = manualUrlInput,
-                        titleInput = manualTitleInput,
-                        bodyInput = normalizedBody.orEmpty(),
-                    ),
-                    titleInput = manualTitleInput.trim().takeIf { it.isNotEmpty() },
-                    bodyInput = normalizedBody.orEmpty(),
-                )
-            } else {
-                vm.saveUrlFromUpNext(extractedUrl.orEmpty())
-            }
-            manualSaveInProgress = false
-            val actionLabel = if (result.opensSettings) "Open Settings" else null
-            val actionKey = if (result.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
-            onShowSnackbar(result.notificationText, actionLabel, actionKey)
-            if (isManualSaveSuccess(result)) {
-                showSaveEntryDialog = false
-                manualUrlInput = ""
-                manualTitleInput = ""
-                manualBodyInput = ""
-                manualSubmitError = null
-            } else {
+            fun queueCurrentManualSaveAndClose(statusMessage: String) {
                 vm.queueFailedManualSave(
                     type = if (manualSaveMode == ManualSaveMode.TEXT) {
                         PendingManualSaveType.TEXT
@@ -698,9 +686,65 @@ fun QueueScreen(
                     urlInput = manualUrlInput,
                     titleInput = manualTitleInput,
                     bodyInput = manualBodyInput,
-                    result = result,
+                    result = ShareSaveResult.NetworkError,
                 )
-                manualSubmitError = result.notificationText
+                showSaveEntryDialog = false
+                manualUrlInput = ""
+                manualTitleInput = ""
+                manualBodyInput = ""
+                manualUrlError = null
+                manualBodyError = null
+                manualSubmitError = null
+                onShowSnackbar(statusMessage, null, null)
+            }
+            if (offline) {
+                queueCurrentManualSaveAndClose("Added to pending manual saves")
+                manualSaveJob = null
+                return
+            }
+            manualSaveInProgress = true
+            try {
+                val result = if (manualSaveMode == ManualSaveMode.TEXT) {
+                    vm.saveManualTextFromUpNext(
+                        urlInput = resolveManualTextSaveUrl(
+                            urlInput = manualUrlInput,
+                            titleInput = manualTitleInput,
+                            bodyInput = normalizedBody.orEmpty(),
+                        ),
+                        titleInput = manualTitleInput.trim().takeIf { it.isNotEmpty() },
+                        bodyInput = normalizedBody.orEmpty(),
+                    )
+                } else {
+                    vm.saveUrlFromUpNext(extractedUrl.orEmpty())
+                }
+                val actionLabel = if (result.opensSettings) "Open Settings" else null
+                val actionKey = if (result.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
+                onShowSnackbar(result.notificationText, actionLabel, actionKey)
+                if (isManualSaveSuccess(result)) {
+                    showSaveEntryDialog = false
+                    manualUrlInput = ""
+                    manualTitleInput = ""
+                    manualBodyInput = ""
+                    manualSubmitError = null
+                } else {
+                    vm.queueFailedManualSave(
+                        type = if (manualSaveMode == ManualSaveMode.TEXT) {
+                            PendingManualSaveType.TEXT
+                        } else {
+                            PendingManualSaveType.URL
+                        },
+                        urlInput = manualUrlInput,
+                        titleInput = manualTitleInput,
+                        bodyInput = manualBodyInput,
+                        result = result,
+                    )
+                    manualSubmitError = result.notificationText
+                }
+            } catch (_: CancellationException) {
+                return
+            } finally {
+                manualSaveInProgress = false
+                manualSaveJob = null
             }
         }
 
@@ -852,16 +896,46 @@ fun QueueScreen(
                 }
             },
             dismissButton = {
-                TextButton(
-                    enabled = !manualSaveInProgress,
-                    onClick = {
-                        showSaveEntryDialog = false
-                        manualUrlError = null
-                        manualBodyError = null
-                        manualSubmitError = null
-                    },
-                ) {
-                    Text("Cancel")
+                if (manualSaveInProgress) {
+                    TextButton(
+                        onClick = {
+                            vm.queueFailedManualSave(
+                                type = if (manualSaveMode == ManualSaveMode.TEXT) {
+                                    PendingManualSaveType.TEXT
+                                } else {
+                                    PendingManualSaveType.URL
+                                },
+                                urlInput = manualUrlInput,
+                                titleInput = manualTitleInput,
+                                bodyInput = manualBodyInput,
+                                result = ShareSaveResult.NetworkError,
+                            )
+                            manualSaveJob?.cancel()
+                            manualSaveInProgress = false
+                            showSaveEntryDialog = false
+                            manualUrlInput = ""
+                            manualTitleInput = ""
+                            manualBodyInput = ""
+                            manualUrlError = null
+                            manualBodyError = null
+                            manualSubmitError = null
+                            onShowSnackbar("Added to pending manual saves", null, null)
+                        },
+                    ) {
+                        Text("Queue now")
+                    }
+                } else {
+                    TextButton(
+                        enabled = !manualSaveInProgress,
+                        onClick = {
+                            showSaveEntryDialog = false
+                            manualUrlError = null
+                            manualBodyError = null
+                            manualSubmitError = null
+                        },
+                    ) {
+                        Text("Cancel")
+                    }
                 }
             },
         )
@@ -943,6 +1017,7 @@ private fun readClipboardText(context: Context): String? {
 private fun PendingManualRetryCard(
     pendingItems: List<PendingManualSaveItem>,
     onRetry: (PendingManualSaveItem) -> Unit,
+    onRetryAll: () -> Unit,
     onDismiss: (PendingManualSaveItem) -> Unit,
     onClearAll: () -> Unit,
 ) {
@@ -962,8 +1037,13 @@ private fun PendingManualRetryCard(
                     text = "Pending manual saves (${pendingItems.size})",
                     style = MaterialTheme.typography.titleSmall,
                 )
-                TextButton(onClick = onClearAll) {
-                    Text("Clear all")
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = onRetryAll) {
+                        Text("Retry all")
+                    }
+                    TextButton(onClick = onClearAll) {
+                        Text("Clear all")
+                    }
                 }
             }
             pendingItems.forEach { item ->
