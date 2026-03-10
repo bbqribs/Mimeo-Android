@@ -130,6 +130,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -243,6 +244,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _pendingManualSaves = MutableStateFlow<List<PendingManualSaveItem>>(emptyList())
     val pendingManualSaves: StateFlow<List<PendingManualSaveItem>> = _pendingManualSaves.asStateFlow()
     private val pendingManualSaveIdCounter = AtomicLong(1L)
+    private val pendingManualRetryMutex = Mutex()
+    private val _pendingManualRetryInProgress = MutableStateFlow(false)
+    val pendingManualRetryInProgress: StateFlow<Boolean> = _pendingManualRetryInProgress.asStateFlow()
     private val _playlists = MutableStateFlow<List<PlaylistSummary>>(emptyList())
     val playlists: StateFlow<List<PlaylistSummary>> = _playlists.asStateFlow()
     private val _folders = MutableStateFlow<List<FolderSummary>>(emptyList())
@@ -586,6 +590,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun retryPendingManualSave(itemId: Long): ShareSaveResult? {
+        if (!pendingManualRetryMutex.tryLock()) return null
+        _pendingManualRetryInProgress.value = true
+        try {
         val item = _pendingManualSaves.value.firstOrNull { it.id == itemId } ?: return null
         val result = when (item.type) {
             PendingManualSaveType.URL -> saveUrlFromUpNext(item.urlInput)
@@ -613,18 +620,54 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         return result
+        } finally {
+            _pendingManualRetryInProgress.value = false
+            pendingManualRetryMutex.unlock()
+        }
     }
 
     suspend fun retryAllPendingManualSaves(limit: Int = 20): Int {
+        if (!pendingManualRetryMutex.tryLock()) return -1
+        _pendingManualRetryInProgress.value = true
+        try {
         val retryIds = _pendingManualSaves.value.take(limit).map { it.id }
         var successCount = 0
         retryIds.forEach { itemId ->
-            val result = retryPendingManualSave(itemId)
+            val item = _pendingManualSaves.value.firstOrNull { it.id == itemId } ?: return@forEach
+            val result = when (item.type) {
+                PendingManualSaveType.URL -> saveUrlFromUpNext(item.urlInput)
+                PendingManualSaveType.TEXT -> saveManualTextFromUpNext(
+                    urlInput = item.urlInput,
+                    titleInput = item.titleInput,
+                    bodyInput = item.bodyInput.orEmpty(),
+                )
+            }
+            if (result is ShareSaveResult.Saved) {
+                _pendingManualSaves.update { existing -> existing.filterNot { it.id == itemId } }
+            } else {
+                _pendingManualSaves.update { existing ->
+                    existing.map { queued ->
+                        if (queued.id == itemId) {
+                            queued.copy(
+                                retryCount = queued.retryCount + 1,
+                                lastFailureMessage = result.notificationText,
+                                autoRetryEligible = shouldAutoRetryManualSave(result),
+                            )
+                        } else {
+                            queued
+                        }
+                    }
+                }
+            }
             if (result is ShareSaveResult.Saved) {
                 successCount += 1
             }
         }
         return successCount
+        } finally {
+            _pendingManualRetryInProgress.value = false
+            pendingManualRetryMutex.unlock()
+        }
     }
 
     fun clearPendingManualSaves() {

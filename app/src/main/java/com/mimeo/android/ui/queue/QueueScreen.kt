@@ -136,6 +136,7 @@ fun QueueScreen(
     val offline by vm.queueOffline.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
     val pendingManualSaves by vm.pendingManualSaves.collectAsState()
+    val pendingManualRetryInProgress by vm.pendingManualRetryInProgress.collectAsState()
     val pendingShareFocusItemId by vm.pendingQueueFocusItemId.collectAsState()
     val lastQueueFetchDebug by vm.lastQueueFetchDebug.collectAsState()
     val actionScope = rememberCoroutineScope()
@@ -169,6 +170,8 @@ fun QueueScreen(
     var manualSubmitError by remember { mutableStateOf<String?>(null) }
     var manualSaveInProgress by remember { mutableStateOf(false) }
     var manualSaveJob by remember { mutableStateOf<Job?>(null) }
+    var manualActivePayload by remember { mutableStateOf<ManualSavePayload?>(null) }
+    var manualSaveAttemptVersion by remember { mutableIntStateOf(0) }
     val manualUrlFocusRequester = remember { FocusRequester() }
     val manualBodyFocusRequester = remember { FocusRequester() }
 
@@ -536,8 +539,13 @@ fun QueueScreen(
         if (pendingManualSaves.isNotEmpty()) {
             PendingManualRetryCard(
                 pendingItems = pendingManualSaves,
+                retryInProgress = pendingManualRetryInProgress,
                 onRetry = { item ->
                     actionScope.launch {
+                        if (offline) {
+                            onShowSnackbar("Still offline. Pending saves kept.", null, null)
+                            return@launch
+                        }
                         val retryResult = vm.retryPendingManualSave(item.id) ?: return@launch
                         val actionLabel = if (retryResult.opensSettings) "Open Settings" else null
                         val actionKey = if (retryResult.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
@@ -546,8 +554,14 @@ fun QueueScreen(
                 },
                 onRetryAll = {
                     actionScope.launch {
+                        if (offline) {
+                            onShowSnackbar("Still offline. Pending saves kept.", null, null)
+                            return@launch
+                        }
                         val retrySuccessCount = vm.retryAllPendingManualSaves()
-                        onShowSnackbar("Retried $retrySuccessCount pending saves", null, null)
+                        if (retrySuccessCount >= 0) {
+                            onShowSnackbar("Retried $retrySuccessCount pending saves", null, null)
+                        }
                     }
                 },
                 onDismiss = { item -> vm.removePendingManualSave(item.id) },
@@ -661,18 +675,6 @@ fun QueueScreen(
         suspend fun submitManualEntry() {
             manualSubmitError = null
             manualSaveJob = currentCoroutineContext()[Job]
-            fun buildCurrentPayload(): ManualSavePayload {
-                return ManualSavePayload(
-                    type = if (manualSaveMode == ManualSaveMode.TEXT) {
-                        PendingManualSaveType.TEXT
-                    } else {
-                        PendingManualSaveType.URL
-                    },
-                    urlInput = manualUrlInput,
-                    titleInput = manualTitleInput,
-                    bodyInput = manualBodyInput,
-                )
-            }
             val extractedUrl = resolveManualSaveUrl(manualUrlInput)
             if (manualSaveMode == ManualSaveMode.URL && extractedUrl == null) {
                 manualUrlError = "Enter a valid http(s) URL"
@@ -695,7 +697,26 @@ fun QueueScreen(
                 return
             }
             manualBodyError = null
-            val payload = buildCurrentPayload()
+            val payload = if (manualSaveMode == ManualSaveMode.TEXT) {
+                ManualSavePayload(
+                    type = PendingManualSaveType.TEXT,
+                    urlInput = resolveManualTextSaveUrl(
+                        urlInput = manualUrlInput,
+                        titleInput = manualTitleInput,
+                        bodyInput = normalizedBody.orEmpty(),
+                    ),
+                    titleInput = manualTitleInput.trim().takeIf { it.isNotEmpty() },
+                    bodyInput = normalizedBody,
+                )
+            } else {
+                ManualSavePayload(
+                    type = PendingManualSaveType.URL,
+                    urlInput = extractedUrl.orEmpty(),
+                    titleInput = null,
+                    bodyInput = null,
+                )
+            }
+            manualActivePayload = payload
             fun queueCurrentManualSaveAndClose(statusMessage: String) {
                 vm.queueFailedManualSave(
                     type = payload.type,
@@ -718,20 +739,21 @@ fun QueueScreen(
                 manualSaveJob = null
                 return
             }
+            val attemptVersion = manualSaveAttemptVersion + 1
+            manualSaveAttemptVersion = attemptVersion
             manualSaveInProgress = true
             try {
                 val result = if (manualSaveMode == ManualSaveMode.TEXT) {
                     vm.saveManualTextFromUpNext(
-                        urlInput = resolveManualTextSaveUrl(
-                            urlInput = manualUrlInput,
-                            titleInput = manualTitleInput,
-                            bodyInput = normalizedBody.orEmpty(),
-                        ),
-                        titleInput = manualTitleInput.trim().takeIf { it.isNotEmpty() },
-                        bodyInput = normalizedBody.orEmpty(),
+                        urlInput = payload.urlInput,
+                        titleInput = payload.titleInput,
+                        bodyInput = payload.bodyInput.orEmpty(),
                     )
                 } else {
-                    vm.saveUrlFromUpNext(extractedUrl.orEmpty())
+                    vm.saveUrlFromUpNext(payload.urlInput)
+                }
+                if (manualSaveAttemptVersion != attemptVersion) {
+                    return
                 }
                 val actionLabel = if (result.opensSettings) "Open Settings" else null
                 val actionKey = if (result.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
@@ -761,8 +783,11 @@ fun QueueScreen(
             } catch (_: CancellationException) {
                 return
             } finally {
-                manualSaveInProgress = false
-                manualSaveJob = null
+                if (manualSaveAttemptVersion == attemptVersion) {
+                    manualSaveInProgress = false
+                    manualSaveJob = null
+                    manualActivePayload = null
+                }
             }
         }
 
@@ -922,16 +947,7 @@ fun QueueScreen(
                 if (manualSaveInProgress) {
                     TextButton(
                         onClick = {
-                            val payload = ManualSavePayload(
-                                type = if (manualSaveMode == ManualSaveMode.TEXT) {
-                                    PendingManualSaveType.TEXT
-                                } else {
-                                    PendingManualSaveType.URL
-                                },
-                                urlInput = manualUrlInput,
-                                titleInput = manualTitleInput,
-                                bodyInput = manualBodyInput,
-                            )
+                            val payload = manualActivePayload ?: return@TextButton
                             vm.queueFailedManualSave(
                                 type = payload.type,
                                 urlInput = payload.urlInput,
@@ -939,12 +955,14 @@ fun QueueScreen(
                                 bodyInput = payload.bodyInput,
                                 result = ShareSaveResult.NetworkError,
                             )
+                            manualSaveAttemptVersion += 1
                             manualSaveJob?.cancel()
                             manualSaveInProgress = false
                             showSaveEntryDialog = false
                             manualUrlInput = ""
                             manualTitleInput = ""
                             manualBodyInput = ""
+                            manualActivePayload = null
                             manualUrlError = null
                             manualBodyError = null
                             manualSubmitError = null
@@ -1045,6 +1063,7 @@ private fun readClipboardText(context: Context): String? {
 @Composable
 private fun PendingManualRetryCard(
     pendingItems: List<PendingManualSaveItem>,
+    retryInProgress: Boolean,
     onRetry: (PendingManualSaveItem) -> Unit,
     onRetryAll: () -> Unit,
     onDismiss: (PendingManualSaveItem) -> Unit,
@@ -1067,10 +1086,10 @@ private fun PendingManualRetryCard(
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = onRetryAll) {
+                    TextButton(enabled = !retryInProgress, onClick = onRetryAll) {
                         Text("Retry all")
                     }
-                    TextButton(onClick = onClearAll) {
+                    TextButton(enabled = !retryInProgress, onClick = onClearAll) {
                         Text("Clear all")
                     }
                 }
@@ -1108,10 +1127,10 @@ private fun PendingManualRetryCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TextButton(onClick = { onRetry(item) }) {
+                        TextButton(enabled = !retryInProgress, onClick = { onRetry(item) }) {
                             Text("Retry")
                         }
-                        TextButton(onClick = { onDismiss(item) }) {
+                        TextButton(enabled = !retryInProgress, onClick = { onDismiss(item) }) {
                             Text("Dismiss")
                         }
                     }
