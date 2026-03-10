@@ -60,6 +60,7 @@ import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.extractFirstHttpUrl
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
@@ -141,6 +142,7 @@ fun QueueScreen(
     var manualBodyInput by rememberSaveable { mutableStateOf("") }
     var manualUrlError by remember { mutableStateOf<String?>(null) }
     var manualBodyError by remember { mutableStateOf<String?>(null) }
+    var manualSubmitError by remember { mutableStateOf<String?>(null) }
     var manualSaveInProgress by remember { mutableStateOf(false) }
     val manualUrlFocusRequester = remember { FocusRequester() }
     val manualBodyFocusRequester = remember { FocusRequester() }
@@ -298,6 +300,7 @@ fun QueueScreen(
                                 manualBodyInput = prefill.bodyInput
                                 manualUrlError = null
                                 manualBodyError = null
+                                manualSubmitError = null
                                 showSaveEntryDialog = true
                             },
                         ) {
@@ -564,6 +567,7 @@ fun QueueScreen(
             inProgress = manualSaveInProgress,
         )
         suspend fun submitManualEntry() {
+            manualSubmitError = null
             val extractedUrl = resolveManualSaveUrl(manualUrlInput)
             if (manualSaveMode == ManualSaveMode.URL && extractedUrl == null) {
                 manualUrlError = "Enter a valid http(s) URL"
@@ -600,13 +604,18 @@ fun QueueScreen(
                 vm.saveUrlFromUpNext(extractedUrl.orEmpty())
             }
             manualSaveInProgress = false
-            showSaveEntryDialog = false
-            manualUrlInput = ""
-            manualTitleInput = ""
-            manualBodyInput = ""
             val actionLabel = if (result.opensSettings) "Open Settings" else null
             val actionKey = if (result.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
             onShowSnackbar(result.notificationText, actionLabel, actionKey)
+            if (isManualSaveSuccess(result)) {
+                showSaveEntryDialog = false
+                manualUrlInput = ""
+                manualTitleInput = ""
+                manualBodyInput = ""
+                manualSubmitError = null
+            } else {
+                manualSubmitError = result.notificationText
+            }
         }
 
         LaunchedEffect(showSaveEntryDialog) {
@@ -621,6 +630,7 @@ fun QueueScreen(
                     showSaveEntryDialog = false
                     manualUrlError = null
                     manualBodyError = null
+                    manualSubmitError = null
                 }
             },
             title = { Text("Save Item") },
@@ -635,6 +645,7 @@ fun QueueScreen(
                             onClick = {
                                 manualSaveMode = ManualSaveMode.URL
                                 manualBodyError = null
+                                manualSubmitError = null
                             },
                             label = { Text("Save URL") },
                         )
@@ -643,6 +654,7 @@ fun QueueScreen(
                             onClick = {
                                 manualSaveMode = ManualSaveMode.TEXT
                                 manualBodyError = null
+                                manualSubmitError = null
                             },
                             label = { Text("Paste Text") },
                         )
@@ -652,6 +664,7 @@ fun QueueScreen(
                         onValueChange = {
                             manualUrlInput = it
                             manualUrlError = null
+                            manualSubmitError = null
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -696,6 +709,13 @@ fun QueueScreen(
                             },
                         ),
                     )
+                    manualSubmitError?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                     if (manualSaveMode == ManualSaveMode.TEXT) {
                         OutlinedTextField(
                             value = manualTitleInput,
@@ -709,6 +729,7 @@ fun QueueScreen(
                             onValueChange = {
                                 manualBodyInput = it
                                 manualBodyError = null
+                                manualSubmitError = null
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -751,6 +772,7 @@ fun QueueScreen(
                         showSaveEntryDialog = false
                         manualUrlError = null
                         manualBodyError = null
+                        manualSubmitError = null
                     },
                 ) {
                     Text("Cancel")
@@ -784,6 +806,10 @@ internal fun canSubmitManualSave(
         ManualSaveMode.URL -> resolveManualSaveUrl(urlInput) != null
         ManualSaveMode.TEXT -> bodyInput.isNotBlank()
     }
+}
+
+internal fun isManualSaveSuccess(result: ShareSaveResult): Boolean {
+    return result is ShareSaveResult.Saved
 }
 
 internal fun buildManualSavePrefill(clipboardText: String?): ManualSavePrefill {
