@@ -10,13 +10,20 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ParagraphSpacingOption
+import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.decodeSelectedPlaylistId
 import com.mimeo.android.model.encodeSelectedPlaylistId
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 private val Context.dataStore by preferencesDataStore(name = "mimeo_settings")
 
@@ -61,6 +68,9 @@ class SettingsStore(private val context: Context) {
         stringPreferencesKey("player_chevron_snap_edge")
     private val playerChevronEdgeOffsetKey: Preferences.Key<Float> =
         floatPreferencesKey("player_chevron_edge_offset")
+    private val queueSnapshotsJsonKey: Preferences.Key<String> =
+        stringPreferencesKey("queue_snapshots_json")
+    private val json = Json { ignoreUnknownKeys = true }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->
         AppSettings(
@@ -233,4 +243,64 @@ class SettingsStore(private val context: Context) {
             prefs[playerChevronEdgeOffsetKey] = playerChevronEdgeOffset.coerceIn(0f, 1f)
         }
     }
+
+    suspend fun saveQueueSnapshot(selectedPlaylistId: Int?, queue: PlaybackQueueResponse) {
+        val key = queueSnapshotKey(selectedPlaylistId)
+        val savedAt = System.currentTimeMillis()
+        context.dataStore.edit { prefs ->
+            val existing = decodeQueueSnapshots(prefs[queueSnapshotsJsonKey])
+            val updated = listOf(
+                QueueSnapshotRecord(
+                    key = key,
+                    count = queue.count,
+                    items = queue.items,
+                    savedAt = savedAt,
+                ),
+            ) + existing.records.filterNot { it.key == key }
+            prefs[queueSnapshotsJsonKey] = json.encodeToString(
+                QueueSnapshotState(
+                    records = updated.take(MAX_QUEUE_SNAPSHOT_RECORDS),
+                ),
+            )
+        }
+    }
+
+    suspend fun loadQueueSnapshot(selectedPlaylistId: Int?): PlaybackQueueResponse? {
+        val key = queueSnapshotKey(selectedPlaylistId)
+        val prefs = context.dataStore.data.first()
+        val stored = decodeQueueSnapshots(prefs[queueSnapshotsJsonKey])
+        val record = stored.records.firstOrNull { it.key == key } ?: return null
+        return PlaybackQueueResponse(
+            count = maxOf(record.count, record.items.size),
+            items = record.items,
+        )
+    }
+
+    private fun queueSnapshotKey(selectedPlaylistId: Int?): String {
+        return selectedPlaylistId?.toString() ?: "smart"
+    }
+
+    private fun decodeQueueSnapshots(raw: String?): QueueSnapshotState {
+        if (raw.isNullOrBlank()) return QueueSnapshotState()
+        return runCatching {
+            json.decodeFromString<QueueSnapshotState>(raw)
+        }.getOrDefault(QueueSnapshotState())
+    }
+
+    companion object {
+        private const val MAX_QUEUE_SNAPSHOT_RECORDS = 16
+    }
 }
+
+@Serializable
+private data class QueueSnapshotState(
+    val records: List<QueueSnapshotRecord> = emptyList(),
+)
+
+@Serializable
+private data class QueueSnapshotRecord(
+    val key: String,
+    val count: Int,
+    val items: List<PlaybackQueueItem>,
+    val savedAt: Long,
+)

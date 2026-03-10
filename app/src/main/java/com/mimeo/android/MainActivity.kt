@@ -758,6 +758,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             _cachedItemIds.value = resolveOfflineReadyIds(queue.items)
+            settingsStore.saveQueueSnapshot(current.selectedPlaylistId, queue)
             _queueOffline.value = false
             _statusMessage.value = "Queue loaded (${queue.count})"
             flushPendingProgress()
@@ -783,16 +784,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
                 _cachedItemIds.value = resolveOfflineReadyIds(refreshedQueue.items)
+                settingsStore.saveQueueSnapshot(current.selectedPlaylistId, refreshedQueue)
                 _statusMessage.value = "Queue loaded (${refreshedQueue.count})"
             }
             Result.success(Unit)
         } catch (e: ApiException) {
+            if (e.statusCode in 500..599 && applySavedQueueSnapshot(current.selectedPlaylistId)) {
+                return@withLock Result.success(Unit)
+            }
             _queueOffline.value = false
             _statusMessage.value = userFacingRequestErrorMessage(e, fallback = "Refresh failed")
             updateSyncBadgeState()
             Result.failure(e)
         } catch (e: Exception) {
-            _queueOffline.value = isNetworkError(e)
+            val networkError = isNetworkError(e)
+            if (networkError && applySavedQueueSnapshot(current.selectedPlaylistId)) {
+                return@withLock Result.success(Unit)
+            }
+            _queueOffline.value = networkError
             _statusMessage.value = userFacingRequestErrorMessage(e, fallback = "Couldn't refresh queue")
             updateSyncBadgeState()
             Result.failure(e)
@@ -820,6 +829,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         return successCount
+    }
+
+    private suspend fun applySavedQueueSnapshot(selectedPlaylistId: Int?): Boolean {
+        val snapshot = runCatching {
+            settingsStore.loadQueueSnapshot(selectedPlaylistId)
+        }.getOrNull() ?: return false
+
+        _queueItems.value = snapshot.items
+        _cachedItemIds.value = resolveOfflineReadyIds(snapshot.items)
+        val appliedSnapshot = QueueFetchDebugSnapshot(
+            selectedPlaylistId = selectedPlaylistId,
+            requestUrl = "local_snapshot",
+            statusCode = null,
+            responseItemCount = snapshot.items.size,
+            responseContains409 = snapshot.items.any { it.itemId == DEBUG_TARGET_ITEM_ID },
+            responseBytes = 0,
+            responseHash = "",
+            appliedItemCount = snapshot.items.size,
+            appliedContains409 = snapshot.items.any { it.itemId == DEBUG_TARGET_ITEM_ID },
+            lastFetchAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()),
+        )
+        _lastQueueFetchDebug.value = appliedSnapshot
+        _queueOffline.value = true
+        _statusMessage.value = "Offline: showing saved queue snapshot (${snapshot.items.size})"
+        updateSyncBadgeState()
+        return true
     }
 
     private fun shouldAutoRetryManualSave(result: ShareSaveResult): Boolean {
@@ -1221,6 +1256,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
             _lastQueueFetchDebug.value = appliedSnapshot
             _cachedItemIds.value = resolveOfflineReadyIds(queue.items)
+            settingsStore.saveQueueSnapshot(current.selectedPlaylistId, queue)
             repository.reconcileSessionWithQueue(queue.items)?.let { updated ->
                 _nowPlayingSession.value = updated
             }
