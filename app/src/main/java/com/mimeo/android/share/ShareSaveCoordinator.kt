@@ -275,6 +275,9 @@ class ShareSaveCoordinator(
             val result = when {
                 error.statusCode == 401 -> ShareSaveResult.Unauthorized
                 error.statusCode == 403 -> ShareSaveResult.Unauthorized
+                error.statusCode == 409 -> ShareSaveResult.Saved(
+                    destinationName = resolveDestinationName(current = current),
+                )
                 error.statusCode in 500..599 -> ShareSaveResult.ServerError
                 else -> ShareSaveResult.SaveFailed
             }
