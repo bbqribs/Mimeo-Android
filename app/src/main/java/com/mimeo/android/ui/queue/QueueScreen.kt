@@ -103,6 +103,7 @@ private data class ManualSavePayload(
     val urlInput: String,
     val titleInput: String?,
     val bodyInput: String?,
+    val destinationPlaylistId: Int?,
 )
 
 private enum class QueueFilterChip(val label: String, val enabled: Boolean = true) {
@@ -714,6 +715,7 @@ fun QueueScreen(
                     ),
                     titleInput = manualTitleInput.trim().takeIf { it.isNotEmpty() },
                     bodyInput = normalizedBody,
+                    destinationPlaylistId = settings.defaultSavePlaylistId,
                 )
             } else {
                 ManualSavePayload(
@@ -721,6 +723,7 @@ fun QueueScreen(
                     urlInput = extractedUrl.orEmpty(),
                     titleInput = null,
                     bodyInput = null,
+                    destinationPlaylistId = settings.defaultSavePlaylistId,
                 )
             }
             manualActivePayload = payload
@@ -731,6 +734,7 @@ fun QueueScreen(
                     titleInput = payload.titleInput,
                     bodyInput = payload.bodyInput,
                     result = ShareSaveResult.NetworkError,
+                    destinationPlaylistId = payload.destinationPlaylistId,
                 )
                 showSaveEntryDialog = false
                 manualUrlInput = ""
@@ -755,9 +759,13 @@ fun QueueScreen(
                         urlInput = payload.urlInput,
                         titleInput = payload.titleInput,
                         bodyInput = payload.bodyInput.orEmpty(),
+                        destinationPlaylistId = payload.destinationPlaylistId,
                     )
                 } else {
-                    vm.saveUrlFromUpNext(payload.urlInput)
+                    vm.saveUrlFromUpNext(
+                        rawInput = payload.urlInput,
+                        destinationPlaylistId = payload.destinationPlaylistId,
+                    )
                 }
                 if (manualSaveAttemptVersion != attemptVersion) {
                     return
@@ -771,6 +779,7 @@ fun QueueScreen(
                         urlInput = payload.urlInput,
                         titleInput = payload.titleInput,
                         bodyInput = payload.bodyInput,
+                        destinationPlaylistId = payload.destinationPlaylistId,
                     )
                     showSaveEntryDialog = false
                     manualUrlInput = ""
@@ -784,6 +793,7 @@ fun QueueScreen(
                         titleInput = payload.titleInput,
                         bodyInput = payload.bodyInput,
                         result = result,
+                        destinationPlaylistId = payload.destinationPlaylistId,
                     )
                     manualSubmitError = result.notificationText
                 }
@@ -961,6 +971,7 @@ fun QueueScreen(
                                 titleInput = payload.titleInput,
                                 bodyInput = payload.bodyInput,
                                 result = ShareSaveResult.NetworkError,
+                                destinationPlaylistId = payload.destinationPlaylistId,
                             )
                             manualSaveAttemptVersion += 1
                             manualSaveJob?.cancel()
