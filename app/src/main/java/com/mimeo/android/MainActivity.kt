@@ -305,8 +305,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            settingsStore.settingsFlow.collect {
-                _settings.value = it
+            var previous = _settings.value
+            settingsStore.settingsFlow.collect { next ->
+                _settings.value = next
+                if (previous.apiToken.isBlank() && next.apiToken.isNotBlank()) {
+                    loadQueue()
+                }
+                previous = next
             }
         }
         WorkScheduler.enqueueProgressSync(application.applicationContext)
@@ -727,7 +732,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun loadQueueOnce(): Result<Unit> = queueLoadMutex.withLock {
         val current = settings.value
+        val snapshotPreloaded = if (_queueItems.value.isEmpty()) {
+            applySavedQueueSnapshot(
+                selectedPlaylistId = current.selectedPlaylistId,
+                markOffline = false,
+                statusMessage = null,
+            )
+        } else {
+            false
+        }
         if (current.apiToken.isBlank()) {
+            if (snapshotPreloaded) {
+                return@withLock Result.success(Unit)
+            }
             _statusMessage.value = "Token required"
             return@withLock Result.failure(IllegalStateException("Token required"))
         }
@@ -789,7 +806,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             Result.success(Unit)
         } catch (e: ApiException) {
-            if (e.statusCode in 500..599 && applySavedQueueSnapshot(current.selectedPlaylistId)) {
+            if (
+                e.statusCode in 500..599 &&
+                applySavedQueueSnapshot(
+                    selectedPlaylistId = current.selectedPlaylistId,
+                    markOffline = true,
+                    statusMessage = null,
+                )
+            ) {
                 return@withLock Result.success(Unit)
             }
             _queueOffline.value = false
@@ -798,7 +822,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             Result.failure(e)
         } catch (e: Exception) {
             val networkError = isNetworkError(e)
-            if (networkError && applySavedQueueSnapshot(current.selectedPlaylistId)) {
+            if (
+                networkError &&
+                applySavedQueueSnapshot(
+                    selectedPlaylistId = current.selectedPlaylistId,
+                    markOffline = true,
+                    statusMessage = null,
+                )
+            ) {
                 return@withLock Result.success(Unit)
             }
             _queueOffline.value = networkError
@@ -831,7 +862,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return successCount
     }
 
-    private suspend fun applySavedQueueSnapshot(selectedPlaylistId: Int?): Boolean {
+    private suspend fun applySavedQueueSnapshot(
+        selectedPlaylistId: Int?,
+        markOffline: Boolean,
+        statusMessage: String?,
+    ): Boolean {
         val snapshot = runCatching {
             settingsStore.loadQueueSnapshot(selectedPlaylistId)
         }.getOrNull() ?: return false
@@ -851,8 +886,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             lastFetchAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()),
         )
         _lastQueueFetchDebug.value = appliedSnapshot
-        _queueOffline.value = true
-        _statusMessage.value = "Offline: showing saved queue snapshot (${snapshot.items.size})"
+        if (markOffline) {
+            _queueOffline.value = true
+            _statusMessage.value = statusMessage ?: "Offline: showing saved queue snapshot (${snapshot.items.size})"
+        }
         updateSyncBadgeState()
         return true
     }
