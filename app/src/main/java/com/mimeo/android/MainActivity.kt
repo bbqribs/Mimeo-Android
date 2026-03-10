@@ -635,6 +635,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _pendingManualSaves.update { existing -> existing.filterNot { it.id == itemId } }
     }
 
+    fun removeMatchingPendingManualSave(
+        type: PendingManualSaveType,
+        urlInput: String,
+        titleInput: String?,
+        bodyInput: String?,
+    ) {
+        _pendingManualSaves.update { existing ->
+            existing.filterNot { pending ->
+                pending.type == type &&
+                    pending.urlInput == urlInput &&
+                    pending.titleInput == titleInput &&
+                    pending.bodyInput == bodyInput
+            }
+        }
+    }
+
     fun testConnection() {
         val current = settings.value
         if (current.apiToken.isBlank()) {

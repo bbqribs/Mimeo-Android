@@ -97,6 +97,13 @@ internal data class ManualSavePrefill(
     val bodyInput: String = "",
 )
 
+private data class ManualSavePayload(
+    val type: PendingManualSaveType,
+    val urlInput: String,
+    val titleInput: String?,
+    val bodyInput: String?,
+)
+
 private enum class QueueFilterChip(val label: String, val enabled: Boolean = true) {
     ALL("All"),
     UNREAD("Unread"),
@@ -654,6 +661,18 @@ fun QueueScreen(
         suspend fun submitManualEntry() {
             manualSubmitError = null
             manualSaveJob = currentCoroutineContext()[Job]
+            fun buildCurrentPayload(): ManualSavePayload {
+                return ManualSavePayload(
+                    type = if (manualSaveMode == ManualSaveMode.TEXT) {
+                        PendingManualSaveType.TEXT
+                    } else {
+                        PendingManualSaveType.URL
+                    },
+                    urlInput = manualUrlInput,
+                    titleInput = manualTitleInput,
+                    bodyInput = manualBodyInput,
+                )
+            }
             val extractedUrl = resolveManualSaveUrl(manualUrlInput)
             if (manualSaveMode == ManualSaveMode.URL && extractedUrl == null) {
                 manualUrlError = "Enter a valid http(s) URL"
@@ -676,16 +695,13 @@ fun QueueScreen(
                 return
             }
             manualBodyError = null
+            val payload = buildCurrentPayload()
             fun queueCurrentManualSaveAndClose(statusMessage: String) {
                 vm.queueFailedManualSave(
-                    type = if (manualSaveMode == ManualSaveMode.TEXT) {
-                        PendingManualSaveType.TEXT
-                    } else {
-                        PendingManualSaveType.URL
-                    },
-                    urlInput = manualUrlInput,
-                    titleInput = manualTitleInput,
-                    bodyInput = manualBodyInput,
+                    type = payload.type,
+                    urlInput = payload.urlInput,
+                    titleInput = payload.titleInput,
+                    bodyInput = payload.bodyInput,
                     result = ShareSaveResult.NetworkError,
                 )
                 showSaveEntryDialog = false
@@ -721,6 +737,12 @@ fun QueueScreen(
                 val actionKey = if (result.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
                 onShowSnackbar(result.notificationText, actionLabel, actionKey)
                 if (isManualSaveSuccess(result)) {
+                    vm.removeMatchingPendingManualSave(
+                        type = payload.type,
+                        urlInput = payload.urlInput,
+                        titleInput = payload.titleInput,
+                        bodyInput = payload.bodyInput,
+                    )
                     showSaveEntryDialog = false
                     manualUrlInput = ""
                     manualTitleInput = ""
@@ -728,14 +750,10 @@ fun QueueScreen(
                     manualSubmitError = null
                 } else {
                     vm.queueFailedManualSave(
-                        type = if (manualSaveMode == ManualSaveMode.TEXT) {
-                            PendingManualSaveType.TEXT
-                        } else {
-                            PendingManualSaveType.URL
-                        },
-                        urlInput = manualUrlInput,
-                        titleInput = manualTitleInput,
-                        bodyInput = manualBodyInput,
+                        type = payload.type,
+                        urlInput = payload.urlInput,
+                        titleInput = payload.titleInput,
+                        bodyInput = payload.bodyInput,
                         result = result,
                     )
                     manualSubmitError = result.notificationText
@@ -772,6 +790,7 @@ fun QueueScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = manualSaveMode == ManualSaveMode.URL,
+                            enabled = !manualSaveInProgress,
                             onClick = {
                                 manualSaveMode = ManualSaveMode.URL
                                 manualBodyError = null
@@ -781,6 +800,7 @@ fun QueueScreen(
                         )
                         FilterChip(
                             selected = manualSaveMode == ManualSaveMode.TEXT,
+                            enabled = !manualSaveInProgress,
                             onClick = {
                                 manualSaveMode = ManualSaveMode.TEXT
                                 manualBodyError = null
@@ -800,6 +820,7 @@ fun QueueScreen(
                             .fillMaxWidth()
                             .focusRequester(manualUrlFocusRequester),
                         singleLine = true,
+                        enabled = !manualSaveInProgress,
                         label = {
                             Text(
                                 if (manualSaveMode == ManualSaveMode.TEXT) {
@@ -852,6 +873,7 @@ fun QueueScreen(
                             onValueChange = { manualTitleInput = it },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
+                            enabled = !manualSaveInProgress,
                             label = { Text("Title (optional)") },
                         )
                         OutlinedTextField(
@@ -867,6 +889,7 @@ fun QueueScreen(
                                 .focusRequester(manualBodyFocusRequester),
                             minLines = 8,
                             maxLines = 16,
+                            enabled = !manualSaveInProgress,
                             label = { Text("Body text") },
                             placeholder = { Text("Paste article text here") },
                             isError = manualBodyError != null,
@@ -899,7 +922,7 @@ fun QueueScreen(
                 if (manualSaveInProgress) {
                     TextButton(
                         onClick = {
-                            vm.queueFailedManualSave(
+                            val payload = ManualSavePayload(
                                 type = if (manualSaveMode == ManualSaveMode.TEXT) {
                                     PendingManualSaveType.TEXT
                                 } else {
@@ -908,6 +931,12 @@ fun QueueScreen(
                                 urlInput = manualUrlInput,
                                 titleInput = manualTitleInput,
                                 bodyInput = manualBodyInput,
+                            )
+                            vm.queueFailedManualSave(
+                                type = payload.type,
+                                urlInput = payload.urlInput,
+                                titleInput = payload.titleInput,
+                                bodyInput = payload.bodyInput,
                                 result = ShareSaveResult.NetworkError,
                             )
                             manualSaveJob?.cancel()
