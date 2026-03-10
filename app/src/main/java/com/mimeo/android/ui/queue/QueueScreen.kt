@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -48,7 +49,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -334,6 +334,7 @@ fun QueueScreen(
                                 actionScope.launch { refreshQueueContent() }
                             },
                             contentDescription = "Refresh queue and sync progress",
+                            pullProgress = pullRefreshProgress,
                         )
                         IconButton(
                             enabled = !manualSaveInProgress,
@@ -527,25 +528,11 @@ fun QueueScreen(
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             if (pullRefreshDistancePx > 0f) {
-                Box(
+                Spacer(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(with(density) { pullRefreshDistancePx.toDp() }),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.msr_refresh_24),
-                        contentDescription = "Pull to refresh",
-                        tint = if (pullRefreshProgress >= 1f) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        modifier = Modifier
-                            .size(22.dp)
-                            .graphicsLayer(rotationZ = 360f * pullRefreshProgress),
-                    )
-                }
+                )
             }
             emptyStateMessage?.let { message ->
                 ElevatedCard(modifier = Modifier.fillMaxWidth()) {
