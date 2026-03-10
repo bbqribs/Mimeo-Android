@@ -610,7 +610,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     if (queued.id == itemId) {
                         queued.copy(
                             retryCount = queued.retryCount + 1,
-                            lastFailureMessage = result.notificationText,
+                            lastFailureMessage = resolvePendingRetryFailureMessage(
+                                existingMessage = queued.lastFailureMessage,
+                                result = result,
+                            ),
                             autoRetryEligible = shouldAutoRetryManualSave(result),
                         )
                     } else {
@@ -650,7 +653,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         if (queued.id == itemId) {
                             queued.copy(
                                 retryCount = queued.retryCount + 1,
-                                lastFailureMessage = result.notificationText,
+                                lastFailureMessage = resolvePendingRetryFailureMessage(
+                                    existingMessage = queued.lastFailureMessage,
+                                    result = result,
+                                ),
                                 autoRetryEligible = shouldAutoRetryManualSave(result),
                             )
                         } else {
@@ -794,6 +800,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ShareSaveResult.SaveFailed,
             -> true
             else -> false
+        }
+    }
+
+    private fun resolvePendingRetryFailureMessage(
+        existingMessage: String?,
+        result: ShareSaveResult,
+    ): String {
+        return when (result) {
+            ShareSaveResult.SaveFailed -> existingMessage ?: ShareSaveResult.NetworkError.notificationText
+            else -> result.notificationText
         }
     }
 

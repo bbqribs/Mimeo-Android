@@ -547,9 +547,11 @@ fun QueueScreen(
                             return@launch
                         }
                         val retryResult = vm.retryPendingManualSave(item.id) ?: return@launch
-                        val actionLabel = if (retryResult.opensSettings) "Open Settings" else null
-                        val actionKey = if (retryResult.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
-                        onShowSnackbar(retryResult.notificationText, actionLabel, actionKey)
+                        if (shouldSurfacePendingRetrySnackbar(retryResult)) {
+                            val actionLabel = if (retryResult.opensSettings) "Open Settings" else null
+                            val actionKey = if (retryResult.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
+                            onShowSnackbar(retryResult.notificationText, actionLabel, actionKey)
+                        }
                     }
                 },
                 onRetryAll = {
@@ -559,7 +561,7 @@ fun QueueScreen(
                             return@launch
                         }
                         val retrySuccessCount = vm.retryAllPendingManualSaves()
-                        if (retrySuccessCount >= 0) {
+                        if (retrySuccessCount > 0) {
                             onShowSnackbar("Retried $retrySuccessCount pending saves", null, null)
                         }
                     }
@@ -1017,6 +1019,17 @@ internal fun canSubmitManualSave(
 
 internal fun isManualSaveSuccess(result: ShareSaveResult): Boolean {
     return result is ShareSaveResult.Saved
+}
+
+internal fun shouldSurfacePendingRetrySnackbar(result: ShareSaveResult): Boolean {
+    return when (result) {
+        is ShareSaveResult.Saved,
+        ShareSaveResult.MissingToken,
+        ShareSaveResult.Unauthorized,
+        ShareSaveResult.NoValidUrl,
+        -> true
+        else -> false
+    }
 }
 
 internal fun buildManualSavePrefill(clipboardText: String?): ManualSavePrefill {
