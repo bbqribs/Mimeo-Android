@@ -129,8 +129,8 @@ fun QueueScreen(
     val density = LocalDensity.current
 
     val listState = rememberLazyListState()
-    val pullRefreshThresholdPx = with(density) { 72.dp.toPx() }
-    val pullRefreshMaxPx = with(density) { 140.dp.toPx() }
+    val pullRefreshMaxPx = with(density) { 96.dp.toPx() }
+    val pullRefreshThresholdPx = pullRefreshMaxPx
     var pullRefreshDistancePx by remember { mutableFloatStateOf(0f) }
     var pendingFocusId by remember { mutableIntStateOf(-1) }
     var playlistMenuExpanded by remember { mutableStateOf(false) }
