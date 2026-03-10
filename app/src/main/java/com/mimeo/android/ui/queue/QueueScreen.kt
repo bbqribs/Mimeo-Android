@@ -11,12 +11,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
@@ -131,6 +133,7 @@ fun QueueScreen(
     var manualBodyError by remember { mutableStateOf<String?>(null) }
     var manualSaveInProgress by remember { mutableStateOf(false) }
     val manualUrlFocusRequester = remember { FocusRequester() }
+    val manualBodyFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
         vm.refreshPlaylists()
@@ -607,7 +610,10 @@ fun QueueScreen(
             },
             title = { Text("Save Item") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = manualSaveMode == ManualSaveMode.URL,
@@ -619,7 +625,10 @@ fun QueueScreen(
                         )
                         FilterChip(
                             selected = manualSaveMode == ManualSaveMode.TEXT,
-                            onClick = { manualSaveMode = ManualSaveMode.TEXT },
+                            onClick = {
+                                manualSaveMode = ManualSaveMode.TEXT
+                                manualBodyError = null
+                            },
                             label = { Text("Paste Text") },
                         )
                     }
@@ -644,6 +653,11 @@ fun QueueScreen(
                             imeAction = if (manualSaveMode == ManualSaveMode.URL) ImeAction.Done else ImeAction.Next,
                         ),
                         keyboardActions = KeyboardActions(
+                            onNext = {
+                                if (manualSaveMode == ManualSaveMode.TEXT) {
+                                    manualBodyFocusRequester.requestFocus()
+                                }
+                            },
                             onDone = {
                                 if (canSubmit) {
                                     actionScope.launch { submitManualEntry() }
@@ -665,16 +679,26 @@ fun QueueScreen(
                                 manualBodyInput = it
                                 manualBodyError = null
                             },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 6,
-                            maxLines = 10,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 160.dp, max = 320.dp)
+                                .focusRequester(manualBodyFocusRequester),
+                            minLines = 8,
+                            maxLines = 16,
                             label = { Text("Body text") },
                             placeholder = { Text("Paste article text here") },
                             isError = manualBodyError != null,
                             supportingText = {
                                 manualBodyError?.let { Text(it) }
                             },
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    if (canSubmit) {
+                                        actionScope.launch { submitManualEntry() }
+                                    }
+                                },
+                            ),
                         )
                     }
                 }
@@ -725,7 +749,7 @@ internal fun canSubmitManualSave(
     inProgress: Boolean,
 ): Boolean {
     if (inProgress) return false
-    if (urlInput.isBlank()) return false
+    if (resolveManualSaveUrl(urlInput) == null) return false
     return mode != ManualSaveMode.TEXT || bodyInput.isNotBlank()
 }
 

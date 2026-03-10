@@ -36,7 +36,9 @@ class ManualUrlEntryValidationTest {
     fun `canSubmitManualSave enforces mode-specific required fields`() {
         assertTrue(canSubmitManualSave(ManualSaveMode.URL, "https://example.com", "", inProgress = false))
         assertFalse(canSubmitManualSave(ManualSaveMode.URL, "", "", inProgress = false))
+        assertFalse(canSubmitManualSave(ManualSaveMode.URL, "not a url", "", inProgress = false))
         assertFalse(canSubmitManualSave(ManualSaveMode.TEXT, "https://example.com", "", inProgress = false))
+        assertFalse(canSubmitManualSave(ManualSaveMode.TEXT, "not a url", "Body", inProgress = false))
         assertTrue(canSubmitManualSave(ManualSaveMode.TEXT, "https://example.com", "Body", inProgress = false))
         assertFalse(canSubmitManualSave(ManualSaveMode.TEXT, "https://example.com", "Body", inProgress = true))
     }
