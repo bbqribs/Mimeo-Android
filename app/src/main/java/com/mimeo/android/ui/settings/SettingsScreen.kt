@@ -237,6 +237,11 @@ fun SettingsScreen(
                     label = { Text("${connectionMode.displayName()} Base URL") },
                     singleLine = true,
                 )
+                Text(
+                    text = connectionModeBaseUrlGuidance(connectionMode),
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 OutlinedTextField(
                     value = token,
                     onValueChange = { token = it },
@@ -244,6 +249,11 @@ fun SettingsScreen(
                     label = { Text("API Token") },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
+                )
+                Text(
+                    text = connectionModeTokenGuidance(connectionMode),
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { saveCurrent() }) { Text("Save") }
@@ -629,6 +639,22 @@ private fun ConnectionMode.description(): String = when (this) {
     ConnectionMode.LOCAL -> "Local loopback/dev-host mode (for emulator-style local access)."
     ConnectionMode.LAN -> "Home LAN mode (when phone and server are on same local network)."
     ConnectionMode.REMOTE -> "Off-LAN remote mode (for secure access over Tailscale/VPN)."
+}
+
+internal fun connectionModeBaseUrlGuidance(mode: ConnectionMode): String = when (mode) {
+    ConnectionMode.LOCAL ->
+        "Use local/emulator host URL (typically http://10.0.2.2:8000 for emulator workflows)."
+    ConnectionMode.LAN ->
+        "Use your server LAN URL (for example http://192.168.x.y:8000) when phone and server share the same network."
+    ConnectionMode.REMOTE ->
+        "Use your Tailscale/VPN URL (for example http://100.x.y.z:8000 or your secure remote host). If using 192.168.x.y, use LAN mode instead."
+}
+
+internal fun connectionModeTokenGuidance(mode: ConnectionMode): String = when (mode) {
+    ConnectionMode.REMOTE ->
+        "Use a valid API token from the same remote server target. Token values are never shown."
+    else ->
+        "Use a valid API token from the selected server."
 }
 
 @Composable
