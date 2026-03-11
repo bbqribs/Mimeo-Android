@@ -302,6 +302,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val pendingNavigationRoute: StateFlow<String?> = _pendingNavigationRoute.asStateFlow()
     private val _settingsScrollOffset = MutableStateFlow(0)
     val settingsScrollOffset: StateFlow<Int> = _settingsScrollOffset.asStateFlow()
+    private var hasAttemptedInitialPendingAutoRetry = false
 
     init {
         viewModelScope.launch {
@@ -741,6 +742,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun loadQueueOnce(autoRetryPendingSaves: Boolean = true): Result<Unit> = queueLoadMutex.withLock {
         val current = settings.value
+        val wasOffline = _queueOffline.value
         val snapshotPreloaded = if (_queueItems.value.isEmpty()) {
             applySavedQueueSnapshot(
                 selectedPlaylistId = current.selectedPlaylistId,
@@ -788,7 +790,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _queueOffline.value = false
             _statusMessage.value = "Queue loaded (${queue.count})"
             flushPendingProgress()
-            val autoRetrySuccessCount = if (autoRetryPendingSaves) {
+            val shouldAttemptPendingAutoRetry = autoRetryPendingSaves && shouldAttemptPendingAutoRetryOnQueueLoad(
+                wasOffline = wasOffline,
+            )
+            val autoRetrySuccessCount = if (shouldAttemptPendingAutoRetry) {
+                hasAttemptedInitialPendingAutoRetry = true
                 autoRetryPendingManualSaves(limit = 2)
             } else {
                 0
@@ -909,6 +915,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun shouldAutoRetryManualSave(result: ShareSaveResult): Boolean {
         return isRetryablePendingSaveResult(result)
+    }
+
+    private fun shouldAttemptPendingAutoRetryOnQueueLoad(wasOffline: Boolean): Boolean {
+        val hasRetryablePending = _pendingManualSaves.value.any { it.autoRetryEligible }
+        if (!hasRetryablePending) return false
+        if (wasOffline) return true
+        return !hasAttemptedInitialPendingAutoRetry
     }
 
     private fun resolvePendingRetryFailureMessage(
