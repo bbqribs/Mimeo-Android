@@ -10,6 +10,9 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ParagraphSpacingOption
+import com.mimeo.android.model.PendingManualSaveItem
+import com.mimeo.android.model.PendingManualSaveType
+import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.model.PlayerChevronSnapEdge
@@ -70,6 +73,8 @@ class SettingsStore(private val context: Context) {
         floatPreferencesKey("player_chevron_edge_offset")
     private val queueSnapshotsJsonKey: Preferences.Key<String> =
         stringPreferencesKey("queue_snapshots_json")
+    private val pendingManualSavesJsonKey: Preferences.Key<String> =
+        stringPreferencesKey("pending_manual_saves_json")
     private val json = Json { ignoreUnknownKeys = true }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -107,6 +112,10 @@ class SettingsStore(private val context: Context) {
                 ?: PlayerChevronSnapEdge.HOME,
             playerChevronEdgeOffset = (prefs[playerChevronEdgeOffsetKey] ?: 0.5f).coerceIn(0f, 1f),
         )
+    }
+
+    val pendingManualSavesFlow: Flow<List<PendingManualSaveItem>> = context.dataStore.data.map { prefs ->
+        decodePendingManualSaves(prefs[pendingManualSavesJsonKey])
     }
 
     suspend fun save(
@@ -276,6 +285,116 @@ class SettingsStore(private val context: Context) {
         )
     }
 
+    suspend fun enqueuePendingManualSave(
+        source: PendingSaveSource,
+        type: PendingManualSaveType,
+        urlInput: String,
+        titleInput: String?,
+        bodyInput: String?,
+        destinationPlaylistId: Int?,
+        lastFailureMessage: String,
+        autoRetryEligible: Boolean,
+    ) {
+        context.dataStore.edit { prefs ->
+            val existing = decodePendingManualSaves(prefs[pendingManualSavesJsonKey])
+            val duplicateIndex = existing.indexOfFirst { pending ->
+                pending.source == source &&
+                    pending.type == type &&
+                    pending.urlInput == urlInput &&
+                    pending.titleInput == titleInput &&
+                    pending.bodyInput == bodyInput &&
+                    pending.destinationPlaylistId == destinationPlaylistId
+            }
+            val updated = if (duplicateIndex >= 0) {
+                existing.mapIndexed { index, item ->
+                    if (index == duplicateIndex) {
+                        item.copy(
+                            retryCount = item.retryCount + 1,
+                            lastFailureMessage = lastFailureMessage,
+                            autoRetryEligible = autoRetryEligible,
+                        )
+                    } else {
+                        item
+                    }
+                }
+            } else {
+                val nextId = (existing.maxOfOrNull { it.id } ?: 0L) + 1L
+                listOf(
+                    PendingManualSaveItem(
+                        id = nextId,
+                        source = source,
+                        type = type,
+                        urlInput = urlInput,
+                        titleInput = titleInput,
+                        bodyInput = bodyInput,
+                        destinationPlaylistId = destinationPlaylistId,
+                        lastFailureMessage = lastFailureMessage,
+                        autoRetryEligible = autoRetryEligible,
+                    ),
+                ) + existing
+            }
+            prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(updated)
+        }
+    }
+
+    suspend fun removePendingManualSave(itemId: Long) {
+        context.dataStore.edit { prefs ->
+            val existing = decodePendingManualSaves(prefs[pendingManualSavesJsonKey])
+            val updated = existing.filterNot { it.id == itemId }
+            prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(updated)
+        }
+    }
+
+    suspend fun clearPendingManualSaves() {
+        context.dataStore.edit { prefs ->
+            prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(emptyList())
+        }
+    }
+
+    suspend fun markPendingManualSaveRetryFailure(
+        itemId: Long,
+        failureMessage: String,
+        autoRetryEligible: Boolean,
+    ) {
+        context.dataStore.edit { prefs ->
+            val existing = decodePendingManualSaves(prefs[pendingManualSavesJsonKey])
+            val updated = existing.map { item ->
+                if (item.id == itemId) {
+                    item.copy(
+                        retryCount = item.retryCount + 1,
+                        lastFailureMessage = failureMessage,
+                        autoRetryEligible = autoRetryEligible,
+                    )
+                } else {
+                    item
+                }
+            }
+            prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(updated)
+        }
+    }
+
+    suspend fun removeMatchingPendingManualSave(
+        source: PendingSaveSource,
+        type: PendingManualSaveType,
+        urlInput: String,
+        titleInput: String?,
+        bodyInput: String?,
+        destinationPlaylistId: Int?,
+    ) {
+        context.dataStore.edit { prefs ->
+            val existing = decodePendingManualSaves(prefs[pendingManualSavesJsonKey])
+            val updated = existing.filterNot { pending ->
+                pending.source == source &&
+                    pending.type == type &&
+                    pending.urlInput == urlInput &&
+                    pending.titleInput == titleInput &&
+                    pending.bodyInput == bodyInput &&
+                    pending.destinationPlaylistId == destinationPlaylistId
+            }
+            prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(updated)
+        }
+    }
+
     private fun queueSnapshotKey(selectedPlaylistId: Int?): String {
         return selectedPlaylistId?.toString() ?: "smart"
     }
@@ -285,6 +404,17 @@ class SettingsStore(private val context: Context) {
         return runCatching {
             json.decodeFromString<QueueSnapshotState>(raw)
         }.getOrDefault(QueueSnapshotState())
+    }
+
+    private fun encodePendingManualSaves(items: List<PendingManualSaveItem>): String {
+        return json.encodeToString(PendingManualSaveState(records = items))
+    }
+
+    private fun decodePendingManualSaves(raw: String?): List<PendingManualSaveItem> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return runCatching {
+            json.decodeFromString<PendingManualSaveState>(raw).records
+        }.getOrDefault(emptyList())
     }
 
     companion object {
@@ -303,4 +433,9 @@ private data class QueueSnapshotRecord(
     val count: Int,
     val items: List<PlaybackQueueItem>,
     val savedAt: Long,
+)
+
+@Serializable
+private data class PendingManualSaveState(
+    val records: List<PendingManualSaveItem> = emptyList(),
 )

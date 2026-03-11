@@ -223,17 +223,27 @@ data class QueueFetchDebugSnapshot(
     val lastFetchAt: String = "",
 )
 
+@Serializable
 enum class PendingManualSaveType {
     URL,
     TEXT,
 }
 
+@Serializable
+enum class PendingSaveSource {
+    MANUAL,
+    SHARE,
+}
+
+@Serializable
 data class PendingManualSaveItem(
     val id: Long,
+    val source: PendingSaveSource = PendingSaveSource.MANUAL,
     val type: PendingManualSaveType,
     val urlInput: String,
     val titleInput: String? = null,
     val bodyInput: String? = null,
+    val destinationPlaylistId: Int? = null,
     val createdAtMs: Long = System.currentTimeMillis(),
     val retryCount: Int = 0,
     val lastFailureMessage: String,

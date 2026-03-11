@@ -68,6 +68,7 @@ import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
+import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.extractFirstHttpUrl
@@ -102,6 +103,7 @@ private data class ManualSavePayload(
     val urlInput: String,
     val titleInput: String?,
     val bodyInput: String?,
+    val destinationPlaylistId: Int?,
 )
 
 private enum class QueueFilterChip(val label: String, val enabled: Boolean = true) {
@@ -713,6 +715,7 @@ fun QueueScreen(
                     ),
                     titleInput = manualTitleInput.trim().takeIf { it.isNotEmpty() },
                     bodyInput = normalizedBody,
+                    destinationPlaylistId = settings.defaultSavePlaylistId,
                 )
             } else {
                 ManualSavePayload(
@@ -720,6 +723,7 @@ fun QueueScreen(
                     urlInput = extractedUrl.orEmpty(),
                     titleInput = null,
                     bodyInput = null,
+                    destinationPlaylistId = settings.defaultSavePlaylistId,
                 )
             }
             manualActivePayload = payload
@@ -730,6 +734,7 @@ fun QueueScreen(
                     titleInput = payload.titleInput,
                     bodyInput = payload.bodyInput,
                     result = ShareSaveResult.NetworkError,
+                    destinationPlaylistId = payload.destinationPlaylistId,
                 )
                 showSaveEntryDialog = false
                 manualUrlInput = ""
@@ -754,9 +759,13 @@ fun QueueScreen(
                         urlInput = payload.urlInput,
                         titleInput = payload.titleInput,
                         bodyInput = payload.bodyInput.orEmpty(),
+                        destinationPlaylistId = payload.destinationPlaylistId,
                     )
                 } else {
-                    vm.saveUrlFromUpNext(payload.urlInput)
+                    vm.saveUrlFromUpNext(
+                        rawInput = payload.urlInput,
+                        destinationPlaylistId = payload.destinationPlaylistId,
+                    )
                 }
                 if (manualSaveAttemptVersion != attemptVersion) {
                     return
@@ -770,6 +779,7 @@ fun QueueScreen(
                         urlInput = payload.urlInput,
                         titleInput = payload.titleInput,
                         bodyInput = payload.bodyInput,
+                        destinationPlaylistId = payload.destinationPlaylistId,
                     )
                     showSaveEntryDialog = false
                     manualUrlInput = ""
@@ -783,6 +793,7 @@ fun QueueScreen(
                         titleInput = payload.titleInput,
                         bodyInput = payload.bodyInput,
                         result = result,
+                        destinationPlaylistId = payload.destinationPlaylistId,
                     )
                     manualSubmitError = result.notificationText
                 }
@@ -950,7 +961,7 @@ fun QueueScreen(
                 }
             },
             dismissButton = {
-                if (manualSaveInProgress) {
+                if (manualSaveInProgress && offline) {
                     TextButton(
                         onClick = {
                             val payload = manualActivePayload ?: return@TextButton
@@ -960,6 +971,7 @@ fun QueueScreen(
                                 titleInput = payload.titleInput,
                                 bodyInput = payload.bodyInput,
                                 result = ShareSaveResult.NetworkError,
+                                destinationPlaylistId = payload.destinationPlaylistId,
                             )
                             manualSaveAttemptVersion += 1
                             manualSaveJob?.cancel()
@@ -1099,7 +1111,7 @@ private fun PendingManualRetryCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Pending manual saves (${pendingItems.size})",
+                    text = "Pending saves (${pendingItems.size})",
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1114,7 +1126,11 @@ private fun PendingManualRetryCard(
             pendingItems.forEach { item ->
                 val titleLine = when (item.type) {
                     PendingManualSaveType.TEXT -> item.titleInput?.takeIf { it.isNotBlank() } ?: "Paste Text"
-                    PendingManualSaveType.URL -> "Save URL"
+                    PendingManualSaveType.URL -> if (item.source == PendingSaveSource.SHARE) {
+                        "Shared URL"
+                    } else {
+                        "Save URL"
+                    }
                 }
                 val bodyPreview = item.bodyInput?.trim()?.take(100)?.takeIf { it.isNotEmpty() }
                 Column(
@@ -1124,6 +1140,12 @@ private fun PendingManualRetryCard(
                     Text(text = titleLine, style = MaterialTheme.typography.labelLarge)
                     Text(
                         text = item.urlInput.ifBlank { "(no URL provided)" },
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = item.destinationPlaylistId?.let { "Destination: Playlist $it" } ?: "Destination: Smart Queue",
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

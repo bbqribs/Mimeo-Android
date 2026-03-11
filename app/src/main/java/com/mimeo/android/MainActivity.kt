@@ -89,6 +89,7 @@ import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
+import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.ProgressSyncBadgeState
@@ -105,6 +106,7 @@ import com.mimeo.android.repository.resolveOfflineReadyItemIds
 import com.mimeo.android.share.ShareSaveCoordinator
 import com.mimeo.android.share.ShareSaveRefreshBus
 import com.mimeo.android.share.ShareSaveResult
+import com.mimeo.android.share.isRetryablePendingSaveResult
 import com.mimeo.android.ui.collections.CollectionsScreen
 import com.mimeo.android.ui.collections.FolderDetailScreen
 import com.mimeo.android.repository.ProgressPostResult
@@ -120,7 +122,6 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -244,7 +245,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val queueItems: StateFlow<List<PlaybackQueueItem>> = _queueItems.asStateFlow()
     private val _pendingManualSaves = MutableStateFlow<List<PendingManualSaveItem>>(emptyList())
     val pendingManualSaves: StateFlow<List<PendingManualSaveItem>> = _pendingManualSaves.asStateFlow()
-    private val pendingManualSaveIdCounter = AtomicLong(1L)
     private val pendingManualRetryMutex = Mutex()
     private val _pendingManualRetryInProgress = MutableStateFlow(false)
     val pendingManualRetryInProgress: StateFlow<Boolean> = _pendingManualRetryInProgress.asStateFlow()
@@ -312,6 +312,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     loadQueue()
                 }
                 previous = next
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.pendingManualSavesFlow.collect { pending ->
+                _pendingManualSaves.value = pending
             }
         }
         WorkScheduler.enqueueProgressSync(application.applicationContext)
@@ -536,18 +541,40 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    suspend fun saveUrlFromUpNext(rawInput: String): ShareSaveResult {
-        return shareSaveCoordinator.saveSharedText(
+    suspend fun saveUrlFromUpNext(
+        rawInput: String,
+        destinationPlaylistId: Int? = null,
+    ): ShareSaveResult {
+        return saveUrlFromSource(
             sharedText = rawInput,
             sharedTitle = null,
+            destinationPlaylistId = destinationPlaylistId,
         )
     }
 
-    suspend fun saveManualTextFromUpNext(urlInput: String, titleInput: String?, bodyInput: String): ShareSaveResult {
+    private suspend fun saveUrlFromSource(
+        sharedText: String,
+        sharedTitle: String?,
+        destinationPlaylistId: Int?,
+    ): ShareSaveResult {
+        return shareSaveCoordinator.saveSharedText(
+            sharedText = sharedText,
+            sharedTitle = sharedTitle,
+            destinationPlaylistIdOverride = destinationPlaylistId,
+        )
+    }
+
+    suspend fun saveManualTextFromUpNext(
+        urlInput: String,
+        titleInput: String?,
+        bodyInput: String,
+        destinationPlaylistId: Int? = null,
+    ): ShareSaveResult {
         return shareSaveCoordinator.saveManualText(
             urlInput = urlInput,
             titleInput = titleInput,
             bodyInput = bodyInput,
+            destinationPlaylistIdOverride = destinationPlaylistId,
         )
     }
 
@@ -557,42 +584,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         titleInput: String?,
         bodyInput: String?,
         result: ShareSaveResult,
+        destinationPlaylistId: Int?,
     ) {
-        if (result is ShareSaveResult.Saved) return
-        val nextFailureMessage = result.notificationText
-        val nextAutoRetryEligible = shouldAutoRetryManualSave(result)
-        _pendingManualSaves.update { existing ->
-            val duplicateIndex = existing.indexOfFirst { pending ->
-                pending.type == type &&
-                    pending.urlInput == urlInput &&
-                    pending.titleInput == titleInput &&
-                    pending.bodyInput == bodyInput
-            }
-            if (duplicateIndex >= 0) {
-                existing.mapIndexed { index, item ->
-                    if (index == duplicateIndex) {
-                        item.copy(
-                            retryCount = item.retryCount + 1,
-                            lastFailureMessage = nextFailureMessage,
-                            autoRetryEligible = nextAutoRetryEligible,
-                        )
-                    } else {
-                        item
-                    }
-                }
-            } else {
-                listOf(
-                    PendingManualSaveItem(
-                        id = pendingManualSaveIdCounter.getAndIncrement(),
-                        type = type,
-                        urlInput = urlInput,
-                        titleInput = titleInput,
-                        bodyInput = bodyInput,
-                        lastFailureMessage = nextFailureMessage,
-                        autoRetryEligible = nextAutoRetryEligible,
-                    ),
-                ) + existing
-            }
+        if (!isRetryablePendingSaveResult(result)) return
+        viewModelScope.launch {
+            settingsStore.enqueuePendingManualSave(
+                source = PendingSaveSource.MANUAL,
+                type = type,
+                urlInput = urlInput,
+                titleInput = titleInput,
+                bodyInput = bodyInput,
+                destinationPlaylistId = destinationPlaylistId,
+                lastFailureMessage = result.notificationText,
+                autoRetryEligible = shouldAutoRetryManualSave(result),
+            )
         }
     }
 
@@ -601,33 +606,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _pendingManualRetryInProgress.value = true
         try {
         val item = _pendingManualSaves.value.firstOrNull { it.id == itemId } ?: return null
-        val result = when (item.type) {
-            PendingManualSaveType.URL -> saveUrlFromUpNext(item.urlInput)
-            PendingManualSaveType.TEXT -> saveManualTextFromUpNext(
-                urlInput = item.urlInput,
-                titleInput = item.titleInput,
-                bodyInput = item.bodyInput.orEmpty(),
-            )
-        }
+        val result = retryPendingManualSaveItem(item)
         if (result is ShareSaveResult.Saved) {
-            _pendingManualSaves.update { existing -> existing.filterNot { it.id == itemId } }
+            settingsStore.removePendingManualSave(itemId)
+        } else if (!isRetryablePendingSaveResult(result)) {
+            settingsStore.removePendingManualSave(itemId)
         } else {
-            _pendingManualSaves.update { existing ->
-                existing.map { queued ->
-                    if (queued.id == itemId) {
-                        queued.copy(
-                            retryCount = queued.retryCount + 1,
-                            lastFailureMessage = resolvePendingRetryFailureMessage(
-                                existingMessage = queued.lastFailureMessage,
-                                result = result,
-                            ),
-                            autoRetryEligible = shouldAutoRetryManualSave(result),
-                        )
-                    } else {
-                        queued
-                    }
-                }
-            }
+            settingsStore.markPendingManualSaveRetryFailure(
+                itemId = itemId,
+                failureMessage = resolvePendingRetryFailureMessage(
+                    existingMessage = item.lastFailureMessage,
+                    result = result,
+                ),
+                autoRetryEligible = shouldAutoRetryManualSave(result),
+            )
         }
         return result
         } finally {
@@ -644,33 +636,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         var successCount = 0
         retryIds.forEach { itemId ->
             val item = _pendingManualSaves.value.firstOrNull { it.id == itemId } ?: return@forEach
-            val result = when (item.type) {
-                PendingManualSaveType.URL -> saveUrlFromUpNext(item.urlInput)
-                PendingManualSaveType.TEXT -> saveManualTextFromUpNext(
-                    urlInput = item.urlInput,
-                    titleInput = item.titleInput,
-                    bodyInput = item.bodyInput.orEmpty(),
-                )
-            }
+            val result = retryPendingManualSaveItem(item)
             if (result is ShareSaveResult.Saved) {
-                _pendingManualSaves.update { existing -> existing.filterNot { it.id == itemId } }
+                settingsStore.removePendingManualSave(itemId)
+            } else if (!isRetryablePendingSaveResult(result)) {
+                settingsStore.removePendingManualSave(itemId)
             } else {
-                _pendingManualSaves.update { existing ->
-                    existing.map { queued ->
-                        if (queued.id == itemId) {
-                            queued.copy(
-                                retryCount = queued.retryCount + 1,
-                                lastFailureMessage = resolvePendingRetryFailureMessage(
-                                    existingMessage = queued.lastFailureMessage,
-                                    result = result,
-                                ),
-                                autoRetryEligible = shouldAutoRetryManualSave(result),
-                            )
-                        } else {
-                            queued
-                        }
-                    }
-                }
+                settingsStore.markPendingManualSaveRetryFailure(
+                    itemId = itemId,
+                    failureMessage = resolvePendingRetryFailureMessage(
+                        existingMessage = item.lastFailureMessage,
+                        result = result,
+                    ),
+                    autoRetryEligible = shouldAutoRetryManualSave(result),
+                )
             }
             if (result is ShareSaveResult.Saved) {
                 successCount += 1
@@ -683,12 +662,39 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private suspend fun retryPendingManualSaveItem(item: PendingManualSaveItem): ShareSaveResult {
+        return when (item.type) {
+            PendingManualSaveType.URL -> {
+                val title = if (item.source == PendingSaveSource.SHARE) {
+                    item.titleInput
+                } else {
+                    null
+                }
+                saveUrlFromSource(
+                    sharedText = item.urlInput,
+                    sharedTitle = title,
+                    destinationPlaylistId = item.destinationPlaylistId,
+                )
+            }
+            PendingManualSaveType.TEXT -> saveManualTextFromUpNext(
+                urlInput = item.urlInput,
+                titleInput = item.titleInput,
+                bodyInput = item.bodyInput.orEmpty(),
+                destinationPlaylistId = item.destinationPlaylistId,
+            )
+        }
+    }
+
     fun clearPendingManualSaves() {
-        _pendingManualSaves.value = emptyList()
+        viewModelScope.launch {
+            settingsStore.clearPendingManualSaves()
+        }
     }
 
     fun removePendingManualSave(itemId: Long) {
-        _pendingManualSaves.update { existing -> existing.filterNot { it.id == itemId } }
+        viewModelScope.launch {
+            settingsStore.removePendingManualSave(itemId)
+        }
     }
 
     fun removeMatchingPendingManualSave(
@@ -696,14 +702,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         urlInput: String,
         titleInput: String?,
         bodyInput: String?,
+        destinationPlaylistId: Int?,
     ) {
-        _pendingManualSaves.update { existing ->
-            existing.filterNot { pending ->
-                pending.type == type &&
-                    pending.urlInput == urlInput &&
-                    pending.titleInput == titleInput &&
-                    pending.bodyInput == bodyInput
-            }
+        viewModelScope.launch {
+            settingsStore.removeMatchingPendingManualSave(
+                source = PendingSaveSource.MANUAL,
+                type = type,
+                urlInput = urlInput,
+                titleInput = titleInput,
+                bodyInput = bodyInput,
+                destinationPlaylistId = destinationPlaylistId,
+            )
         }
     }
 
@@ -730,7 +739,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    suspend fun loadQueueOnce(): Result<Unit> = queueLoadMutex.withLock {
+    suspend fun loadQueueOnce(autoRetryPendingSaves: Boolean = true): Result<Unit> = queueLoadMutex.withLock {
         val current = settings.value
         val snapshotPreloaded = if (_queueItems.value.isEmpty()) {
             applySavedQueueSnapshot(
@@ -779,7 +788,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _queueOffline.value = false
             _statusMessage.value = "Queue loaded (${queue.count})"
             flushPendingProgress()
-            val autoRetrySuccessCount = autoRetryPendingManualSaves(limit = 2)
+            val autoRetrySuccessCount = if (autoRetryPendingSaves) {
+                autoRetryPendingManualSaves(limit = 2)
+            } else {
+                0
+            }
             if (autoRetrySuccessCount > 0) {
                 val refreshedQueueResult = repository.loadQueueAndPrefetch(
                     current.baseUrl,
@@ -842,9 +855,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun loadQueue() {
+    fun loadQueue(autoRetryPendingSaves: Boolean = true) {
         viewModelScope.launch {
-            loadQueueOnce()
+            loadQueueOnce(autoRetryPendingSaves = autoRetryPendingSaves)
         }
     }
 
@@ -895,14 +908,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun shouldAutoRetryManualSave(result: ShareSaveResult): Boolean {
-        return when (result) {
-            ShareSaveResult.NetworkError,
-            ShareSaveResult.TimedOut,
-            ShareSaveResult.ServerError,
-            ShareSaveResult.SaveFailed,
-            -> true
-            else -> false
-        }
+        return isRetryablePendingSaveResult(result)
     }
 
     private fun resolvePendingRetryFailureMessage(
@@ -964,7 +970,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _settings.update { current -> current.copy(selectedPlaylistId = playlistId) }
             settingsStore.saveSelectedPlaylistId(playlistId)
-            loadQueue()
+            val snapshotApplied = applySavedQueueSnapshot(
+                selectedPlaylistId = playlistId,
+                markOffline = false,
+                statusMessage = null,
+            )
+            if (!snapshotApplied) {
+                _queueItems.value = emptyList()
+                _cachedItemIds.value = emptySet()
+            }
+            loadQueue(autoRetryPendingSaves = false)
         }
     }
 
