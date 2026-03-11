@@ -1338,10 +1338,8 @@ private fun PendingProjectedQueueItemCard(
     onDismiss: () -> Unit,
 ) {
     var actionsMenuExpanded by remember { mutableStateOf(false) }
-    val sourceLabel = if (item.source == PendingSaveSource.SHARE) "Shared" else "Manual"
-    val destinationLabel = item.destinationPlaylistId?.let { "Playlist $it" } ?: "Smart Queue"
     val hostLabel = resolvePendingHost(item.urlInput)
-    val subLabel = listOf(hostLabel, sourceLabel, destinationLabel).joinToString(" • ")
+    val subLabel = hostLabel
     val primaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f)
     val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
     val titleLine = when {
@@ -1416,14 +1414,7 @@ private fun PendingProjectedQueueItemCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = item.lastFailureMessage,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
+                Box(modifier = Modifier.size(8.dp))
                 Icon(
                     painter = painterResource(id = R.drawable.msr_sync_problem_24),
                     contentDescription = "Pending and unavailable offline",
