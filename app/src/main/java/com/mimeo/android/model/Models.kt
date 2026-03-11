@@ -42,7 +42,7 @@ data class ConnectionTestSuccessSnapshot(
     val mode: ConnectionMode,
     val baseUrl: String,
     val gitSha: String? = null,
-    val succeededAtMs: Long = System.currentTimeMillis(),
+    val succeededAtMs: Long = 0L,
 )
 
 @Serializable

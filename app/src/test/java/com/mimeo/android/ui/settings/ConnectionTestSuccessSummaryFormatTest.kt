@@ -2,6 +2,7 @@ package com.mimeo.android.ui.settings
 
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,5 +37,15 @@ class ConnectionTestSuccessSummaryFormatTest {
         assertTrue(summary.contains("LAN"))
         assertTrue(summary.contains("192.168.68.124"))
         assertTrue(!summary.contains("git_sha="))
+    }
+
+    @Test
+    fun `snapshot default timestamp is stable sentinel`() {
+        val snapshot = ConnectionTestSuccessSnapshot(
+            mode = ConnectionMode.LOCAL,
+            baseUrl = "http://10.0.2.2:8000",
+        )
+
+        assertEquals(0L, snapshot.succeededAtMs)
     }
 }

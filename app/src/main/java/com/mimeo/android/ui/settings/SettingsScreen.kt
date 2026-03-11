@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mimeo.android.AppViewModel
@@ -283,6 +284,8 @@ fun SettingsScreen(
                             text = summary,
                             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                             color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -656,9 +659,13 @@ private fun ConnectionMode.description(): String = when (this) {
 }
 
 internal fun formatConnectionTestSuccessSummary(snapshot: ConnectionTestSuccessSnapshot): String {
-    val timestamp = runCatching {
-        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(snapshot.succeededAtMs))
-    }.getOrDefault("unknown time")
+    val timestamp = if (snapshot.succeededAtMs > 0L) {
+        runCatching {
+            SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(snapshot.succeededAtMs))
+        }.getOrDefault("unknown time")
+    } else {
+        "unknown time"
+    }
     val host = runCatching {
         URI(snapshot.baseUrl.trim()).host
             ?.takeIf { it.isNotBlank() }
