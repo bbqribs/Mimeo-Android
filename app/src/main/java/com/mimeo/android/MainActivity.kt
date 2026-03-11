@@ -970,6 +970,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _settings.update { current -> current.copy(selectedPlaylistId = playlistId) }
             settingsStore.saveSelectedPlaylistId(playlistId)
+            val snapshotApplied = applySavedQueueSnapshot(
+                selectedPlaylistId = playlistId,
+                markOffline = false,
+                statusMessage = null,
+            )
+            if (!snapshotApplied) {
+                _queueItems.value = emptyList()
+                _cachedItemIds.value = emptySet()
+            }
             loadQueue(autoRetryPendingSaves = false)
         }
     }

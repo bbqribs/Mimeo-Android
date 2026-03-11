@@ -961,7 +961,7 @@ fun QueueScreen(
                 }
             },
             dismissButton = {
-                if (manualSaveInProgress) {
+                if (manualSaveInProgress && offline) {
                     TextButton(
                         onClick = {
                             val payload = manualActivePayload ?: return@TextButton
