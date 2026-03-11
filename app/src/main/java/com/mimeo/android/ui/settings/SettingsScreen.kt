@@ -151,7 +151,7 @@ fun SettingsScreen(
         testRequested = false
         when {
             message.startsWith("Connected") -> {
-                vm.showSnackbar("Connected")
+                vm.showSnackbar(message)
             }
             message.contains("Token required", ignoreCase = true) -> {
                 vm.showSnackbar("Token required")
