@@ -585,17 +585,6 @@ fun QueueScreen(
                 )
             }
         }
-        if (pendingManualSaves.isNotEmpty()) {
-            PendingManualRetryCard(
-                pendingItems = pendingManualSaves,
-                retryInProgress = pendingManualRetryInProgress,
-                onRetry = retryPendingItem,
-                onRetryAll = retryAllPendingItems,
-                onDismiss = { item -> vm.removePendingManualSave(item.id) },
-                onClearAll = { vm.clearPendingManualSaves() },
-            )
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -1169,13 +1158,16 @@ private fun PendingManualRetryCard(
                 }
             }
             pendingItems.forEach { item ->
-                val titleLine = when (item.type) {
-                    PendingManualSaveType.TEXT -> item.titleInput?.takeIf { it.isNotBlank() } ?: "Paste Text"
-                    PendingManualSaveType.URL -> if (item.source == PendingSaveSource.SHARE) {
-                        "Shared URL"
-                    } else {
-                        "Save URL"
-                    }
+                val sourceLabel = if (item.source == PendingSaveSource.SHARE) {
+                    "Source: Shared"
+                } else {
+                    "Source: Manual"
+                }
+                val titleLine = when {
+                    !item.titleInput.isNullOrBlank() -> item.titleInput
+                    item.type == PendingManualSaveType.TEXT -> "Pasted text"
+                    item.source == PendingSaveSource.SHARE -> "Shared URL"
+                    else -> "Manual URL"
                 }
                 val bodyPreview = item.bodyInput?.trim()?.take(100)?.takeIf { it.isNotEmpty() }
                 Column(
@@ -1183,6 +1175,10 @@ private fun PendingManualRetryCard(
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     Text(text = titleLine, style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        text = sourceLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                     Text(
                         text = item.urlInput.ifBlank { "(no URL provided)" },
                         style = MaterialTheme.typography.bodySmall,
