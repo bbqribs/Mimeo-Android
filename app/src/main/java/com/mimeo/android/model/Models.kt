@@ -174,8 +174,19 @@ enum class PlayerChevronSnapEdge {
 }
 
 @Serializable
+enum class ConnectionMode {
+    LOCAL,
+    LAN,
+    REMOTE,
+}
+
+@Serializable
 data class AppSettings(
     val baseUrl: String = "http://10.0.2.2:8000",
+    val connectionMode: ConnectionMode = ConnectionMode.LOCAL,
+    val localBaseUrl: String = "http://10.0.2.2:8000",
+    val lanBaseUrl: String = "",
+    val remoteBaseUrl: String = "",
     val apiToken: String = "",
     val autoAdvanceOnCompletion: Boolean = false,
     val persistentPlayerEnabled: Boolean = true,

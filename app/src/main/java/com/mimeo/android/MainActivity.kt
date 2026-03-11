@@ -81,6 +81,7 @@ import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
+import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.FolderSummary
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaylistSummary
@@ -360,6 +361,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveSettings(
         baseUrl: String,
+        connectionMode: ConnectionMode,
+        localBaseUrl: String,
+        lanBaseUrl: String,
+        remoteBaseUrl: String,
         token: String,
         autoAdvanceOnCompletion: Boolean,
         persistentPlayerEnabled: Boolean,
@@ -372,6 +377,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsStore.save(
                 baseUrl = baseUrl,
+                connectionMode = connectionMode,
+                localBaseUrl = localBaseUrl,
+                lanBaseUrl = lanBaseUrl,
+                remoteBaseUrl = remoteBaseUrl,
                 apiToken = token,
                 autoAdvanceOnCompletion = autoAdvanceOnCompletion,
                 persistentPlayerEnabled = persistentPlayerEnabled,
@@ -407,6 +416,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsStore.save(
                 baseUrl = settings.value.baseUrl,
+                connectionMode = settings.value.connectionMode,
+                localBaseUrl = settings.value.localBaseUrl,
+                lanBaseUrl = settings.value.lanBaseUrl,
+                remoteBaseUrl = settings.value.remoteBaseUrl,
                 apiToken = settings.value.apiToken,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
                 persistentPlayerEnabled = settings.value.persistentPlayerEnabled,
@@ -435,6 +448,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsStore.save(
                 baseUrl = settings.value.baseUrl,
+                connectionMode = settings.value.connectionMode,
+                localBaseUrl = settings.value.localBaseUrl,
+                lanBaseUrl = settings.value.lanBaseUrl,
+                remoteBaseUrl = settings.value.remoteBaseUrl,
                 apiToken = settings.value.apiToken,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
                 persistentPlayerEnabled = settings.value.persistentPlayerEnabled,
