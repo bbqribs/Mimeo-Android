@@ -1157,62 +1157,83 @@ private fun PendingManualRetryCard(
                     }
                 }
             }
-            pendingItems.forEach { item ->
-                val sourceLabel = if (item.source == PendingSaveSource.SHARE) {
-                    "Source: Shared"
-                } else {
-                    "Source: Manual"
-                }
-                val titleLine = when {
-                    !item.titleInput.isNullOrBlank() -> item.titleInput
-                    item.type == PendingManualSaveType.TEXT -> "Pasted text"
-                    item.source == PendingSaveSource.SHARE -> "Shared URL"
-                    else -> "Manual URL"
-                }
-                val bodyPreview = item.bodyInput?.trim()?.take(100)?.takeIf { it.isNotEmpty() }
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(text = titleLine, style = MaterialTheme.typography.labelLarge)
-                    Text(
-                        text = sourceLabel,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(
-                        text = item.urlInput.ifBlank { "(no URL provided)" },
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = item.destinationPlaylistId?.let { "Destination: Playlist $it" } ?: "Destination: Smart Queue",
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    bodyPreview?.let { preview ->
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 320.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                pendingItems.forEachIndexed { index, item ->
+                    val sourceLabel = if (item.source == PendingSaveSource.SHARE) {
+                        "Source: Shared"
+                    } else {
+                        "Source: Manual"
+                    }
+                    val titleLine = when {
+                        !item.titleInput.isNullOrBlank() -> item.titleInput
+                        item.urlInput.isNotBlank() -> item.urlInput
+                        item.type == PendingManualSaveType.TEXT -> "Pasted text"
+                        else -> "(no title)"
+                    }
+                    val bodyPreview = item.bodyInput?.trim()?.take(100)?.takeIf { it.isNotEmpty() }
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
                         Text(
-                            text = preview,
+                            text = titleLine,
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = sourceLabel,
                             style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            text = item.urlInput.ifBlank { "(no URL provided)" },
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = item.destinationPlaylistId?.let { "Destination: Playlist $it" } ?: "Destination: Smart Queue",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        bodyPreview?.let { preview ->
+                            Text(
+                                text = preview,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Text(
+                            text = "${item.lastFailureMessage} (retries: ${item.retryCount})",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            TextButton(enabled = !retryInProgress, onClick = { onRetry(item) }) {
+                                Text("Retry")
+                            }
+                            TextButton(enabled = !retryInProgress, onClick = { onDismiss(item) }) {
+                                Text("Dismiss")
+                            }
+                        }
                     }
-                    Text(
-                        text = "${item.lastFailureMessage} (retries: ${item.retryCount})",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TextButton(enabled = !retryInProgress, onClick = { onRetry(item) }) {
-                            Text("Retry")
-                        }
-                        TextButton(enabled = !retryInProgress, onClick = { onDismiss(item) }) {
-                            Text("Dismiss")
-                        }
+                    if (index < pendingItems.lastIndex) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f)),
+                        )
                     }
                 }
             }
