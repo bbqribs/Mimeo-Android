@@ -231,15 +231,21 @@ fun QueueScreen(
         QueueSortOption.PROGRESS_LOW -> filteredItems.sortedBy { it.furthestPercent }
         QueueSortOption.TITLE_AZ -> filteredItems.sortedBy { (it.title ?: it.url).lowercase() }
     }
+    val projectedPendingItems = projectPendingItemsForDestination(
+        pendingItems = pendingManualSaves,
+        selectedPlaylistId = settings.selectedPlaylistId,
+        queueItems = items,
+    )
+    val hasVisibleQueueContent = displayedItems.isNotEmpty() || projectedPendingItems.isNotEmpty()
     val pullRefreshProgress = (pullRefreshDistancePx / pullRefreshThresholdPx).coerceIn(0f, 1f)
     val emptyStateMessage = when {
         loading -> null
-        items.isEmpty() && offline && settings.selectedPlaylistId != null ->
+        !hasVisibleQueueContent && offline && settings.selectedPlaylistId != null ->
             "Offline. Can't refresh \"$selectedPlaylistName\" right now."
-        items.isEmpty() && offline ->
+        !hasVisibleQueueContent && offline ->
             "Offline. Can't refresh Smart Queue right now."
-        items.isEmpty() && settings.selectedPlaylistId != null -> "No items yet in \"$selectedPlaylistName\"."
-        items.isEmpty() -> "No items in Smart queue yet. Share a link to add one."
+        !hasVisibleQueueContent && settings.selectedPlaylistId != null -> "No items yet in \"$selectedPlaylistName\"."
+        !hasVisibleQueueContent -> "No items in Smart queue yet. Share a link to add one."
         displayedItems.isEmpty() && searchQuery.isNotBlank() ->
             "No results for \"$searchQuery\" in $selectedPlaylistName."
         displayedItems.isEmpty() && selectedFilter != QueueFilterChip.ALL ->
@@ -616,6 +622,20 @@ fun QueueScreen(
                 verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
                 itemsIndexed(
+                    items = projectedPendingItems,
+                    key = { _, item -> "pending-${item.id}" },
+                ) { index, item ->
+                    PendingProjectedQueueItemCard(
+                        item = item,
+                        retryInProgress = pendingManualRetryInProgress,
+                        onRetry = { retryPendingItem(item) },
+                        onDismiss = { vm.removePendingManualSave(item.id) },
+                    )
+                    if (index < projectedPendingItems.lastIndex || displayedItems.isNotEmpty()) {
+                        ThinQueueDivider()
+                    }
+                }
+                itemsIndexed(
                     items = displayedItems,
                     key = { _, item -> item.itemId },
                 ) { index, item ->
@@ -635,17 +655,7 @@ fun QueueScreen(
                         onExpandMenu = { rowMenuItemId = item.itemId },
                     )
                     if (index < displayedItems.lastIndex) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(1.dp)
-                                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f)),
-                            )
-                        }
+                        ThinQueueDivider()
                     }
                 }
             }
@@ -1042,6 +1052,43 @@ fun QueueScreen(
 
 }
 
+private fun projectPendingItemsForDestination(
+    pendingItems: List<PendingManualSaveItem>,
+    selectedPlaylistId: Int?,
+    queueItems: List<PlaybackQueueItem>,
+): List<PendingManualSaveItem> {
+    val knownQueueUrls = queueItems.mapNotNullTo(mutableSetOf()) { item ->
+        normalizePendingComparisonUrl(item.url)
+    }
+    return pendingItems.filter { pending ->
+        if (pending.destinationPlaylistId != selectedPlaylistId) {
+            return@filter false
+        }
+        val normalizedPendingUrl = normalizePendingComparisonUrl(pending.urlInput)
+        normalizedPendingUrl == null || normalizedPendingUrl !in knownQueueUrls
+    }
+}
+
+private fun normalizePendingComparisonUrl(raw: String?): String? {
+    val extracted = extractFirstHttpUrl(raw)?.trim()?.lowercase() ?: return null
+    return extracted.removeSuffix("/")
+}
+
+@Composable
+private fun ThinQueueDivider() {
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f)),
+        )
+    }
+}
+
 private fun normalizeSearchText(value: String): String {
     return value.filter { it.isLetterOrDigit() }
 }
@@ -1235,6 +1282,84 @@ private fun PendingManualRetryCard(
                                 .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f)),
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PendingProjectedQueueItemCard(
+    item: PendingManualSaveItem,
+    retryInProgress: Boolean,
+    onRetry: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sourceLabel = if (item.source == PendingSaveSource.SHARE) "Shared" else "Manual"
+    val titleLine = when {
+        !item.titleInput.isNullOrBlank() -> item.titleInput
+        item.urlInput.isNotBlank() -> item.urlInput
+        item.type == PendingManualSaveType.TEXT -> "Pasted text"
+        else -> "(pending save)"
+    }
+    val bodyPreview = item.bodyInput?.trim()?.take(100)?.takeIf { it.isNotEmpty() }
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                text = "Pending save",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+            Text(
+                text = titleLine,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "Source: $sourceLabel",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
+                text = item.destinationPlaylistId?.let { "Destination: Playlist $it" } ?: "Destination: Smart Queue",
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (item.urlInput.isNotBlank()) {
+                Text(
+                    text = item.urlInput,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            bodyPreview?.let { preview ->
+                Text(
+                    text = preview,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                text = item.lastFailureMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(enabled = !retryInProgress, onClick = onRetry) {
+                    Text("Retry")
+                }
+                TextButton(enabled = !retryInProgress, onClick = onDismiss) {
+                    Text("Dismiss")
                 }
             }
         }
