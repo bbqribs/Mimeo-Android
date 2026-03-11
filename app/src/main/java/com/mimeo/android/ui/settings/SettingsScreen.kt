@@ -158,7 +158,7 @@ fun SettingsScreen(
             }
             else -> {
                 vm.showSnackbar(
-                    message = "Can't reach server",
+                    message = message.ifBlank { "Can't reach server" },
                     actionLabel = "Diagnostics",
                     actionKey = "open_diagnostics",
                 )
