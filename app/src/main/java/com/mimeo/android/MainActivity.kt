@@ -113,6 +113,7 @@ import com.mimeo.android.ui.collections.FolderDetailScreen
 import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
+import com.mimeo.android.ui.settings.ConnectionTestMessageResolver
 import com.mimeo.android.ui.settings.SettingsScreen
 import com.mimeo.android.ui.player.PlayerScreen
 import com.mimeo.android.ui.playlists.PlaylistsScreen
@@ -737,20 +738,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun testConnection() {
         val current = settings.value
         if (current.apiToken.isBlank()) {
-            _statusMessage.value = "Token required"
+            _statusMessage.value = ConnectionTestMessageResolver.tokenRequired()
             return
         }
         viewModelScope.launch {
             _testingConnection.value = true
             try {
                 val version = apiClient.getDebugVersion(current.baseUrl, current.apiToken)
-                _statusMessage.value = "Connected git_sha=${version.gitSha ?: "unknown"}"
+                _statusMessage.value = ConnectionTestMessageResolver.connected(version.gitSha)
                 _queueOffline.value = false
                 updateSyncBadgeState()
             } catch (e: ApiException) {
-                _statusMessage.value = if (e.statusCode == 401) "Unauthorized-check token" else e.message
+                _statusMessage.value = ConnectionTestMessageResolver.forApiFailure(
+                    mode = current.connectionMode,
+                    baseUrl = current.baseUrl,
+                    statusCode = e.statusCode,
+                    message = e.message,
+                )
             } catch (e: Exception) {
-                _statusMessage.value = e.message
+                _statusMessage.value = ConnectionTestMessageResolver.forException(
+                    mode = current.connectionMode,
+                    baseUrl = current.baseUrl,
+                    message = e.message,
+                )
             } finally {
                 _testingConnection.value = false
             }
