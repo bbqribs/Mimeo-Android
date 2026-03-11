@@ -84,6 +84,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
+import java.net.URI
 import java.util.UUID
 
 private const val DONE_PERCENT_THRESHOLD = 98
@@ -231,15 +232,21 @@ fun QueueScreen(
         QueueSortOption.PROGRESS_LOW -> filteredItems.sortedBy { it.furthestPercent }
         QueueSortOption.TITLE_AZ -> filteredItems.sortedBy { (it.title ?: it.url).lowercase() }
     }
+    val projectedPendingItems = projectPendingItemsForDestination(
+        pendingItems = pendingManualSaves,
+        selectedPlaylistId = settings.selectedPlaylistId,
+        queueItems = items,
+    )
+    val hasVisibleQueueContent = displayedItems.isNotEmpty() || projectedPendingItems.isNotEmpty()
     val pullRefreshProgress = (pullRefreshDistancePx / pullRefreshThresholdPx).coerceIn(0f, 1f)
     val emptyStateMessage = when {
         loading -> null
-        items.isEmpty() && offline && settings.selectedPlaylistId != null ->
+        !hasVisibleQueueContent && offline && settings.selectedPlaylistId != null ->
             "Offline. Can't refresh \"$selectedPlaylistName\" right now."
-        items.isEmpty() && offline ->
+        !hasVisibleQueueContent && offline ->
             "Offline. Can't refresh Smart Queue right now."
-        items.isEmpty() && settings.selectedPlaylistId != null -> "No items yet in \"$selectedPlaylistName\"."
-        items.isEmpty() -> "No items in Smart queue yet. Share a link to add one."
+        !hasVisibleQueueContent && settings.selectedPlaylistId != null -> "No items yet in \"$selectedPlaylistName\"."
+        !hasVisibleQueueContent -> "No items in Smart queue yet. Share a link to add one."
         displayedItems.isEmpty() && searchQuery.isNotBlank() ->
             "No results for \"$searchQuery\" in $selectedPlaylistName."
         displayedItems.isEmpty() && selectedFilter != QueueFilterChip.ALL ->
@@ -616,6 +623,20 @@ fun QueueScreen(
                 verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
                 itemsIndexed(
+                    items = projectedPendingItems,
+                    key = { _, item -> "pending-${item.id}" },
+                ) { index, item ->
+                    PendingProjectedQueueItemCard(
+                        item = item,
+                        retryInProgress = pendingManualRetryInProgress,
+                        onRetry = { retryPendingItem(item) },
+                        onDismiss = { vm.removePendingManualSave(item.id) },
+                    )
+                    if (index < projectedPendingItems.lastIndex || displayedItems.isNotEmpty()) {
+                        ThinQueueDivider()
+                    }
+                }
+                itemsIndexed(
                     items = displayedItems,
                     key = { _, item -> item.itemId },
                 ) { index, item ->
@@ -635,17 +656,7 @@ fun QueueScreen(
                         onExpandMenu = { rowMenuItemId = item.itemId },
                     )
                     if (index < displayedItems.lastIndex) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(1.dp)
-                                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f)),
-                            )
-                        }
+                        ThinQueueDivider()
                     }
                 }
             }
@@ -1042,6 +1053,43 @@ fun QueueScreen(
 
 }
 
+private fun projectPendingItemsForDestination(
+    pendingItems: List<PendingManualSaveItem>,
+    selectedPlaylistId: Int?,
+    queueItems: List<PlaybackQueueItem>,
+): List<PendingManualSaveItem> {
+    val knownQueueUrls = queueItems.mapNotNullTo(mutableSetOf()) { item ->
+        normalizePendingComparisonUrl(item.url)
+    }
+    return pendingItems.filter { pending ->
+        if (pending.destinationPlaylistId != selectedPlaylistId) {
+            return@filter false
+        }
+        val normalizedPendingUrl = normalizePendingComparisonUrl(pending.urlInput)
+        normalizedPendingUrl == null || normalizedPendingUrl !in knownQueueUrls
+    }
+}
+
+private fun normalizePendingComparisonUrl(raw: String?): String? {
+    val extracted = extractFirstHttpUrl(raw)?.trim()?.lowercase() ?: return null
+    return extracted.removeSuffix("/")
+}
+
+@Composable
+private fun ThinQueueDivider() {
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f)),
+        )
+    }
+}
+
 private fun normalizeSearchText(value: String): String {
     return value.filter { it.isLetterOrDigit() }
 }
@@ -1132,6 +1180,7 @@ private fun PendingManualRetryCard(
     onDismiss: (PendingManualSaveItem) -> Unit,
     onClearAll: () -> Unit,
 ) {
+    var menuExpandedItemId by remember { mutableStateOf<Long?>(null) }
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -1170,6 +1219,7 @@ private fun PendingManualRetryCard(
                     } else {
                         "Source: Manual"
                     }
+                    val destinationLabel = item.destinationPlaylistId?.let { "Destination: Playlist $it" } ?: "Destination: Smart Queue"
                     val titleLine = when {
                         !item.titleInput.isNullOrBlank() -> item.titleInput
                         item.urlInput.isNotBlank() -> item.urlInput
@@ -1181,24 +1231,71 @@ private fun PendingManualRetryCard(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        Text(
-                            text = titleLine,
-                            style = MaterialTheme.typography.labelLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = sourceLabel,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = titleLine,
+                                style = MaterialTheme.typography.labelLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Box {
+                                IconButton(
+                                    enabled = !retryInProgress,
+                                    onClick = { menuExpandedItemId = item.id },
+                                ) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.msr_more_vert_24),
+                                        contentDescription = "Pending item actions",
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = menuExpandedItemId == item.id,
+                                    onDismissRequest = { menuExpandedItemId = null },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Retry") },
+                                        onClick = {
+                                            onRetry(item)
+                                            menuExpandedItemId = null
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Dismiss") },
+                                        onClick = {
+                                            onDismiss(item)
+                                            menuExpandedItemId = null
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = sourceLabel,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = destinationLabel,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                         Text(
                             text = item.urlInput.ifBlank { "(no URL provided)" },
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = item.destinationPlaylistId?.let { "Destination: Playlist $it" } ?: "Destination: Smart Queue",
                             style = MaterialTheme.typography.bodySmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -1218,14 +1315,6 @@ private fun PendingManualRetryCard(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            TextButton(enabled = !retryInProgress, onClick = { onRetry(item) }) {
-                                Text("Retry")
-                            }
-                            TextButton(enabled = !retryInProgress, onClick = { onDismiss(item) }) {
-                                Text("Dismiss")
-                            }
-                        }
                     }
                     if (index < pendingItems.lastIndex) {
                         Box(
@@ -1239,6 +1328,112 @@ private fun PendingManualRetryCard(
             }
         }
     }
+}
+
+@Composable
+private fun PendingProjectedQueueItemCard(
+    item: PendingManualSaveItem,
+    retryInProgress: Boolean,
+    onRetry: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var actionsMenuExpanded by remember { mutableStateOf(false) }
+    val hostLabel = resolvePendingHost(item.urlInput)
+    val subLabel = hostLabel
+    val primaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f)
+    val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
+    val titleLine = when {
+        !item.titleInput.isNullOrBlank() -> item.titleInput
+        item.urlInput.isNotBlank() -> item.urlInput
+        item.type == PendingManualSaveType.TEXT -> "Pasted text"
+        else -> "(pending save)"
+    }
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 5.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = titleLine,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = primaryTextColor,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Box {
+                    IconButton(
+                        modifier = Modifier.size(40.dp),
+                        enabled = !retryInProgress,
+                        onClick = { actionsMenuExpanded = true },
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.msr_more_vert_24),
+                            contentDescription = "Pending item actions",
+                            tint = secondaryTextColor,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = actionsMenuExpanded,
+                        onDismissRequest = { actionsMenuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Retry") },
+                            onClick = {
+                                onRetry()
+                                actionsMenuExpanded = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Dismiss") },
+                            onClick = {
+                                onDismiss()
+                                actionsMenuExpanded = false
+                            },
+                        )
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = subLabel,
+                    style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
+                    color = secondaryTextColor,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Box(modifier = Modifier.size(8.dp))
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_sync_problem_24),
+                    contentDescription = "Pending and unavailable offline",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier
+                        .padding(start = 6.dp)
+                        .size(16.dp),
+                )
+            }
+        }
+    }
+}
+
+private fun resolvePendingHost(urlInput: String): String {
+    val extracted = extractFirstHttpUrl(urlInput)?.trim().orEmpty()
+    if (extracted.isEmpty()) return "Pending"
+    return runCatching {
+        URI(extracted).host?.removePrefix("www.")?.takeIf { it.isNotBlank() }
+    }.getOrNull() ?: "Pending"
 }
 
 @Composable
