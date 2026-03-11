@@ -154,6 +154,7 @@ fun QueueScreen(
     var playlistPickerItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
     var topActionsMenuExpanded by remember { mutableStateOf(false) }
+    var showPendingSavesHub by remember { mutableStateOf(false) }
     var sortMenuExpanded by remember { mutableStateOf(false) }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -297,6 +298,33 @@ fun QueueScreen(
         }
     }
 
+    val retryPendingItem: (PendingManualSaveItem) -> Unit = { item ->
+        actionScope.launch {
+            if (offline) {
+                onShowSnackbar("Still offline. Pending saves kept.", null, null)
+                return@launch
+            }
+            val retryResult = vm.retryPendingManualSave(item.id) ?: return@launch
+            if (shouldSurfacePendingRetrySnackbar(retryResult)) {
+                val actionLabel = if (retryResult.opensSettings) "Open Settings" else null
+                val actionKey = if (retryResult.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
+                onShowSnackbar(retryResult.notificationText, actionLabel, actionKey)
+            }
+        }
+    }
+    val retryAllPendingItems: () -> Unit = {
+        actionScope.launch {
+            if (offline) {
+                onShowSnackbar("Still offline. Pending saves kept.", null, null)
+                return@launch
+            }
+            val retrySuccessCount = vm.retryAllPendingManualSaves()
+            if (retrySuccessCount > 0) {
+                onShowSnackbar("Retried $retrySuccessCount pending saves", null, null)
+            }
+        }
+    }
+
     LaunchedEffect(displayedItems, pendingFocusId) {
         if (pendingFocusId <= 0) return@LaunchedEffect
         val index = displayedItems.indexOfFirst { it.itemId == pendingFocusId }
@@ -432,19 +460,34 @@ fun QueueScreen(
                                 }
                             }
                         }
-                        if (BuildConfig.DEBUG) {
-                            Box {
-                                IconButton(onClick = { topActionsMenuExpanded = true }) {
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.msr_more_vert_24),
-                                        contentDescription = "Queue actions",
-                                        modifier = Modifier.size(24.dp),
-                                    )
-                                }
-                                DropdownMenu(
-                                    expanded = topActionsMenuExpanded,
-                                    onDismissRequest = { topActionsMenuExpanded = false },
-                                ) {
+                        Box {
+                            IconButton(onClick = { topActionsMenuExpanded = true }) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.msr_more_vert_24),
+                                    contentDescription = "Queue actions",
+                                    modifier = Modifier.size(24.dp),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = topActionsMenuExpanded,
+                                onDismissRequest = { topActionsMenuExpanded = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            if (pendingManualSaves.isEmpty()) {
+                                                "Pending saves"
+                                            } else {
+                                                "Pending saves (${pendingManualSaves.size})"
+                                            },
+                                        )
+                                    },
+                                    onClick = {
+                                        showPendingSavesHub = true
+                                        topActionsMenuExpanded = false
+                                    },
+                                )
+                                if (BuildConfig.DEBUG) {
                                     DropdownMenuItem(
                                         text = {
                                             Text(
@@ -542,41 +585,6 @@ fun QueueScreen(
                 )
             }
         }
-        if (pendingManualSaves.isNotEmpty()) {
-            PendingManualRetryCard(
-                pendingItems = pendingManualSaves,
-                retryInProgress = pendingManualRetryInProgress,
-                onRetry = { item ->
-                    actionScope.launch {
-                        if (offline) {
-                            onShowSnackbar("Still offline. Pending saves kept.", null, null)
-                            return@launch
-                        }
-                        val retryResult = vm.retryPendingManualSave(item.id) ?: return@launch
-                        if (shouldSurfacePendingRetrySnackbar(retryResult)) {
-                            val actionLabel = if (retryResult.opensSettings) "Open Settings" else null
-                            val actionKey = if (retryResult.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
-                            onShowSnackbar(retryResult.notificationText, actionLabel, actionKey)
-                        }
-                    }
-                },
-                onRetryAll = {
-                    actionScope.launch {
-                        if (offline) {
-                            onShowSnackbar("Still offline. Pending saves kept.", null, null)
-                            return@launch
-                        }
-                        val retrySuccessCount = vm.retryAllPendingManualSaves()
-                        if (retrySuccessCount > 0) {
-                            onShowSnackbar("Retried $retrySuccessCount pending saves", null, null)
-                        }
-                    }
-                },
-                onDismiss = { item -> vm.removePendingManualSave(item.id) },
-                onClearAll = { vm.clearPendingManualSaves() },
-            )
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -1006,6 +1014,32 @@ fun QueueScreen(
         )
     }
 
+    if (showPendingSavesHub) {
+        AlertDialog(
+            onDismissRequest = { showPendingSavesHub = false },
+            title = { Text("Pending saves") },
+            text = {
+                if (pendingManualSaves.isEmpty()) {
+                    Text("No pending saves.")
+                } else {
+                    PendingManualRetryCard(
+                        pendingItems = pendingManualSaves,
+                        retryInProgress = pendingManualRetryInProgress,
+                        onRetry = retryPendingItem,
+                        onRetryAll = retryAllPendingItems,
+                        onDismiss = { item -> vm.removePendingManualSave(item.id) },
+                        onClearAll = { vm.clearPendingManualSaves() },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPendingSavesHub = false }) {
+                    Text("Close")
+                }
+            },
+        )
+    }
+
 }
 
 private fun normalizeSearchText(value: String): String {
@@ -1123,55 +1157,83 @@ private fun PendingManualRetryCard(
                     }
                 }
             }
-            pendingItems.forEach { item ->
-                val titleLine = when (item.type) {
-                    PendingManualSaveType.TEXT -> item.titleInput?.takeIf { it.isNotBlank() } ?: "Paste Text"
-                    PendingManualSaveType.URL -> if (item.source == PendingSaveSource.SHARE) {
-                        "Shared URL"
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 320.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                pendingItems.forEachIndexed { index, item ->
+                    val sourceLabel = if (item.source == PendingSaveSource.SHARE) {
+                        "Source: Shared"
                     } else {
-                        "Save URL"
+                        "Source: Manual"
                     }
-                }
-                val bodyPreview = item.bodyInput?.trim()?.take(100)?.takeIf { it.isNotEmpty() }
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(text = titleLine, style = MaterialTheme.typography.labelLarge)
-                    Text(
-                        text = item.urlInput.ifBlank { "(no URL provided)" },
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = item.destinationPlaylistId?.let { "Destination: Playlist $it" } ?: "Destination: Smart Queue",
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    bodyPreview?.let { preview ->
+                    val titleLine = when {
+                        !item.titleInput.isNullOrBlank() -> item.titleInput
+                        item.urlInput.isNotBlank() -> item.urlInput
+                        item.type == PendingManualSaveType.TEXT -> "Pasted text"
+                        else -> "(no title)"
+                    }
+                    val bodyPreview = item.bodyInput?.trim()?.take(100)?.takeIf { it.isNotEmpty() }
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
                         Text(
-                            text = preview,
+                            text = titleLine,
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = sourceLabel,
                             style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            text = item.urlInput.ifBlank { "(no URL provided)" },
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = item.destinationPlaylistId?.let { "Destination: Playlist $it" } ?: "Destination: Smart Queue",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        bodyPreview?.let { preview ->
+                            Text(
+                                text = preview,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Text(
+                            text = "${item.lastFailureMessage} (retries: ${item.retryCount})",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            TextButton(enabled = !retryInProgress, onClick = { onRetry(item) }) {
+                                Text("Retry")
+                            }
+                            TextButton(enabled = !retryInProgress, onClick = { onDismiss(item) }) {
+                                Text("Dismiss")
+                            }
+                        }
                     }
-                    Text(
-                        text = "${item.lastFailureMessage} (retries: ${item.retryCount})",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TextButton(enabled = !retryInProgress, onClick = { onRetry(item) }) {
-                            Text("Retry")
-                        }
-                        TextButton(enabled = !retryInProgress, onClick = { onDismiss(item) }) {
-                            Text("Dismiss")
-                        }
+                    if (index < pendingItems.lastIndex) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f)),
+                        )
                     }
                 }
             }
