@@ -170,6 +170,7 @@ class ShareSaveCoordinator(
             val result = when {
                 error.statusCode == 401 -> ShareSaveResult.Unauthorized
                 error.statusCode == 403 -> ShareSaveResult.Unauthorized
+                isAuthLikeApiFailure(error) -> ShareSaveResult.Unauthorized
                 error.statusCode == 409 -> resolveDuplicateSaveResult(
                     current = current,
                     url = url,
@@ -292,6 +293,7 @@ class ShareSaveCoordinator(
             val result = when {
                 error.statusCode == 401 -> ShareSaveResult.Unauthorized
                 error.statusCode == 403 -> ShareSaveResult.Unauthorized
+                isAuthLikeApiFailure(error) -> ShareSaveResult.Unauthorized
                 error.statusCode == 409 -> resolveDuplicateSaveResult(
                     current = current,
                     url = normalizedUrl,
@@ -516,6 +518,16 @@ class ShareSaveCoordinator(
             -> true
             else -> false
         }
+    }
+
+    private fun isAuthLikeApiFailure(error: ApiException): Boolean {
+        if (error.statusCode == 401 || error.statusCode == 403) return true
+        val message = error.message?.lowercase().orEmpty()
+        if (message.isBlank()) return false
+        return message.contains("unauthorized") ||
+            message.contains("forbidden") ||
+            message.contains("token") ||
+            message.contains("auth")
     }
 
     private fun rootCause(error: Throwable): Throwable {
