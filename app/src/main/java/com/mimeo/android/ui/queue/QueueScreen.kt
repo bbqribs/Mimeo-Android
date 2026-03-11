@@ -154,6 +154,7 @@ fun QueueScreen(
     var playlistPickerItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
     var topActionsMenuExpanded by remember { mutableStateOf(false) }
+    var showPendingSavesHub by remember { mutableStateOf(false) }
     var sortMenuExpanded by remember { mutableStateOf(false) }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -297,6 +298,33 @@ fun QueueScreen(
         }
     }
 
+    val retryPendingItem: (PendingManualSaveItem) -> Unit = { item ->
+        actionScope.launch {
+            if (offline) {
+                onShowSnackbar("Still offline. Pending saves kept.", null, null)
+                return@launch
+            }
+            val retryResult = vm.retryPendingManualSave(item.id) ?: return@launch
+            if (shouldSurfacePendingRetrySnackbar(retryResult)) {
+                val actionLabel = if (retryResult.opensSettings) "Open Settings" else null
+                val actionKey = if (retryResult.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
+                onShowSnackbar(retryResult.notificationText, actionLabel, actionKey)
+            }
+        }
+    }
+    val retryAllPendingItems: () -> Unit = {
+        actionScope.launch {
+            if (offline) {
+                onShowSnackbar("Still offline. Pending saves kept.", null, null)
+                return@launch
+            }
+            val retrySuccessCount = vm.retryAllPendingManualSaves()
+            if (retrySuccessCount > 0) {
+                onShowSnackbar("Retried $retrySuccessCount pending saves", null, null)
+            }
+        }
+    }
+
     LaunchedEffect(displayedItems, pendingFocusId) {
         if (pendingFocusId <= 0) return@LaunchedEffect
         val index = displayedItems.indexOfFirst { it.itemId == pendingFocusId }
@@ -432,19 +460,34 @@ fun QueueScreen(
                                 }
                             }
                         }
-                        if (BuildConfig.DEBUG) {
-                            Box {
-                                IconButton(onClick = { topActionsMenuExpanded = true }) {
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.msr_more_vert_24),
-                                        contentDescription = "Queue actions",
-                                        modifier = Modifier.size(24.dp),
-                                    )
-                                }
-                                DropdownMenu(
-                                    expanded = topActionsMenuExpanded,
-                                    onDismissRequest = { topActionsMenuExpanded = false },
-                                ) {
+                        Box {
+                            IconButton(onClick = { topActionsMenuExpanded = true }) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.msr_more_vert_24),
+                                    contentDescription = "Queue actions",
+                                    modifier = Modifier.size(24.dp),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = topActionsMenuExpanded,
+                                onDismissRequest = { topActionsMenuExpanded = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            if (pendingManualSaves.isEmpty()) {
+                                                "Pending saves"
+                                            } else {
+                                                "Pending saves (${pendingManualSaves.size})"
+                                            },
+                                        )
+                                    },
+                                    onClick = {
+                                        showPendingSavesHub = true
+                                        topActionsMenuExpanded = false
+                                    },
+                                )
+                                if (BuildConfig.DEBUG) {
                                     DropdownMenuItem(
                                         text = {
                                             Text(
@@ -546,32 +589,8 @@ fun QueueScreen(
             PendingManualRetryCard(
                 pendingItems = pendingManualSaves,
                 retryInProgress = pendingManualRetryInProgress,
-                onRetry = { item ->
-                    actionScope.launch {
-                        if (offline) {
-                            onShowSnackbar("Still offline. Pending saves kept.", null, null)
-                            return@launch
-                        }
-                        val retryResult = vm.retryPendingManualSave(item.id) ?: return@launch
-                        if (shouldSurfacePendingRetrySnackbar(retryResult)) {
-                            val actionLabel = if (retryResult.opensSettings) "Open Settings" else null
-                            val actionKey = if (retryResult.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
-                            onShowSnackbar(retryResult.notificationText, actionLabel, actionKey)
-                        }
-                    }
-                },
-                onRetryAll = {
-                    actionScope.launch {
-                        if (offline) {
-                            onShowSnackbar("Still offline. Pending saves kept.", null, null)
-                            return@launch
-                        }
-                        val retrySuccessCount = vm.retryAllPendingManualSaves()
-                        if (retrySuccessCount > 0) {
-                            onShowSnackbar("Retried $retrySuccessCount pending saves", null, null)
-                        }
-                    }
-                },
+                onRetry = retryPendingItem,
+                onRetryAll = retryAllPendingItems,
                 onDismiss = { item -> vm.removePendingManualSave(item.id) },
                 onClearAll = { vm.clearPendingManualSaves() },
             )
@@ -1001,6 +1020,32 @@ fun QueueScreen(
                     ) {
                         Text("Cancel")
                     }
+                }
+            },
+        )
+    }
+
+    if (showPendingSavesHub) {
+        AlertDialog(
+            onDismissRequest = { showPendingSavesHub = false },
+            title = { Text("Pending saves") },
+            text = {
+                if (pendingManualSaves.isEmpty()) {
+                    Text("No pending saves.")
+                } else {
+                    PendingManualRetryCard(
+                        pendingItems = pendingManualSaves,
+                        retryInProgress = pendingManualRetryInProgress,
+                        onRetry = retryPendingItem,
+                        onRetryAll = retryAllPendingItems,
+                        onDismiss = { item -> vm.removePendingManualSave(item.id) },
+                        onClearAll = { vm.clearPendingManualSaves() },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPendingSavesHub = false }) {
+                    Text("Close")
                 }
             },
         )
