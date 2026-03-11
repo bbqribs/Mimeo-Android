@@ -20,6 +20,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.net.ssl.SSLException
 
 private const val SHARE_CREATE_TIMEOUT_MS = 45_000L
+private const val SHARE_POST_FAILURE_RESOLUTION_ATTEMPTS = 2
+private const val SHARE_POST_FAILURE_RESOLUTION_DELAY_MS = 1_200L
 private const val AUTO_DOWNLOAD_MAX_ATTEMPTS = 4
 private const val AUTO_DOWNLOAD_RETRY_DELAY_MS = 1200L
 
@@ -30,6 +32,14 @@ data class ShareRefreshEvent(
 
 object ShareSaveRefreshBus {
     val events = MutableSharedFlow<ShareRefreshEvent>(extraBufferCapacity = 8)
+}
+
+internal fun shouldAttemptLateShareSaveResolution(result: ShareSaveResult): Boolean = when (result) {
+    ShareSaveResult.NetworkError,
+    ShareSaveResult.TimedOut,
+    ShareSaveResult.SaveFailed,
+    -> true
+    else -> false
 }
 
 sealed interface ShareSaveResult {
@@ -193,11 +203,20 @@ class ShareSaveCoordinator(
             )
             result
         } catch (error: Exception) {
-            val result = when {
+            val baseResult = when {
                 isTimeoutError(error) -> ShareSaveResult.TimedOut
                 isNetworkError(error) -> ShareSaveResult.NetworkError
                 else -> ShareSaveResult.SaveFailed
             }
+            val recoveredResult = resolveLateShareSaveSuccess(
+                baseResult = baseResult,
+                current = current,
+                url = url,
+                destinationPlaylistId = destinationPlaylistId,
+                preferredTitle = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
+                attemptId = attemptId,
+            )
+            val result = recoveredResult ?: baseResult
             recordSnapshot(
                 attemptId = attemptId,
                 baseUrl = current.baseUrl,
@@ -206,7 +225,7 @@ class ShareSaveCoordinator(
                 requestUrls = requestUrls,
                 result = result,
                 error = error,
-                phase = "exception",
+                phase = if (recoveredResult != null) "exception_recovered" else "exception",
             )
             result
         }
@@ -415,6 +434,41 @@ class ShareSaveCoordinator(
             ),
             itemTitle = preferredTitle,
         )
+    }
+
+    private suspend fun resolveLateShareSaveSuccess(
+        baseResult: ShareSaveResult,
+        current: AppSettings,
+        url: String,
+        destinationPlaylistId: Int?,
+        preferredTitle: String?,
+        attemptId: Int,
+    ): ShareSaveResult.Saved? {
+        if (!shouldAttemptLateShareSaveResolution(baseResult)) {
+            return null
+        }
+        repeat(SHARE_POST_FAILURE_RESOLUTION_ATTEMPTS) { attempt ->
+            val existingItemId = resolveExistingItemIdForUrl(
+                current = current,
+                url = url,
+                destinationPlaylistId = destinationPlaylistId,
+            )
+            if (existingItemId != null) {
+                return runCatching {
+                    completeSavedItem(
+                        itemId = existingItemId,
+                        itemTitle = preferredTitle,
+                        current = current,
+                        destinationPlaylistId = destinationPlaylistId,
+                        attemptId = attemptId,
+                    )
+                }.getOrNull()
+            }
+            if (attempt < SHARE_POST_FAILURE_RESOLUTION_ATTEMPTS - 1) {
+                delay(SHARE_POST_FAILURE_RESOLUTION_DELAY_MS)
+            }
+        }
+        return null
     }
 
     private suspend fun resolveExistingItemIdForUrl(
