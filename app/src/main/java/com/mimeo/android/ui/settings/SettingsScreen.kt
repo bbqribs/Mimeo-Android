@@ -661,7 +661,7 @@ private fun ConnectionMode.description(): String = when (this) {
 internal fun formatConnectionTestSuccessSummary(snapshot: ConnectionTestSuccessSnapshot): String {
     val timestamp = if (snapshot.succeededAtMs > 0L) {
         runCatching {
-            SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(snapshot.succeededAtMs))
+            SimpleDateFormat("yy-MM-dd HH:mm", Locale.US).format(Date(snapshot.succeededAtMs))
         }.getOrDefault("unknown time")
     } else {
         "unknown time"
@@ -671,8 +671,8 @@ internal fun formatConnectionTestSuccessSummary(snapshot: ConnectionTestSuccessS
             ?.takeIf { it.isNotBlank() }
             ?: snapshot.baseUrl.trim()
     }.getOrDefault(snapshot.baseUrl.trim())
-    val shaSuffix = snapshot.gitSha?.takeIf { it.isNotBlank() }?.let { " • git_sha=$it" }.orEmpty()
-    return "${snapshot.mode.displayName()} • $host • $timestamp$shaSuffix"
+    val shaSuffix = snapshot.gitSha?.takeIf { it.isNotBlank() }?.let { " git_sha=$it" }.orEmpty()
+    return "${snapshot.mode.displayName()}: $host $timestamp$shaSuffix"
 }
 
 @Composable

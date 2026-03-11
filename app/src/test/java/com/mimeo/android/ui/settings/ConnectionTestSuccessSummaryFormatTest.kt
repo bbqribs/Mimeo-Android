@@ -19,8 +19,10 @@ class ConnectionTestSuccessSummaryFormatTest {
         val summary = formatConnectionTestSuccessSummary(snapshot)
 
         assertTrue(summary.contains("Remote"))
+        assertTrue(summary.contains("Remote:"))
         assertTrue(summary.contains("100.101.102.103"))
         assertTrue(summary.contains("git_sha=abc1234"))
+        assertTrue(!summary.contains("•"))
     }
 
     @Test
