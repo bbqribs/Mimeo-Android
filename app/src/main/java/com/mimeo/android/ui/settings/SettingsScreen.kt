@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
+import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.ui.theme.toFontFamily
@@ -56,7 +57,10 @@ fun SettingsScreen(
     val playlists by vm.playlists.collectAsState()
     val scrollState = rememberScrollState()
     var restoredScrollOffset by remember { mutableStateOf(false) }
-    var baseUrl by remember(settings.baseUrl) { mutableStateOf(settings.baseUrl) }
+    var connectionMode by remember(settings.connectionMode) { mutableStateOf(settings.connectionMode) }
+    var localBaseUrl by remember(settings.localBaseUrl) { mutableStateOf(settings.localBaseUrl) }
+    var lanBaseUrl by remember(settings.lanBaseUrl) { mutableStateOf(settings.lanBaseUrl) }
+    var remoteBaseUrl by remember(settings.remoteBaseUrl) { mutableStateOf(settings.remoteBaseUrl) }
     var token by remember(settings.apiToken) { mutableStateOf(settings.apiToken) }
     var autoAdvance by remember(settings.autoAdvanceOnCompletion) {
         mutableStateOf(settings.autoAdvanceOnCompletion)
@@ -98,9 +102,21 @@ fun SettingsScreen(
     var showDefaultSavePlaylistDialog by remember { mutableStateOf(false) }
     var showFontMenu by remember { mutableStateOf(false) }
 
+    fun selectedModeBaseUrl(): String {
+        return when (connectionMode) {
+            ConnectionMode.LOCAL -> localBaseUrl
+            ConnectionMode.LAN -> lanBaseUrl
+            ConnectionMode.REMOTE -> remoteBaseUrl
+        }
+    }
+
     fun saveCurrent() {
         vm.saveSettings(
-            baseUrl = baseUrl,
+            baseUrl = selectedModeBaseUrl(),
+            connectionMode = connectionMode,
+            localBaseUrl = localBaseUrl,
+            lanBaseUrl = lanBaseUrl,
+            remoteBaseUrl = remoteBaseUrl,
             token = token,
             autoAdvanceOnCompletion = autoAdvance,
             persistentPlayerEnabled = persistentPlayerEnabled,
@@ -181,7 +197,7 @@ fun SettingsScreen(
     ) {
         SettingsSectionHeader(
             title = "Connection / Server",
-            subtitle = "Set your backend address and token, then verify connectivity.",
+            subtitle = "Choose Local, LAN, or Remote mode, then set URL and token.",
         )
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(
@@ -191,11 +207,34 @@ fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text("Connection")
-                OutlinedTextField(
-                    value = baseUrl,
-                    onValueChange = { baseUrl = it },
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Base URL") },
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ConnectionMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = connectionMode == mode,
+                            onClick = { connectionMode = mode },
+                            label = { Text(mode.displayName()) },
+                        )
+                    }
+                }
+                Text(
+                    text = connectionMode.description(),
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = selectedModeBaseUrl(),
+                    onValueChange = {
+                        when (connectionMode) {
+                            ConnectionMode.LOCAL -> localBaseUrl = it
+                            ConnectionMode.LAN -> lanBaseUrl = it
+                            ConnectionMode.REMOTE -> remoteBaseUrl = it
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("${connectionMode.displayName()} Base URL") },
                     singleLine = true,
                 )
                 OutlinedTextField(
@@ -578,6 +617,18 @@ private fun ReaderFontOption.displayName(): String = when (this) {
     ReaderFontOption.SERIF -> "Serif"
     ReaderFontOption.SANS_SERIF -> "Sans Serif"
     ReaderFontOption.MONOSPACE -> "Monospace"
+}
+
+private fun ConnectionMode.displayName(): String = when (this) {
+    ConnectionMode.LOCAL -> "Local"
+    ConnectionMode.LAN -> "LAN"
+    ConnectionMode.REMOTE -> "Remote"
+}
+
+private fun ConnectionMode.description(): String = when (this) {
+    ConnectionMode.LOCAL -> "Local loopback/dev-host mode (for emulator-style local access)."
+    ConnectionMode.LAN -> "Home LAN mode (when phone and server are on same local network)."
+    ConnectionMode.REMOTE -> "Off-LAN remote mode (for secure access over Tailscale/VPN)."
 }
 
 @Composable

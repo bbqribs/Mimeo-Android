@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.mimeo.android.model.AppSettings
+import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
@@ -32,6 +33,10 @@ private val Context.dataStore by preferencesDataStore(name = "mimeo_settings")
 
 class SettingsStore(private val context: Context) {
     private val baseUrlKey: Preferences.Key<String> = stringPreferencesKey("base_url")
+    private val connectionModeKey: Preferences.Key<String> = stringPreferencesKey("connection_mode")
+    private val localBaseUrlKey: Preferences.Key<String> = stringPreferencesKey("local_base_url")
+    private val lanBaseUrlKey: Preferences.Key<String> = stringPreferencesKey("lan_base_url")
+    private val remoteBaseUrlKey: Preferences.Key<String> = stringPreferencesKey("remote_base_url")
     private val tokenKey: Preferences.Key<String> = stringPreferencesKey("api_token")
     private val autoAdvanceOnCompletionKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("auto_advance_on_completion")
@@ -78,8 +83,23 @@ class SettingsStore(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->
+        val storedBaseUrl = prefs[baseUrlKey] ?: "http://10.0.2.2:8000"
+        val parsedConnectionMode = prefs[connectionModeKey]
+            ?.let { runCatching { ConnectionMode.valueOf(it) }.getOrNull() }
+            ?: if (storedBaseUrl.contains("10.0.2.2")) ConnectionMode.LOCAL else ConnectionMode.LAN
+        val localBaseUrl = prefs[localBaseUrlKey] ?: if (storedBaseUrl.contains("10.0.2.2")) {
+            storedBaseUrl
+        } else {
+            "http://10.0.2.2:8000"
+        }
+        val lanBaseUrl = prefs[lanBaseUrlKey] ?: storedBaseUrl
+        val remoteBaseUrl = prefs[remoteBaseUrlKey] ?: storedBaseUrl
         AppSettings(
-            baseUrl = prefs[baseUrlKey] ?: "http://10.0.2.2:8000",
+            baseUrl = storedBaseUrl,
+            connectionMode = parsedConnectionMode,
+            localBaseUrl = localBaseUrl,
+            lanBaseUrl = lanBaseUrl,
+            remoteBaseUrl = remoteBaseUrl,
             apiToken = prefs[tokenKey] ?: "",
             autoAdvanceOnCompletion = prefs[autoAdvanceOnCompletionKey] ?: false,
             persistentPlayerEnabled = prefs[persistentPlayerEnabledKey] ?: true,
@@ -120,6 +140,10 @@ class SettingsStore(private val context: Context) {
 
     suspend fun save(
         baseUrl: String,
+        connectionMode: ConnectionMode,
+        localBaseUrl: String,
+        lanBaseUrl: String,
+        remoteBaseUrl: String,
         apiToken: String,
         autoAdvanceOnCompletion: Boolean,
         persistentPlayerEnabled: Boolean,
@@ -143,6 +167,10 @@ class SettingsStore(private val context: Context) {
     ) {
         context.dataStore.edit { prefs ->
             prefs[baseUrlKey] = baseUrl.trim()
+            prefs[connectionModeKey] = connectionMode.name
+            prefs[localBaseUrlKey] = localBaseUrl.trim()
+            prefs[lanBaseUrlKey] = lanBaseUrl.trim()
+            prefs[remoteBaseUrlKey] = remoteBaseUrl.trim()
             prefs[tokenKey] = apiToken.trim()
             prefs[autoAdvanceOnCompletionKey] = autoAdvanceOnCompletion
             prefs[persistentPlayerEnabledKey] = persistentPlayerEnabled
