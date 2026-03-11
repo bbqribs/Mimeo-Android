@@ -72,6 +72,27 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 - `127.0.0.1` on Android points to the device itself, not your host backend.
 - If your PC IP is `192.168.68.124`, set app base URL to `http://192.168.68.124:8000`.
 
+## Remote mode (Tailscale / off-LAN)
+Use this when your phone is not on the same home LAN as the backend host.
+
+1. On the backend host, confirm Mimeo backend is reachable on port `8000` (not loopback-only bind).
+2. Connect both host and phone to the same Tailscale tailnet.
+3. On the backend host, get the Tailscale address:
+   ```powershell
+   tailscale ip -4
+   tailscale status
+   ```
+4. In Android app Settings:
+   - Connection mode: `Remote`
+   - Remote Base URL: `http://<tailscale-ip>:8000` (or your Tailnet DNS/HTTPS URL if configured)
+   - API token: your device token
+5. Tap **Test connection** and confirm it reports connected.
+
+Notes:
+- `Local` is for emulator/dev-loopback style access.
+- `LAN` is for phone + host on same local network.
+- `Remote` is for secure off-LAN access (for example Tailscale).
+
 ## Device connectivity quick fix (Windows + physical phone)
 1. Start backend on LAN bind (not localhost-only):
    ```powershell
