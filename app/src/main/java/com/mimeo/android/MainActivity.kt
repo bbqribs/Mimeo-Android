@@ -302,7 +302,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val pendingNavigationRoute: StateFlow<String?> = _pendingNavigationRoute.asStateFlow()
     private val _settingsScrollOffset = MutableStateFlow(0)
     val settingsScrollOffset: StateFlow<Int> = _settingsScrollOffset.asStateFlow()
-    private var hasAttemptedInitialPendingAutoRetry = false
+    private var lastPendingAutoRetryFingerprint: String? = null
 
     init {
         viewModelScope.launch {
@@ -794,10 +794,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 wasOffline = wasOffline,
             )
             val autoRetrySuccessCount = if (shouldAttemptPendingAutoRetry) {
-                hasAttemptedInitialPendingAutoRetry = true
                 autoRetryPendingManualSaves(limit = 2)
             } else {
                 0
+            }
+            if (shouldAttemptPendingAutoRetry) {
+                lastPendingAutoRetryFingerprint = buildRetryablePendingFingerprint()
             }
             if (autoRetrySuccessCount > 0) {
                 val refreshedQueueResult = repository.loadQueueAndPrefetch(
@@ -918,10 +920,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun shouldAttemptPendingAutoRetryOnQueueLoad(wasOffline: Boolean): Boolean {
-        val hasRetryablePending = _pendingManualSaves.value.any { it.autoRetryEligible }
-        if (!hasRetryablePending) return false
+        val fingerprint = buildRetryablePendingFingerprint() ?: return false
         if (wasOffline) return true
-        return !hasAttemptedInitialPendingAutoRetry
+        return fingerprint != lastPendingAutoRetryFingerprint
+    }
+
+    private fun buildRetryablePendingFingerprint(): String? {
+        val retryable = _pendingManualSaves.value
+            .filter { it.autoRetryEligible }
+            .sortedBy { it.id }
+        if (retryable.isEmpty()) return null
+        return retryable.joinToString("|") { item ->
+            "${item.id}:${item.retryCount}:${item.autoRetryEligible}"
+        }
     }
 
     private fun resolvePendingRetryFailureMessage(
