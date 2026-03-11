@@ -84,6 +84,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
+import java.net.URI
 import java.util.UUID
 
 private const val DONE_PERCENT_THRESHOLD = 98
@@ -1339,40 +1340,46 @@ private fun PendingProjectedQueueItemCard(
     var actionsMenuExpanded by remember { mutableStateOf(false) }
     val sourceLabel = if (item.source == PendingSaveSource.SHARE) "Shared" else "Manual"
     val destinationLabel = item.destinationPlaylistId?.let { "Playlist $it" } ?: "Smart Queue"
+    val hostLabel = resolvePendingHost(item.urlInput)
+    val subLabel = listOf(hostLabel, sourceLabel, destinationLabel).joinToString(" • ")
+    val primaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f)
+    val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
     val titleLine = when {
         !item.titleInput.isNullOrBlank() -> item.titleInput
         item.urlInput.isNotBlank() -> item.urlInput
         item.type == PendingManualSaveType.TEXT -> "Pasted text"
         else -> "(pending save)"
     }
-    val bodyPreview = item.bodyInput?.trim()?.take(100)?.takeIf { it.isNotEmpty() }
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
+                .padding(horizontal = 8.dp, vertical = 5.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = titleLine,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = primaryTextColor,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 Box {
                     IconButton(
+                        modifier = Modifier.size(40.dp),
                         enabled = !retryInProgress,
                         onClick = { actionsMenuExpanded = true },
                     ) {
                         Icon(
                             painter = painterResource(id = R.drawable.msr_more_vert_24),
                             contentDescription = "Pending item actions",
+                            tint = secondaryTextColor,
                             modifier = Modifier.size(20.dp),
                         )
                     }
@@ -1399,53 +1406,43 @@ private fun PendingProjectedQueueItemCard(
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    text = "Source: $sourceLabel",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = subLabel,
+                    style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
+                    color = secondaryTextColor,
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "Destination: $destinationLabel",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = item.lastFailureMessage,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_sync_problem_24),
+                    contentDescription = "Pending and unavailable offline",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier
+                        .padding(start = 6.dp)
+                        .size(16.dp),
                 )
             }
-            Text(
-                text = "Pending save",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.tertiary,
-            )
-            if (item.urlInput.isNotBlank()) {
-                Text(
-                    text = item.urlInput,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            bodyPreview?.let { preview ->
-                Text(
-                    text = preview,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Text(
-                text = item.lastFailureMessage,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
     }
+}
+
+private fun resolvePendingHost(urlInput: String): String {
+    val extracted = extractFirstHttpUrl(urlInput)?.trim().orEmpty()
+    if (extracted.isEmpty()) return "Pending"
+    return runCatching {
+        URI(extracted).host?.removePrefix("www.")?.takeIf { it.isNotBlank() }
+    }.getOrNull() ?: "Pending"
 }
 
 @Composable
