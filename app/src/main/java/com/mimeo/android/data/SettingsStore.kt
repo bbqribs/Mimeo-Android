@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectionMode
+import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
@@ -80,6 +81,8 @@ class SettingsStore(private val context: Context) {
         stringPreferencesKey("queue_snapshots_json")
     private val pendingManualSavesJsonKey: Preferences.Key<String> =
         stringPreferencesKey("pending_manual_saves_json")
+    private val connectionTestSuccessJsonKey: Preferences.Key<String> =
+        stringPreferencesKey("connection_test_success_json")
     private val json = Json { ignoreUnknownKeys = true }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -136,6 +139,11 @@ class SettingsStore(private val context: Context) {
 
     val pendingManualSavesFlow: Flow<List<PendingManualSaveItem>> = context.dataStore.data.map { prefs ->
         decodePendingManualSaves(prefs[pendingManualSavesJsonKey])
+    }
+
+    val connectionTestSuccessFlow: Flow<Map<ConnectionMode, ConnectionTestSuccessSnapshot>> = context.dataStore.data.map { prefs ->
+        decodeConnectionTestSuccesses(prefs[connectionTestSuccessJsonKey])
+            .associateBy { it.mode }
     }
 
     suspend fun save(
@@ -423,6 +431,26 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun saveConnectionTestSuccess(
+        mode: ConnectionMode,
+        baseUrl: String,
+        gitSha: String?,
+    ) {
+        context.dataStore.edit { prefs ->
+            val existing = decodeConnectionTestSuccesses(prefs[connectionTestSuccessJsonKey])
+            val next = ConnectionTestSuccessSnapshot(
+                mode = mode,
+                baseUrl = baseUrl.trim(),
+                gitSha = gitSha?.trim()?.takeIf { it.isNotEmpty() },
+                succeededAtMs = System.currentTimeMillis(),
+            )
+            val updated = listOf(next) + existing.filterNot { it.mode == mode }
+            prefs[connectionTestSuccessJsonKey] = json.encodeToString(
+                ConnectionTestSuccessState(records = updated.take(3)),
+            )
+        }
+    }
+
     private fun queueSnapshotKey(selectedPlaylistId: Int?): String {
         return selectedPlaylistId?.toString() ?: "smart"
     }
@@ -442,6 +470,13 @@ class SettingsStore(private val context: Context) {
         if (raw.isNullOrBlank()) return emptyList()
         return runCatching {
             json.decodeFromString<PendingManualSaveState>(raw).records
+        }.getOrDefault(emptyList())
+    }
+
+    private fun decodeConnectionTestSuccesses(raw: String?): List<ConnectionTestSuccessSnapshot> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return runCatching {
+            json.decodeFromString<ConnectionTestSuccessState>(raw).records
         }.getOrDefault(emptyList())
     }
 
@@ -466,4 +501,9 @@ private data class QueueSnapshotRecord(
 @Serializable
 private data class PendingManualSaveState(
     val records: List<PendingManualSaveItem> = emptyList(),
+)
+
+@Serializable
+private data class ConnectionTestSuccessState(
+    val records: List<ConnectionTestSuccessSnapshot> = emptyList(),
 )

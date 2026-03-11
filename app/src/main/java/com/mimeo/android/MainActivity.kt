@@ -82,6 +82,7 @@ import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
 import com.mimeo.android.model.ConnectionMode
+import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.FolderSummary
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaylistSummary
@@ -292,6 +293,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _diagnosticsLastError = MutableStateFlow<String?>(null)
     val diagnosticsLastError: StateFlow<String?> = _diagnosticsLastError.asStateFlow()
+    private val _connectionTestSuccessByMode = MutableStateFlow<Map<ConnectionMode, ConnectionTestSuccessSnapshot>>(emptyMap())
+    val connectionTestSuccessByMode: StateFlow<Map<ConnectionMode, ConnectionTestSuccessSnapshot>> =
+        _connectionTestSuccessByMode.asStateFlow()
 
     private val _playbackPositionByItem = MutableStateFlow<Map<Int, PlaybackPosition>>(emptyMap())
     val playbackPositionByItem: StateFlow<Map<Int, PlaybackPosition>> = _playbackPositionByItem.asStateFlow()
@@ -320,6 +324,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsStore.pendingManualSavesFlow.collect { pending ->
                 _pendingManualSaves.value = pending
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.connectionTestSuccessFlow.collect { snapshots ->
+                _connectionTestSuccessByMode.value = snapshots
             }
         }
         WorkScheduler.enqueueProgressSync(application.applicationContext)
@@ -745,6 +754,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _testingConnection.value = true
             try {
                 val version = apiClient.getDebugVersion(current.baseUrl, current.apiToken)
+                settingsStore.saveConnectionTestSuccess(
+                    mode = current.connectionMode,
+                    baseUrl = current.baseUrl,
+                    gitSha = version.gitSha,
+                )
                 _statusMessage.value = ConnectionTestMessageResolver.connected(
                     mode = current.connectionMode,
                     baseUrl = current.baseUrl,

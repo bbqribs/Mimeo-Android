@@ -38,9 +38,14 @@ import androidx.compose.ui.unit.sp
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.ConnectionMode
+import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.ui.theme.toFontFamily
+import java.net.URI
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private const val PREVIEW_PARAGRAPH_1 = "Mimeo now remembers your reading layout so Locus feels like a calm, bookish surface instead of a raw text dump."
 private const val PREVIEW_PARAGRAPH_2 = "Use this preview to check rhythm, paragraph spacing, and readability before returning to long-form listening sessions."
@@ -54,6 +59,7 @@ fun SettingsScreen(
     val settingsScrollOffset by vm.settingsScrollOffset.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val testingConnection by vm.testingConnection.collectAsState()
+    val connectionTestSuccessByMode by vm.connectionTestSuccessByMode.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val scrollState = rememberScrollState()
     var restoredScrollOffset by remember { mutableStateOf(false) }
@@ -261,6 +267,24 @@ fun SettingsScreen(
                         },
                     ) { Text(if (testingConnection) "Testing..." else "Test") }
                     Button(onClick = onOpenDiagnostics) { Text("Diagnostics") }
+                }
+                val lastSuccessItems = ConnectionMode.entries.mapNotNull { mode ->
+                    connectionTestSuccessByMode[mode]?.let { snapshot ->
+                        formatConnectionTestSuccessSummary(snapshot)
+                    }
+                }
+                if (lastSuccessItems.isNotEmpty()) {
+                    Text(
+                        text = "Last successful test",
+                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                    )
+                    lastSuccessItems.forEach { summary ->
+                        Text(
+                            text = summary,
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
@@ -629,6 +653,19 @@ private fun ConnectionMode.description(): String = when (this) {
     ConnectionMode.LOCAL -> "Local loopback/dev-host mode (for emulator-style local access)."
     ConnectionMode.LAN -> "Home LAN mode (when phone and server are on same local network)."
     ConnectionMode.REMOTE -> "Off-LAN remote mode (for secure access over Tailscale/VPN)."
+}
+
+internal fun formatConnectionTestSuccessSummary(snapshot: ConnectionTestSuccessSnapshot): String {
+    val timestamp = runCatching {
+        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(snapshot.succeededAtMs))
+    }.getOrDefault("unknown time")
+    val host = runCatching {
+        URI(snapshot.baseUrl.trim()).host
+            ?.takeIf { it.isNotBlank() }
+            ?: snapshot.baseUrl.trim()
+    }.getOrDefault(snapshot.baseUrl.trim())
+    val shaSuffix = snapshot.gitSha?.takeIf { it.isNotBlank() }?.let { " • git_sha=$it" }.orEmpty()
+    return "${snapshot.mode.displayName()} • $host • $timestamp$shaSuffix"
 }
 
 @Composable

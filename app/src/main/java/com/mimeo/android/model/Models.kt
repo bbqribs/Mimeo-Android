@@ -38,6 +38,14 @@ data class ConnectivityDiagnosticRow(
 )
 
 @Serializable
+data class ConnectionTestSuccessSnapshot(
+    val mode: ConnectionMode,
+    val baseUrl: String,
+    val gitSha: String? = null,
+    val succeededAtMs: Long = System.currentTimeMillis(),
+)
+
+@Serializable
 data class DebugVersionResponse(
     @SerialName("git_sha") val gitSha: String? = null,
     @SerialName("alembic_head") val alembicHead: String? = null,
