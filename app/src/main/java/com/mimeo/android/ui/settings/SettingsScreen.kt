@@ -151,14 +151,14 @@ fun SettingsScreen(
         testRequested = false
         when {
             message.startsWith("Connected") -> {
-                vm.showSnackbar("Connected")
+                vm.showSnackbar(message)
             }
             message.contains("Token required", ignoreCase = true) -> {
                 vm.showSnackbar("Token required")
             }
             else -> {
                 vm.showSnackbar(
-                    message = "Can't reach server",
+                    message = message.ifBlank { "Can't reach server" },
                     actionLabel = "Diagnostics",
                     actionKey = "open_diagnostics",
                 )
