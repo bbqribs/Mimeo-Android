@@ -7,7 +7,20 @@ import java.util.Locale
 internal object ConnectionTestMessageResolver {
     fun tokenRequired(): String = "Token required"
 
-    fun connected(gitSha: String?): String = "Connected git_sha=${gitSha ?: "unknown"}"
+    fun connected(
+        mode: ConnectionMode,
+        baseUrl: String,
+        gitSha: String?,
+    ): String {
+        val base = "Connected git_sha=${gitSha ?: "unknown"}"
+        return when {
+            mode == ConnectionMode.REMOTE && isLanIp(parseHost(baseUrl).lowercase(Locale.US)) ->
+                "$base (Remote mode is using a LAN IP; use LAN mode or a Tailscale/VPN URL.)"
+            mode == ConnectionMode.LAN && isLoopbackHost(parseHost(baseUrl).lowercase(Locale.US)) ->
+                "$base (LAN mode is using loopback/emulator host; prefer your server LAN IP.)"
+            else -> base
+        }
+    }
 
     fun forApiFailure(
         mode: ConnectionMode,
@@ -84,6 +97,10 @@ internal object ConnectionTestMessageResolver {
         return runCatching { URI(trimmed).host.orEmpty() }.getOrElse {
             trimmed.removePrefix("http://").removePrefix("https://").substringBefore('/').substringBefore(':')
         }
+    }
+
+    private fun isLoopbackHost(host: String): Boolean {
+        return host == "127.0.0.1" || host == "localhost" || host.contains("10.0.2.2")
     }
 
     private fun isLanIp(host: String): Boolean {

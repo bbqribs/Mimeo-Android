@@ -51,4 +51,27 @@ class ConnectionTestMessageResolverTest {
 
         assertTrue(message.contains("LAN mode needs your server LAN IP"))
     }
+
+    @Test
+    fun `connected in remote mode with lan ip includes mode mismatch hint`() {
+        val message = ConnectionTestMessageResolver.connected(
+            mode = ConnectionMode.REMOTE,
+            baseUrl = "http://192.168.68.124:8000",
+            gitSha = "abc123",
+        )
+
+        assertTrue(message.contains("Connected git_sha=abc123"))
+        assertTrue(message.contains("Remote mode is using a LAN IP"))
+    }
+
+    @Test
+    fun `connected in remote mode with tailscale address stays clean`() {
+        val message = ConnectionTestMessageResolver.connected(
+            mode = ConnectionMode.REMOTE,
+            baseUrl = "http://100.101.102.103:8000",
+            gitSha = "abc123",
+        )
+
+        assertEquals("Connected git_sha=abc123", message)
+    }
 }

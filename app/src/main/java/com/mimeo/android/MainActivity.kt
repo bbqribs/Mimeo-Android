@@ -745,7 +745,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _testingConnection.value = true
             try {
                 val version = apiClient.getDebugVersion(current.baseUrl, current.apiToken)
-                _statusMessage.value = ConnectionTestMessageResolver.connected(version.gitSha)
+                _statusMessage.value = ConnectionTestMessageResolver.connected(
+                    mode = current.connectionMode,
+                    baseUrl = current.baseUrl,
+                    gitSha = version.gitSha,
+                )
                 _queueOffline.value = false
                 updateSyncBadgeState()
             } catch (e: ApiException) {
