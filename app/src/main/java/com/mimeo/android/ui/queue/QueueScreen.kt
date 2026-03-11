@@ -1179,6 +1179,7 @@ private fun PendingManualRetryCard(
     onDismiss: (PendingManualSaveItem) -> Unit,
     onClearAll: () -> Unit,
 ) {
+    var menuExpandedItemId by remember { mutableStateOf<Long?>(null) }
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -1217,6 +1218,7 @@ private fun PendingManualRetryCard(
                     } else {
                         "Source: Manual"
                     }
+                    val destinationLabel = item.destinationPlaylistId?.let { "Destination: Playlist $it" } ?: "Destination: Smart Queue"
                     val titleLine = when {
                         !item.titleInput.isNullOrBlank() -> item.titleInput
                         item.urlInput.isNotBlank() -> item.urlInput
@@ -1228,24 +1230,71 @@ private fun PendingManualRetryCard(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        Text(
-                            text = titleLine,
-                            style = MaterialTheme.typography.labelLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = sourceLabel,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = titleLine,
+                                style = MaterialTheme.typography.labelLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Box {
+                                IconButton(
+                                    enabled = !retryInProgress,
+                                    onClick = { menuExpandedItemId = item.id },
+                                ) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.msr_more_vert_24),
+                                        contentDescription = "Pending item actions",
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = menuExpandedItemId == item.id,
+                                    onDismissRequest = { menuExpandedItemId = null },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Retry") },
+                                        onClick = {
+                                            onRetry(item)
+                                            menuExpandedItemId = null
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Dismiss") },
+                                        onClick = {
+                                            onDismiss(item)
+                                            menuExpandedItemId = null
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = sourceLabel,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = destinationLabel,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                         Text(
                             text = item.urlInput.ifBlank { "(no URL provided)" },
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = item.destinationPlaylistId?.let { "Destination: Playlist $it" } ?: "Destination: Smart Queue",
                             style = MaterialTheme.typography.bodySmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -1265,14 +1314,6 @@ private fun PendingManualRetryCard(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            TextButton(enabled = !retryInProgress, onClick = { onRetry(item) }) {
-                                Text("Retry")
-                            }
-                            TextButton(enabled = !retryInProgress, onClick = { onDismiss(item) }) {
-                                Text("Dismiss")
-                            }
-                        }
                     }
                     if (index < pendingItems.lastIndex) {
                         Box(
@@ -1295,7 +1336,9 @@ private fun PendingProjectedQueueItemCard(
     onRetry: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    var actionsMenuExpanded by remember { mutableStateOf(false) }
     val sourceLabel = if (item.source == PendingSaveSource.SHARE) "Shared" else "Manual"
+    val destinationLabel = item.destinationPlaylistId?.let { "Playlist $it" } ?: "Smart Queue"
     val titleLine = when {
         !item.titleInput.isNullOrBlank() -> item.titleInput
         item.urlInput.isNotBlank() -> item.urlInput
@@ -1310,26 +1353,73 @@ private fun PendingProjectedQueueItemCard(
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = titleLine,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Box {
+                    IconButton(
+                        enabled = !retryInProgress,
+                        onClick = { actionsMenuExpanded = true },
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.msr_more_vert_24),
+                            contentDescription = "Pending item actions",
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = actionsMenuExpanded,
+                        onDismissRequest = { actionsMenuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Retry") },
+                            onClick = {
+                                onRetry()
+                                actionsMenuExpanded = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Dismiss") },
+                            onClick = {
+                                onDismiss()
+                                actionsMenuExpanded = false
+                            },
+                        )
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Source: $sourceLabel",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "Destination: $destinationLabel",
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Text(
                 text = "Pending save",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.tertiary,
-            )
-            Text(
-                text = titleLine,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "Source: $sourceLabel",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Text(
-                text = item.destinationPlaylistId?.let { "Destination: Playlist $it" } ?: "Destination: Smart Queue",
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
             if (item.urlInput.isNotBlank()) {
                 Text(
@@ -1354,14 +1444,6 @@ private fun PendingProjectedQueueItemCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                TextButton(enabled = !retryInProgress, onClick = onRetry) {
-                    Text("Retry")
-                }
-                TextButton(enabled = !retryInProgress, onClick = onDismiss) {
-                    Text("Dismiss")
-                }
-            }
         }
     }
 }
