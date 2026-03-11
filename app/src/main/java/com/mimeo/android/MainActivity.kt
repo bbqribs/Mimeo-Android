@@ -302,6 +302,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val pendingNavigationRoute: StateFlow<String?> = _pendingNavigationRoute.asStateFlow()
     private val _settingsScrollOffset = MutableStateFlow(0)
     val settingsScrollOffset: StateFlow<Int> = _settingsScrollOffset.asStateFlow()
+    private var lastPendingAutoRetryFingerprint: String? = null
 
     init {
         viewModelScope.launch {
@@ -741,6 +742,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun loadQueueOnce(autoRetryPendingSaves: Boolean = true): Result<Unit> = queueLoadMutex.withLock {
         val current = settings.value
+        val wasOffline = _queueOffline.value
         val snapshotPreloaded = if (_queueItems.value.isEmpty()) {
             applySavedQueueSnapshot(
                 selectedPlaylistId = current.selectedPlaylistId,
@@ -788,10 +790,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _queueOffline.value = false
             _statusMessage.value = "Queue loaded (${queue.count})"
             flushPendingProgress()
-            val autoRetrySuccessCount = if (autoRetryPendingSaves) {
+            val shouldAttemptPendingAutoRetry = autoRetryPendingSaves && shouldAttemptPendingAutoRetryOnQueueLoad(
+                wasOffline = wasOffline,
+            )
+            val autoRetrySuccessCount = if (shouldAttemptPendingAutoRetry) {
                 autoRetryPendingManualSaves(limit = 2)
             } else {
                 0
+            }
+            if (shouldAttemptPendingAutoRetry) {
+                lastPendingAutoRetryFingerprint = buildRetryablePendingFingerprint()
             }
             if (autoRetrySuccessCount > 0) {
                 val refreshedQueueResult = repository.loadQueueAndPrefetch(
@@ -909,6 +917,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun shouldAutoRetryManualSave(result: ShareSaveResult): Boolean {
         return isRetryablePendingSaveResult(result)
+    }
+
+    private fun shouldAttemptPendingAutoRetryOnQueueLoad(wasOffline: Boolean): Boolean {
+        val fingerprint = buildRetryablePendingFingerprint() ?: return false
+        if (wasOffline) return true
+        return fingerprint != lastPendingAutoRetryFingerprint
+    }
+
+    private fun buildRetryablePendingFingerprint(): String? {
+        val retryable = _pendingManualSaves.value
+            .filter { it.autoRetryEligible }
+            .sortedBy { it.id }
+        if (retryable.isEmpty()) return null
+        return retryable.joinToString("|") { item ->
+            "${item.id}:${item.retryCount}:${item.autoRetryEligible}"
+        }
     }
 
     private fun resolvePendingRetryFailureMessage(
