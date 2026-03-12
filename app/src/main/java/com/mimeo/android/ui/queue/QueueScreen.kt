@@ -1035,6 +1035,7 @@ fun QueueScreen(
                 } else {
                     PendingManualRetryCard(
                         pendingItems = pendingManualSaves,
+                        playlistNameById = playlists.associate { it.id to it.name },
                         retryInProgress = pendingManualRetryInProgress,
                         onRetry = retryPendingItem,
                         onRetryAll = retryAllPendingItems,
@@ -1171,9 +1172,39 @@ private fun readClipboardText(context: Context): String? {
     return item.coerceToText(context)?.toString()
 }
 
+internal fun formatPendingDestinationLabel(
+    destinationPlaylistId: Int?,
+    playlistNameById: Map<Int, String>,
+): String {
+    if (destinationPlaylistId == null) {
+        return "Destination: Smart Queue"
+    }
+    val playlistName = playlistNameById[destinationPlaylistId]
+    return if (playlistName.isNullOrBlank()) {
+        "Destination: Playlist #$destinationPlaylistId"
+    } else {
+        "Destination: $playlistName"
+    }
+}
+
+internal fun classifyPendingFailureReason(message: String): String {
+    val lower = message.lowercase()
+    return when {
+        lower.contains("unauthorized") || lower.contains("forbidden") || lower.contains("token") ->
+            "Auth required"
+        lower.contains("timeout") || lower.contains("timed out") ->
+            "Request timed out"
+        lower.contains("network") || lower.contains("offline") ||
+            lower.contains("couldn't reach server") || lower.contains("could not reach server") ->
+            "Backend unreachable"
+        else -> "Save failed"
+    }
+}
+
 @Composable
 private fun PendingManualRetryCard(
     pendingItems: List<PendingManualSaveItem>,
+    playlistNameById: Map<Int, String>,
     retryInProgress: Boolean,
     onRetry: (PendingManualSaveItem) -> Unit,
     onRetryAll: () -> Unit,
@@ -1219,7 +1250,10 @@ private fun PendingManualRetryCard(
                     } else {
                         "Source: Manual"
                     }
-                    val destinationLabel = item.destinationPlaylistId?.let { "Destination: Playlist $it" } ?: "Destination: Smart Queue"
+                    val destinationLabel = formatPendingDestinationLabel(
+                        destinationPlaylistId = item.destinationPlaylistId,
+                        playlistNameById = playlistNameById,
+                    )
                     val titleLine = when {
                         !item.titleInput.isNullOrBlank() -> item.titleInput
                         item.urlInput.isNotBlank() -> item.urlInput
@@ -1309,10 +1343,10 @@ private fun PendingManualRetryCard(
                             )
                         }
                         Text(
-                            text = "${item.lastFailureMessage} (retries: ${item.retryCount})",
+                            text = "Pending: ${classifyPendingFailureReason(item.lastFailureMessage)} • retries: ${item.retryCount}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
-                            maxLines = 2,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
