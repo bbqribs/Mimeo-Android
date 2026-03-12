@@ -72,6 +72,7 @@ import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.extractFirstHttpUrl
+import com.mimeo.android.share.isRetryablePendingSaveResult
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.components.StatusBanner
@@ -765,7 +766,7 @@ fun QueueScreen(
                 onShowSnackbar(statusMessage, null, null)
             }
             if (offline) {
-                queueCurrentManualSaveAndClose("Added to pending manual saves")
+                queueCurrentManualSaveAndClose(ShareSaveResult.PendingQueued.notificationText)
                 manualSaveJob = null
                 return
             }
@@ -789,10 +790,10 @@ fun QueueScreen(
                 if (manualSaveAttemptVersion != attemptVersion) {
                     return
                 }
-                val actionLabel = if (result.opensSettings) "Open Settings" else null
-                val actionKey = if (result.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
-                onShowSnackbar(result.notificationText, actionLabel, actionKey)
                 if (isManualSaveSuccess(result)) {
+                    val actionLabel = if (result.opensSettings) "Open Settings" else null
+                    val actionKey = if (result.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
+                    onShowSnackbar(result.notificationText, actionLabel, actionKey)
                     vm.removeMatchingPendingManualSave(
                         type = payload.type,
                         urlInput = payload.urlInput,
@@ -805,7 +806,12 @@ fun QueueScreen(
                     manualTitleInput = ""
                     manualBodyInput = ""
                     manualSubmitError = null
+                } else if (isRetryablePendingSaveResult(result)) {
+                    queueCurrentManualSaveAndClose(ShareSaveResult.PendingQueued.notificationText)
                 } else {
+                    val actionLabel = if (result.opensSettings) "Open Settings" else null
+                    val actionKey = if (result.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
+                    onShowSnackbar(result.notificationText, actionLabel, actionKey)
                     vm.queueFailedManualSave(
                         type = payload.type,
                         urlInput = payload.urlInput,
