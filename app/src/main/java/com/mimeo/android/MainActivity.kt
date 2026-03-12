@@ -629,6 +629,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun consumeStatusMessage(expected: String) {
+        if (_statusMessage.value == expected) {
+            _statusMessage.value = null
+        }
+    }
+
     suspend fun retryPendingManualSave(itemId: Long): ShareSaveResult? {
         if (!pendingManualRetryMutex.tryLock()) return null
         _pendingManualRetryInProgress.value = true
