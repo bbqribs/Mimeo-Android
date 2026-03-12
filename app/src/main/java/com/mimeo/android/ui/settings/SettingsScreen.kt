@@ -201,6 +201,7 @@ fun SettingsScreen(
                 )
             }
         }
+        vm.consumeStatusMessage(message)
     }
 
     LaunchedEffect(Unit) {

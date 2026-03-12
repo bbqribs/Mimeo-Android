@@ -45,7 +45,7 @@ internal object ConnectionTestMessageResolver {
 
     private fun authFailureMessage(mode: ConnectionMode): String {
         return if (mode == ConnectionMode.REMOTE) {
-            "Token rejected. Verify token; if needed, create a new device token and update Settings."
+            "Token rejected. It may be expired or invalid. Create a new device token and update Settings."
         } else {
             "Token rejected. Check API token."
         }
