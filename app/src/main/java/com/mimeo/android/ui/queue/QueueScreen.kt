@@ -151,6 +151,7 @@ fun QueueScreen(
     val pullRefreshThresholdPx = pullRefreshMaxPx
     var pullRefreshDistancePx by remember { mutableFloatStateOf(0f) }
     var pendingFocusId by remember { mutableIntStateOf(-1) }
+    var previousProjectedPendingIds by remember { mutableStateOf<List<Long>>(emptyList()) }
     var playlistMenuExpanded by remember { mutableStateOf(false) }
     var rowMenuItemId by remember { mutableIntStateOf(-1) }
     var playlistPickerItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
@@ -342,6 +343,16 @@ fun QueueScreen(
             vm.consumePendingQueueFocusItemId(focusedItemId)
             pendingFocusId = -1
         }
+    }
+
+    LaunchedEffect(projectedPendingItems) {
+        val currentIds = projectedPendingItems.map { it.id }
+        val previousIds = previousProjectedPendingIds.toHashSet()
+        val hasNewProjectedPending = currentIds.any { it !in previousIds }
+        if (hasNewProjectedPending && currentIds.isNotEmpty()) {
+            listState.animateScrollToItem(0)
+        }
+        previousProjectedPendingIds = currentIds
     }
 
     Column(
@@ -747,13 +758,16 @@ fun QueueScreen(
                 )
             }
             manualActivePayload = payload
-            fun queueCurrentManualSaveAndClose(statusMessage: String) {
+            fun queueCurrentManualSaveAndClose(
+                statusMessage: String,
+                pendingResult: ShareSaveResult = ShareSaveResult.NetworkError,
+            ) {
                 vm.queueFailedManualSave(
                     type = payload.type,
                     urlInput = payload.urlInput,
                     titleInput = payload.titleInput,
                     bodyInput = payload.bodyInput,
-                    result = ShareSaveResult.NetworkError,
+                    result = pendingResult,
                     destinationPlaylistId = payload.destinationPlaylistId,
                 )
                 showSaveEntryDialog = false
@@ -807,7 +821,10 @@ fun QueueScreen(
                     manualBodyInput = ""
                     manualSubmitError = null
                 } else if (isRetryablePendingSaveResult(result)) {
-                    queueCurrentManualSaveAndClose(ShareSaveResult.PendingQueued.notificationText)
+                    queueCurrentManualSaveAndClose(
+                        statusMessage = ShareSaveResult.PendingQueued.notificationText,
+                        pendingResult = result,
+                    )
                 } else {
                     val actionLabel = if (result.opensSettings) "Open Settings" else null
                     val actionKey = if (result.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
@@ -1009,7 +1026,7 @@ fun QueueScreen(
                             manualUrlError = null
                             manualBodyError = null
                             manualSubmitError = null
-                            onShowSnackbar("Added to pending manual saves", null, null)
+                            onShowSnackbar(ShareSaveResult.PendingQueued.notificationText, null, null)
                         },
                     ) {
                         Text("Queue now")

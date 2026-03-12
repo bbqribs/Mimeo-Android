@@ -28,7 +28,7 @@ import javax.net.ssl.SSLException
 
 private const val SHARE_CREATE_TIMEOUT_MS = 45_000L
 private const val SHARE_ONLINE_DEADLINE_MS = 8_000L
-private const val MANUAL_SAVE_ONLINE_DEADLINE_MS = 8_000L
+private const val MANUAL_SAVE_ONLINE_DEADLINE_MS = 2_000L
 private const val SHARE_POST_FAILURE_RESOLUTION_ATTEMPTS = 2
 private const val SHARE_POST_FAILURE_RESOLUTION_DELAY_MS = 1_200L
 private const val AUTO_DOWNLOAD_MAX_ATTEMPTS = 4

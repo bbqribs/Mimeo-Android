@@ -20,6 +20,7 @@ import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.share.ShareSaveCoordinator
 import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.extractFirstHttpUrl
+import com.mimeo.android.share.isAutoRetryEligiblePendingSaveResult
 import com.mimeo.android.share.isRetryablePendingSaveResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -74,7 +75,7 @@ class ShareReceiverActivity : ComponentActivity() {
                         bodyInput = null,
                         destinationPlaylistId = settings.defaultSavePlaylistId,
                         lastFailureMessage = result.notificationText,
-                        autoRetryEligible = true,
+                        autoRetryEligible = isAutoRetryEligiblePendingSaveResult(result),
                     )
                     surfacedResult = ShareSaveResult.PendingQueued
                 }

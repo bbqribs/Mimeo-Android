@@ -2,8 +2,13 @@ package com.mimeo.android
 
 import android.Manifest
 import android.app.Application
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Bundle
 import android.os.Build
 import android.util.Log
@@ -108,6 +113,7 @@ import com.mimeo.android.repository.resolveOfflineReadyItemIds
 import com.mimeo.android.share.ShareSaveCoordinator
 import com.mimeo.android.share.ShareSaveRefreshBus
 import com.mimeo.android.share.ShareSaveResult
+import com.mimeo.android.share.isAutoRetryEligiblePendingSaveResult
 import com.mimeo.android.share.isRetryablePendingSaveResult
 import com.mimeo.android.ui.collections.CollectionsScreen
 import com.mimeo.android.ui.collections.FolderDetailScreen
@@ -309,6 +315,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _settingsScrollOffset = MutableStateFlow(0)
     val settingsScrollOffset: StateFlow<Int> = _settingsScrollOffset.asStateFlow()
     private var lastPendingAutoRetryFingerprint: String? = null
+    private val connectivityManager =
+        application.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+    private var connectivityCallback: ConnectivityManager.NetworkCallback? = null
+    private var lastConnectivityRefreshAtMs: Long = 0L
 
     init {
         viewModelScope.launch {
@@ -367,6 +377,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             refreshFolders()
         }
+        startConnectivityMonitoring()
     }
 
     fun saveSettings(
@@ -967,7 +978,42 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun shouldAutoRetryManualSave(result: ShareSaveResult): Boolean {
-        return isRetryablePendingSaveResult(result)
+        return isAutoRetryEligiblePendingSaveResult(result)
+    }
+
+    private fun startConnectivityMonitoring() {
+        val manager = connectivityManager ?: return
+        if (connectivityCallback != null) return
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                maybeRefreshAfterConnectivityRestored()
+            }
+
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                val validated = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                if (hasInternet && validated) {
+                    maybeRefreshAfterConnectivityRestored()
+                }
+            }
+        }
+        runCatching {
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            manager.registerNetworkCallback(request, callback)
+            connectivityCallback = callback
+        }
+    }
+
+    private fun maybeRefreshAfterConnectivityRestored() {
+        if (!_queueOffline.value && _pendingManualSaves.value.isEmpty()) return
+        val now = System.currentTimeMillis()
+        if (now - lastConnectivityRefreshAtMs < 2_000L) return
+        lastConnectivityRefreshAtMs = now
+        viewModelScope.launch {
+            loadQueueOnce(autoRetryPendingSaves = true)
+        }
     }
 
     private fun shouldAttemptPendingAutoRetryOnQueueLoad(wasOffline: Boolean): Boolean {
@@ -1732,6 +1778,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return fallback
         }
         return message
+    }
+
+    override fun onCleared() {
+        connectivityCallback?.let { callback ->
+            runCatching {
+                connectivityManager?.unregisterNetworkCallback(callback)
+            }
+        }
+        connectivityCallback = null
+        super.onCleared()
     }
 
     private fun updatePlaylistEntriesLocally(playlistId: Int, itemId: Int, added: Boolean) {
