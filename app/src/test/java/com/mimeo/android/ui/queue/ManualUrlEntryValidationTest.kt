@@ -91,4 +91,28 @@ class ManualUrlEntryValidationTest {
         assertTrue(isManualSaveSuccess(ShareSaveResult.Saved(destinationName = "Smart Queue")))
         assertFalse(isManualSaveSuccess(ShareSaveResult.NetworkError))
     }
+
+    @Test
+    fun `formatPendingDestinationLabel uses playlist name when available`() {
+        assertEquals(
+            "Destination: Up Next",
+            formatPendingDestinationLabel(12, mapOf(12 to "Up Next")),
+        )
+        assertEquals(
+            "Destination: Playlist #12",
+            formatPendingDestinationLabel(12, emptyMap()),
+        )
+        assertEquals(
+            "Destination: Smart Queue",
+            formatPendingDestinationLabel(null, emptyMap()),
+        )
+    }
+
+    @Test
+    fun `classifyPendingFailureReason maps common retry blockers`() {
+        assertEquals("Auth required", classifyPendingFailureReason("Unauthorized"))
+        assertEquals("Request timed out", classifyPendingFailureReason("Request timed out"))
+        assertEquals("Backend unreachable", classifyPendingFailureReason("Couldn't reach server"))
+        assertEquals("Save failed", classifyPendingFailureReason("Unexpected parser issue"))
+    }
 }
