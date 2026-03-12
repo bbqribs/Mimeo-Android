@@ -120,6 +120,14 @@ fun SettingsScreen(
         }
     }
 
+    fun savedModeBaseUrl(): String {
+        return when (connectionMode) {
+            ConnectionMode.LOCAL -> settings.localBaseUrl
+            ConnectionMode.LAN -> settings.lanBaseUrl
+            ConnectionMode.REMOTE -> settings.remoteBaseUrl
+        }
+    }
+
     fun saveCurrent() {
         vm.saveSettings(
             baseUrl = selectedModeBaseUrl(),
@@ -274,6 +282,29 @@ fun SettingsScreen(
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                 )
+                val currentModeSnapshot = connectionTestSuccessByMode[connectionMode]
+                val hasUnsavedModeUrlEdit =
+                    normalizeConnectionBaseUrl(selectedModeBaseUrl()) != normalizeConnectionBaseUrl(savedModeBaseUrl())
+                Text(
+                    text = formatCurrentConnectionStatusSummary(
+                        mode = connectionMode,
+                        selectedBaseUrl = savedModeBaseUrl(),
+                        snapshot = currentModeSnapshot,
+                    ),
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (hasUnsavedModeUrlEdit) {
+                    Text(
+                        text = "${connectionMode.displayName()}: unsaved URL edits in the field.",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { saveCurrent() }) { Text("Save") }
                     Button(
@@ -692,13 +723,7 @@ private fun ConnectionMode.description(): String = when (this) {
 }
 
 internal fun formatConnectionTestSuccessSummary(snapshot: ConnectionTestSuccessSnapshot): String {
-    val timestamp = if (snapshot.succeededAtMs > 0L) {
-        runCatching {
-            SimpleDateFormat("yy-MM-dd HH:mm", Locale.US).format(Date(snapshot.succeededAtMs))
-        }.getOrDefault("unknown time")
-    } else {
-        "unknown time"
-    }
+    val timestamp = formatConnectionSnapshotTimestamp(snapshot.succeededAtMs)
     val host = runCatching {
         URI(snapshot.baseUrl.trim()).host
             ?.takeIf { it.isNotBlank() }
@@ -706,6 +731,38 @@ internal fun formatConnectionTestSuccessSummary(snapshot: ConnectionTestSuccessS
     }.getOrDefault(snapshot.baseUrl.trim())
     val shaSuffix = snapshot.gitSha?.takeIf { it.isNotBlank() }?.let { " git_sha=$it" }.orEmpty()
     return "${snapshot.mode.displayName()}: $host $timestamp$shaSuffix"
+}
+
+internal fun formatCurrentConnectionStatusSummary(
+    mode: ConnectionMode,
+    selectedBaseUrl: String,
+    snapshot: ConnectionTestSuccessSnapshot?,
+): String {
+    if (snapshot == null) {
+        return "${mode.displayName()}: no successful test saved yet."
+    }
+    val snapshotTime = formatConnectionSnapshotTimestamp(snapshot.succeededAtMs)
+    val sameTarget = normalizeConnectionBaseUrl(selectedBaseUrl) == normalizeConnectionBaseUrl(snapshot.baseUrl)
+    return if (sameTarget) {
+        val shaSuffix = snapshot.gitSha?.takeIf { it.isNotBlank() }?.let { " (git_sha=$it)" }.orEmpty()
+        "${mode.displayName()}: matches last successful target at $snapshotTime$shaSuffix"
+    } else {
+        "${mode.displayName()}: differs from last successful target (${snapshot.baseUrl}) at $snapshotTime"
+    }
+}
+
+internal fun normalizeConnectionBaseUrl(url: String): String {
+    return url.trim().trimEnd('/').lowercase(Locale.US)
+}
+
+private fun formatConnectionSnapshotTimestamp(succeededAtMs: Long): String {
+    return if (succeededAtMs > 0L) {
+        runCatching {
+            SimpleDateFormat("yy-MM-dd HH:mm", Locale.US).format(Date(succeededAtMs))
+        }.getOrDefault("unknown time")
+    } else {
+        "unknown time"
+    }
 }
 
 @Composable
