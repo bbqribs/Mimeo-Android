@@ -30,7 +30,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,6 +58,7 @@ fun SettingsScreen(
     vm: AppViewModel,
     onOpenDiagnostics: () -> Unit,
 ) {
+    val clipboardManager = LocalClipboardManager.current
     val settings by vm.settings.collectAsState()
     val settingsScrollOffset by vm.settingsScrollOffset.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
@@ -133,6 +136,25 @@ fun SettingsScreen(
             keepShareResultNotifications = keepShareResultNotifications,
             autoDownloadSavedArticles = autoDownloadSavedArticles,
         )
+    }
+
+    fun applyConnectionSnapshot(snapshot: ConnectionTestSuccessSnapshot) {
+        when (snapshot.mode) {
+            ConnectionMode.LOCAL -> {
+                connectionMode = ConnectionMode.LOCAL
+                localBaseUrl = snapshot.baseUrl
+            }
+            ConnectionMode.LAN -> {
+                connectionMode = ConnectionMode.LAN
+                lanBaseUrl = snapshot.baseUrl
+            }
+            ConnectionMode.REMOTE -> {
+                connectionMode = ConnectionMode.REMOTE
+                remoteBaseUrl = snapshot.baseUrl
+            }
+        }
+        saveCurrent()
+        vm.showSnackbar("${snapshot.mode.displayName()} URL applied")
     }
 
     fun saveReading(
@@ -270,23 +292,34 @@ fun SettingsScreen(
                     Button(onClick = onOpenDiagnostics) { Text("Diagnostics") }
                 }
                 val lastSuccessItems = ConnectionMode.entries.mapNotNull { mode ->
-                    connectionTestSuccessByMode[mode]?.let { snapshot ->
-                        formatConnectionTestSuccessSummary(snapshot)
-                    }
+                    connectionTestSuccessByMode[mode]?.let { snapshot -> mode to snapshot }
                 }
                 if (lastSuccessItems.isNotEmpty()) {
                     Text(
                         text = "Last successful test",
                         style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                     )
-                    lastSuccessItems.forEach { summary ->
-                        Text(
-                            text = summary,
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                    lastSuccessItems.forEach { (_, snapshot) ->
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = formatConnectionTestSuccessSummary(snapshot),
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                TextButton(
+                                    onClick = { applyConnectionSnapshot(snapshot) },
+                                ) { Text("Use") }
+                                TextButton(
+                                    onClick = {
+                                        clipboardManager.setText(AnnotatedString(snapshot.baseUrl))
+                                        vm.showSnackbar("${snapshot.mode.displayName()} URL copied")
+                                    },
+                                ) { Text("Copy") }
+                            }
+                        }
                     }
                 }
             }
