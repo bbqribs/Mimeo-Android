@@ -9,9 +9,13 @@ import com.mimeo.android.data.ApiException
 import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.repository.PlaybackRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import java.net.ConnectException
 import java.net.SocketException
 import java.net.SocketTimeoutException
@@ -105,6 +109,8 @@ class ShareSaveCoordinator(
         appContext = context.applicationContext,
     ),
 ) {
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     suspend fun saveSharedText(
         sharedText: String?,
         sharedTitle: String?,
@@ -515,7 +521,7 @@ class ShareSaveCoordinator(
             playlistId = destinationPlaylistId,
             current = current,
         )
-        autoDownloadIfEnabled(
+        autoDownloadIfEnabledAsync(
             itemId = itemId,
             current = current,
             attemptId = attemptId,
@@ -590,6 +596,21 @@ class ShareSaveCoordinator(
             current = current.cause!!
         }
         return current
+    }
+
+    private fun autoDownloadIfEnabledAsync(
+        itemId: Int,
+        current: AppSettings,
+        attemptId: Int,
+    ) {
+        if (!current.autoDownloadSavedArticles) return
+        backgroundScope.launch {
+            autoDownloadIfEnabled(
+                itemId = itemId,
+                current = current,
+                attemptId = attemptId,
+            )
+        }
     }
 
     private suspend fun autoDownloadIfEnabled(
