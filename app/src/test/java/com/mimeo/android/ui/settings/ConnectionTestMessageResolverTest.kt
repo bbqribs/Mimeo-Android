@@ -16,7 +16,7 @@ class ConnectionTestMessageResolverTest {
         )
 
         assertEquals(
-            "Token rejected. It may be expired. Create a new device token and update Settings.",
+            "Token rejected. Verify token; if needed, create a new device token and update Settings.",
             message,
         )
     }
