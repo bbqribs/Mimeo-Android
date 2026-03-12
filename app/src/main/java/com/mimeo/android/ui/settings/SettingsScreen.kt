@@ -120,6 +120,14 @@ fun SettingsScreen(
         }
     }
 
+    fun savedModeBaseUrl(): String {
+        return when (connectionMode) {
+            ConnectionMode.LOCAL -> settings.localBaseUrl
+            ConnectionMode.LAN -> settings.lanBaseUrl
+            ConnectionMode.REMOTE -> settings.remoteBaseUrl
+        }
+    }
+
     fun saveCurrent() {
         vm.saveSettings(
             baseUrl = selectedModeBaseUrl(),
@@ -275,10 +283,12 @@ fun SettingsScreen(
                     singleLine = true,
                 )
                 val currentModeSnapshot = connectionTestSuccessByMode[connectionMode]
+                val hasUnsavedModeUrlEdit =
+                    normalizeConnectionBaseUrl(selectedModeBaseUrl()) != normalizeConnectionBaseUrl(savedModeBaseUrl())
                 Text(
                     text = formatCurrentConnectionStatusSummary(
                         mode = connectionMode,
-                        selectedBaseUrl = selectedModeBaseUrl(),
+                        selectedBaseUrl = savedModeBaseUrl(),
                         snapshot = currentModeSnapshot,
                     ),
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
@@ -286,6 +296,15 @@ fun SettingsScreen(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (hasUnsavedModeUrlEdit) {
+                    Text(
+                        text = "${connectionMode.displayName()}: unsaved URL edits in the field.",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { saveCurrent() }) { Text("Save") }
                     Button(
