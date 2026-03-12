@@ -314,7 +314,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val pendingNavigationRoute: StateFlow<String?> = _pendingNavigationRoute.asStateFlow()
     private val _settingsScrollOffset = MutableStateFlow(0)
     val settingsScrollOffset: StateFlow<Int> = _settingsScrollOffset.asStateFlow()
-    private var lastPendingAutoRetryFingerprint: String? = null
+    private var lastPendingAutoRetryAtMs: Long = 0L
     private val connectivityManager =
         application.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
     private var connectivityCallback: ConnectivityManager.NetworkCallback? = null
@@ -856,12 +856,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 wasOffline = wasOffline,
             )
             val autoRetrySuccessCount = if (shouldAttemptPendingAutoRetry) {
-                autoRetryPendingManualSaves(limit = 2)
+                autoRetryPendingManualSaves(limit = 20)
             } else {
                 0
             }
             if (shouldAttemptPendingAutoRetry) {
-                lastPendingAutoRetryFingerprint = buildRetryablePendingFingerprint()
+                lastPendingAutoRetryAtMs = System.currentTimeMillis()
             }
             if (autoRetrySuccessCount > 0) {
                 val refreshedQueueResult = repository.loadQueueAndPrefetch(
@@ -1017,19 +1017,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun shouldAttemptPendingAutoRetryOnQueueLoad(wasOffline: Boolean): Boolean {
-        val fingerprint = buildRetryablePendingFingerprint() ?: return false
+        val hasRetryablePending = _pendingManualSaves.value.any { it.autoRetryEligible }
+        if (!hasRetryablePending) return false
         if (wasOffline) return true
-        return fingerprint != lastPendingAutoRetryFingerprint
-    }
-
-    private fun buildRetryablePendingFingerprint(): String? {
-        val retryable = _pendingManualSaves.value
-            .filter { it.autoRetryEligible }
-            .sortedBy { it.id }
-        if (retryable.isEmpty()) return null
-        return retryable.joinToString("|") { item ->
-            "${item.id}:${item.retryCount}:${item.autoRetryEligible}"
-        }
+        return System.currentTimeMillis() - lastPendingAutoRetryAtMs >= 3_000L
     }
 
     private fun resolvePendingRetryFailureMessage(

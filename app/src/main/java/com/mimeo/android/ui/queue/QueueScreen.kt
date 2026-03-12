@@ -314,6 +314,9 @@ fun QueueScreen(
                 return@launch
             }
             val retryResult = vm.retryPendingManualSave(item.id) ?: return@launch
+            if (retryResult is ShareSaveResult.Saved) {
+                vm.loadQueue(autoRetryPendingSaves = false)
+            }
             if (shouldSurfacePendingRetrySnackbar(retryResult)) {
                 val actionLabel = if (retryResult.opensSettings) "Open Settings" else null
                 val actionKey = if (retryResult.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
@@ -329,7 +332,10 @@ fun QueueScreen(
             }
             val retrySuccessCount = vm.retryAllPendingManualSaves()
             if (retrySuccessCount > 0) {
+                vm.loadQueue(autoRetryPendingSaves = false)
                 onShowSnackbar("Retried $retrySuccessCount pending saves", null, null)
+            } else if (pendingManualSaves.isNotEmpty()) {
+                onShowSnackbar("No pending saves retried. Check API token/connection.", null, null)
             }
         }
     }
