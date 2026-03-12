@@ -275,6 +275,11 @@ fun SettingsScreen(
                     label = { Text("${connectionMode.displayName()} Base URL") },
                     singleLine = true,
                 )
+                Text(
+                    text = connectionModeBaseUrlGuidance(connectionMode),
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 OutlinedTextField(
                     value = token,
                     onValueChange = { token = it },
@@ -730,12 +735,23 @@ private fun ConnectionMode.description(): String = when (this) {
     ConnectionMode.REMOTE -> "Off-LAN remote mode (for secure access over Tailscale/VPN)."
 }
 
+internal fun connectionModeBaseUrlGuidance(mode: ConnectionMode): String = when (mode) {
+    ConnectionMode.LOCAL ->
+        "Use local/emulator host URL (typically http://10.0.2.2:8000 for emulator workflows)."
+    ConnectionMode.LAN ->
+        "Use your server LAN URL (for example http://192.168.x.y:8000) when phone and server share the same network."
+    ConnectionMode.REMOTE ->
+        "Use your Tailscale/VPN URL (for example http://100.x.y.z:8000 or your secure remote host). If using 192.168.x.y, use LAN mode instead."
+}
+
 private fun connectionModeTokenAuthHelp(mode: ConnectionMode): String = when (mode) {
     ConnectionMode.REMOTE ->
         "Remote device tokens can expire. If token is rejected, create a new device token and update this field."
     else ->
         "Use a valid API token for this server target."
 }
+
+internal fun connectionModeTokenGuidance(mode: ConnectionMode): String = connectionModeTokenAuthHelp(mode)
 
 internal fun formatConnectionTestSuccessSummary(snapshot: ConnectionTestSuccessSnapshot): String {
     val timestamp = formatConnectionSnapshotTimestamp(snapshot.succeededAtMs)
