@@ -50,4 +50,47 @@ class ConnectionTestSuccessSummaryFormatTest {
 
         assertEquals(0L, snapshot.succeededAtMs)
     }
+
+    @Test
+    fun `current status reports match when mode and base url align`() {
+        val snapshot = ConnectionTestSuccessSnapshot(
+            mode = ConnectionMode.REMOTE,
+            baseUrl = "http://100.101.102.103:8000/",
+            gitSha = "abc123",
+            succeededAtMs = 1_700_000_000_000L,
+        )
+
+        val summary = formatCurrentConnectionStatusSummary(
+            mode = ConnectionMode.REMOTE,
+            selectedBaseUrl = "http://100.101.102.103:8000",
+            snapshot = snapshot,
+        )
+
+        assertTrue(summary.contains("matches last successful target"))
+        assertTrue(summary.contains("git_sha=abc123"))
+    }
+
+    @Test
+    fun `current status reports mismatch when selected target differs`() {
+        val snapshot = ConnectionTestSuccessSnapshot(
+            mode = ConnectionMode.LAN,
+            baseUrl = "http://192.168.68.124:8000",
+            succeededAtMs = 1_700_000_000_000L,
+        )
+
+        val summary = formatCurrentConnectionStatusSummary(
+            mode = ConnectionMode.LAN,
+            selectedBaseUrl = "http://192.168.68.200:8000",
+            snapshot = snapshot,
+        )
+
+        assertTrue(summary.contains("differs from last successful target"))
+        assertTrue(summary.contains("192.168.68.124"))
+    }
+
+    @Test
+    fun `normalize base url trims case and trailing slash`() {
+        val normalized = normalizeConnectionBaseUrl(" HTTP://EXAMPLE.COM:8000/ ")
+        assertEquals("http://example.com:8000", normalized)
+    }
 }
