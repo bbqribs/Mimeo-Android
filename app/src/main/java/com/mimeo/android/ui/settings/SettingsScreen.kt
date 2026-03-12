@@ -30,17 +30,25 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.ConnectionMode
+import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.ui.theme.toFontFamily
+import java.net.URI
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private const val PREVIEW_PARAGRAPH_1 = "Mimeo now remembers your reading layout so Locus feels like a calm, bookish surface instead of a raw text dump."
 private const val PREVIEW_PARAGRAPH_2 = "Use this preview to check rhythm, paragraph spacing, and readability before returning to long-form listening sessions."
@@ -50,10 +58,12 @@ fun SettingsScreen(
     vm: AppViewModel,
     onOpenDiagnostics: () -> Unit,
 ) {
+    val clipboardManager = LocalClipboardManager.current
     val settings by vm.settings.collectAsState()
     val settingsScrollOffset by vm.settingsScrollOffset.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val testingConnection by vm.testingConnection.collectAsState()
+    val connectionTestSuccessByMode by vm.connectionTestSuccessByMode.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val scrollState = rememberScrollState()
     var restoredScrollOffset by remember { mutableStateOf(false) }
@@ -110,6 +120,14 @@ fun SettingsScreen(
         }
     }
 
+    fun savedModeBaseUrl(): String {
+        return when (connectionMode) {
+            ConnectionMode.LOCAL -> settings.localBaseUrl
+            ConnectionMode.LAN -> settings.lanBaseUrl
+            ConnectionMode.REMOTE -> settings.remoteBaseUrl
+        }
+    }
+
     fun saveCurrent() {
         vm.saveSettings(
             baseUrl = selectedModeBaseUrl(),
@@ -126,6 +144,25 @@ fun SettingsScreen(
             keepShareResultNotifications = keepShareResultNotifications,
             autoDownloadSavedArticles = autoDownloadSavedArticles,
         )
+    }
+
+    fun applyConnectionSnapshot(snapshot: ConnectionTestSuccessSnapshot) {
+        when (snapshot.mode) {
+            ConnectionMode.LOCAL -> {
+                connectionMode = ConnectionMode.LOCAL
+                localBaseUrl = snapshot.baseUrl
+            }
+            ConnectionMode.LAN -> {
+                connectionMode = ConnectionMode.LAN
+                lanBaseUrl = snapshot.baseUrl
+            }
+            ConnectionMode.REMOTE -> {
+                connectionMode = ConnectionMode.REMOTE
+                remoteBaseUrl = snapshot.baseUrl
+            }
+        }
+        saveCurrent()
+        vm.showSnackbar("${snapshot.mode.displayName()} URL applied")
     }
 
     fun saveReading(
@@ -164,6 +201,7 @@ fun SettingsScreen(
                 )
             }
         }
+        vm.consumeStatusMessage(message)
     }
 
     LaunchedEffect(Unit) {
@@ -251,10 +289,35 @@ fun SettingsScreen(
                     singleLine = true,
                 )
                 Text(
-                    text = connectionModeTokenGuidance(connectionMode),
+                    text = connectionModeTokenAuthHelp(connectionMode),
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
+                val currentModeSnapshot = connectionTestSuccessByMode[connectionMode]
+                val hasUnsavedModeUrlEdit =
+                    normalizeConnectionBaseUrl(selectedModeBaseUrl()) != normalizeConnectionBaseUrl(savedModeBaseUrl())
+                Text(
+                    text = formatCurrentConnectionStatusSummary(
+                        mode = connectionMode,
+                        selectedBaseUrl = savedModeBaseUrl(),
+                        snapshot = currentModeSnapshot,
+                    ),
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (hasUnsavedModeUrlEdit) {
+                    Text(
+                        text = "${connectionMode.displayName()}: unsaved URL edits in the field.",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { saveCurrent() }) { Text("Save") }
                     Button(
@@ -271,6 +334,37 @@ fun SettingsScreen(
                         },
                     ) { Text(if (testingConnection) "Testing..." else "Test") }
                     Button(onClick = onOpenDiagnostics) { Text("Diagnostics") }
+                }
+                val lastSuccessItems = ConnectionMode.entries.mapNotNull { mode ->
+                    connectionTestSuccessByMode[mode]?.let { snapshot -> mode to snapshot }
+                }
+                if (lastSuccessItems.isNotEmpty()) {
+                    Text(
+                        text = "Last successful test",
+                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                    )
+                    lastSuccessItems.forEach { (_, snapshot) ->
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = formatConnectionTestSuccessSummary(snapshot),
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                TextButton(
+                                    onClick = { applyConnectionSnapshot(snapshot) },
+                                ) { Text("Use") }
+                                TextButton(
+                                    onClick = {
+                                        clipboardManager.setText(AnnotatedString(snapshot.baseUrl))
+                                        vm.showSnackbar("${snapshot.mode.displayName()} URL copied")
+                                    },
+                                ) { Text("Copy") }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -650,11 +744,56 @@ internal fun connectionModeBaseUrlGuidance(mode: ConnectionMode): String = when 
         "Use your Tailscale/VPN URL (for example http://100.x.y.z:8000 or your secure remote host). If using 192.168.x.y, use LAN mode instead."
 }
 
-internal fun connectionModeTokenGuidance(mode: ConnectionMode): String = when (mode) {
+private fun connectionModeTokenAuthHelp(mode: ConnectionMode): String = when (mode) {
     ConnectionMode.REMOTE ->
-        "Use a valid API token from the same remote server target. Token values are never shown."
+        "Remote device tokens can expire. If token is rejected, create a new device token and update this field."
     else ->
-        "Use a valid API token from the selected server."
+        "Use a valid API token for this server target."
+}
+
+internal fun connectionModeTokenGuidance(mode: ConnectionMode): String = connectionModeTokenAuthHelp(mode)
+
+internal fun formatConnectionTestSuccessSummary(snapshot: ConnectionTestSuccessSnapshot): String {
+    val timestamp = formatConnectionSnapshotTimestamp(snapshot.succeededAtMs)
+    val host = runCatching {
+        URI(snapshot.baseUrl.trim()).host
+            ?.takeIf { it.isNotBlank() }
+            ?: snapshot.baseUrl.trim()
+    }.getOrDefault(snapshot.baseUrl.trim())
+    val shaSuffix = snapshot.gitSha?.takeIf { it.isNotBlank() }?.let { " git_sha=$it" }.orEmpty()
+    return "${snapshot.mode.displayName()}: $host $timestamp$shaSuffix"
+}
+
+internal fun formatCurrentConnectionStatusSummary(
+    mode: ConnectionMode,
+    selectedBaseUrl: String,
+    snapshot: ConnectionTestSuccessSnapshot?,
+): String {
+    if (snapshot == null) {
+        return "${mode.displayName()}: no successful test saved yet."
+    }
+    val snapshotTime = formatConnectionSnapshotTimestamp(snapshot.succeededAtMs)
+    val sameTarget = normalizeConnectionBaseUrl(selectedBaseUrl) == normalizeConnectionBaseUrl(snapshot.baseUrl)
+    return if (sameTarget) {
+        val shaSuffix = snapshot.gitSha?.takeIf { it.isNotBlank() }?.let { " (git_sha=$it)" }.orEmpty()
+        "${mode.displayName()}: matches last successful target at $snapshotTime$shaSuffix"
+    } else {
+        "${mode.displayName()}: differs from last successful target (${snapshot.baseUrl}) at $snapshotTime"
+    }
+}
+
+internal fun normalizeConnectionBaseUrl(url: String): String {
+    return url.trim().trimEnd('/').lowercase(Locale.US)
+}
+
+private fun formatConnectionSnapshotTimestamp(succeededAtMs: Long): String {
+    return if (succeededAtMs > 0L) {
+        runCatching {
+            SimpleDateFormat("yy-MM-dd HH:mm", Locale.US).format(Date(succeededAtMs))
+        }.getOrDefault("unknown time")
+    } else {
+        "unknown time"
+    }
 }
 
 @Composable

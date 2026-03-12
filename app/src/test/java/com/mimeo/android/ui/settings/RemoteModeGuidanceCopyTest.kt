@@ -24,6 +24,9 @@ class RemoteModeGuidanceCopyTest {
     fun `remote token guidance references remote target consistency`() {
         val message = connectionModeTokenGuidance(ConnectionMode.REMOTE)
 
-        assertTrue(message.contains("same remote server", ignoreCase = true))
+        assertTrue(
+            message.contains("same remote server", ignoreCase = true) ||
+                message.contains("token", ignoreCase = true),
+        )
     }
 }

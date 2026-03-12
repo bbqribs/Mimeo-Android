@@ -29,17 +29,25 @@ internal object ConnectionTestMessageResolver {
         message: String?,
     ): String {
         return when (statusCode) {
-            401, 403 -> "Token rejected. Check API token."
+            401, 403 -> authFailureMessage(mode)
             404 -> "Server reachable, but endpoint not found. Check base URL."
             in 500..599 -> "Backend error. Server reachable; check backend status."
             else -> {
                 val lower = message.orEmpty().lowercase(Locale.US)
                 if (lower.contains("unauthorized") || lower.contains("forbidden")) {
-                    "Token rejected. Check API token."
+                    authFailureMessage(mode)
                 } else {
                     "Connection failed. ${modeHint(mode, baseUrl)}"
                 }
             }
+        }
+    }
+
+    private fun authFailureMessage(mode: ConnectionMode): String {
+        return if (mode == ConnectionMode.REMOTE) {
+            "Token rejected. It may be expired or invalid. Create a new device token and update Settings."
+        } else {
+            "Token rejected. Check API token."
         }
     }
 
