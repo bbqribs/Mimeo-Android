@@ -15,6 +15,21 @@ class ConnectionTestMessageResolverTest {
             message = "Unauthorized",
         )
 
+        assertEquals(
+            "Token rejected. Verify token; if needed, create a new device token and update Settings.",
+            message,
+        )
+    }
+
+    @Test
+    fun `api unauthorized in lan keeps generic token guidance`() {
+        val message = ConnectionTestMessageResolver.forApiFailure(
+            mode = ConnectionMode.LAN,
+            baseUrl = "http://192.168.68.124:8000",
+            statusCode = 401,
+            message = "Unauthorized",
+        )
+
         assertEquals("Token rejected. Check API token.", message)
     }
 

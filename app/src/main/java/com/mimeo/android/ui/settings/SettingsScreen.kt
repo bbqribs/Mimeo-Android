@@ -282,6 +282,13 @@ fun SettingsScreen(
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                 )
+                Text(
+                    text = connectionModeTokenAuthHelp(connectionMode),
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 val currentModeSnapshot = connectionTestSuccessByMode[connectionMode]
                 val hasUnsavedModeUrlEdit =
                     normalizeConnectionBaseUrl(selectedModeBaseUrl()) != normalizeConnectionBaseUrl(savedModeBaseUrl())
@@ -720,6 +727,13 @@ private fun ConnectionMode.description(): String = when (this) {
     ConnectionMode.LOCAL -> "Local loopback/dev-host mode (for emulator-style local access)."
     ConnectionMode.LAN -> "Home LAN mode (when phone and server are on same local network)."
     ConnectionMode.REMOTE -> "Off-LAN remote mode (for secure access over Tailscale/VPN)."
+}
+
+private fun connectionModeTokenAuthHelp(mode: ConnectionMode): String = when (mode) {
+    ConnectionMode.REMOTE ->
+        "Remote device tokens can expire. If token is rejected, create a new device token and update this field."
+    else ->
+        "Use a valid API token for this server target."
 }
 
 internal fun formatConnectionTestSuccessSummary(snapshot: ConnectionTestSuccessSnapshot): String {
