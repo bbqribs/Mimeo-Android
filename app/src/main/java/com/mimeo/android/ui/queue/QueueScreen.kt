@@ -238,6 +238,8 @@ fun QueueScreen(
         pendingItems = pendingManualSaves,
         selectedPlaylistId = settings.selectedPlaylistId,
         queueItems = items,
+        cachedItemIds = cachedItemIds,
+        requireOfflineReady = settings.autoDownloadSavedArticles,
     )
     val hasVisibleQueueContent = displayedItems.isNotEmpty() || projectedPendingItems.isNotEmpty()
     val pullRefreshProgress = (pullRefreshDistancePx / pullRefreshThresholdPx).coerceIn(0f, 1f)
@@ -330,10 +332,14 @@ fun QueueScreen(
                 onShowSnackbar("Still offline. Pending saves kept.", null, null)
                 return@launch
             }
-            val retrySuccessCount = vm.retryAllPendingManualSaves()
-            if (retrySuccessCount > 0) {
+            val retrySummary = vm.retryAllPendingManualSaves()
+            if (retrySummary.successCount > 0) {
                 vm.loadQueue(autoRetryPendingSaves = false)
-                onShowSnackbar("Retried $retrySuccessCount pending saves", null, null)
+                onShowSnackbar("Retried ${retrySummary.successCount} pending saves", null, null)
+            } else if (retrySummary.firstFailureResult != null) {
+                val actionLabel = if (retrySummary.firstFailureResult.opensSettings) "Open Settings" else null
+                val actionKey = if (retrySummary.firstFailureResult.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
+                onShowSnackbar(retrySummary.firstFailureResult.notificationText, actionLabel, actionKey)
             } else if (pendingManualSaves.isNotEmpty()) {
                 onShowSnackbar("No pending saves retried. Check API token/connection.", null, null)
             }
@@ -665,6 +671,20 @@ fun QueueScreen(
                             vm.startNowPlayingSession(item.itemId)
                             onOpenPlayer(item.itemId)
                         },
+                        onDownload = {
+                            actionScope.launch {
+                                if (cachedItemIds.contains(item.itemId)) {
+                                    onShowSnackbar("Already available offline", null, null)
+                                    return@launch
+                                }
+                                val result = vm.downloadItemForOffline(item.itemId)
+                                if (result.isSuccess) {
+                                    onShowSnackbar("Downloaded for offline reading", null, null)
+                                } else {
+                                    onShowSnackbar("Couldn't download article", null, null)
+                                }
+                            }
+                        },
                         onOpenPlaylistPicker = {
                             vm.refreshPlaylists()
                             playlistPickerItem = item
@@ -764,6 +784,14 @@ fun QueueScreen(
                 )
             }
             manualActivePayload = payload
+            vm.enqueueAcceptedPendingSave(
+                source = PendingSaveSource.MANUAL,
+                type = payload.type,
+                urlInput = payload.urlInput,
+                titleInput = payload.titleInput,
+                bodyInput = payload.bodyInput,
+                destinationPlaylistId = payload.destinationPlaylistId,
+            )
             fun queueCurrentManualSaveAndClose(
                 statusMessage: String,
                 pendingResult: ShareSaveResult = ShareSaveResult.NetworkError,
@@ -814,13 +842,6 @@ fun QueueScreen(
                     val actionLabel = if (result.opensSettings) "Open Settings" else null
                     val actionKey = if (result.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
                     onShowSnackbar(result.notificationText, actionLabel, actionKey)
-                    vm.removeMatchingPendingManualSave(
-                        type = payload.type,
-                        urlInput = payload.urlInput,
-                        titleInput = payload.titleInput,
-                        bodyInput = payload.bodyInput,
-                        destinationPlaylistId = payload.destinationPlaylistId,
-                    )
                     showSaveEntryDialog = false
                     manualUrlInput = ""
                     manualTitleInput = ""
@@ -1087,16 +1108,17 @@ private fun projectPendingItemsForDestination(
     pendingItems: List<PendingManualSaveItem>,
     selectedPlaylistId: Int?,
     queueItems: List<PlaybackQueueItem>,
+    cachedItemIds: Set<Int>,
+    requireOfflineReady: Boolean,
 ): List<PendingManualSaveItem> {
-    val knownQueueUrls = queueItems.mapNotNullTo(mutableSetOf()) { item ->
-        normalizePendingComparisonUrl(item.url)
-    }
     return pendingItems.filter { pending ->
         if (pending.destinationPlaylistId != selectedPlaylistId) {
             return@filter false
         }
-        val normalizedPendingUrl = normalizePendingComparisonUrl(pending.urlInput)
-        normalizedPendingUrl == null || normalizedPendingUrl !in knownQueueUrls
+        val matchedQueueItem = queueItems.firstOrNull { item ->
+            normalizePendingComparisonUrl(pending.urlInput) == normalizePendingComparisonUrl(item.url)
+        } ?: return@filter true
+        requireOfflineReady && !cachedItemIds.contains(matchedQueueItem.itemId)
     }
 }
 
@@ -1219,6 +1241,7 @@ internal fun formatPendingDestinationLabel(
 internal fun classifyPendingFailureReason(message: String): String {
     val lower = message.lowercase()
     return when {
+        lower.contains("saving") -> "Saving..."
         lower.contains("unauthorized") || lower.contains("forbidden") || lower.contains("token") ->
             "Auth required"
         lower.contains("timeout") || lower.contains("timed out") ->
@@ -1504,6 +1527,7 @@ private fun QueueItemCard(
     item: PlaybackQueueItem,
     cached: Boolean,
     onOpenPlayer: () -> Unit,
+    onDownload: () -> Unit,
     onOpenPlaylistPicker: () -> Unit,
     isMenuExpanded: Boolean,
     onDismissMenu: () -> Unit,
@@ -1563,6 +1587,13 @@ private fun QueueItemCard(
                         expanded = isMenuExpanded,
                         onDismissRequest = onDismissMenu,
                     ) {
+                        DropdownMenuItem(
+                            text = { Text(if (cached) "Downloaded" else "Download") },
+                            onClick = {
+                                onDismissMenu()
+                                onDownload()
+                            },
+                        )
                         DropdownMenuItem(
                             text = { Text("Playlists...") },
                             onClick = {

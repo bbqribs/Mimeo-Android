@@ -330,6 +330,7 @@ class SettingsStore(private val context: Context) {
         destinationPlaylistId: Int?,
         lastFailureMessage: String,
         autoRetryEligible: Boolean,
+        incrementRetryCount: Boolean = true,
     ) {
         context.dataStore.edit { prefs ->
             val existing = decodePendingManualSaves(prefs[pendingManualSavesJsonKey])
@@ -345,7 +346,7 @@ class SettingsStore(private val context: Context) {
                 existing.mapIndexed { index, item ->
                     if (index == duplicateIndex) {
                         item.copy(
-                            retryCount = item.retryCount + 1,
+                            retryCount = if (incrementRetryCount) item.retryCount + 1 else item.retryCount,
                             lastFailureMessage = lastFailureMessage,
                             autoRetryEligible = autoRetryEligible,
                         )

@@ -173,6 +173,11 @@ data class UiSnackbarMessage(
     val duration: SnackbarDuration = SnackbarDuration.Short,
 )
 
+data class PendingRetryBatchResult(
+    val successCount: Int,
+    val firstFailureResult: ShareSaveResult? = null,
+)
+
 private fun isLikelyPhysicalDevice(): Boolean {
     val fingerprint = Build.FINGERPRINT.lowercase()
     val model = Build.MODEL.lowercase()
@@ -636,6 +641,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 destinationPlaylistId = destinationPlaylistId,
                 lastFailureMessage = result.notificationText,
                 autoRetryEligible = shouldAutoRetryManualSave(result),
+                incrementRetryCount = false,
+            )
+        }
+    }
+
+    fun enqueueAcceptedPendingSave(
+        source: PendingSaveSource,
+        type: PendingManualSaveType,
+        urlInput: String,
+        titleInput: String?,
+        bodyInput: String?,
+        destinationPlaylistId: Int?,
+    ) {
+        viewModelScope.launch {
+            settingsStore.enqueuePendingManualSave(
+                source = source,
+                type = type,
+                urlInput = urlInput,
+                titleInput = titleInput,
+                bodyInput = bodyInput,
+                destinationPlaylistId = destinationPlaylistId,
+                lastFailureMessage = "Saving...",
+                autoRetryEligible = false,
+                incrementRetryCount = false,
             )
         }
     }
@@ -652,9 +681,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         try {
         val item = _pendingManualSaves.value.firstOrNull { it.id == itemId } ?: return null
         val result = retryPendingManualSaveItem(item)
-        if (result is ShareSaveResult.Saved) {
-            settingsStore.removePendingManualSave(itemId)
-        } else if (!isRetryablePendingSaveResult(result)) {
+        if (!isRetryablePendingSaveResult(result)) {
             settingsStore.removePendingManualSave(itemId)
         } else {
             settingsStore.markPendingManualSaveRetryFailure(
@@ -673,18 +700,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    suspend fun retryAllPendingManualSaves(limit: Int = 20): Int {
-        if (!pendingManualRetryMutex.tryLock()) return -1
+    suspend fun retryAllPendingManualSaves(limit: Int = 20): PendingRetryBatchResult {
+        if (!pendingManualRetryMutex.tryLock()) return PendingRetryBatchResult(successCount = -1)
         _pendingManualRetryInProgress.value = true
         try {
         val retryIds = _pendingManualSaves.value.take(limit).map { it.id }
         var successCount = 0
+        var firstFailureResult: ShareSaveResult? = null
         retryIds.forEach { itemId ->
             val item = _pendingManualSaves.value.firstOrNull { it.id == itemId } ?: return@forEach
             val result = retryPendingManualSaveItem(item)
-            if (result is ShareSaveResult.Saved) {
-                settingsStore.removePendingManualSave(itemId)
-            } else if (!isRetryablePendingSaveResult(result)) {
+            if (!isRetryablePendingSaveResult(result)) {
                 settingsStore.removePendingManualSave(itemId)
             } else {
                 settingsStore.markPendingManualSaveRetryFailure(
@@ -698,9 +724,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             if (result is ShareSaveResult.Saved) {
                 successCount += 1
+            } else if (firstFailureResult == null) {
+                firstFailureResult = result
             }
         }
-        return successCount
+        return PendingRetryBatchResult(
+            successCount = successCount,
+            firstFailureResult = firstFailureResult,
+        )
         } finally {
             _pendingManualRetryInProgress.value = false
             pendingManualRetryMutex.unlock()
@@ -834,6 +865,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 playlistId = current.selectedPlaylistId,
             )
             val queue = queueResult.payload
+            var offlineReadyIds = resolveOfflineReadyIds(queue.items)
+            offlineReadyIds = ensurePendingItemsOfflineReady(
+                queueItems = queue.items,
+                selectedPlaylistId = current.selectedPlaylistId,
+                offlineReadyIds = offlineReadyIds,
+                current = current,
+            )
             _queueItems.value = queue.items
             val appliedSnapshot = queueResult.debugSnapshot.copy(
                 appliedItemCount = _queueItems.value.size,
@@ -847,8 +885,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     "viewModelApply playlistId=${appliedSnapshot.selectedPlaylistId} uiCount=${appliedSnapshot.appliedItemCount} uiContains409=${appliedSnapshot.appliedContains409} requestUrl=${appliedSnapshot.requestUrl}",
                 )
             }
-            _cachedItemIds.value = resolveOfflineReadyIds(queue.items)
+            _cachedItemIds.value = offlineReadyIds
             settingsStore.saveQueueSnapshot(current.selectedPlaylistId, queue)
+            reconcilePendingSavesWithQueue(
+                queueItems = queue.items,
+                selectedPlaylistId = current.selectedPlaylistId,
+                offlineReadyIds = offlineReadyIds,
+                requireOfflineReady = current.autoDownloadSavedArticles,
+            )
             _queueOffline.value = false
             _statusMessage.value = "Queue loaded (${queue.count})"
             flushPendingProgress()
@@ -870,6 +914,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     playlistId = current.selectedPlaylistId,
                 )
                 val refreshedQueue = refreshedQueueResult.payload
+                var refreshedOfflineReadyIds = resolveOfflineReadyIds(refreshedQueue.items)
+                refreshedOfflineReadyIds = ensurePendingItemsOfflineReady(
+                    queueItems = refreshedQueue.items,
+                    selectedPlaylistId = current.selectedPlaylistId,
+                    offlineReadyIds = refreshedOfflineReadyIds,
+                    current = current,
+                )
                 _queueItems.value = refreshedQueue.items
                 val refreshedSnapshot = refreshedQueueResult.debugSnapshot.copy(
                     appliedItemCount = _queueItems.value.size,
@@ -883,8 +934,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         "viewModelApply playlistId=${refreshedSnapshot.selectedPlaylistId} uiCount=${refreshedSnapshot.appliedItemCount} uiContains409=${refreshedSnapshot.appliedContains409} requestUrl=${refreshedSnapshot.requestUrl}",
                     )
                 }
-                _cachedItemIds.value = resolveOfflineReadyIds(refreshedQueue.items)
+                _cachedItemIds.value = refreshedOfflineReadyIds
                 settingsStore.saveQueueSnapshot(current.selectedPlaylistId, refreshedQueue)
+                reconcilePendingSavesWithQueue(
+                    queueItems = refreshedQueue.items,
+                    selectedPlaylistId = current.selectedPlaylistId,
+                    offlineReadyIds = refreshedOfflineReadyIds,
+                    requireOfflineReady = current.autoDownloadSavedArticles,
+                )
                 _statusMessage.value = "Queue loaded (${refreshedQueue.count})"
             }
             Result.success(Unit)
@@ -979,6 +1036,80 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun shouldAutoRetryManualSave(result: ShareSaveResult): Boolean {
         return isAutoRetryEligiblePendingSaveResult(result)
+    }
+
+    private suspend fun ensurePendingItemsOfflineReady(
+        queueItems: List<PlaybackQueueItem>,
+        selectedPlaylistId: Int?,
+        offlineReadyIds: Set<Int>,
+        current: AppSettings,
+    ): Set<Int> {
+        if (!current.autoDownloadSavedArticles) return offlineReadyIds
+        val pendingForDestination = _pendingManualSaves.value.filter { it.destinationPlaylistId == selectedPlaylistId }
+        if (pendingForDestination.isEmpty()) return offlineReadyIds
+
+        val updated = offlineReadyIds.toMutableSet()
+        val matchedItemsNeedingDownload = pendingForDestination
+            .mapNotNull { pending ->
+                queueItems.firstOrNull { queueItem -> pendingMatchesQueueItem(pending, queueItem) }
+            }
+            .distinctBy { it.itemId }
+            .filterNot { updated.contains(it.itemId) }
+
+        matchedItemsNeedingDownload.forEach { item ->
+            val loaded = runCatching {
+                repository.getItemText(
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
+                    itemId = item.itemId,
+                    expectedActiveVersionId = expectedActiveVersionFor(item.itemId),
+                )
+            }.getOrNull() ?: return@forEach
+            val relatedIds = if (loaded.payload.activeContentVersionId != null) {
+                queueItems
+                    .asSequence()
+                    .filter { it.activeContentVersionId == loaded.payload.activeContentVersionId }
+                    .map { it.itemId }
+                    .toSet()
+            } else {
+                emptySet()
+            }
+            updated += item.itemId
+            updated += relatedIds
+        }
+
+        return updated
+    }
+
+    private suspend fun reconcilePendingSavesWithQueue(
+        queueItems: List<PlaybackQueueItem>,
+        selectedPlaylistId: Int?,
+        offlineReadyIds: Set<Int>,
+        requireOfflineReady: Boolean,
+    ) {
+        val confirmedPendingIds = _pendingManualSaves.value
+            .filter { it.destinationPlaylistId == selectedPlaylistId }
+            .filter { pending ->
+                val matchedQueueItem = queueItems.firstOrNull { queueItem -> pendingMatchesQueueItem(pending, queueItem) }
+                    ?: return@filter false
+                !requireOfflineReady || offlineReadyIds.contains(matchedQueueItem.itemId)
+            }
+            .map { it.id }
+
+        confirmedPendingIds.forEach { itemId ->
+            settingsStore.removePendingManualSave(itemId)
+        }
+    }
+
+    private fun pendingMatchesQueueItem(
+        pending: PendingManualSaveItem,
+        queueItem: PlaybackQueueItem,
+    ): Boolean {
+        return normalizePendingComparisonUrl(pending.urlInput) == normalizePendingComparisonUrl(queueItem.url)
+    }
+
+    private fun normalizePendingComparisonUrl(raw: String?): String? {
+        return raw?.trim()?.lowercase()?.removeSuffix("/")?.takeIf { it.isNotEmpty() }
     }
 
     private fun startConnectivityMonitoring() {
@@ -1392,6 +1523,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             Result.failure(error)
         }
+    }
+
+    suspend fun downloadItemForOffline(itemId: Int): Result<Unit> {
+        return fetchItemText(itemId).map { Unit }
     }
 
     suspend fun refreshCurrentPlayerItem(itemId: Int): Result<Unit> {

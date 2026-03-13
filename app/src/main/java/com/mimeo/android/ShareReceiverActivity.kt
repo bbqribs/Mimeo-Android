@@ -59,13 +59,26 @@ class ShareReceiverActivity : ComponentActivity() {
             val notificationId = notifications.postAccepted()
             val settingsStore = SettingsStore(applicationContext)
             val settings = settingsStore.settingsFlow.first()
+            val normalizedUrl = extractFirstHttpUrl(sharedText)
+            if (normalizedUrl != null) {
+                settingsStore.enqueuePendingManualSave(
+                    source = PendingSaveSource.SHARE,
+                    type = PendingManualSaveType.URL,
+                    urlInput = normalizedUrl,
+                    titleInput = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
+                    bodyInput = null,
+                    destinationPlaylistId = settings.defaultSavePlaylistId,
+                    lastFailureMessage = "Saving...",
+                    autoRetryEligible = false,
+                    incrementRetryCount = false,
+                )
+            }
             val result = ShareSaveCoordinator(applicationContext).saveSharedText(
                 sharedText = sharedText,
                 sharedTitle = sharedTitle,
             )
             var surfacedResult = result
             if (isRetryablePendingSaveResult(result)) {
-                val normalizedUrl = extractFirstHttpUrl(sharedText)
                 if (normalizedUrl != null) {
                     settingsStore.enqueuePendingManualSave(
                         source = PendingSaveSource.SHARE,
@@ -76,6 +89,7 @@ class ShareReceiverActivity : ComponentActivity() {
                         destinationPlaylistId = settings.defaultSavePlaylistId,
                         lastFailureMessage = result.notificationText,
                         autoRetryEligible = isAutoRetryEligiblePendingSaveResult(result),
+                        incrementRetryCount = false,
                     )
                     surfacedResult = ShareSaveResult.PendingQueued
                 }

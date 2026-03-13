@@ -110,6 +110,7 @@ class ManualUrlEntryValidationTest {
 
     @Test
     fun `classifyPendingFailureReason maps common retry blockers`() {
+        assertEquals("Saving...", classifyPendingFailureReason("Saving..."))
         assertEquals("Auth required", classifyPendingFailureReason("Unauthorized"))
         assertEquals("Request timed out", classifyPendingFailureReason("Request timed out"))
         assertEquals("Backend unreachable", classifyPendingFailureReason("Couldn't reach server"))
