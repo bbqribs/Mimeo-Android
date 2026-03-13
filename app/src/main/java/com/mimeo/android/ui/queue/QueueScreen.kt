@@ -664,6 +664,11 @@ fun QueueScreen(
                         retryInProgress = pendingManualRetryInProgress,
                         onRetry = { retryPendingItem(item) },
                         onDismiss = { vm.removePendingManualSave(item.id) },
+                        onTap = {
+                            if (isPendingFailureState(item.lastFailureMessage)) {
+                                onShowSnackbar(item.lastFailureMessage, null, null)
+                            }
+                        },
                     )
                     if (index < projectedPendingItems.lastIndex || displayedItems.isNotEmpty()) {
                         ThinQueueDivider()
@@ -1461,6 +1466,7 @@ private fun PendingProjectedQueueItemCard(
     retryInProgress: Boolean,
     onRetry: () -> Unit,
     onDismiss: () -> Unit,
+    onTap: () -> Unit,
 ) {
     var actionsMenuExpanded by remember { mutableStateOf(false) }
     val hostLabel = resolvePendingHost(item.urlInput)
@@ -1474,7 +1480,11 @@ private fun PendingProjectedQueueItemCard(
         item.type == PendingManualSaveType.TEXT -> "Pasted text"
         else -> "(pending save)"
     }
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = failedProcessing, onClick = onTap),
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
