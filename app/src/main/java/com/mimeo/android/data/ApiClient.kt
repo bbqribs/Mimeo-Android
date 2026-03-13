@@ -134,6 +134,15 @@ class ApiClient(
         }
     }
 
+    suspend fun getItemSummary(baseUrl: String, token: String, itemId: Int): ArticleSummary = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/items/$itemId"))
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<ArticleSummary>(payload) }
+    }
+
     suspend fun getPlaylists(baseUrl: String, token: String): List<PlaylistSummary> = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(resolveUrl(baseUrl, "/playlists"))

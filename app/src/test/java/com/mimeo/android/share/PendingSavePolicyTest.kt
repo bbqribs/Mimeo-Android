@@ -6,18 +6,29 @@ import org.junit.Test
 
 class PendingSavePolicyTest {
     @Test
-    fun `retryable pending save results are network timeout server and generic save failures`() {
+    fun `queueable pending save results include retryable and auth failures`() {
         assertTrue(isRetryablePendingSaveResult(ShareSaveResult.NetworkError))
         assertTrue(isRetryablePendingSaveResult(ShareSaveResult.TimedOut))
         assertTrue(isRetryablePendingSaveResult(ShareSaveResult.ServerError))
         assertTrue(isRetryablePendingSaveResult(ShareSaveResult.SaveFailed))
+        assertTrue(isRetryablePendingSaveResult(ShareSaveResult.MissingToken))
+        assertTrue(isRetryablePendingSaveResult(ShareSaveResult.Unauthorized))
     }
 
     @Test
-    fun `non retryable pending save results are auth token no-url and saved`() {
-        assertFalse(isRetryablePendingSaveResult(ShareSaveResult.MissingToken))
-        assertFalse(isRetryablePendingSaveResult(ShareSaveResult.Unauthorized))
+    fun `non queueable pending save results are no-url and saved`() {
         assertFalse(isRetryablePendingSaveResult(ShareSaveResult.NoValidUrl))
         assertFalse(isRetryablePendingSaveResult(ShareSaveResult.Saved(destinationName = "Smart Queue")))
+    }
+
+    @Test
+    fun `auto retry eligibility remains transient-only`() {
+        assertTrue(isAutoRetryEligiblePendingSaveResult(ShareSaveResult.NetworkError))
+        assertTrue(isAutoRetryEligiblePendingSaveResult(ShareSaveResult.TimedOut))
+        assertTrue(isAutoRetryEligiblePendingSaveResult(ShareSaveResult.ServerError))
+        assertTrue(isAutoRetryEligiblePendingSaveResult(ShareSaveResult.SaveFailed))
+        assertFalse(isAutoRetryEligiblePendingSaveResult(ShareSaveResult.MissingToken))
+        assertFalse(isAutoRetryEligiblePendingSaveResult(ShareSaveResult.Unauthorized))
+        assertFalse(isAutoRetryEligiblePendingSaveResult(ShareSaveResult.NoValidUrl))
     }
 }

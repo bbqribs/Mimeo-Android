@@ -110,9 +110,12 @@ class ManualUrlEntryValidationTest {
 
     @Test
     fun `classifyPendingFailureReason maps common retry blockers`() {
+        assertEquals("Saving...", classifyPendingFailureReason("Saving..."))
         assertEquals("Auth required", classifyPendingFailureReason("Unauthorized"))
         assertEquals("Request timed out", classifyPendingFailureReason("Request timed out"))
         assertEquals("Backend unreachable", classifyPendingFailureReason("Couldn't reach server"))
+        assertEquals("Blocked by source", classifyPendingFailureReason("Article blocked by source"))
+        assertEquals("Source unsupported", classifyPendingFailureReason("Article source unsupported"))
         assertEquals("Save failed", classifyPendingFailureReason("Unexpected parser issue"))
     }
 }
