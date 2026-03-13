@@ -16,8 +16,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,14 +39,21 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun SignInScreen(
     initialServerUrl: String,
+    initialAutoDownloadEnabled: Boolean,
     signInState: SignInState,
     onSignIn: (serverUrl: String, username: String, password: String) -> Unit,
+    onAutoDownloadChanged: (Boolean) -> Unit,
     onOpenAdvancedSettings: () -> Unit,
     onClearError: () -> Unit,
 ) {
-    var serverUrl by rememberSaveable(initialServerUrl) { mutableStateOf(initialServerUrl) }
+    var serverPreset by rememberSaveable { mutableStateOf(inferSignInPreset(defaultSignInServerUrl(initialServerUrl))) }
+    var scheme by rememberSaveable { mutableStateOf(inferSignInScheme(defaultSignInServerUrl(initialServerUrl))) }
+    var serverUrl by rememberSaveable(initialServerUrl) {
+        mutableStateOf(buildPresetServerUrl(serverPreset, scheme, defaultSignInServerUrl(initialServerUrl)))
+    }
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
+    var autoDownloadEnabled by rememberSaveable(initialAutoDownloadEnabled) { mutableStateOf(initialAutoDownloadEnabled) }
     val loading = signInState is SignInState.Loading
     val errorMessage = (signInState as? SignInState.Error)?.message
     val focusManager = LocalFocusManager.current
@@ -82,10 +91,49 @@ fun SignInScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Text(
+                    text = "Server",
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SignInServerPreset.entries.forEach { preset ->
+                        FilterChip(
+                            selected = serverPreset == preset,
+                            onClick = {
+                                serverPreset = preset
+                                serverUrl = buildPresetServerUrl(serverPreset, scheme, serverUrl)
+                                if (errorMessage != null) onClearError()
+                            },
+                            enabled = !loading,
+                            label = { Text(preset.label()) },
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SignInUrlScheme.entries.forEach { nextScheme ->
+                        FilterChip(
+                            selected = scheme == nextScheme,
+                            onClick = {
+                                scheme = nextScheme
+                                serverUrl = buildPresetServerUrl(serverPreset, scheme, serverUrl)
+                                if (errorMessage != null) onClearError()
+                            },
+                            enabled = !loading,
+                            label = { Text(nextScheme.value.uppercase()) },
+                        )
+                    }
+                }
                 OutlinedTextField(
                     value = serverUrl,
                     onValueChange = {
                         serverUrl = it
+                        serverPreset = SignInServerPreset.MANUAL
                         if (errorMessage != null) onClearError()
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -136,6 +184,33 @@ fun SignInScreen(
                     ),
                     keyboardActions = KeyboardActions(onDone = { submit() }),
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = "Auto-download saved articles",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            text = "Applies immediately after successful sign-in too.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = autoDownloadEnabled,
+                        enabled = !loading,
+                        onCheckedChange = {
+                            autoDownloadEnabled = it
+                            onAutoDownloadChanged(it)
+                        },
+                    )
+                }
                 if (!errorMessage.isNullOrBlank()) {
                     Text(
                         text = errorMessage,
@@ -170,4 +245,10 @@ fun SignInScreen(
             }
         }
     }
+}
+
+private fun SignInServerPreset.label(): String = when (this) {
+    SignInServerPreset.REMOTE -> "Remote"
+    SignInServerPreset.LAN -> "LAN"
+    SignInServerPreset.MANUAL -> "Manual"
 }

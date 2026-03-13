@@ -356,9 +356,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             var previous = _settings.value
             settingsStore.settingsFlow.collect { next ->
                 _settings.value = next
+                if (next.apiToken.isBlank()) {
+                    _queueItems.value = emptyList()
+                    _cachedItemIds.value = emptySet()
+                    _queueOffline.value = false
+                    _playlists.value = emptyList()
+                }
                 if (previous.apiToken.isBlank() && next.apiToken.isNotBlank()) {
                     pendingInitialPostSignInHydration = true
                     loadQueue()
+                } else if (previous.apiToken.isNotBlank() && next.apiToken.isBlank()) {
+                    pendingInitialPostSignInHydration = false
+                    settingsStore.clearQueueSnapshots()
                 }
                 previous = next
             }
@@ -2448,8 +2457,10 @@ private fun MimeoApp(vm: AppViewModel) {
                         composable(ROUTE_SIGN_IN) {
                             SignInScreen(
                                 initialServerUrl = settings.baseUrl,
+                                initialAutoDownloadEnabled = settings.autoDownloadSavedArticles,
                                 signInState = signInState,
                                 onSignIn = vm::signIn,
+                                onAutoDownloadChanged = vm::saveAutoDownloadSavedArticles,
                                 onOpenAdvancedSettings = { nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true } },
                                 onClearError = vm::clearSignInError,
                             )
