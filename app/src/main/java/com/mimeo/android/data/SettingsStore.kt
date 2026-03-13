@@ -263,6 +263,25 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun saveSignedInSession(
+        baseUrl: String,
+        connectionMode: ConnectionMode,
+        apiToken: String,
+    ) {
+        val trimmedBaseUrl = baseUrl.trim()
+        val trimmedToken = apiToken.trim()
+        context.dataStore.edit { prefs ->
+            prefs[baseUrlKey] = trimmedBaseUrl
+            prefs[connectionModeKey] = connectionMode.name
+            prefs[tokenKey] = trimmedToken
+            when (connectionMode) {
+                ConnectionMode.LOCAL -> prefs[localBaseUrlKey] = trimmedBaseUrl
+                ConnectionMode.LAN -> prefs[lanBaseUrlKey] = trimmedBaseUrl
+                ConnectionMode.REMOTE -> prefs[remoteBaseUrlKey] = trimmedBaseUrl
+            }
+        }
+    }
+
     suspend fun savePlayerControlsMode(playerControlsMode: PlayerControlsMode) {
         context.dataStore.edit { prefs ->
             prefs[playerControlsModeKey] = playerControlsMode.name

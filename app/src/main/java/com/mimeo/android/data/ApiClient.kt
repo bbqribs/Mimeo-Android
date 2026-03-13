@@ -2,6 +2,7 @@
 
 import android.util.Log
 import com.mimeo.android.BuildConfig
+import com.mimeo.android.model.AuthTokenResponse
 import com.mimeo.android.model.DebugVersionResponse
 import com.mimeo.android.model.DebugPythonResponse
 import com.mimeo.android.model.ItemTextResponse
@@ -55,6 +56,13 @@ private data class ManualTextPayload(
     @kotlinx.serialization.SerialName("site_name") val siteName: String? = null,
 )
 
+@Serializable
+private data class AuthTokenPayload(
+    val username: String,
+    val password: String,
+    @kotlinx.serialization.SerialName("device_name") val deviceName: String,
+)
+
 class ApiClient(
     private val okHttpClient: OkHttpClient = OkHttpClient(),
     private val json: Json = Json { ignoreUnknownKeys = true },
@@ -71,6 +79,26 @@ class ApiClient(
             .get()
             .build()
         executeJson(request) { payload -> json.decodeFromString<DebugVersionResponse>(payload) }
+    }
+
+    suspend fun postAuthToken(
+        baseUrl: String,
+        username: String,
+        password: String,
+        deviceName: String,
+    ): AuthTokenResponse = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(
+            AuthTokenPayload(
+                username = username,
+                password = password,
+                deviceName = deviceName,
+            )
+        ).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/auth/token"))
+            .post(body)
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<AuthTokenResponse>(payload) }
     }
 
     suspend fun getQueue(baseUrl: String, token: String, playlistId: Int? = null): QueueFetchResult = withContext(Dispatchers.IO) {

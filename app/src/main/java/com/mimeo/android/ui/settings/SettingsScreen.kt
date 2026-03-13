@@ -235,7 +235,7 @@ fun SettingsScreen(
     ) {
         SettingsSectionHeader(
             title = "Connection / Server",
-            subtitle = "Choose Local, LAN, or Remote mode, then set URL and token.",
+            subtitle = "Choose Local, LAN, or Remote mode. Sign-in is primary; manual token entry is for advanced use.",
         )
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(
@@ -284,7 +284,7 @@ fun SettingsScreen(
                     value = token,
                     onValueChange = { token = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("API Token") },
+                    label = { Text("Device token (advanced)") },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                 )
