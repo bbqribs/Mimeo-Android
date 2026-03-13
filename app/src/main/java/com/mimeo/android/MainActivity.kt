@@ -1179,17 +1179,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun hasFailedQueueStatus(queueItem: PlaybackQueueItem): Boolean {
-        val status = queueItem.status?.trim()?.lowercase().orEmpty()
-        return status.contains("fail") || status.contains("error")
+        return isTerminalPendingProcessingStatus(queueItem.status)
     }
 
     private fun resolveProcessingFailureMessage(queueItem: PlaybackQueueItem): String {
-        val status = queueItem.status?.trim().orEmpty()
-        return if (status.isBlank()) {
-            "Article processing failed"
-        } else {
-            "Article processing failed: $status"
-        }
+        return resolveTerminalPendingProcessingMessage(queueItem.status)
     }
 
     private fun startConnectivityMonitoring() {

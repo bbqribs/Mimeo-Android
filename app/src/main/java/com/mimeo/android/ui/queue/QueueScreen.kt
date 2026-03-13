@@ -65,6 +65,8 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
+import com.mimeo.android.isPendingProcessingFailureMessage
+import com.mimeo.android.isTerminalPendingProcessingStatus
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
@@ -1282,6 +1284,10 @@ internal fun classifyPendingFailureReason(message: String): String {
         lower.contains("network") || lower.contains("offline") ||
             lower.contains("couldn't reach server") || lower.contains("could not reach server") ->
             "Backend unreachable"
+        lower.contains("blocked") || lower.contains("paywall") ->
+            "Blocked by source"
+        lower.contains("unsupported") ->
+            "Source unsupported"
         else -> "Save failed"
     }
 }
@@ -1567,13 +1573,11 @@ private fun resolvePendingHost(urlInput: String): String {
 }
 
 private fun hasFailedPendingProjectionStatus(queueItem: PlaybackQueueItem): Boolean {
-    val status = queueItem.status?.trim()?.lowercase().orEmpty()
-    return status.contains("fail") || status.contains("error")
+    return isTerminalPendingProcessingStatus(queueItem.status)
 }
 
 private fun isPendingFailureState(message: String): Boolean {
-    val lower = message.trim().lowercase()
-    return lower.contains("failed") || lower.contains("error")
+    return isPendingProcessingFailureMessage(message)
 }
 
 @Composable
