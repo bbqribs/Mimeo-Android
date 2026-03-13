@@ -396,6 +396,27 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun updatePendingManualSaveStatus(
+        itemId: Long,
+        statusMessage: String,
+        autoRetryEligible: Boolean,
+    ) {
+        context.dataStore.edit { prefs ->
+            val existing = decodePendingManualSaves(prefs[pendingManualSavesJsonKey])
+            val updated = existing.map { item ->
+                if (item.id == itemId) {
+                    item.copy(
+                        lastFailureMessage = statusMessage,
+                        autoRetryEligible = autoRetryEligible,
+                    )
+                } else {
+                    item
+                }
+            }
+            prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(updated)
+        }
+    }
+
     suspend fun markMatchingPendingManualSaveResolved(
         source: PendingSaveSource,
         type: PendingManualSaveType,

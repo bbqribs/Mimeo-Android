@@ -1146,11 +1146,12 @@ private fun projectPendingItemsForDestination(
         if (pending.destinationPlaylistId != selectedPlaylistId) {
             return@filter false
         }
-        queueItems.firstOrNull { item ->
+        val matchedQueueItem = queueItems.firstOrNull { item ->
             pending.resolvedItemId?.let { resolvedItemId ->
                 item.itemId == resolvedItemId
             } ?: (normalizePendingComparisonUrl(pending.urlInput) == normalizePendingComparisonUrl(item.url))
-        } == null
+        } ?: return@filter true
+        hasFailedPendingProjectionStatus(matchedQueueItem) || pending.resolvedItemId == null
     }
 }
 
@@ -1460,6 +1461,7 @@ private fun PendingProjectedQueueItemCard(
     val subLabel = hostLabel
     val primaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f)
     val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
+    val failedProcessing = isPendingFailureState(item.lastFailureMessage)
     val titleLine = when {
         !item.titleInput.isNullOrBlank() -> item.titleInput
         item.urlInput.isNotBlank() -> item.urlInput
@@ -1534,8 +1536,18 @@ private fun PendingProjectedQueueItemCard(
                 )
                 Box(modifier = Modifier.size(8.dp))
                 Icon(
-                    painter = painterResource(id = R.drawable.msr_sync_problem_24),
-                    contentDescription = "Pending and unavailable offline",
+                    painter = painterResource(
+                        id = if (failedProcessing) {
+                            R.drawable.msr_error_circle_24
+                        } else {
+                            R.drawable.msr_sync_problem_24
+                        },
+                    ),
+                    contentDescription = if (failedProcessing) {
+                        "Pending save failed"
+                    } else {
+                        "Pending and unavailable offline"
+                    },
                     tint = MaterialTheme.colorScheme.error,
                     modifier = Modifier
                         .padding(start = 6.dp)
@@ -1552,6 +1564,16 @@ private fun resolvePendingHost(urlInput: String): String {
     return runCatching {
         URI(extracted).host?.removePrefix("www.")?.takeIf { it.isNotBlank() }
     }.getOrNull() ?: "Pending"
+}
+
+private fun hasFailedPendingProjectionStatus(queueItem: PlaybackQueueItem): Boolean {
+    val status = queueItem.status?.trim()?.lowercase().orEmpty()
+    return status.contains("fail") || status.contains("error")
+}
+
+private fun isPendingFailureState(message: String): Boolean {
+    val lower = message.trim().lowercase()
+    return lower.contains("failed") || lower.contains("error")
 }
 
 @Composable

@@ -926,6 +926,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             _cachedItemIds.value = offlineReadyIds
             settingsStore.saveQueueSnapshot(current.selectedPlaylistId, queue)
+            syncPendingSaveProcessingFailures(
+                queueItems = queue.items,
+                selectedPlaylistId = current.selectedPlaylistId,
+            )
             reconcilePendingSavesWithQueue(
                 queueItems = queue.items,
                 selectedPlaylistId = current.selectedPlaylistId,
@@ -973,6 +977,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 _cachedItemIds.value = refreshedOfflineReadyIds
                 settingsStore.saveQueueSnapshot(current.selectedPlaylistId, refreshedQueue)
+                syncPendingSaveProcessingFailures(
+                    queueItems = refreshedQueue.items,
+                    selectedPlaylistId = current.selectedPlaylistId,
+                )
                 reconcilePendingSavesWithQueue(
                     queueItems = refreshedQueue.items,
                     selectedPlaylistId = current.selectedPlaylistId,
@@ -1123,13 +1131,37 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val confirmedPendingIds = _pendingManualSaves.value
             .filter { it.destinationPlaylistId == selectedPlaylistId }
             .filter { pending ->
-                queueItems.any { queueItem -> pendingMatchesQueueItem(pending, queueItem) }
+                queueItems.any { queueItem ->
+                    pendingMatchesQueueItem(pending, queueItem) && !hasFailedQueueStatus(queueItem)
+                }
             }
             .map { it.id }
 
         confirmedPendingIds.forEach { itemId ->
             settingsStore.removePendingManualSave(itemId)
         }
+    }
+
+    private suspend fun syncPendingSaveProcessingFailures(
+        queueItems: List<PlaybackQueueItem>,
+        selectedPlaylistId: Int?,
+    ) {
+        _pendingManualSaves.value
+            .filter { it.destinationPlaylistId == selectedPlaylistId }
+            .forEach { pending ->
+                val matchedQueueItem = queueItems.firstOrNull { queueItem -> pendingMatchesQueueItem(pending, queueItem) }
+                    ?: return@forEach
+                if (!hasFailedQueueStatus(matchedQueueItem)) return@forEach
+                val failureMessage = resolveProcessingFailureMessage(matchedQueueItem)
+                if (pending.lastFailureMessage != failureMessage) {
+                    settingsStore.updatePendingManualSaveStatus(
+                        itemId = pending.id,
+                        statusMessage = failureMessage,
+                        autoRetryEligible = false,
+                    )
+                    showSnackbar(failureMessage)
+                }
+            }
     }
 
     private fun pendingMatchesQueueItem(
@@ -1144,6 +1176,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun normalizePendingComparisonUrl(raw: String?): String? {
         return raw?.trim()?.lowercase()?.removeSuffix("/")?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun hasFailedQueueStatus(queueItem: PlaybackQueueItem): Boolean {
+        val status = queueItem.status?.trim()?.lowercase().orEmpty()
+        return status.contains("fail") || status.contains("error")
+    }
+
+    private fun resolveProcessingFailureMessage(queueItem: PlaybackQueueItem): String {
+        val status = queueItem.status?.trim().orEmpty()
+        return if (status.isBlank()) {
+            "Article processing failed"
+        } else {
+            "Article processing failed: $status"
+        }
     }
 
     private fun startConnectivityMonitoring() {
@@ -1182,8 +1228,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun shouldAttemptPendingAutoRetryOnQueueLoad(wasOffline: Boolean): Boolean {
-        val hasRetryablePending = _pendingManualSaves.value.any { it.autoRetryEligible }
-        if (!hasRetryablePending) return false
+        val hasRetryCandidate = _pendingManualSaves.value.any { it.autoRetryEligible || it.resolvedItemId == null }
+        if (!hasRetryCandidate) return false
         if (wasOffline) return true
         return System.currentTimeMillis() - lastPendingAutoRetryAtMs >= 3_000L
     }
