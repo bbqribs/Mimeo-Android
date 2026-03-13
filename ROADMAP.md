@@ -47,6 +47,9 @@
 - [x] Up Next `+` flow now supports manual text submission v1 (`Save URL` / `Paste Text`) via existing `/items/manual-text` backend path.
 - [ ] Backlog: allow sharing plain text and saving it as a readable item, not just URLs.
 
+### User sign-in (Phase 3)
+- [ ] Username/password sign-in flow — spec ready: `docs/ANDROID_AUTH_PHASE3_SPEC.md`
+
 ### Next tickets
 - [ ] Share-save destination trust polish: small post-save confirmation surface cleanup if any ambiguity remains after semantics cleanup.
 - [ ] Manual-save failed-attempt recovery queue: keep failed manual saves in a clearable retry queue, preserve user-entered work across offline/interrupted conditions, and auto-retry when connectivity returns.
