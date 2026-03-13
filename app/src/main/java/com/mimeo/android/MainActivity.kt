@@ -193,6 +193,7 @@ internal fun selectInitialQueueHydrationTargets(
     if (limit <= 0) return emptyList()
     return queueItems
         .asSequence()
+        .filterNot { isTerminalPendingProcessingStatus(it.status) }
         .map { it.itemId }
         .distinct()
         .filterNot { cachedItemIds.contains(it) }
