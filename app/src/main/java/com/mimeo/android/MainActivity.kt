@@ -929,6 +929,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             syncPendingSaveProcessingFailures(
                 queueItems = queue.items,
                 selectedPlaylistId = current.selectedPlaylistId,
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
             )
             reconcilePendingSavesWithQueue(
                 queueItems = queue.items,
@@ -980,6 +982,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 syncPendingSaveProcessingFailures(
                     queueItems = refreshedQueue.items,
                     selectedPlaylistId = current.selectedPlaylistId,
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
                 )
                 reconcilePendingSavesWithQueue(
                     queueItems = refreshedQueue.items,
@@ -1145,14 +1149,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun syncPendingSaveProcessingFailures(
         queueItems: List<PlaybackQueueItem>,
         selectedPlaylistId: Int?,
+        baseUrl: String,
+        token: String,
     ) {
         _pendingManualSaves.value
             .filter { it.destinationPlaylistId == selectedPlaylistId }
             .forEach { pending ->
-                val matchedQueueItem = queueItems.firstOrNull { queueItem -> pendingMatchesQueueItem(pending, queueItem) }
-                    ?: return@forEach
-                if (!hasFailedQueueStatus(matchedQueueItem)) return@forEach
-                val failureMessage = resolveProcessingFailureMessage(matchedQueueItem)
+                val failureMessage = resolveProcessingFailureMessage(
+                    pending = pending,
+                    queueItem = queueItems.firstOrNull { queueItem -> pendingMatchesQueueItem(pending, queueItem) },
+                    baseUrl = baseUrl,
+                    token = token,
+                ) ?: return@forEach
                 if (pending.lastFailureMessage != failureMessage) {
                     settingsStore.updatePendingManualSaveStatus(
                         itemId = pending.id,
@@ -1182,8 +1190,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return isTerminalPendingProcessingStatus(queueItem.status)
     }
 
-    private fun resolveProcessingFailureMessage(queueItem: PlaybackQueueItem): String {
-        return resolveTerminalPendingProcessingMessage(queueItem.status)
+    private suspend fun resolveProcessingFailureMessage(
+        pending: PendingManualSaveItem,
+        queueItem: PlaybackQueueItem?,
+        baseUrl: String,
+        token: String,
+    ): String? {
+        val itemId = pending.resolvedItemId ?: queueItem?.itemId
+        if (itemId != null) {
+            val summary = runCatching {
+                apiClient.getItemSummary(baseUrl, token, itemId)
+            }.getOrNull()
+            if (summary != null) {
+                val summaryHasFailure =
+                    isTerminalPendingProcessingStatus(summary.status) ||
+                        !summary.failureReason.isNullOrBlank()
+                if (summaryHasFailure) {
+                    return resolveTerminalPendingProcessingMessage(
+                        status = summary.status,
+                        failureReason = summary.failureReason,
+                        fetchHttpStatus = summary.fetchHttpStatus,
+                    )
+                }
+            }
+        }
+        val matchedQueueItem = queueItem ?: return null
+        return if (hasFailedQueueStatus(matchedQueueItem)) {
+            resolveTerminalPendingProcessingMessage(matchedQueueItem.status)
+        } else {
+            null
+        }
     }
 
     private fun startConnectivityMonitoring() {

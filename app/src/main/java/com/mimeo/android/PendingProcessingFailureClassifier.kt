@@ -13,9 +13,33 @@ internal fun isTerminalPendingProcessingStatus(status: String?): Boolean {
 }
 
 internal fun resolveTerminalPendingProcessingMessage(status: String?): String {
+    return resolveTerminalPendingProcessingMessage(
+        status = status,
+        failureReason = null,
+        fetchHttpStatus = null,
+    )
+}
+
+internal fun resolveTerminalPendingProcessingMessage(
+    status: String?,
+    failureReason: String?,
+    fetchHttpStatus: Int?,
+): String {
     val trimmed = status?.trim().orEmpty()
     val normalized = trimmed.lowercase()
+    val normalizedReason = failureReason?.trim()?.lowercase().orEmpty()
     return when {
+        normalizedReason == "blocked_by_paywall" -> "Article blocked by paywall"
+        normalizedReason == "blocked_by_bot" ||
+            normalizedReason == "blocked_by_bot_confirmed" ||
+            normalizedReason == "human_verification_required" ->
+            "Article blocked by source"
+        normalizedReason == "consent_banner_ignored" -> "Article blocked by consent banner"
+        normalizedReason == "article_not_found" -> "Article not found"
+        normalizedReason == "cookie_decrypt_failed" -> "Article login needs refresh"
+        normalizedReason == "http_request_failed" && fetchHttpStatus == 403 -> "Article blocked by source"
+        normalizedReason == "http_request_failed" && fetchHttpStatus == 404 -> "Article not found"
+        normalizedReason.isNotBlank() -> "Article processing failed"
         normalized.isBlank() -> "Article processing failed"
         normalized.contains("blocked") || normalized.contains("paywall") -> "Article blocked by source"
         normalized.contains("unsupported") -> "Article source unsupported"
@@ -33,5 +57,7 @@ internal fun isPendingProcessingFailureMessage(message: String): Boolean {
         normalized.contains("blocked") ||
         normalized.contains("paywall") ||
         normalized.contains("unsupported") ||
-        normalized.contains("access denied")
+        normalized.contains("access denied") ||
+        normalized.contains("not found") ||
+        normalized.contains("login needs refresh")
 }

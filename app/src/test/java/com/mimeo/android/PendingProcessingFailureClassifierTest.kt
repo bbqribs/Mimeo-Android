@@ -30,4 +30,32 @@ class PendingProcessingFailureClassifierTest {
         assertTrue(isPendingProcessingFailureMessage("Article processing failed"))
         assertFalse(isPendingProcessingFailureMessage("Saving..."))
     }
+
+    @Test
+    fun `terminal processing message maps backend failure reasons`() {
+        assertEquals(
+            "Article blocked by paywall",
+            resolveTerminalPendingProcessingMessage(
+                status = "blocked",
+                failureReason = "blocked_by_paywall",
+                fetchHttpStatus = 403,
+            ),
+        )
+        assertEquals(
+            "Article blocked by source",
+            resolveTerminalPendingProcessingMessage(
+                status = "blocked",
+                failureReason = "blocked_by_bot_confirmed",
+                fetchHttpStatus = 403,
+            ),
+        )
+        assertEquals(
+            "Article not found",
+            resolveTerminalPendingProcessingMessage(
+                status = "failed",
+                failureReason = "article_not_found",
+                fetchHttpStatus = 404,
+            ),
+        )
+    }
 }
