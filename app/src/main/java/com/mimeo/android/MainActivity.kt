@@ -119,6 +119,11 @@ import com.mimeo.android.ui.settings.SettingsScreen
 import com.mimeo.android.ui.player.PlayerScreen
 import com.mimeo.android.ui.playlists.PlaylistsScreen
 import com.mimeo.android.ui.queue.QueueScreen
+import com.mimeo.android.ui.signin.SignInScreen
+import com.mimeo.android.ui.signin.SignInState
+import com.mimeo.android.ui.signin.buildAuthDeviceName
+import com.mimeo.android.ui.signin.inferConnectionModeForBaseUrl
+import com.mimeo.android.ui.signin.resolveSignInErrorMessage
 import com.mimeo.android.ui.theme.MimeoTheme
 import com.mimeo.android.work.WorkScheduler
 import java.io.IOException
@@ -143,6 +148,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 private const val DONE_PERCENT_THRESHOLD = 98
 private const val ROUTE_UP_NEXT = "upNext"
+private const val ROUTE_SIGN_IN = "signIn"
 private const val ROUTE_LOCUS = "locus"
 private const val ROUTE_LOCUS_ITEM = "locus/{itemId}"
 private const val ROUTE_COLLECTIONS = "collections"
@@ -284,6 +290,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val snackbarMessages: Flow<UiSnackbarMessage> = _snackbarMessages.receiveAsFlow()
     private val _testingConnection = MutableStateFlow(false)
     val testingConnection: StateFlow<Boolean> = _testingConnection.asStateFlow()
+    private val _signInState = MutableStateFlow<SignInState>(SignInState.Idle)
+    val signInState: StateFlow<SignInState> = _signInState.asStateFlow()
 
     private val _diagnosticsRows = MutableStateFlow<List<ConnectivityDiagnosticRow>>(emptyList())
     val diagnosticsRows: StateFlow<List<ConnectivityDiagnosticRow>> = _diagnosticsRows.asStateFlow()
@@ -567,6 +575,40 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 duration = duration,
             ),
         )
+    }
+
+    fun clearSignInError() {
+        if (_signInState.value is SignInState.Error) {
+            _signInState.value = SignInState.Idle
+        }
+    }
+
+    fun signIn(serverUrl: String, username: String, password: String) {
+        viewModelScope.launch {
+            _signInState.value = SignInState.Loading
+            try {
+                val normalizedBaseUrl = serverUrl.trim().trimEnd('/')
+                val response = apiClient.postAuthToken(
+                    baseUrl = normalizedBaseUrl,
+                    username = username.trim(),
+                    password = password,
+                    deviceName = buildAuthDeviceName(
+                        manufacturer = Build.MANUFACTURER.orEmpty(),
+                        model = Build.MODEL.orEmpty(),
+                    ),
+                )
+                val connectionMode = inferConnectionModeForBaseUrl(normalizedBaseUrl)
+                settingsStore.saveSignedInSession(
+                    baseUrl = normalizedBaseUrl,
+                    connectionMode = connectionMode,
+                    apiToken = response.token,
+                )
+                _signInState.value = SignInState.Idle
+                requestNavigation(ROUTE_UP_NEXT)
+            } catch (error: Exception) {
+                _signInState.value = SignInState.Error(resolveSignInErrorMessage(error))
+            }
+        }
     }
 
     suspend fun saveUrlFromUpNext(
@@ -1849,10 +1891,12 @@ private fun MimeoApp(vm: AppViewModel) {
         BottomNavDestination(ROUTE_SETTINGS, "Settings"),
     )
     val settings by vm.settings.collectAsState()
+    val signInState by vm.signInState.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val pendingNavigationRoute by vm.pendingNavigationRoute.collectAsState()
+    val requiresSignIn = settings.apiToken.isBlank()
     val sessionNowPlayingItemId = vm.currentNowPlayingItemId()
     val routeItemId = navBackStack?.arguments?.let { args ->
         if (args.containsKey("itemId")) args.getInt("itemId").takeIf { it > 0 } else null
@@ -1930,7 +1974,7 @@ private fun MimeoApp(vm: AppViewModel) {
         statusLooksError -> statusMessage
         else -> null
     }
-    val showGlobalBanner = queueOffline || baseUrlHint != null || statusLooksError
+    val showGlobalBanner = !requiresSignIn && (queueOffline || baseUrlHint != null || statusLooksError)
 
     LaunchedEffect(vm, snackbarHostState) {
         vm.snackbarMessages.collect { message ->
@@ -1985,7 +2029,7 @@ private fun MimeoApp(vm: AppViewModel) {
     Scaffold(
         bottomBar = {
             AnimatedVisibility(
-                visible = !(isOnLocusRoute && readerChromeHidden),
+                visible = !requiresSignIn && !(isOnLocusRoute && readerChromeHidden),
                 enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(150)),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
             ) {
@@ -2039,18 +2083,20 @@ private fun MimeoApp(vm: AppViewModel) {
                         onDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                     )
                 }
-                PersistentNowPlayingStrip(
-                    title = nowPlayingStripTitle,
-                    domain = nowPlayingStripDomain,
-                    sourceUrl = nowPlayingStripSourceUrl,
-                    continuous = settings.continuousNowPlayingMarquee,
-                    expanded = isNowPlayingStripExpanded,
-                    onTap = {
-                        if (canExpandNowPlayingTitle) {
-                            isNowPlayingStripExpanded = !isNowPlayingStripExpanded
-                        }
-                    },
-                )
+                if (!requiresSignIn) {
+                    PersistentNowPlayingStrip(
+                        title = nowPlayingStripTitle,
+                        domain = nowPlayingStripDomain,
+                        sourceUrl = nowPlayingStripSourceUrl,
+                        continuous = settings.continuousNowPlayingMarquee,
+                        expanded = isNowPlayingStripExpanded,
+                        onTap = {
+                            if (canExpandNowPlayingTitle) {
+                                isNowPlayingStripExpanded = !isNowPlayingStripExpanded
+                            }
+                        },
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2058,11 +2104,20 @@ private fun MimeoApp(vm: AppViewModel) {
                 ) {
                     NavHost(
                         navController = nav,
-                        startDestination = ROUTE_UP_NEXT,
+                        startDestination = if (requiresSignIn) ROUTE_SIGN_IN else ROUTE_UP_NEXT,
                         modifier = Modifier
                             .fillMaxSize()
                             .background(MaterialTheme.colorScheme.background),
                     ) {
+                        composable(ROUTE_SIGN_IN) {
+                            SignInScreen(
+                                initialServerUrl = settings.baseUrl,
+                                signInState = signInState,
+                                onSignIn = vm::signIn,
+                                onOpenAdvancedSettings = { nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true } },
+                                onClearError = vm::clearSignInError,
+                            )
+                        }
                         composable(ROUTE_COLLECTIONS) {
                             CollectionsScreen(
                                 vm = vm,
@@ -2134,7 +2189,7 @@ private fun MimeoApp(vm: AppViewModel) {
                         }
                     }
 
-                    if (requestedPlayerItemId != null) {
+                    if (!requiresSignIn && requestedPlayerItemId != null) {
                         PlayerScreen(
                             vm = vm,
                             onShowSnackbar = { message, actionLabel, actionKey ->

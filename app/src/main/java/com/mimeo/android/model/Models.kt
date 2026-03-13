@@ -53,6 +53,16 @@ data class DebugVersionResponse(
 )
 
 @Serializable
+data class AuthTokenResponse(
+    val token: String,
+    val id: Int,
+    val name: String,
+    val scope: String,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("expires_at") val expiresAt: String? = null,
+)
+
+@Serializable
 data class PlaybackQueueResponse(
     val count: Int,
     val items: List<PlaybackQueueItem>,
