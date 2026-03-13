@@ -588,6 +588,7 @@ class ShareSaveCoordinator(
             itemId = itemId,
             current = current,
             attemptId = attemptId,
+            destinationPlaylistId = destinationPlaylistId,
         )
         ShareSaveRefreshBus.events.tryEmit(
             ShareRefreshEvent(
@@ -713,6 +714,7 @@ class ShareSaveCoordinator(
         itemId: Int,
         current: AppSettings,
         attemptId: Int,
+        destinationPlaylistId: Int?,
     ) {
         if (!current.autoDownloadSavedArticles) return
         backgroundScope.launch {
@@ -720,6 +722,12 @@ class ShareSaveCoordinator(
                 itemId = itemId,
                 current = current,
                 attemptId = attemptId,
+            )
+            ShareSaveRefreshBus.events.tryEmit(
+                ShareRefreshEvent(
+                    playlistId = destinationPlaylistId,
+                    itemId = itemId,
+                ),
             )
         }
     }

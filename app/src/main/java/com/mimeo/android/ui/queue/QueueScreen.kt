@@ -158,6 +158,7 @@ fun QueueScreen(
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
     var topActionsMenuExpanded by remember { mutableStateOf(false) }
     var showPendingSavesHub by remember { mutableStateOf(false) }
+    var pendingHubStatusMessage by remember { mutableStateOf<String?>(null) }
     var sortMenuExpanded by remember { mutableStateOf(false) }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -312,12 +313,16 @@ fun QueueScreen(
     val retryPendingItem: (PendingManualSaveItem) -> Unit = { item ->
         actionScope.launch {
             if (offline) {
+                pendingHubStatusMessage = "Still offline. Pending saves kept."
                 onShowSnackbar("Still offline. Pending saves kept.", null, null)
                 return@launch
             }
             val retryResult = vm.retryPendingManualSave(item.id) ?: return@launch
             if (retryResult is ShareSaveResult.Saved) {
+                pendingHubStatusMessage = null
                 vm.loadQueue(autoRetryPendingSaves = false)
+            } else {
+                pendingHubStatusMessage = retryResult.notificationText
             }
             if (shouldSurfacePendingRetrySnackbar(retryResult)) {
                 val actionLabel = if (retryResult.opensSettings) "Open Settings" else null
@@ -329,18 +334,22 @@ fun QueueScreen(
     val retryAllPendingItems: () -> Unit = {
         actionScope.launch {
             if (offline) {
+                pendingHubStatusMessage = "Still offline. Pending saves kept."
                 onShowSnackbar("Still offline. Pending saves kept.", null, null)
                 return@launch
             }
             val retrySummary = vm.retryAllPendingManualSaves()
             if (retrySummary.successCount > 0) {
+                pendingHubStatusMessage = null
                 vm.loadQueue(autoRetryPendingSaves = false)
                 onShowSnackbar("Retried ${retrySummary.successCount} pending saves", null, null)
             } else if (retrySummary.firstFailureResult != null) {
+                pendingHubStatusMessage = retrySummary.firstFailureResult.notificationText
                 val actionLabel = if (retrySummary.firstFailureResult.opensSettings) "Open Settings" else null
                 val actionKey = if (retrySummary.firstFailureResult.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
                 onShowSnackbar(retrySummary.firstFailureResult.notificationText, actionLabel, actionKey)
             } else if (pendingManualSaves.isNotEmpty()) {
+                pendingHubStatusMessage = "No pending saves retried. Check API token/connection."
                 onShowSnackbar("No pending saves retried. Check API token/connection.", null, null)
             }
         }
@@ -1077,25 +1086,40 @@ fun QueueScreen(
 
     if (showPendingSavesHub) {
         AlertDialog(
-            onDismissRequest = { showPendingSavesHub = false },
+            onDismissRequest = {
+                showPendingSavesHub = false
+                pendingHubStatusMessage = null
+            },
             title = { Text("Pending saves") },
             text = {
-                if (pendingManualSaves.isEmpty()) {
-                    Text("No pending saves.")
-                } else {
-                    PendingManualRetryCard(
-                        pendingItems = pendingManualSaves,
-                        playlistNameById = playlists.associate { it.id to it.name },
-                        retryInProgress = pendingManualRetryInProgress,
-                        onRetry = retryPendingItem,
-                        onRetryAll = retryAllPendingItems,
-                        onDismiss = { item -> vm.removePendingManualSave(item.id) },
-                        onClearAll = { vm.clearPendingManualSaves() },
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    pendingHubStatusMessage?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    if (pendingManualSaves.isEmpty()) {
+                        Text("No pending saves.")
+                    } else {
+                        PendingManualRetryCard(
+                            pendingItems = pendingManualSaves,
+                            playlistNameById = playlists.associate { it.id to it.name },
+                            retryInProgress = pendingManualRetryInProgress,
+                            onRetry = retryPendingItem,
+                            onRetryAll = retryAllPendingItems,
+                            onDismiss = { item -> vm.removePendingManualSave(item.id) },
+                            onClearAll = { vm.clearPendingManualSaves() },
+                        )
+                    }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showPendingSavesHub = false }) {
+                TextButton(onClick = {
+                    showPendingSavesHub = false
+                    pendingHubStatusMessage = null
+                }) {
                     Text("Close")
                 }
             },

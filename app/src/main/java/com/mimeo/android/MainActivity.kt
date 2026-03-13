@@ -814,6 +814,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 _queueOffline.value = false
                 updateSyncBadgeState()
+                val retrySummary = retryAllPendingManualSaves()
+                if (retrySummary.successCount >= 0) {
+                    loadQueueOnce(autoRetryPendingSaves = false)
+                }
             } catch (e: ApiException) {
                 _statusMessage.value = ConnectionTestMessageResolver.forApiFailure(
                     mode = current.connectionMode,
