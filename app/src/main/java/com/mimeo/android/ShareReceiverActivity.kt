@@ -77,7 +77,19 @@ class ShareReceiverActivity : ComponentActivity() {
                 sharedText = sharedText,
                 sharedTitle = sharedTitle,
             )
-            var surfacedResult = result
+            var surfacedResult: ShareSaveResult? = result
+            if (result is ShareSaveResult.Saved && result.itemId != null && normalizedUrl != null) {
+                settingsStore.markMatchingPendingManualSaveResolved(
+                    source = PendingSaveSource.SHARE,
+                    type = PendingManualSaveType.URL,
+                    urlInput = normalizedUrl,
+                    titleInput = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
+                    bodyInput = null,
+                    destinationPlaylistId = settings.defaultSavePlaylistId,
+                    resolvedItemId = result.itemId,
+                    statusMessage = "Processing...",
+                )
+            }
             if (isRetryablePendingSaveResult(result)) {
                 if (normalizedUrl != null) {
                     settingsStore.enqueuePendingManualSave(
@@ -91,10 +103,12 @@ class ShareReceiverActivity : ComponentActivity() {
                         autoRetryEligible = isAutoRetryEligiblePendingSaveResult(result),
                         incrementRetryCount = false,
                     )
-                    surfacedResult = ShareSaveResult.PendingQueued
+                    surfacedResult = null
                 }
             }
-            notifications.post(surfacedResult, notificationId)
+            if (surfacedResult != null) {
+                notifications.post(surfacedResult, notificationId)
+            }
         }
 
         setIntent(

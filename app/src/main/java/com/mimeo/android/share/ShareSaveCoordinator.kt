@@ -58,6 +58,7 @@ sealed interface ShareSaveResult {
         get() = "Mimeo"
 
     data class Saved(
+        val itemId: Int? = null,
         val destinationName: String,
         val itemTitle: String? = null,
     ) : ShareSaveResult {
@@ -597,6 +598,7 @@ class ShareSaveCoordinator(
             ),
         )
         return ShareSaveResult.Saved(
+            itemId = itemId,
             destinationName = resolveDestinationName(
                 current = current,
                 destinationPlaylistId = destinationPlaylistId,

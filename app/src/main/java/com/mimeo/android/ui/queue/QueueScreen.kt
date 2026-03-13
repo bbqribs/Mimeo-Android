@@ -851,6 +851,17 @@ fun QueueScreen(
                     val actionLabel = if (result.opensSettings) "Open Settings" else null
                     val actionKey = if (result.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
                     onShowSnackbar(result.notificationText, actionLabel, actionKey)
+                    if (result is ShareSaveResult.Saved && result.itemId != null) {
+                        vm.markAcceptedPendingSaveResolved(
+                            source = PendingSaveSource.MANUAL,
+                            type = payload.type,
+                            urlInput = payload.urlInput,
+                            titleInput = payload.titleInput,
+                            bodyInput = payload.bodyInput,
+                            destinationPlaylistId = payload.destinationPlaylistId,
+                            resolvedItemId = result.itemId,
+                        )
+                    }
                     showSaveEntryDialog = false
                     manualUrlInput = ""
                     manualTitleInput = ""
@@ -1140,7 +1151,9 @@ private fun projectPendingItemsForDestination(
             return@filter false
         }
         val matchedQueueItem = queueItems.firstOrNull { item ->
-            normalizePendingComparisonUrl(pending.urlInput) == normalizePendingComparisonUrl(item.url)
+            pending.resolvedItemId?.let { resolvedItemId ->
+                item.itemId == resolvedItemId
+            } ?: (normalizePendingComparisonUrl(pending.urlInput) == normalizePendingComparisonUrl(item.url))
         } ?: return@filter true
         requireOfflineReady && !cachedItemIds.contains(matchedQueueItem.itemId)
     }

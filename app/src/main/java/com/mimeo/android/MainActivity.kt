@@ -669,6 +669,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun markAcceptedPendingSaveResolved(
+        source: PendingSaveSource,
+        type: PendingManualSaveType,
+        urlInput: String,
+        titleInput: String?,
+        bodyInput: String?,
+        destinationPlaylistId: Int?,
+        resolvedItemId: Int,
+    ) {
+        viewModelScope.launch {
+            settingsStore.markMatchingPendingManualSaveResolved(
+                source = source,
+                type = type,
+                urlInput = urlInput,
+                titleInput = titleInput,
+                bodyInput = bodyInput,
+                destinationPlaylistId = destinationPlaylistId,
+                resolvedItemId = resolvedItemId,
+                statusMessage = "Processing...",
+            )
+        }
+    }
+
     fun consumeStatusMessage(expected: String) {
         if (_statusMessage.value == expected) {
             _statusMessage.value = null
@@ -681,7 +704,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         try {
         val item = _pendingManualSaves.value.firstOrNull { it.id == itemId } ?: return null
         val result = retryPendingManualSaveItem(item)
-        if (!isRetryablePendingSaveResult(result)) {
+        if (result is ShareSaveResult.Saved && result.itemId != null) {
+            settingsStore.markPendingManualSaveResolved(
+                itemId = itemId,
+                resolvedItemId = result.itemId,
+                statusMessage = "Processing...",
+            )
+        } else if (!isRetryablePendingSaveResult(result)) {
             settingsStore.removePendingManualSave(itemId)
         } else {
             settingsStore.markPendingManualSaveRetryFailure(
@@ -710,7 +739,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         retryIds.forEach { itemId ->
             val item = _pendingManualSaves.value.firstOrNull { it.id == itemId } ?: return@forEach
             val result = retryPendingManualSaveItem(item)
-            if (!isRetryablePendingSaveResult(result)) {
+            if (result is ShareSaveResult.Saved && result.itemId != null) {
+                settingsStore.markPendingManualSaveResolved(
+                    itemId = itemId,
+                    resolvedItemId = result.itemId,
+                    statusMessage = "Processing...",
+                )
+            } else if (!isRetryablePendingSaveResult(result)) {
                 settingsStore.removePendingManualSave(itemId)
             } else {
                 settingsStore.markPendingManualSaveRetryFailure(
@@ -1109,6 +1144,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         pending: PendingManualSaveItem,
         queueItem: PlaybackQueueItem,
     ): Boolean {
+        pending.resolvedItemId?.let { resolvedItemId ->
+            return queueItem.itemId == resolvedItemId
+        }
         return normalizePendingComparisonUrl(pending.urlInput) == normalizePendingComparisonUrl(queueItem.url)
     }
 

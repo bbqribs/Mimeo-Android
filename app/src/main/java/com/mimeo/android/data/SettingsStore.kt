@@ -374,6 +374,62 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun markPendingManualSaveResolved(
+        itemId: Long,
+        resolvedItemId: Int,
+        statusMessage: String,
+    ) {
+        context.dataStore.edit { prefs ->
+            val existing = decodePendingManualSaves(prefs[pendingManualSavesJsonKey])
+            val updated = existing.map { item ->
+                if (item.id == itemId) {
+                    item.copy(
+                        lastFailureMessage = statusMessage,
+                        autoRetryEligible = false,
+                        resolvedItemId = resolvedItemId,
+                    )
+                } else {
+                    item
+                }
+            }
+            prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(updated)
+        }
+    }
+
+    suspend fun markMatchingPendingManualSaveResolved(
+        source: PendingSaveSource,
+        type: PendingManualSaveType,
+        urlInput: String,
+        titleInput: String?,
+        bodyInput: String?,
+        destinationPlaylistId: Int?,
+        resolvedItemId: Int,
+        statusMessage: String,
+    ) {
+        context.dataStore.edit { prefs ->
+            val existing = decodePendingManualSaves(prefs[pendingManualSavesJsonKey])
+            val updated = existing.map { item ->
+                if (
+                    item.source == source &&
+                    item.type == type &&
+                    item.urlInput == urlInput &&
+                    item.titleInput == titleInput &&
+                    item.bodyInput == bodyInput &&
+                    item.destinationPlaylistId == destinationPlaylistId
+                ) {
+                    item.copy(
+                        lastFailureMessage = statusMessage,
+                        autoRetryEligible = false,
+                        resolvedItemId = resolvedItemId,
+                    )
+                } else {
+                    item
+                }
+            }
+            prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(updated)
+        }
+    }
+
     suspend fun removePendingManualSave(itemId: Long) {
         context.dataStore.edit { prefs ->
             val existing = decodePendingManualSaves(prefs[pendingManualSavesJsonKey])
