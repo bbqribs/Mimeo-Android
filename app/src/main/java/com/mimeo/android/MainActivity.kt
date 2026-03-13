@@ -166,6 +166,7 @@ private const val ACTION_KEY_OPEN_DIAGNOSTICS = "open_diagnostics"
 private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
 private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
 private const val DEBUG_TARGET_ITEM_ID = 409
+private const val INITIAL_SIGN_IN_AUTO_DOWNLOAD_LIMIT = 8
 
 private data class BottomNavDestination(
     val route: String,
@@ -183,6 +184,21 @@ data class PendingRetryBatchResult(
     val successCount: Int,
     val firstFailureResult: ShareSaveResult? = null,
 )
+
+internal fun selectInitialQueueHydrationTargets(
+    queueItems: List<PlaybackQueueItem>,
+    cachedItemIds: Set<Int>,
+    limit: Int = INITIAL_SIGN_IN_AUTO_DOWNLOAD_LIMIT,
+): List<Int> {
+    if (limit <= 0) return emptyList()
+    return queueItems
+        .asSequence()
+        .map { it.itemId }
+        .distinct()
+        .filterNot { cachedItemIds.contains(it) }
+        .take(limit)
+        .toList()
+}
 
 private fun isLikelyPhysicalDevice(): Boolean {
     val fingerprint = Build.FINGERPRINT.lowercase()
@@ -328,6 +344,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _settingsScrollOffset = MutableStateFlow(0)
     val settingsScrollOffset: StateFlow<Int> = _settingsScrollOffset.asStateFlow()
     private var lastPendingAutoRetryAtMs: Long = 0L
+    private var pendingInitialPostSignInHydration = false
     private val connectivityManager =
         application.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
     private var connectivityCallback: ConnectivityManager.NetworkCallback? = null
@@ -339,6 +356,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             settingsStore.settingsFlow.collect { next ->
                 _settings.value = next
                 if (previous.apiToken.isBlank() && next.apiToken.isNotBlank()) {
+                    pendingInitialPostSignInHydration = true
                     loadQueue()
                 }
                 previous = next
@@ -968,6 +986,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             _cachedItemIds.value = offlineReadyIds
             settingsStore.saveQueueSnapshot(current.selectedPlaylistId, queue)
+            triggerInitialPostSignInHydrationIfNeeded(
+                current = current,
+                queueItems = queue.items,
+                cachedItemIds = offlineReadyIds,
+            )
             syncPendingSaveProcessingFailures(
                 queueItems = queue.items,
                 selectedPlaylistId = current.selectedPlaylistId,
@@ -2025,6 +2048,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             candidates.mapNotNull { it.activeContentVersionId },
         )
         return resolveOfflineReadyItemIds(candidates, cachedByItemId, cachedByVersion)
+    }
+
+    private fun triggerInitialPostSignInHydrationIfNeeded(
+        current: AppSettings,
+        queueItems: List<PlaybackQueueItem>,
+        cachedItemIds: Set<Int>,
+    ) {
+        if (!pendingInitialPostSignInHydration) return
+        pendingInitialPostSignInHydration = false
+        if (!current.autoDownloadSavedArticles) return
+        val targets = selectInitialQueueHydrationTargets(
+            queueItems = queueItems,
+            cachedItemIds = cachedItemIds,
+        )
+        if (targets.isEmpty()) return
+        viewModelScope.launch {
+            targets.forEach { itemId ->
+                downloadItemForOffline(itemId)
+            }
+        }
     }
 
     private fun updateSyncBadgeState(pendingCount: Int = _pendingProgressCount.value) {
