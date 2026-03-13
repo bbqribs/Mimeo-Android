@@ -65,6 +65,8 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
+import com.mimeo.android.isPendingProcessingFailureMessage
+import com.mimeo.android.isTerminalPendingProcessingStatus
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
@@ -72,6 +74,7 @@ import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.extractFirstHttpUrl
+import com.mimeo.android.share.isRetryablePendingSaveResult
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.components.StatusBanner
@@ -150,12 +153,14 @@ fun QueueScreen(
     val pullRefreshThresholdPx = pullRefreshMaxPx
     var pullRefreshDistancePx by remember { mutableFloatStateOf(0f) }
     var pendingFocusId by remember { mutableIntStateOf(-1) }
+    var previousProjectedPendingIds by remember { mutableStateOf<List<Long>>(emptyList()) }
     var playlistMenuExpanded by remember { mutableStateOf(false) }
     var rowMenuItemId by remember { mutableIntStateOf(-1) }
     var playlistPickerItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
     var topActionsMenuExpanded by remember { mutableStateOf(false) }
     var showPendingSavesHub by remember { mutableStateOf(false) }
+    var pendingHubStatusMessage by remember { mutableStateOf<String?>(null) }
     var sortMenuExpanded by remember { mutableStateOf(false) }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -308,10 +313,17 @@ fun QueueScreen(
     val retryPendingItem: (PendingManualSaveItem) -> Unit = { item ->
         actionScope.launch {
             if (offline) {
+                pendingHubStatusMessage = "Still offline. Pending saves kept."
                 onShowSnackbar("Still offline. Pending saves kept.", null, null)
                 return@launch
             }
             val retryResult = vm.retryPendingManualSave(item.id) ?: return@launch
+            if (retryResult is ShareSaveResult.Saved) {
+                pendingHubStatusMessage = null
+                vm.loadQueue(autoRetryPendingSaves = false)
+            } else {
+                pendingHubStatusMessage = retryResult.notificationText
+            }
             if (shouldSurfacePendingRetrySnackbar(retryResult)) {
                 val actionLabel = if (retryResult.opensSettings) "Open Settings" else null
                 val actionKey = if (retryResult.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
@@ -322,12 +334,23 @@ fun QueueScreen(
     val retryAllPendingItems: () -> Unit = {
         actionScope.launch {
             if (offline) {
+                pendingHubStatusMessage = "Still offline. Pending saves kept."
                 onShowSnackbar("Still offline. Pending saves kept.", null, null)
                 return@launch
             }
-            val retrySuccessCount = vm.retryAllPendingManualSaves()
-            if (retrySuccessCount > 0) {
-                onShowSnackbar("Retried $retrySuccessCount pending saves", null, null)
+            val retrySummary = vm.retryAllPendingManualSaves()
+            if (retrySummary.successCount > 0) {
+                pendingHubStatusMessage = null
+                vm.loadQueue(autoRetryPendingSaves = false)
+                onShowSnackbar("Retried ${retrySummary.successCount} pending saves", null, null)
+            } else if (retrySummary.firstFailureResult != null) {
+                pendingHubStatusMessage = retrySummary.firstFailureResult.notificationText
+                val actionLabel = if (retrySummary.firstFailureResult.opensSettings) "Open Settings" else null
+                val actionKey = if (retrySummary.firstFailureResult.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
+                onShowSnackbar(retrySummary.firstFailureResult.notificationText, actionLabel, actionKey)
+            } else if (pendingManualSaves.isNotEmpty()) {
+                pendingHubStatusMessage = "No pending saves retried. Check API token/connection."
+                onShowSnackbar("No pending saves retried. Check API token/connection.", null, null)
             }
         }
     }
@@ -341,6 +364,16 @@ fun QueueScreen(
             vm.consumePendingQueueFocusItemId(focusedItemId)
             pendingFocusId = -1
         }
+    }
+
+    LaunchedEffect(projectedPendingItems) {
+        val currentIds = projectedPendingItems.map { it.id }
+        val previousIds = previousProjectedPendingIds.toHashSet()
+        val hasNewProjectedPending = currentIds.any { it !in previousIds }
+        if (hasNewProjectedPending && currentIds.isNotEmpty()) {
+            listState.animateScrollToItem(0)
+        }
+        previousProjectedPendingIds = currentIds
     }
 
     Column(
@@ -631,6 +664,11 @@ fun QueueScreen(
                         retryInProgress = pendingManualRetryInProgress,
                         onRetry = { retryPendingItem(item) },
                         onDismiss = { vm.removePendingManualSave(item.id) },
+                        onTap = {
+                            if (isPendingFailureState(item.lastFailureMessage)) {
+                                onShowSnackbar(item.lastFailureMessage, null, null)
+                            }
+                        },
                     )
                     if (index < projectedPendingItems.lastIndex || displayedItems.isNotEmpty()) {
                         ThinQueueDivider()
@@ -646,6 +684,20 @@ fun QueueScreen(
                         onOpenPlayer = {
                             vm.startNowPlayingSession(item.itemId)
                             onOpenPlayer(item.itemId)
+                        },
+                        onDownload = {
+                            actionScope.launch {
+                                if (cachedItemIds.contains(item.itemId)) {
+                                    onShowSnackbar("Already available offline", null, null)
+                                    return@launch
+                                }
+                                val result = vm.downloadItemForOffline(item.itemId)
+                                if (result.isSuccess) {
+                                    onShowSnackbar("Downloaded for offline reading", null, null)
+                                } else {
+                                    onShowSnackbar("Couldn't download article", null, null)
+                                }
+                            }
                         },
                         onOpenPlaylistPicker = {
                             vm.refreshPlaylists()
@@ -746,13 +798,24 @@ fun QueueScreen(
                 )
             }
             manualActivePayload = payload
-            fun queueCurrentManualSaveAndClose(statusMessage: String) {
+            vm.enqueueAcceptedPendingSave(
+                source = PendingSaveSource.MANUAL,
+                type = payload.type,
+                urlInput = payload.urlInput,
+                titleInput = payload.titleInput,
+                bodyInput = payload.bodyInput,
+                destinationPlaylistId = payload.destinationPlaylistId,
+            )
+            fun queueCurrentManualSaveAndClose(
+                statusMessage: String,
+                pendingResult: ShareSaveResult = ShareSaveResult.NetworkError,
+            ) {
                 vm.queueFailedManualSave(
                     type = payload.type,
                     urlInput = payload.urlInput,
                     titleInput = payload.titleInput,
                     bodyInput = payload.bodyInput,
-                    result = ShareSaveResult.NetworkError,
+                    result = pendingResult,
                     destinationPlaylistId = payload.destinationPlaylistId,
                 )
                 showSaveEntryDialog = false
@@ -765,7 +828,7 @@ fun QueueScreen(
                 onShowSnackbar(statusMessage, null, null)
             }
             if (offline) {
-                queueCurrentManualSaveAndClose("Added to pending manual saves")
+                queueCurrentManualSaveAndClose(ShareSaveResult.PendingQueued.notificationText)
                 manualSaveJob = null
                 return
             }
@@ -789,23 +852,35 @@ fun QueueScreen(
                 if (manualSaveAttemptVersion != attemptVersion) {
                     return
                 }
-                val actionLabel = if (result.opensSettings) "Open Settings" else null
-                val actionKey = if (result.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
-                onShowSnackbar(result.notificationText, actionLabel, actionKey)
                 if (isManualSaveSuccess(result)) {
-                    vm.removeMatchingPendingManualSave(
-                        type = payload.type,
-                        urlInput = payload.urlInput,
-                        titleInput = payload.titleInput,
-                        bodyInput = payload.bodyInput,
-                        destinationPlaylistId = payload.destinationPlaylistId,
-                    )
+                    val actionLabel = if (result.opensSettings) "Open Settings" else null
+                    val actionKey = if (result.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
+                    onShowSnackbar(result.notificationText, actionLabel, actionKey)
+                    if (result is ShareSaveResult.Saved && result.itemId != null) {
+                        vm.markAcceptedPendingSaveResolved(
+                            source = PendingSaveSource.MANUAL,
+                            type = payload.type,
+                            urlInput = payload.urlInput,
+                            titleInput = payload.titleInput,
+                            bodyInput = payload.bodyInput,
+                            destinationPlaylistId = payload.destinationPlaylistId,
+                            resolvedItemId = result.itemId,
+                        )
+                    }
                     showSaveEntryDialog = false
                     manualUrlInput = ""
                     manualTitleInput = ""
                     manualBodyInput = ""
                     manualSubmitError = null
+                } else if (isRetryablePendingSaveResult(result)) {
+                    queueCurrentManualSaveAndClose(
+                        statusMessage = ShareSaveResult.PendingQueued.notificationText,
+                        pendingResult = result,
+                    )
                 } else {
+                    val actionLabel = if (result.opensSettings) "Open Settings" else null
+                    val actionKey = if (result.opensSettings) ACTION_KEY_OPEN_SETTINGS else null
+                    onShowSnackbar(result.notificationText, actionLabel, actionKey)
                     vm.queueFailedManualSave(
                         type = payload.type,
                         urlInput = payload.urlInput,
@@ -1003,7 +1078,7 @@ fun QueueScreen(
                             manualUrlError = null
                             manualBodyError = null
                             manualSubmitError = null
-                            onShowSnackbar("Added to pending manual saves", null, null)
+                            onShowSnackbar(ShareSaveResult.PendingQueued.notificationText, null, null)
                         },
                     ) {
                         Text("Queue now")
@@ -1027,25 +1102,40 @@ fun QueueScreen(
 
     if (showPendingSavesHub) {
         AlertDialog(
-            onDismissRequest = { showPendingSavesHub = false },
+            onDismissRequest = {
+                showPendingSavesHub = false
+                pendingHubStatusMessage = null
+            },
             title = { Text("Pending saves") },
             text = {
-                if (pendingManualSaves.isEmpty()) {
-                    Text("No pending saves.")
-                } else {
-                    PendingManualRetryCard(
-                        pendingItems = pendingManualSaves,
-                        playlistNameById = playlists.associate { it.id to it.name },
-                        retryInProgress = pendingManualRetryInProgress,
-                        onRetry = retryPendingItem,
-                        onRetryAll = retryAllPendingItems,
-                        onDismiss = { item -> vm.removePendingManualSave(item.id) },
-                        onClearAll = { vm.clearPendingManualSaves() },
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    pendingHubStatusMessage?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    if (pendingManualSaves.isEmpty()) {
+                        Text("No pending saves.")
+                    } else {
+                        PendingManualRetryCard(
+                            pendingItems = pendingManualSaves,
+                            playlistNameById = playlists.associate { it.id to it.name },
+                            retryInProgress = pendingManualRetryInProgress,
+                            onRetry = retryPendingItem,
+                            onRetryAll = retryAllPendingItems,
+                            onDismiss = { item -> vm.removePendingManualSave(item.id) },
+                            onClearAll = { vm.clearPendingManualSaves() },
+                        )
+                    }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showPendingSavesHub = false }) {
+                TextButton(onClick = {
+                    showPendingSavesHub = false
+                    pendingHubStatusMessage = null
+                }) {
                     Text("Close")
                 }
             },
@@ -1059,15 +1149,16 @@ private fun projectPendingItemsForDestination(
     selectedPlaylistId: Int?,
     queueItems: List<PlaybackQueueItem>,
 ): List<PendingManualSaveItem> {
-    val knownQueueUrls = queueItems.mapNotNullTo(mutableSetOf()) { item ->
-        normalizePendingComparisonUrl(item.url)
-    }
     return pendingItems.filter { pending ->
         if (pending.destinationPlaylistId != selectedPlaylistId) {
             return@filter false
         }
-        val normalizedPendingUrl = normalizePendingComparisonUrl(pending.urlInput)
-        normalizedPendingUrl == null || normalizedPendingUrl !in knownQueueUrls
+        val matchedQueueItem = queueItems.firstOrNull { item ->
+            pending.resolvedItemId?.let { resolvedItemId ->
+                item.itemId == resolvedItemId
+            } ?: (normalizePendingComparisonUrl(pending.urlInput) == normalizePendingComparisonUrl(item.url))
+        } ?: return@filter true
+        hasFailedPendingProjectionStatus(matchedQueueItem) || pending.resolvedItemId == null
     }
 }
 
@@ -1190,6 +1281,7 @@ internal fun formatPendingDestinationLabel(
 internal fun classifyPendingFailureReason(message: String): String {
     val lower = message.lowercase()
     return when {
+        lower.contains("saving") -> "Saving..."
         lower.contains("unauthorized") || lower.contains("forbidden") || lower.contains("token") ->
             "Auth required"
         lower.contains("timeout") || lower.contains("timed out") ->
@@ -1197,6 +1289,10 @@ internal fun classifyPendingFailureReason(message: String): String {
         lower.contains("network") || lower.contains("offline") ||
             lower.contains("couldn't reach server") || lower.contains("could not reach server") ->
             "Backend unreachable"
+        lower.contains("blocked") || lower.contains("paywall") ->
+            "Blocked by source"
+        lower.contains("unsupported") ->
+            "Source unsupported"
         else -> "Save failed"
     }
 }
@@ -1370,19 +1466,25 @@ private fun PendingProjectedQueueItemCard(
     retryInProgress: Boolean,
     onRetry: () -> Unit,
     onDismiss: () -> Unit,
+    onTap: () -> Unit,
 ) {
     var actionsMenuExpanded by remember { mutableStateOf(false) }
     val hostLabel = resolvePendingHost(item.urlInput)
     val subLabel = hostLabel
     val primaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f)
     val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
+    val failedProcessing = isPendingFailureState(item.lastFailureMessage)
     val titleLine = when {
         !item.titleInput.isNullOrBlank() -> item.titleInput
         item.urlInput.isNotBlank() -> item.urlInput
         item.type == PendingManualSaveType.TEXT -> "Pasted text"
         else -> "(pending save)"
     }
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = failedProcessing, onClick = onTap),
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1450,8 +1552,18 @@ private fun PendingProjectedQueueItemCard(
                 )
                 Box(modifier = Modifier.size(8.dp))
                 Icon(
-                    painter = painterResource(id = R.drawable.msr_sync_problem_24),
-                    contentDescription = "Pending and unavailable offline",
+                    painter = painterResource(
+                        id = if (failedProcessing) {
+                            R.drawable.msr_error_circle_24
+                        } else {
+                            R.drawable.msr_sync_problem_24
+                        },
+                    ),
+                    contentDescription = if (failedProcessing) {
+                        "Pending save failed"
+                    } else {
+                        "Pending and unavailable offline"
+                    },
                     tint = MaterialTheme.colorScheme.error,
                     modifier = Modifier
                         .padding(start = 6.dp)
@@ -1470,11 +1582,20 @@ private fun resolvePendingHost(urlInput: String): String {
     }.getOrNull() ?: "Pending"
 }
 
+private fun hasFailedPendingProjectionStatus(queueItem: PlaybackQueueItem): Boolean {
+    return isTerminalPendingProcessingStatus(queueItem.status)
+}
+
+private fun isPendingFailureState(message: String): Boolean {
+    return isPendingProcessingFailureMessage(message)
+}
+
 @Composable
 private fun QueueItemCard(
     item: PlaybackQueueItem,
     cached: Boolean,
     onOpenPlayer: () -> Unit,
+    onDownload: () -> Unit,
     onOpenPlaylistPicker: () -> Unit,
     isMenuExpanded: Boolean,
     onDismissMenu: () -> Unit,
@@ -1534,6 +1655,13 @@ private fun QueueItemCard(
                         expanded = isMenuExpanded,
                         onDismissRequest = onDismissMenu,
                     ) {
+                        DropdownMenuItem(
+                            text = { Text(if (cached) "Downloaded" else "Download") },
+                            onClick = {
+                                onDismissMenu()
+                                onDownload()
+                            },
+                        )
                         DropdownMenuItem(
                             text = { Text("Playlists...") },
                             onClick = {

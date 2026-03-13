@@ -20,6 +20,7 @@ import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.share.ShareSaveCoordinator
 import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.extractFirstHttpUrl
+import com.mimeo.android.share.isAutoRetryEligiblePendingSaveResult
 import com.mimeo.android.share.isRetryablePendingSaveResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -54,14 +55,42 @@ class ShareReceiverActivity : ComponentActivity() {
         val sharedText = incomingIntent.getStringExtra(Intent.EXTRA_TEXT)
         val sharedTitle = incomingIntent.getStringExtra(Intent.EXTRA_SUBJECT)
         backgroundScope.launch {
+            val notifications = ShareResultNotifications(applicationContext)
+            val notificationId = notifications.postAccepted()
             val settingsStore = SettingsStore(applicationContext)
             val settings = settingsStore.settingsFlow.first()
+            val normalizedUrl = extractFirstHttpUrl(sharedText)
+            if (normalizedUrl != null) {
+                settingsStore.enqueuePendingManualSave(
+                    source = PendingSaveSource.SHARE,
+                    type = PendingManualSaveType.URL,
+                    urlInput = normalizedUrl,
+                    titleInput = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
+                    bodyInput = null,
+                    destinationPlaylistId = settings.defaultSavePlaylistId,
+                    lastFailureMessage = "Saving...",
+                    autoRetryEligible = false,
+                    incrementRetryCount = false,
+                )
+            }
             val result = ShareSaveCoordinator(applicationContext).saveSharedText(
                 sharedText = sharedText,
                 sharedTitle = sharedTitle,
             )
+            var surfacedResult: ShareSaveResult? = result
+            if (result is ShareSaveResult.Saved && result.itemId != null && normalizedUrl != null) {
+                settingsStore.markMatchingPendingManualSaveResolved(
+                    source = PendingSaveSource.SHARE,
+                    type = PendingManualSaveType.URL,
+                    urlInput = normalizedUrl,
+                    titleInput = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
+                    bodyInput = null,
+                    destinationPlaylistId = settings.defaultSavePlaylistId,
+                    resolvedItemId = result.itemId,
+                    statusMessage = "Processing...",
+                )
+            }
             if (isRetryablePendingSaveResult(result)) {
-                val normalizedUrl = extractFirstHttpUrl(sharedText)
                 if (normalizedUrl != null) {
                     settingsStore.enqueuePendingManualSave(
                         source = PendingSaveSource.SHARE,
@@ -71,11 +100,15 @@ class ShareReceiverActivity : ComponentActivity() {
                         bodyInput = null,
                         destinationPlaylistId = settings.defaultSavePlaylistId,
                         lastFailureMessage = result.notificationText,
-                        autoRetryEligible = true,
+                        autoRetryEligible = isAutoRetryEligiblePendingSaveResult(result),
+                        incrementRetryCount = false,
                     )
+                    surfacedResult = null
                 }
             }
-            ShareResultNotifications(applicationContext).post(result)
+            if (surfacedResult != null) {
+                notifications.post(surfacedResult, notificationId)
+            }
         }
 
         setIntent(
@@ -104,7 +137,25 @@ class ShareReceiverActivity : ComponentActivity() {
 private class ShareResultNotifications(
     private val context: Context,
 ) {
-    suspend fun post(result: ShareSaveResult) {
+    suspend fun postAccepted(): Int? {
+        if (!canPostNotifications()) return null
+        ensureChannel()
+        val notificationId = nextNotificationId()
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.msr_view_list_24)
+            .setLargeIcon(buildBrandLargeIcon())
+            .setContentTitle("Mimeo")
+            .setContentText("Received. Saving...")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("Received. Saving..."))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setAutoCancel(true)
+            .setTimeoutAfter(3_000L)
+        NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+        return notificationId
+    }
+
+    suspend fun post(result: ShareSaveResult, notificationId: Int? = null) {
         if (!canPostNotifications()) return
 
         val settings = SettingsStore(context.applicationContext).settingsFlow.first()
@@ -140,7 +191,7 @@ private class ShareResultNotifications(
             )
         }
 
-        NotificationManagerCompat.from(context).notify(nextNotificationId(), builder.build())
+        NotificationManagerCompat.from(context).notify(notificationId ?: nextNotificationId(), builder.build())
     }
 
     private fun ensureChannel() {

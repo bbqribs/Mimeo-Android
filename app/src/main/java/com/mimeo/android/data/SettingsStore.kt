@@ -330,6 +330,7 @@ class SettingsStore(private val context: Context) {
         destinationPlaylistId: Int?,
         lastFailureMessage: String,
         autoRetryEligible: Boolean,
+        incrementRetryCount: Boolean = true,
     ) {
         context.dataStore.edit { prefs ->
             val existing = decodePendingManualSaves(prefs[pendingManualSavesJsonKey])
@@ -345,7 +346,7 @@ class SettingsStore(private val context: Context) {
                 existing.mapIndexed { index, item ->
                     if (index == duplicateIndex) {
                         item.copy(
-                            retryCount = item.retryCount + 1,
+                            retryCount = if (incrementRetryCount) item.retryCount + 1 else item.retryCount,
                             lastFailureMessage = lastFailureMessage,
                             autoRetryEligible = autoRetryEligible,
                         )
@@ -368,6 +369,83 @@ class SettingsStore(private val context: Context) {
                         autoRetryEligible = autoRetryEligible,
                     ),
                 ) + existing
+            }
+            prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(updated)
+        }
+    }
+
+    suspend fun markPendingManualSaveResolved(
+        itemId: Long,
+        resolvedItemId: Int,
+        statusMessage: String,
+    ) {
+        context.dataStore.edit { prefs ->
+            val existing = decodePendingManualSaves(prefs[pendingManualSavesJsonKey])
+            val updated = existing.map { item ->
+                if (item.id == itemId) {
+                    item.copy(
+                        lastFailureMessage = statusMessage,
+                        autoRetryEligible = false,
+                        resolvedItemId = resolvedItemId,
+                    )
+                } else {
+                    item
+                }
+            }
+            prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(updated)
+        }
+    }
+
+    suspend fun updatePendingManualSaveStatus(
+        itemId: Long,
+        statusMessage: String,
+        autoRetryEligible: Boolean,
+    ) {
+        context.dataStore.edit { prefs ->
+            val existing = decodePendingManualSaves(prefs[pendingManualSavesJsonKey])
+            val updated = existing.map { item ->
+                if (item.id == itemId) {
+                    item.copy(
+                        lastFailureMessage = statusMessage,
+                        autoRetryEligible = autoRetryEligible,
+                    )
+                } else {
+                    item
+                }
+            }
+            prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(updated)
+        }
+    }
+
+    suspend fun markMatchingPendingManualSaveResolved(
+        source: PendingSaveSource,
+        type: PendingManualSaveType,
+        urlInput: String,
+        titleInput: String?,
+        bodyInput: String?,
+        destinationPlaylistId: Int?,
+        resolvedItemId: Int,
+        statusMessage: String,
+    ) {
+        context.dataStore.edit { prefs ->
+            val existing = decodePendingManualSaves(prefs[pendingManualSavesJsonKey])
+            val updated = existing.map { item ->
+                if (
+                    item.source == source &&
+                    item.type == type &&
+                    item.urlInput == urlInput &&
+                    item.titleInput == titleInput &&
+                    item.bodyInput == bodyInput &&
+                    item.destinationPlaylistId == destinationPlaylistId
+                ) {
+                    item.copy(
+                        lastFailureMessage = statusMessage,
+                        autoRetryEligible = false,
+                        resolvedItemId = resolvedItemId,
+                    )
+                } else {
+                    item
+                }
             }
             prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(updated)
         }

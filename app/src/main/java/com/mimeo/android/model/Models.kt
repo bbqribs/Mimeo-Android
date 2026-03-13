@@ -267,4 +267,5 @@ data class PendingManualSaveItem(
     val retryCount: Int = 0,
     val lastFailureMessage: String,
     val autoRetryEligible: Boolean,
+    val resolvedItemId: Int? = null,
 )

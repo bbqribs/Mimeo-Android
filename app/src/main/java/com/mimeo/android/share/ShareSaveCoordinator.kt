@@ -1,6 +1,8 @@
 package com.mimeo.android.share
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.util.Log
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.data.AppDatabase
@@ -9,9 +11,14 @@ import com.mimeo.android.data.ApiException
 import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.repository.PlaybackRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.net.ConnectException
 import java.net.SocketException
 import java.net.SocketTimeoutException
@@ -20,6 +27,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.net.ssl.SSLException
 
 private const val SHARE_CREATE_TIMEOUT_MS = 45_000L
+private const val SHARE_ONLINE_DEADLINE_MS = 8_000L
+private const val MANUAL_SAVE_ONLINE_DEADLINE_MS = 2_000L
 private const val SHARE_POST_FAILURE_RESOLUTION_ATTEMPTS = 2
 private const val SHARE_POST_FAILURE_RESOLUTION_DELAY_MS = 1_200L
 private const val AUTO_DOWNLOAD_MAX_ATTEMPTS = 4
@@ -49,6 +58,7 @@ sealed interface ShareSaveResult {
         get() = "Mimeo"
 
     data class Saved(
+        val itemId: Int? = null,
         val destinationName: String,
         val itemTitle: String? = null,
     ) : ShareSaveResult {
@@ -93,6 +103,11 @@ sealed interface ShareSaveResult {
         override val notificationText: String = "Couldn't save article"
         override val opensSettings: Boolean = false
     }
+
+    data object PendingQueued : ShareSaveResult {
+        override val notificationText: String = "Added to Pending Saves"
+        override val opensSettings: Boolean = false
+    }
 }
 
 class ShareSaveCoordinator(
@@ -105,6 +120,9 @@ class ShareSaveCoordinator(
         appContext = context.applicationContext,
     ),
 ) {
+    private val appContext = context.applicationContext
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     suspend fun saveSharedText(
         sharedText: String?,
         sharedTitle: String?,
@@ -149,16 +167,42 @@ class ShareSaveCoordinator(
             )
             return ShareSaveResult.MissingToken
         }
+        if (isClearlyOffline()) {
+            recordSnapshot(
+                attemptId = attemptId,
+                baseUrl = current.baseUrl,
+                tokenPresent = true,
+                destination = destination,
+                requestUrls = requestUrls,
+                result = ShareSaveResult.NetworkError,
+                phase = "offline_short_circuit",
+            )
+            return ShareSaveResult.NetworkError
+        }
 
         return try {
-            val article = apiClient.createItem(
-                baseUrl = current.baseUrl,
-                token = current.apiToken,
-                url = url,
-                idempotencyKey = buildShareIdempotencyKey(url),
-                title = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
-                timeoutMs = SHARE_CREATE_TIMEOUT_MS,
-            )
+            val article = withTimeoutOrNull(SHARE_ONLINE_DEADLINE_MS) {
+                apiClient.createItem(
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
+                    url = url,
+                    idempotencyKey = buildShareIdempotencyKey(url),
+                    title = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
+                    timeoutMs = SHARE_CREATE_TIMEOUT_MS,
+                )
+            }
+            if (article == null) {
+                recordSnapshot(
+                    attemptId = attemptId,
+                    baseUrl = current.baseUrl,
+                    tokenPresent = true,
+                    destination = destination,
+                    requestUrls = requestUrls,
+                    result = ShareSaveResult.TimedOut,
+                    phase = "deadline_timeout",
+                )
+                return ShareSaveResult.TimedOut
+            }
             val result = completeSavedItem(
                 itemId = article.id,
                 itemTitle = article.title,
@@ -282,15 +326,41 @@ class ShareSaveCoordinator(
             )
             return ShareSaveResult.MissingToken
         }
+        if (isClearlyOffline()) {
+            recordSnapshot(
+                attemptId = attemptId,
+                baseUrl = current.baseUrl,
+                tokenPresent = true,
+                destination = destination,
+                requestUrls = requestUrls,
+                result = ShareSaveResult.NetworkError,
+                phase = "offline_short_circuit",
+            )
+            return ShareSaveResult.NetworkError
+        }
 
         return try {
-            val article = apiClient.createManualTextItem(
-                baseUrl = current.baseUrl,
-                token = current.apiToken,
-                url = normalizedUrl,
-                text = normalizedBody,
-                title = titleInput?.trim()?.takeIf { it.isNotEmpty() },
-            )
+            val article = withTimeoutOrNull(MANUAL_SAVE_ONLINE_DEADLINE_MS) {
+                apiClient.createManualTextItem(
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
+                    url = normalizedUrl,
+                    text = normalizedBody,
+                    title = titleInput?.trim()?.takeIf { it.isNotEmpty() },
+                )
+            }
+            if (article == null) {
+                recordSnapshot(
+                    attemptId = attemptId,
+                    baseUrl = current.baseUrl,
+                    tokenPresent = true,
+                    destination = destination,
+                    requestUrls = requestUrls,
+                    result = ShareSaveResult.TimedOut,
+                    phase = "deadline_timeout",
+                )
+                return ShareSaveResult.TimedOut
+            }
             val result = completeSavedItem(
                 itemId = article.id,
                 itemTitle = article.title,
@@ -515,10 +585,11 @@ class ShareSaveCoordinator(
             playlistId = destinationPlaylistId,
             current = current,
         )
-        autoDownloadIfEnabled(
+        autoDownloadIfEnabledAsync(
             itemId = itemId,
             current = current,
             attemptId = attemptId,
+            destinationPlaylistId = destinationPlaylistId,
         )
         ShareSaveRefreshBus.events.tryEmit(
             ShareRefreshEvent(
@@ -527,6 +598,7 @@ class ShareSaveCoordinator(
             ),
         )
         return ShareSaveResult.Saved(
+            itemId = itemId,
             destinationName = resolveDestinationName(
                 current = current,
                 destinationPlaylistId = destinationPlaylistId,
@@ -638,6 +710,37 @@ class ShareSaveCoordinator(
             return error.statusCode in setOf(404, 409, 425, 429, 500, 502, 503, 504)
         }
         return false
+    }
+
+    private fun autoDownloadIfEnabledAsync(
+        itemId: Int,
+        current: AppSettings,
+        attemptId: Int,
+        destinationPlaylistId: Int?,
+    ) {
+        if (!current.autoDownloadSavedArticles) return
+        backgroundScope.launch {
+            autoDownloadIfEnabled(
+                itemId = itemId,
+                current = current,
+                attemptId = attemptId,
+            )
+            ShareSaveRefreshBus.events.tryEmit(
+                ShareRefreshEvent(
+                    playlistId = destinationPlaylistId,
+                    itemId = itemId,
+                ),
+            )
+        }
+    }
+
+    private fun isClearlyOffline(): Boolean {
+        val manager = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        val network = manager.activeNetwork ?: return true
+        val capabilities = manager.getNetworkCapabilities(network) ?: return true
+        val hasInternet = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        val validated = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        return !(hasInternet && validated)
     }
 
     private fun recordSnapshot(
