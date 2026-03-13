@@ -239,8 +239,6 @@ fun QueueScreen(
         pendingItems = pendingManualSaves,
         selectedPlaylistId = settings.selectedPlaylistId,
         queueItems = items,
-        cachedItemIds = cachedItemIds,
-        requireOfflineReady = settings.autoDownloadSavedArticles,
     )
     val hasVisibleQueueContent = displayedItems.isNotEmpty() || projectedPendingItems.isNotEmpty()
     val pullRefreshProgress = (pullRefreshDistancePx / pullRefreshThresholdPx).coerceIn(0f, 1f)
@@ -1143,19 +1141,16 @@ private fun projectPendingItemsForDestination(
     pendingItems: List<PendingManualSaveItem>,
     selectedPlaylistId: Int?,
     queueItems: List<PlaybackQueueItem>,
-    cachedItemIds: Set<Int>,
-    requireOfflineReady: Boolean,
 ): List<PendingManualSaveItem> {
     return pendingItems.filter { pending ->
         if (pending.destinationPlaylistId != selectedPlaylistId) {
             return@filter false
         }
-        val matchedQueueItem = queueItems.firstOrNull { item ->
+        queueItems.firstOrNull { item ->
             pending.resolvedItemId?.let { resolvedItemId ->
                 item.itemId == resolvedItemId
             } ?: (normalizePendingComparisonUrl(pending.urlInput) == normalizePendingComparisonUrl(item.url))
-        } ?: return@filter true
-        requireOfflineReady && !cachedItemIds.contains(matchedQueueItem.itemId)
+        } == null
     }
 }
 

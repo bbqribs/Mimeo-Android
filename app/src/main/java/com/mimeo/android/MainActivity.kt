@@ -929,8 +929,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             reconcilePendingSavesWithQueue(
                 queueItems = queue.items,
                 selectedPlaylistId = current.selectedPlaylistId,
-                offlineReadyIds = offlineReadyIds,
-                requireOfflineReady = current.autoDownloadSavedArticles,
             )
             _queueOffline.value = false
             _statusMessage.value = "Queue loaded (${queue.count})"
@@ -978,8 +976,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 reconcilePendingSavesWithQueue(
                     queueItems = refreshedQueue.items,
                     selectedPlaylistId = current.selectedPlaylistId,
-                    offlineReadyIds = refreshedOfflineReadyIds,
-                    requireOfflineReady = current.autoDownloadSavedArticles,
                 )
                 _statusMessage.value = "Queue loaded (${refreshedQueue.count})"
             }
@@ -1029,7 +1025,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun autoRetryPendingManualSaves(limit: Int): Int {
         val candidates = _pendingManualSaves.value
-            .filter { it.autoRetryEligible }
+            .filter { it.autoRetryEligible || it.resolvedItemId == null }
             .take(limit)
         var successCount = 0
         candidates.forEach { item ->
@@ -1123,15 +1119,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun reconcilePendingSavesWithQueue(
         queueItems: List<PlaybackQueueItem>,
         selectedPlaylistId: Int?,
-        offlineReadyIds: Set<Int>,
-        requireOfflineReady: Boolean,
     ) {
         val confirmedPendingIds = _pendingManualSaves.value
             .filter { it.destinationPlaylistId == selectedPlaylistId }
             .filter { pending ->
-                val matchedQueueItem = queueItems.firstOrNull { queueItem -> pendingMatchesQueueItem(pending, queueItem) }
-                    ?: return@filter false
-                !requireOfflineReady || offlineReadyIds.contains(matchedQueueItem.itemId)
+                queueItems.any { queueItem -> pendingMatchesQueueItem(pending, queueItem) }
             }
             .map { it.id }
 
