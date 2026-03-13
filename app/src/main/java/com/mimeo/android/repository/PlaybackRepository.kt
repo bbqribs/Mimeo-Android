@@ -103,7 +103,11 @@ class PlaybackRepository(
     ): QueueFetchResult {
         val queueResult = apiClient.getQueue(baseUrl, token, playlistId = playlistId)
         val queue = queueResult.payload
-        val targets = queue.items.take(prefetchCount.coerceIn(1, PREFETCH_MAX))
+        val targets = if (prefetchCount <= 0) {
+            emptyList()
+        } else {
+            queue.items.take(prefetchCount.coerceAtMost(PREFETCH_MAX))
+        }
         for (item in targets) {
             runCatching { apiClient.getItemText(baseUrl, token, item.itemId) }
                 .onSuccess { payload -> cacheItem(payload) }

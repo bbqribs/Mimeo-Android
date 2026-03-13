@@ -37,4 +37,29 @@ class InitialQueueHydrationTest {
 
         assertEquals(listOf(3, 4), targets)
     }
+
+    @Test
+    fun `consumes initial queue prefetch only for pending auto-download bootstrap`() {
+        assertEquals(
+            8 to false,
+            consumeInitialQueuePrefetchCount(
+                autoDownloadEnabled = true,
+                hydrationPending = true,
+            ),
+        )
+        assertEquals(
+            0 to false,
+            consumeInitialQueuePrefetchCount(
+                autoDownloadEnabled = false,
+                hydrationPending = true,
+            ),
+        )
+        assertEquals(
+            0 to false,
+            consumeInitialQueuePrefetchCount(
+                autoDownloadEnabled = true,
+                hydrationPending = false,
+            ),
+        )
+    }
 }
