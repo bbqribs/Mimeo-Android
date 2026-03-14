@@ -557,25 +557,23 @@ fun PlayerScreen(
             debugLog("end of item chunk=${safe.chunkIndex}")
             isSpeaking = false
             isAutoPlaying = false
-            syncProgress(force = true)
+            actionScope.launch { syncProgress(force = true) }
             val playlistScoped = vm.isCurrentSessionPlaylistScoped()
             val shouldAutoAdvance = vm.shouldAutoAdvanceAfterCompletion()
             if (playlistScoped || shouldAutoAdvance) {
-                actionScope.launch {
-                    val nextId = if (playlistScoped) {
-                        vm.nextPlaylistScopedSessionItemId(currentItemId)
-                    } else {
-                        vm.nextSessionItemId(currentItemId)
-                    }
-                    if (nextId == null) {
-                        uiMessage = "Completed"
-                    } else {
-                        stopSpeaking(forceSync = true)
-                        currentItemId = nextId
-                        vm.setPlaybackPosition(nextId, 0, 0)
-                        autoPlayAfterLoad = true
-                        onOpenItem(nextId)
-                    }
+                val nextId = if (playlistScoped) {
+                    vm.nextPlaylistScopedSessionItemId(currentItemId)
+                } else {
+                    vm.nextSessionItemId(currentItemId)
+                }
+                if (nextId == null) {
+                    uiMessage = "Completed"
+                } else {
+                    stopSpeaking(forceSync = false)
+                    currentItemId = nextId
+                    vm.setPlaybackPosition(nextId, 0, 0)
+                    autoPlayAfterLoad = true
+                    onOpenItem(nextId)
                 }
             } else {
                 uiMessage = "Completed"
