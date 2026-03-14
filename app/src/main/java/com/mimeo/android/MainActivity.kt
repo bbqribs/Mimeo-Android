@@ -166,7 +166,7 @@ private const val ACTION_KEY_OPEN_DIAGNOSTICS = "open_diagnostics"
 private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
 private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
 private const val DEBUG_TARGET_ITEM_ID = 409
-private const val INITIAL_SIGN_IN_AUTO_DOWNLOAD_LIMIT = 8
+private const val INITIAL_SIGN_IN_AUTO_DOWNLOAD_LIMIT = 2_147_483_647
 
 private data class BottomNavDestination(
     val route: String,

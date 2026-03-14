@@ -37,4 +37,22 @@ class InitialQueueHydrationTest {
 
         assertEquals(listOf(3, 4), targets)
     }
+
+    @Test
+    fun `default bootstrap limit includes all eligible rows`() {
+        val queueItems = (1..12).map { itemId ->
+            PlaybackQueueItem(
+                itemId = itemId,
+                url = "https://example.com/$itemId",
+                createdAt = "2026-03-${itemId.toString().padStart(2, '0')}",
+            )
+        }
+
+        val targets = selectInitialQueueHydrationTargets(
+            queueItems = queueItems,
+            cachedItemIds = emptySet(),
+        )
+
+        assertEquals((12 downTo 1).toList(), targets)
+    }
 }
