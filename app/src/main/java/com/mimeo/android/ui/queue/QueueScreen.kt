@@ -3,6 +3,7 @@ package com.mimeo.android.ui.queue
 import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -94,6 +95,7 @@ import java.util.UUID
 
 private const val DONE_PERCENT_THRESHOLD = 98
 private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
+private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 internal enum class ManualSaveMode {
     URL,
     TEXT,
@@ -686,7 +688,16 @@ fun QueueScreen(
                         cached = cachedItemIds.contains(item.itemId),
                         noActiveContent = noActiveContentItemIds.contains(item.itemId),
                         onOpenPlayer = {
-                            vm.startNowPlayingSession(item.itemId)
+                            Log.d(
+                                LOCUS_CONTINUATION_DEBUG_TAG,
+                                "queue.openPlayer tapped=${item.itemId} sort=${selectedSort.name} " +
+                                    "playlist=${settings.selectedPlaylistId ?: "smart"} " +
+                                    "displayedHead=${displayedItems.take(8).joinToString { it.itemId.toString() }}",
+                            )
+                            vm.startNowPlayingSession(
+                                startItemId = item.itemId,
+                                orderedQueueItems = displayedItems,
+                            )
                             onOpenPlayer(item.itemId)
                         },
                         onDownload = {

@@ -484,7 +484,10 @@ fun SettingsScreen(
                     Text("Auto-advance on completion")
                     Switch(
                         checked = autoAdvance,
-                        onCheckedChange = { autoAdvance = it },
+                        onCheckedChange = {
+                            autoAdvance = it
+                            vm.saveAutoAdvanceOnCompletion(it)
+                        },
                     )
                 }
                 Row(

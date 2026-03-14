@@ -176,6 +176,8 @@ private const val INITIAL_SIGN_IN_HYDRATION_ATTEMPTS = 3
 private const val INITIAL_SIGN_IN_HYDRATION_RETRY_DELAY_MS = 300L
 private const val INITIAL_SIGN_IN_BACKGROUND_HYDRATION_ATTEMPTS = 10
 private const val INITIAL_SIGN_IN_BACKGROUND_HYDRATION_RETRY_DELAY_MS = 500L
+private const val SMART_QUEUE_SESSION_CONTEXT_ID = -1
+private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 
 private data class BottomNavDestination(
     val route: String,
@@ -208,6 +210,21 @@ internal fun isNoActiveContentAttempt(attempt: ItemTextPrefetchAttempt): Boolean
 }
 
 internal fun noActiveContentOfflineMessage(): String = "Not available for offline reading"
+
+internal fun resolveNextPlaylistScopedSessionIndex(
+    session: NowPlayingSession,
+    currentId: Int,
+): Int? {
+    if (session.sourcePlaylistId == null) return null
+    val idx = session.items.indexOfFirst { it.itemId == currentId }.let { if (it >= 0) it else session.currentIndex }
+    if (idx >= session.items.lastIndex) return null
+    return idx + 1
+}
+
+internal fun resolveSessionSourcePlaylistId(selectedPlaylistId: Int?): Int {
+    return selectedPlaylistId ?: SMART_QUEUE_SESSION_CONTEXT_ID
+}
+
 data class PendingRetryBatchResult(
     val successCount: Int,
     val firstFailureResult: ShareSaveResult? = null,
@@ -581,6 +598,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _settings.value = current.copy(persistentPlayerEnabled = enabled)
         viewModelScope.launch {
             settingsStore.savePersistentPlayerEnabled(enabled)
+        }
+    }
+
+    fun saveAutoAdvanceOnCompletion(enabled: Boolean) {
+        val current = settings.value
+        _settings.value = current.copy(autoAdvanceOnCompletion = enabled)
+        viewModelScope.launch {
+            settingsStore.saveAutoAdvanceOnCompletion(enabled)
         }
     }
 
@@ -1934,20 +1959,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         val queue = queueItems.value
         if (queue.isNotEmpty()) {
-            val session = repository.startSession(queue, fallbackItemId)
+            val session = repository.startSession(
+                queueItems = queue,
+                startItemId = fallbackItemId,
+                sourcePlaylistId = resolveSessionSourcePlaylistId(settings.value.selectedPlaylistId),
+            )
             applySessionSnapshot(session)
             return session.currentItem?.itemId ?: fallbackItemId
         }
         return fallbackItemId
     }
 
-    fun startNowPlayingSession(startItemId: Int) {
-        val queue = queueItems.value
+    fun startNowPlayingSession(startItemId: Int, orderedQueueItems: List<PlaybackQueueItem>? = null) {
+        val queue = orderedQueueItems?.takeIf { it.isNotEmpty() } ?: queueItems.value
         if (queue.isEmpty()) {
             return
         }
         viewModelScope.launch {
-            val session = repository.startSession(queue, startItemId)
+            val session = repository.startSession(
+                queueItems = queue,
+                startItemId = startItemId,
+                sourcePlaylistId = resolveSessionSourcePlaylistId(settings.value.selectedPlaylistId),
+            )
             applySessionSnapshot(session)
         }
     }
@@ -1984,6 +2017,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun shouldAutoAdvanceAfterCompletion(): Boolean = settings.value.autoAdvanceOnCompletion
     fun shouldAutoScrollWhileListening(): Boolean = settings.value.autoScrollWhileListening
+    fun isCurrentSessionPlaylistScoped(): Boolean = nowPlayingSession.value?.sourcePlaylistId != null
 
     fun baseUrlHintForDevice(isPhysicalDevice: Boolean): String? =
         baseUrlHint(settings.value.baseUrl.trim().trimEnd('/'), isPhysicalDevice)
@@ -2043,6 +2077,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return updated.currentItem?.itemId
     }
 
+    suspend fun nextPlaylistScopedSessionItemId(currentId: Int): Int? {
+        val session = nowPlayingSession.value ?: run {
+            Log.d(LOCUS_CONTINUATION_DEBUG_TAG, "vm.nextPlaylistScopedSessionItemId currentId=$currentId session=null")
+            return null
+        }
+        Log.d(
+            LOCUS_CONTINUATION_DEBUG_TAG,
+            "vm.nextPlaylistScopedSessionItemId start currentId=$currentId currentIndex=${session.currentIndex} " +
+                "currentSessionItem=${session.currentItem?.itemId} itemCount=${session.items.size} " +
+                "sourcePlaylistId=${session.sourcePlaylistId} firstItems=${session.items.take(8).joinToString { it.itemId.toString() }}",
+        )
+        val nextIndex = resolveNextPlaylistScopedSessionIndex(session, currentId) ?: run {
+            Log.d(
+                LOCUS_CONTINUATION_DEBUG_TAG,
+                "vm.nextPlaylistScopedSessionItemId noNext currentId=$currentId currentIndex=${session.currentIndex} " +
+                    "currentSessionItem=${session.currentItem?.itemId} itemCount=${session.items.size}",
+            )
+            return null
+        }
+        val updated = repository.setCurrentIndex(nextIndex) ?: session.copy(currentIndex = nextIndex)
+        _nowPlayingSession.value = updated
+        Log.d(
+            LOCUS_CONTINUATION_DEBUG_TAG,
+            "vm.nextPlaylistScopedSessionItemId currentId=$currentId nextIndex=$nextIndex nextId=${updated.currentItem?.itemId} sourcePlaylistId=${updated.sourcePlaylistId}",
+        )
+        return updated.currentItem?.itemId
+    }
+
     suspend fun prevSessionItemId(currentId: Int): Int? {
         val session = getOrCreateNowPlayingSession(currentId) ?: return null
         val idx = session.items.indexOfFirst { it.itemId == currentId }.let { if (it >= 0) it else session.currentIndex }
@@ -2057,7 +2119,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         nowPlayingSession.value?.let { return it }
         val queue = queueItems.value
         if (queue.isEmpty()) return null
-        val session = repository.startSession(queue, currentId)
+        val session = repository.startSession(
+            queueItems = queue,
+            startItemId = currentId,
+            sourcePlaylistId = resolveSessionSourcePlaylistId(settings.value.selectedPlaylistId),
+        )
         applySessionSnapshot(session)
         return session
     }
@@ -2484,7 +2550,13 @@ private fun MimeoApp(vm: AppViewModel) {
     val routeItemId = navBackStack?.arguments?.let { args ->
         if (args.containsKey("itemId")) args.getInt("itemId").takeIf { it > 0 } else null
     }
-    val requestedPlayerItemId = routeItemId ?: sessionNowPlayingItemId
+    val requestedPlayerItemId = sessionNowPlayingItemId ?: routeItemId
+    LaunchedEffect(sessionNowPlayingItemId, routeItemId, requestedPlayerItemId, currentRoute) {
+        Log.d(
+            LOCUS_CONTINUATION_DEBUG_TAG,
+            "mimeoApp route=$currentRoute routeItemId=$routeItemId sessionItemId=$sessionNowPlayingItemId requestedItemId=$requestedPlayerItemId",
+        )
+    }
     val selectedTab = when {
         currentRoute.startsWith(ROUTE_LOCUS) -> ROUTE_LOCUS
         currentRoute.startsWith(ROUTE_COLLECTIONS) -> ROUTE_COLLECTIONS

@@ -251,6 +251,12 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun saveAutoAdvanceOnCompletion(autoAdvanceOnCompletion: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[autoAdvanceOnCompletionKey] = autoAdvanceOnCompletion
+        }
+    }
+
     suspend fun saveContinuousNowPlayingMarquee(continuousNowPlayingMarquee: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[continuousNowPlayingMarqueeKey] = continuousNowPlayingMarquee

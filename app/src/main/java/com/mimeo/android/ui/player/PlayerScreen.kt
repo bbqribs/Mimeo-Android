@@ -2,6 +2,7 @@ package com.mimeo.android.ui.player
 
 import android.os.Build
 import android.os.SystemClock
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -129,11 +130,16 @@ private const val PLAYBACK_SPEED_MAX = 4.0f
 private const val PLAYBACK_SPEED_STEP = 0.05f
 private const val PLAYBACK_SPEED_STEPS = 69
 private val PLAYBACK_SPEED_PILLS = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
+private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 
 private fun debugLog(message: String) {
     if (DEBUG_PLAYBACK) {
         println("[Mimeo][player] $message")
     }
+}
+
+private fun continuationLog(message: String) {
+    Log.d(LOCUS_CONTINUATION_DEBUG_TAG, message)
 }
 
 @Composable
@@ -257,6 +263,10 @@ fun PlayerScreen(
                     debugLog("ignore stale onDone utterance=${event.utteranceId} eventChunk=${event.chunkIndex} currentChunk=${latestPosition.chunkIndex}")
                     return@TtsController
                 }
+                continuationLog(
+                    "onChunkDone item=${event.itemId} chunk=${event.chunkIndex} " +
+                        "latestItem=$latestItemId latestChunk=${latestPosition.chunkIndex}",
+                )
                 activeChunkRange = null
                 pendingDoneEvent = PlaybackDoneEvent(
                     utteranceId = event.utteranceId,
@@ -435,6 +445,9 @@ fun PlayerScreen(
         if (!resolvedInitial) return@LaunchedEffect
         val target = requestedItemId ?: return@LaunchedEffect
         if (target == currentItemId) return@LaunchedEffect
+        continuationLog(
+            "requestedItemEffect target=$target current=$currentItemId autoPlayAfterLoad=$autoPlayAfterLoad",
+        )
         stopSpeaking(forceSync = true)
         currentItemId = target
         autoPlayAfterLoad = false
@@ -454,6 +467,9 @@ fun PlayerScreen(
 
     LaunchedEffect(currentItemId, resolvedInitial, reloadNonce) {
         if (!resolvedInitial) return@LaunchedEffect
+        continuationLog(
+            "loadItem start currentItemId=$currentItemId reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
+        )
         val preservingVisibleContent = preserveVisibleContentOnReload
         stopSpeaking(forceSync = false)
         vm.setNowPlayingCurrentItem(currentItemId)
@@ -479,6 +495,9 @@ fun PlayerScreen(
                 textPayload = payload
                 usingCachedText = loaded.usingCache
                 chunks = buildChunks(payload)
+                continuationLog(
+                    "loadItem success item=$currentItemId chunks=${chunks.size} usingCache=$usingCachedText autoPlayAfterLoad=$autoPlayAfterLoad",
+                )
                 preserveVisibleContentOnReload = false
                 if (!preservingVisibleContent) {
                     readerScrollTriggerSignal += 1
@@ -500,6 +519,9 @@ fun PlayerScreen(
                 vm.setPlaybackPosition(currentItemId, safe.chunkIndex, safe.offsetInChunkChars)
 
                 if (autoPlayAfterLoad && chunks.isNotEmpty()) {
+                    continuationLog(
+                        "loadItem autoplay item=$currentItemId chunk=${safe.chunkIndex} offset=${safe.offsetInChunkChars}",
+                    )
                     autoPlayAfterLoad = false
                     isAutoPlaying = true
                     playChunk(safe.chunkIndex, safe.offsetInChunkChars)
@@ -529,7 +551,15 @@ fun PlayerScreen(
 
     LaunchedEffect(pendingDoneEvent, isAutoPlaying, chunks.size) {
         val event = pendingDoneEvent ?: return@LaunchedEffect
-        if (!isAutoPlaying || chunks.isEmpty()) return@LaunchedEffect
+        continuationLog(
+            "doneEffect start eventItem=${event.itemId} eventChunk=${event.chunkIndex} " +
+                "currentItem=$currentItemId isAutoPlaying=$isAutoPlaying chunks=${chunks.size} " +
+                "currentChunk=${currentPosition.chunkIndex}",
+        )
+        if (!isAutoPlaying || chunks.isEmpty()) {
+            continuationLog("doneEffect earlyExit autoPlaying=$isAutoPlaying chunks=${chunks.size}")
+            return@LaunchedEffect
+        }
         val safe = normalizedPosition(currentPosition)
         val transition = applyDoneTransition(
             event = event,
@@ -538,6 +568,11 @@ fun PlayerScreen(
             chunkCount = chunks.size,
             lastHandledUtteranceId = lastHandledDoneUtteranceId,
         )
+        continuationLog(
+            "doneEffect transition shouldHandle=${transition.shouldHandle} " +
+                "playNextChunk=${transition.shouldPlayNextChunk} reachedEnd=${transition.reachedEnd} " +
+                "nextChunk=${transition.nextPosition.chunkIndex}",
+        )
         if (!transition.shouldHandle) {
             pendingDoneEvent = null
             return@LaunchedEffect
@@ -545,30 +580,41 @@ fun PlayerScreen(
 
         lastHandledDoneUtteranceId = transition.handledUtteranceId
         pendingDoneEvent = null
-        val finishedChunk = chunks[safe.chunkIndex]
-        setPlaybackPosition(safe.chunkIndex, finishedChunk.length)
 
         if (transition.shouldPlayNextChunk) {
             val next = transition.nextPosition.chunkIndex
             debugLog("advance chunk ${safe.chunkIndex} -> $next")
+            continuationLog("doneEffect nextChunk currentItem=$currentItemId nextChunk=$next")
+            val finishedChunk = chunks[safe.chunkIndex]
+            setPlaybackPosition(safe.chunkIndex, finishedChunk.length)
             setPlaybackPosition(next, 0)
             playChunk(next, 0)
         } else if (transition.reachedEnd) {
             debugLog("end of item chunk=${safe.chunkIndex}")
+            continuationLog("doneEffect reachedEnd currentItem=$currentItemId playlistScoped=${vm.isCurrentSessionPlaylistScoped()}")
             isSpeaking = false
             isAutoPlaying = false
-            syncProgress(force = true)
+            actionScope.launch { syncProgress(force = true) }
+            val playlistScoped = vm.isCurrentSessionPlaylistScoped()
             val shouldAutoAdvance = vm.shouldAutoAdvanceAfterCompletion()
-            if (shouldAutoAdvance) {
+            if (playlistScoped || shouldAutoAdvance) {
+                val finishedItemId = currentItemId
                 actionScope.launch {
-                    val nextId = vm.nextSessionItemId(currentItemId)
+                    val nextId = if (playlistScoped) {
+                        vm.nextPlaylistScopedSessionItemId(finishedItemId)
+                    } else {
+                        vm.nextSessionItemId(finishedItemId)
+                    }
+                    continuationLog("doneEffect resolvedNextId currentItem=$finishedItemId nextId=$nextId")
                     if (nextId == null) {
                         uiMessage = "Completed"
                     } else {
-                        stopSpeaking(forceSync = true)
+                        stopSpeaking(forceSync = false)
+                        continuationLog("doneEffect switching currentItem $finishedItemId -> $nextId")
                         currentItemId = nextId
                         vm.setPlaybackPosition(nextId, 0, 0)
                         autoPlayAfterLoad = true
+                        continuationLog("doneEffect navigating nextId=$nextId")
                         onOpenItem(nextId)
                     }
                 }
