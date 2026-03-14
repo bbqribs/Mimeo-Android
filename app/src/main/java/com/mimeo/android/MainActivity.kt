@@ -2529,7 +2529,7 @@ private fun MimeoApp(vm: AppViewModel) {
     val routeItemId = navBackStack?.arguments?.let { args ->
         if (args.containsKey("itemId")) args.getInt("itemId").takeIf { it > 0 } else null
     }
-    val requestedPlayerItemId = routeItemId ?: sessionNowPlayingItemId
+    val requestedPlayerItemId = sessionNowPlayingItemId ?: routeItemId
     val selectedTab = when {
         currentRoute.startsWith(ROUTE_LOCUS) -> ROUTE_LOCUS
         currentRoute.startsWith(ROUTE_COLLECTIONS) -> ROUTE_COLLECTIONS
