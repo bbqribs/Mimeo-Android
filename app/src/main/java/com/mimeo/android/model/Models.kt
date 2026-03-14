@@ -212,7 +212,7 @@ data class AppSettings(
     val continuousNowPlayingMarquee: Boolean = true,
     val forceSentenceHighlightFallback: Boolean = false,
     val keepShareResultNotifications: Boolean = false,
-    val autoDownloadSavedArticles: Boolean = false,
+    val autoDownloadSavedArticles: Boolean = true,
     val playbackSpeed: Float = 1.0f,
     val selectedPlaylistId: Int? = null,
     val defaultSavePlaylistId: Int? = null,

@@ -110,7 +110,7 @@ class SettingsStore(private val context: Context) {
             continuousNowPlayingMarquee = prefs[continuousNowPlayingMarqueeKey] ?: true,
             forceSentenceHighlightFallback = prefs[forceSentenceHighlightFallbackKey] ?: false,
             keepShareResultNotifications = prefs[keepShareResultNotificationsKey] ?: false,
-            autoDownloadSavedArticles = prefs[autoDownloadSavedArticlesKey] ?: false,
+            autoDownloadSavedArticles = prefs[autoDownloadSavedArticlesKey] ?: true,
             playbackSpeed = prefs[playbackSpeedKey] ?: 1.0f,
             selectedPlaylistId = decodeSelectedPlaylistId(prefs[selectedPlaylistIdKey]),
             defaultSavePlaylistId = decodeSelectedPlaylistId(prefs[defaultSavePlaylistIdKey]),

@@ -67,6 +67,8 @@ import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
 import com.mimeo.android.isPendingProcessingFailureMessage
 import com.mimeo.android.isTerminalPendingProcessingStatus
+import com.mimeo.android.isNoActiveContentError
+import com.mimeo.android.noActiveContentOfflineMessage
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
@@ -141,6 +143,7 @@ fun QueueScreen(
     val loading by vm.queueLoading.collectAsState()
     val offline by vm.queueOffline.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
+    val noActiveContentItemIds by vm.noActiveContentItemIds.collectAsState()
     val pendingManualSaves by vm.pendingManualSaves.collectAsState()
     val pendingManualRetryInProgress by vm.pendingManualRetryInProgress.collectAsState()
     val pendingShareFocusItemId by vm.pendingQueueFocusItemId.collectAsState()
@@ -681,6 +684,7 @@ fun QueueScreen(
                     QueueItemCard(
                         item = item,
                         cached = cachedItemIds.contains(item.itemId),
+                        noActiveContent = noActiveContentItemIds.contains(item.itemId),
                         onOpenPlayer = {
                             vm.startNowPlayingSession(item.itemId)
                             onOpenPlayer(item.itemId)
@@ -694,6 +698,8 @@ fun QueueScreen(
                                 val result = vm.downloadItemForOffline(item.itemId)
                                 if (result.isSuccess) {
                                     onShowSnackbar("Downloaded for offline reading", null, null)
+                                } else if (result.exceptionOrNull()?.let(::isNoActiveContentError) == true) {
+                                    onShowSnackbar(noActiveContentOfflineMessage(), null, null)
                                 } else {
                                     onShowSnackbar("Couldn't download article", null, null)
                                 }
@@ -1594,6 +1600,7 @@ private fun isPendingFailureState(message: String): Boolean {
 private fun QueueItemCard(
     item: PlaybackQueueItem,
     cached: Boolean,
+    noActiveContent: Boolean,
     onOpenPlayer: () -> Unit,
     onDownload: () -> Unit,
     onOpenPlaylistPicker: () -> Unit,
@@ -1607,11 +1614,15 @@ private fun QueueItemCard(
     val isDone = item.furthestPercent >= DONE_PERCENT_THRESHOLD
     val primaryTextColor = if (cached) {
         MaterialTheme.colorScheme.onSurface
+    } else if (noActiveContent) {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f)
     }
     val secondaryTextColor = if (cached) {
         MaterialTheme.colorScheme.onSurfaceVariant
+    } else if (noActiveContent) {
+        MaterialTheme.colorScheme.error.copy(alpha = 0.9f)
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
     }
@@ -1656,7 +1667,15 @@ private fun QueueItemCard(
                         onDismissRequest = onDismissMenu,
                     ) {
                         DropdownMenuItem(
-                            text = { Text(if (cached) "Downloaded" else "Download") },
+                            text = {
+                                Text(
+                                    when {
+                                        cached -> "Downloaded"
+                                        noActiveContent -> "Unavailable offline"
+                                        else -> "Download"
+                                    },
+                                )
+                            },
                             onClick = {
                                 onDismissMenu()
                                 onDownload()
@@ -1680,7 +1699,11 @@ private fun QueueItemCard(
                     modifier = Modifier.weight(1f),
                     text = source,
                     style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
-                    color = secondaryTextColor,
+                    color = if (noActiveContent && !cached) {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
+                    } else {
+                        secondaryTextColor
+                    },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -1688,19 +1711,33 @@ private fun QueueItemCard(
                     modifier = Modifier.padding(start = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text(
-                        text = "$progress%",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = secondaryTextColor,
-                    )
-                    Icon(
-                        painter = painterResource(
-                            id = if (isDone) R.drawable.ic_book_closed_24 else R.drawable.ic_book_open_24,
-                        ),
-                        contentDescription = if (isDone) "Done" else "Not done",
-                        tint = secondaryTextColor,
-                        modifier = Modifier.size(16.dp),
-                    )
+                    if (noActiveContent && !cached) {
+                        Text(
+                            text = "No active content",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = secondaryTextColor,
+                        )
+                        Icon(
+                            painter = painterResource(id = R.drawable.msr_error_circle_24),
+                            contentDescription = "Not available offline",
+                            tint = secondaryTextColor,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    } else {
+                        Text(
+                            text = "$progress%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = secondaryTextColor,
+                        )
+                        Icon(
+                            painter = painterResource(
+                                id = if (isDone) R.drawable.ic_book_closed_24 else R.drawable.ic_book_open_24,
+                            ),
+                            contentDescription = if (isDone) "Done" else "Not done",
+                            tint = secondaryTextColor,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                 }
             }
         }

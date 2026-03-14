@@ -74,6 +74,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavType
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -194,6 +195,19 @@ internal fun isStaleTokenAuthFailure(error: Throwable): Boolean {
 
 internal fun staleTokenSignInMessage(): String = "Session expired. Please sign in again."
 
+internal fun isNoActiveContentError(error: Throwable): Boolean {
+    return error is ApiException &&
+        error.statusCode == 409 &&
+        error.message.orEmpty().contains("No active content", ignoreCase = true)
+}
+
+internal fun isNoActiveContentAttempt(attempt: ItemTextPrefetchAttempt): Boolean {
+    return !attempt.success &&
+        !attempt.retryable &&
+        attempt.errorSummary.orEmpty().contains("No active content", ignoreCase = true)
+}
+
+internal fun noActiveContentOfflineMessage(): String = "Not available for offline reading"
 data class PendingRetryBatchResult(
     val successCount: Int,
     val firstFailureResult: ShareSaveResult? = null,
@@ -321,6 +335,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _cachedItemIds = MutableStateFlow<Set<Int>>(emptySet())
     val cachedItemIds: StateFlow<Set<Int>> = _cachedItemIds.asStateFlow()
+    private val _noActiveContentItemIds = MutableStateFlow<Set<Int>>(emptySet())
+    val noActiveContentItemIds: StateFlow<Set<Int>> = _noActiveContentItemIds.asStateFlow()
     private val _pendingQueueFocusItemId = MutableStateFlow<Int?>(null)
     val pendingQueueFocusItemId: StateFlow<Int?> = _pendingQueueFocusItemId.asStateFlow()
 
@@ -379,6 +395,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     initialPostSignInHydrationJob = null
                     _queueItems.value = emptyList()
                     _cachedItemIds.value = emptySet()
+                    _noActiveContentItemIds.value = emptySet()
                     _queueOffline.value = false
                     _playlists.value = emptyList()
                 }
@@ -1053,6 +1070,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             _cachedItemIds.value = offlineReadyIds
+            _noActiveContentItemIds.value = retainKnownNoActiveContentIds(
+                queueItems = queue.items,
+                existing = _noActiveContentItemIds.value,
+            )
             settingsStore.saveQueueSnapshot(current.selectedPlaylistId, queue)
             syncPendingSaveProcessingFailures(
                 queueItems = queue.items,
@@ -1107,6 +1128,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
                 _cachedItemIds.value = refreshedOfflineReadyIds
+                _noActiveContentItemIds.value = retainKnownNoActiveContentIds(
+                    queueItems = refreshedQueue.items,
+                    existing = _noActiveContentItemIds.value,
+                )
                 settingsStore.saveQueueSnapshot(current.selectedPlaylistId, refreshedQueue)
                 syncPendingSaveProcessingFailures(
                     queueItems = refreshedQueue.items,
@@ -1122,6 +1147,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             Result.success(Unit)
         } catch (e: ApiException) {
+            if (handleAuthFailureIfNeeded(e)) {
+                _queueOffline.value = false
+                updateSyncBadgeState()
+                return@withLock Result.failure(e)
+            }
             if (
                 e.statusCode in 500..599 &&
                 applySavedQueueSnapshot(
@@ -1189,6 +1219,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         _queueItems.value = snapshot.items
         _cachedItemIds.value = resolveOfflineReadyIds(snapshot.items)
+        _noActiveContentItemIds.value = retainKnownNoActiveContentIds(
+            queueItems = snapshot.items,
+            existing = _noActiveContentItemIds.value,
+        )
         val appliedSnapshot = QueueFetchDebugSnapshot(
             selectedPlaylistId = selectedPlaylistId,
             requestUrl = "local_snapshot",
@@ -1427,6 +1461,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             updateSyncBadgeState()
             Result.success(Unit)
         } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
             if (isNetworkError(error)) {
                 _queueOffline.value = true
                 updateSyncBadgeState()
@@ -1460,6 +1497,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (!snapshotApplied) {
                 _queueItems.value = emptyList()
                 _cachedItemIds.value = emptySet()
+                _noActiveContentItemIds.value = emptySet()
             }
             loadQueue(autoRetryPendingSaves = false)
         }
@@ -1621,6 +1659,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
             Result.failure(error)
         }
     }
@@ -1721,6 +1762,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 updateSyncBadgeState(syncResult.pendingCount)
             } catch (e: Exception) {
+                if (handleAuthFailureIfNeeded(e)) {
+                    updateSyncBadgeState()
+                    return@launch
+                }
                 if (isNetworkError(e)) {
                     _queueOffline.value = true
                 }
@@ -1751,11 +1796,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 emptySet()
             }
             _cachedItemIds.update { previous -> previous + itemId + relatedIds }
+            _noActiveContentItemIds.update { previous -> previous - itemId - relatedIds }
             updateSyncBadgeState()
             Result.success(loaded)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNoActiveContentError(error)) {
+                _noActiveContentItemIds.update { previous -> previous + itemId }
+            }
             if (isNetworkError(error)) {
                 _queueOffline.value = true
                 updateSyncBadgeState()
@@ -1806,6 +1858,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
             if (isNetworkError(error)) {
                 _queueOffline.value = true
                 updateSyncBadgeState()
@@ -1832,6 +1887,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
             if (isNetworkError(error)) {
                 _queueOffline.value = true
                 _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
@@ -1857,6 +1915,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
             if (isNetworkError(error)) {
                 _queueOffline.value = true
                 _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
@@ -2135,10 +2196,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 token = current.apiToken,
                 itemIds = remainingTargets,
             )
+            val noActiveContentIds = attempts
+                .filter(::isNoActiveContentAttempt)
+                .map { it.itemId }
+                .toSet()
             val terminalFailedIds = attempts
                 .filterNot { it.success || it.retryable }
                 .map { it.itemId }
                 .toSet()
+            if (noActiveContentIds.isNotEmpty()) {
+                _noActiveContentItemIds.update { previous ->
+                    retainKnownNoActiveContentIds(queueItems, previous + noActiveContentIds)
+                }
+            }
             offlineReadyIds = resolveOfflineReadyIds(queueItems)
             remainingTargets = selectInitialQueueHydrationTargets(
                 queueItems = queueItems,
@@ -2182,6 +2252,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 token = current.apiToken,
                 itemIds = remainingTargets,
             )
+            val noActiveContentIds = attempts
+                .filter(::isNoActiveContentAttempt)
+                .map { it.itemId }
+                .toSet()
             val terminalFailedIds = attempts
                 .filterNot { it.success || it.retryable }
                 .map { it.itemId }
@@ -2189,6 +2263,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val cachedTargetIds = repository.getCachedItemIds(remainingTargets)
             if (cachedTargetIds.isNotEmpty()) {
                 _cachedItemIds.value = resolveOfflineReadyIds(_queueItems.value)
+            }
+            if (noActiveContentIds.isNotEmpty()) {
+                _noActiveContentItemIds.update { previous ->
+                    retainKnownNoActiveContentIds(_queueItems.value, previous + noActiveContentIds)
+                }
             }
             remainingTargets = remainingTargets.filterNot {
                 cachedTargetIds.contains(it) || terminalFailedIds.contains(it)
@@ -2211,6 +2290,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 "unresolvedAfterBackground itemIds=${remainingTargets.joinToString(",")}",
             )
         }
+    }
+
+    private fun retainKnownNoActiveContentIds(
+        queueItems: List<PlaybackQueueItem>,
+        existing: Set<Int>,
+    ): Set<Int> {
+        if (existing.isEmpty()) return emptySet()
+        val queueItemIds = queueItems.mapTo(linkedSetOf()) { it.itemId }
+        return existing.filterTo(linkedSetOf()) { queueItemIds.contains(it) }
     }
 
     private fun logInitialHydrationAttempt(
@@ -2489,7 +2577,19 @@ private fun MimeoApp(vm: AppViewModel) {
 
     LaunchedEffect(pendingNavigationRoute) {
         pendingNavigationRoute?.let { route ->
-            nav.navigate(route) { launchSingleTop = true }
+            if (route == ROUTE_SIGN_IN) {
+                nav.navigate(route) {
+                    popUpTo(nav.graph.findStartDestination().id) { inclusive = true }
+                    launchSingleTop = true
+                }
+            } else if (route == ROUTE_UP_NEXT && currentRoute == ROUTE_SIGN_IN) {
+                nav.navigate(route) {
+                    popUpTo(ROUTE_SIGN_IN) { inclusive = true }
+                    launchSingleTop = true
+                }
+            } else {
+                nav.navigate(route) { launchSingleTop = true }
+            }
             vm.consumePendingNavigation(route)
         }
     }
