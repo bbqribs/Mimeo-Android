@@ -600,6 +600,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun saveAutoAdvanceOnCompletion(enabled: Boolean) {
+        val current = settings.value
+        _settings.value = current.copy(autoAdvanceOnCompletion = enabled)
+        viewModelScope.launch {
+            settingsStore.saveAutoAdvanceOnCompletion(enabled)
+        }
+    }
+
     fun saveContinuousNowPlayingMarquee(enabled: Boolean) {
         val current = settings.value
         _settings.value = current.copy(continuousNowPlayingMarquee = enabled)
@@ -1961,8 +1969,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return fallbackItemId
     }
 
-    fun startNowPlayingSession(startItemId: Int) {
-        val queue = queueItems.value
+    fun startNowPlayingSession(startItemId: Int, orderedQueueItems: List<PlaybackQueueItem>? = null) {
+        val queue = orderedQueueItems?.takeIf { it.isNotEmpty() } ?: queueItems.value
         if (queue.isEmpty()) {
             return
         }

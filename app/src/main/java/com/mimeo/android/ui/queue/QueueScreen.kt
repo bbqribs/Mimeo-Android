@@ -686,7 +686,10 @@ fun QueueScreen(
                         cached = cachedItemIds.contains(item.itemId),
                         noActiveContent = noActiveContentItemIds.contains(item.itemId),
                         onOpenPlayer = {
-                            vm.startNowPlayingSession(item.itemId)
+                            vm.startNowPlayingSession(
+                                startItemId = item.itemId,
+                                orderedQueueItems = displayedItems,
+                            )
                             onOpenPlayer(item.itemId)
                         },
                         onDownload = {
