@@ -558,10 +558,15 @@ fun PlayerScreen(
             isSpeaking = false
             isAutoPlaying = false
             syncProgress(force = true)
+            val playlistScoped = vm.isCurrentSessionPlaylistScoped()
             val shouldAutoAdvance = vm.shouldAutoAdvanceAfterCompletion()
-            if (shouldAutoAdvance) {
+            if (playlistScoped || shouldAutoAdvance) {
                 actionScope.launch {
-                    val nextId = vm.nextPlaylistScopedSessionItemId(currentItemId)
+                    val nextId = if (playlistScoped) {
+                        vm.nextPlaylistScopedSessionItemId(currentItemId)
+                    } else {
+                        vm.nextSessionItemId(currentItemId)
+                    }
                     if (nextId == null) {
                         uiMessage = "Completed"
                     } else {

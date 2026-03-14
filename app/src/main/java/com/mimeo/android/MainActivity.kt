@@ -2008,6 +2008,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun shouldAutoAdvanceAfterCompletion(): Boolean = settings.value.autoAdvanceOnCompletion
     fun shouldAutoScrollWhileListening(): Boolean = settings.value.autoScrollWhileListening
+    fun isCurrentSessionPlaylistScoped(): Boolean = nowPlayingSession.value?.sourcePlaylistId != null
 
     fun baseUrlHintForDevice(isPhysicalDevice: Boolean): String? =
         baseUrlHint(settings.value.baseUrl.trim().trimEnd('/'), isPhysicalDevice)
