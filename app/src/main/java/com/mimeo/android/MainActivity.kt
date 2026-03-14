@@ -2078,8 +2078,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun nextPlaylistScopedSessionItemId(currentId: Int): Int? {
-        val session = nowPlayingSession.value ?: return null
-        val nextIndex = resolveNextPlaylistScopedSessionIndex(session, currentId) ?: return null
+        val session = nowPlayingSession.value ?: run {
+            Log.d(LOCUS_CONTINUATION_DEBUG_TAG, "vm.nextPlaylistScopedSessionItemId currentId=$currentId session=null")
+            return null
+        }
+        Log.d(
+            LOCUS_CONTINUATION_DEBUG_TAG,
+            "vm.nextPlaylistScopedSessionItemId start currentId=$currentId currentIndex=${session.currentIndex} " +
+                "currentSessionItem=${session.currentItem?.itemId} itemCount=${session.items.size} " +
+                "sourcePlaylistId=${session.sourcePlaylistId} firstItems=${session.items.take(8).joinToString { it.itemId.toString() }}",
+        )
+        val nextIndex = resolveNextPlaylistScopedSessionIndex(session, currentId) ?: run {
+            Log.d(
+                LOCUS_CONTINUATION_DEBUG_TAG,
+                "vm.nextPlaylistScopedSessionItemId noNext currentId=$currentId currentIndex=${session.currentIndex} " +
+                    "currentSessionItem=${session.currentItem?.itemId} itemCount=${session.items.size}",
+            )
+            return null
+        }
         val updated = repository.setCurrentIndex(nextIndex) ?: session.copy(currentIndex = nextIndex)
         _nowPlayingSession.value = updated
         Log.d(
