@@ -9,4 +9,5 @@ data class NowPlayingEntity(
     val queueJson: String,
     val currentIndex: Int,
     val updatedAt: Long,
+    val sourcePlaylistId: Int? = null,
 )

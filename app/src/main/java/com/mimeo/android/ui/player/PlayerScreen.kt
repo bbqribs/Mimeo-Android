@@ -561,7 +561,7 @@ fun PlayerScreen(
             val shouldAutoAdvance = vm.shouldAutoAdvanceAfterCompletion()
             if (shouldAutoAdvance) {
                 actionScope.launch {
-                    val nextId = vm.nextSessionItemId(currentItemId)
+                    val nextId = vm.nextPlaylistScopedSessionItemId(currentItemId)
                     if (nextId == null) {
                         uiMessage = "Completed"
                     } else {

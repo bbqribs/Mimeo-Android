@@ -61,6 +61,7 @@ data class NowPlayingSession(
     val items: List<NowPlayingSessionItem>,
     val currentIndex: Int,
     val updatedAt: Long,
+    val sourcePlaylistId: Int?,
 ) {
     val currentItem: NowPlayingSessionItem?
         get() = items.getOrNull(currentIndex)
@@ -310,7 +311,11 @@ class PlaybackRepository(
         return database.cachedItemDao().findByItemId(itemId) != null
     }
 
-    suspend fun startSession(queueItems: List<PlaybackQueueItem>, startItemId: Int): NowPlayingSession {
+    suspend fun startSession(
+        queueItems: List<PlaybackQueueItem>,
+        startItemId: Int,
+        sourcePlaylistId: Int?,
+    ): NowPlayingSession {
         if (queueItems.isEmpty()) {
             throw IllegalArgumentException("Cannot start now playing session from empty queue")
         }
@@ -334,6 +339,7 @@ class PlaybackRepository(
             queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
             currentIndex = currentIndex,
             updatedAt = updatedAt,
+            sourcePlaylistId = sourcePlaylistId,
         )
         database.nowPlayingDao().upsert(row)
         return row.toSession(stored)
@@ -605,6 +611,7 @@ class PlaybackRepository(
             },
             currentIndex = safeIndex,
             updatedAt = updatedAt,
+            sourcePlaylistId = sourcePlaylistId,
         )
     }
 }

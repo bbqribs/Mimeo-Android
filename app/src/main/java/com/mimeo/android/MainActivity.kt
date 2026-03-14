@@ -208,6 +208,17 @@ internal fun isNoActiveContentAttempt(attempt: ItemTextPrefetchAttempt): Boolean
 }
 
 internal fun noActiveContentOfflineMessage(): String = "Not available for offline reading"
+
+internal fun resolveNextPlaylistScopedSessionIndex(
+    session: NowPlayingSession,
+    currentId: Int,
+): Int? {
+    if (session.sourcePlaylistId == null) return null
+    val idx = session.items.indexOfFirst { it.itemId == currentId }.let { if (it >= 0) it else session.currentIndex }
+    if (idx >= session.items.lastIndex) return null
+    return idx + 1
+}
+
 data class PendingRetryBatchResult(
     val successCount: Int,
     val firstFailureResult: ShareSaveResult? = null,
@@ -1934,7 +1945,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         val queue = queueItems.value
         if (queue.isNotEmpty()) {
-            val session = repository.startSession(queue, fallbackItemId)
+            val session = repository.startSession(
+                queueItems = queue,
+                startItemId = fallbackItemId,
+                sourcePlaylistId = settings.value.selectedPlaylistId,
+            )
             applySessionSnapshot(session)
             return session.currentItem?.itemId ?: fallbackItemId
         }
@@ -1947,7 +1962,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
-            val session = repository.startSession(queue, startItemId)
+            val session = repository.startSession(
+                queueItems = queue,
+                startItemId = startItemId,
+                sourcePlaylistId = settings.value.selectedPlaylistId,
+            )
             applySessionSnapshot(session)
         }
     }
@@ -2043,6 +2062,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return updated.currentItem?.itemId
     }
 
+    suspend fun nextPlaylistScopedSessionItemId(currentId: Int): Int? {
+        val session = nowPlayingSession.value ?: return null
+        val nextIndex = resolveNextPlaylistScopedSessionIndex(session, currentId) ?: return null
+        val updated = repository.setCurrentIndex(nextIndex) ?: session.copy(currentIndex = nextIndex)
+        _nowPlayingSession.value = updated
+        return updated.currentItem?.itemId
+    }
+
     suspend fun prevSessionItemId(currentId: Int): Int? {
         val session = getOrCreateNowPlayingSession(currentId) ?: return null
         val idx = session.items.indexOfFirst { it.itemId == currentId }.let { if (it >= 0) it else session.currentIndex }
@@ -2057,7 +2084,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         nowPlayingSession.value?.let { return it }
         val queue = queueItems.value
         if (queue.isEmpty()) return null
-        val session = repository.startSession(queue, currentId)
+        val session = repository.startSession(
+            queueItems = queue,
+            startItemId = currentId,
+            sourcePlaylistId = settings.value.selectedPlaylistId,
+        )
         applySessionSnapshot(session)
         return session
     }
