@@ -30,4 +30,52 @@ class SignInSupportTest {
             resolveSignInErrorMessage(IOException("timeout")),
         )
     }
+
+    @Test
+    fun `defaults blank and local sign in url to remote http preset`() {
+        assertEquals(
+            "http://100.93.62.125:8000",
+            defaultSignInServerUrl(""),
+        )
+        assertEquals(
+            "http://100.93.62.125:8000",
+            defaultSignInServerUrl("http://10.0.2.2:8000"),
+        )
+    }
+
+    @Test
+    fun `builds preset urls for remote lan and manual entry`() {
+        assertEquals(
+            "http://100.93.62.125:8000",
+            buildPresetServerUrl(SignInServerPreset.REMOTE, SignInUrlScheme.HTTP, ""),
+        )
+        assertEquals(
+            "https://192.168.68.124:8000",
+            buildPresetServerUrl(SignInServerPreset.LAN, SignInUrlScheme.HTTPS, ""),
+        )
+        assertEquals(
+            "http://example.com:8000",
+            buildPresetServerUrl(SignInServerPreset.MANUAL, SignInUrlScheme.HTTP, "example.com:8000"),
+        )
+    }
+
+    @Test
+    fun `infers preset and scheme from sign in url`() {
+        assertEquals(
+            SignInServerPreset.REMOTE,
+            inferSignInPreset("https://100.93.62.125:8000"),
+        )
+        assertEquals(
+            SignInServerPreset.LAN,
+            inferSignInPreset("http://192.168.68.124:8000"),
+        )
+        assertEquals(
+            SignInServerPreset.MANUAL,
+            inferSignInPreset("https://mimeo.example.com"),
+        )
+        assertEquals(
+            SignInUrlScheme.HTTPS,
+            inferSignInScheme("https://100.93.62.125:8000"),
+        )
+    }
 }

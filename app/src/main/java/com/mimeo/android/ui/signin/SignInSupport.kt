@@ -16,6 +16,21 @@ sealed interface SignInState {
     data class Error(val message: String) : SignInState
 }
 
+enum class SignInServerPreset {
+    REMOTE,
+    LAN,
+    MANUAL,
+}
+
+enum class SignInUrlScheme(val value: String) {
+    HTTP("http"),
+    HTTPS("https"),
+}
+
+internal const val DEFAULT_REMOTE_SIGN_IN_HOST = "100.93.62.125:8000"
+internal const val DEFAULT_LAN_SIGN_IN_HOST = "192.168.68.124:8000"
+private const val DEFAULT_LOCAL_SIGN_IN_URL = "http://10.0.2.2:8000"
+
 internal fun inferConnectionModeForBaseUrl(baseUrl: String): ConnectionMode {
     val host = parseHost(baseUrl)
     if (host.isBlank()) return ConnectionMode.LAN
@@ -56,6 +71,60 @@ internal fun buildAuthDeviceName(manufacturer: String, model: String): String {
     }
 }
 
+internal fun defaultSignInServerUrl(initialServerUrl: String): String {
+    val trimmed = initialServerUrl.trim()
+    return if (trimmed.isBlank() || trimmed == DEFAULT_LOCAL_SIGN_IN_URL) {
+        buildPresetServerUrl(SignInServerPreset.REMOTE, SignInUrlScheme.HTTP, manualUrl = "")
+    } else {
+        trimmed
+    }
+}
+
+internal fun inferSignInPreset(serverUrl: String): SignInServerPreset {
+    val normalized = normalizeServerUrl(serverUrl)
+    return when (normalized) {
+        normalizeServerUrl(buildPresetServerUrl(SignInServerPreset.REMOTE, SignInUrlScheme.HTTP, ""))
+        -> SignInServerPreset.REMOTE
+        normalizeServerUrl(buildPresetServerUrl(SignInServerPreset.REMOTE, SignInUrlScheme.HTTPS, ""))
+        -> SignInServerPreset.REMOTE
+        normalizeServerUrl(buildPresetServerUrl(SignInServerPreset.LAN, SignInUrlScheme.HTTP, ""))
+        -> SignInServerPreset.LAN
+        normalizeServerUrl(buildPresetServerUrl(SignInServerPreset.LAN, SignInUrlScheme.HTTPS, ""))
+        -> SignInServerPreset.LAN
+        else -> SignInServerPreset.MANUAL
+    }
+}
+
+internal fun inferSignInScheme(serverUrl: String): SignInUrlScheme {
+    return if (serverUrl.trim().startsWith("https://", ignoreCase = true)) {
+        SignInUrlScheme.HTTPS
+    } else {
+        SignInUrlScheme.HTTP
+    }
+}
+
+internal fun buildPresetServerUrl(
+    preset: SignInServerPreset,
+    scheme: SignInUrlScheme,
+    manualUrl: String,
+): String {
+    val normalizedManual = manualUrl.trim()
+    return when (preset) {
+        SignInServerPreset.REMOTE -> "${scheme.value}://$DEFAULT_REMOTE_SIGN_IN_HOST"
+        SignInServerPreset.LAN -> "${scheme.value}://$DEFAULT_LAN_SIGN_IN_HOST"
+        SignInServerPreset.MANUAL -> normalizeManualServerUrl(normalizedManual, scheme)
+    }
+}
+
+private fun normalizeManualServerUrl(manualUrl: String, scheme: SignInUrlScheme): String {
+    if (manualUrl.isBlank()) return ""
+    return if (manualUrl.startsWith("http://", ignoreCase = true) || manualUrl.startsWith("https://", ignoreCase = true)) {
+        manualUrl
+    } else {
+        "${scheme.value}://$manualUrl"
+    }
+}
+
 private fun parseHost(baseUrl: String): String {
     val trimmed = baseUrl.trim()
     if (trimmed.isBlank()) return ""
@@ -67,6 +136,10 @@ private fun parseHost(baseUrl: String): String {
             .substringBefore('/')
             .substringBefore(':')
     }.lowercase(Locale.US)
+}
+
+private fun normalizeServerUrl(serverUrl: String): String {
+    return serverUrl.trim().trimEnd('/').lowercase(Locale.US)
 }
 
 private fun isCarrierGradeNat(host: String): Boolean {

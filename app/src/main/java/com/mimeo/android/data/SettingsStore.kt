@@ -340,6 +340,12 @@ class SettingsStore(private val context: Context) {
         )
     }
 
+    suspend fun clearQueueSnapshots() {
+        context.dataStore.edit { prefs ->
+            prefs[queueSnapshotsJsonKey] = json.encodeToString(QueueSnapshotState())
+        }
+    }
+
     suspend fun enqueuePendingManualSave(
         source: PendingSaveSource,
         type: PendingManualSaveType,

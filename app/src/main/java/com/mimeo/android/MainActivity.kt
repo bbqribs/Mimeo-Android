@@ -103,6 +103,7 @@ import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.repository.ItemTextResult
+import com.mimeo.android.repository.ItemTextPrefetchAttempt
 import com.mimeo.android.repository.FoldersRepository
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.NowPlayingSessionItem
@@ -137,6 +138,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -166,6 +169,12 @@ private const val ACTION_KEY_OPEN_DIAGNOSTICS = "open_diagnostics"
 private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
 private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
 private const val DEBUG_TARGET_ITEM_ID = 409
+private const val INITIAL_SIGN_IN_HYDRATION_DEBUG_TAG = "MimeoSignInHydration"
+private const val INITIAL_SIGN_IN_AUTO_DOWNLOAD_LIMIT = 2_147_483_647
+private const val INITIAL_SIGN_IN_HYDRATION_ATTEMPTS = 3
+private const val INITIAL_SIGN_IN_HYDRATION_RETRY_DELAY_MS = 300L
+private const val INITIAL_SIGN_IN_BACKGROUND_HYDRATION_ATTEMPTS = 10
+private const val INITIAL_SIGN_IN_BACKGROUND_HYDRATION_RETRY_DELAY_MS = 500L
 
 private data class BottomNavDestination(
     val route: String,
@@ -183,6 +192,23 @@ data class PendingRetryBatchResult(
     val successCount: Int,
     val firstFailureResult: ShareSaveResult? = null,
 )
+
+internal fun selectInitialQueueHydrationTargets(
+    queueItems: List<PlaybackQueueItem>,
+    cachedItemIds: Set<Int>,
+    limit: Int = INITIAL_SIGN_IN_AUTO_DOWNLOAD_LIMIT,
+): List<Int> {
+    if (limit <= 0) return emptyList()
+    return queueItems
+        .sortedByDescending { it.createdAt ?: "" }
+        .asSequence()
+        .filterNot { isTerminalPendingProcessingStatus(it.status) }
+        .map { it.itemId }
+        .distinct()
+        .filterNot { cachedItemIds.contains(it) }
+        .take(limit)
+        .toList()
+}
 
 private fun isLikelyPhysicalDevice(): Boolean {
     val fingerprint = Build.FINGERPRINT.lowercase()
@@ -328,6 +354,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _settingsScrollOffset = MutableStateFlow(0)
     val settingsScrollOffset: StateFlow<Int> = _settingsScrollOffset.asStateFlow()
     private var lastPendingAutoRetryAtMs: Long = 0L
+    private var pendingInitialPostSignInHydration = false
+    private var initialPostSignInHydrationJob: Job? = null
     private val connectivityManager =
         application.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
     private var connectivityCallback: ConnectivityManager.NetworkCallback? = null
@@ -338,8 +366,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             var previous = _settings.value
             settingsStore.settingsFlow.collect { next ->
                 _settings.value = next
+                if (next.apiToken.isBlank()) {
+                    initialPostSignInHydrationJob?.cancel()
+                    initialPostSignInHydrationJob = null
+                    _queueItems.value = emptyList()
+                    _cachedItemIds.value = emptySet()
+                    _queueOffline.value = false
+                    _playlists.value = emptyList()
+                }
                 if (previous.apiToken.isBlank() && next.apiToken.isNotBlank()) {
+                    pendingInitialPostSignInHydration = true
                     loadQueue()
+                } else if (previous.apiToken.isNotBlank() && next.apiToken.isBlank()) {
+                    pendingInitialPostSignInHydration = false
+                    settingsStore.clearQueueSnapshots()
                 }
                 previous = next
             }
@@ -944,9 +984,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 current.baseUrl,
                 current.apiToken,
                 playlistId = current.selectedPlaylistId,
+                prefetchCount = 0,
             )
             val queue = queueResult.payload
             var offlineReadyIds = resolveOfflineReadyIds(queue.items)
+            offlineReadyIds = runInitialPostSignInHydrationIfNeeded(
+                current = current,
+                queueItems = queue.items,
+                cachedItemIds = offlineReadyIds,
+            )
             offlineReadyIds = ensurePendingItemsOfflineReady(
                 queueItems = queue.items,
                 selectedPlaylistId = current.selectedPlaylistId,
@@ -997,6 +1043,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     current.baseUrl,
                     current.apiToken,
                     playlistId = current.selectedPlaylistId,
+                    prefetchCount = 0,
                 )
                 val refreshedQueue = refreshedQueueResult.payload
                 var refreshedOfflineReadyIds = resolveOfflineReadyIds(refreshedQueue.items)
@@ -1697,6 +1744,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 current.baseUrl,
                 current.apiToken,
                 playlistId = current.selectedPlaylistId,
+                prefetchCount = 0,
             )
             val queue = queueResult.payload
             _queueItems.value = queue.items
@@ -2025,6 +2073,121 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             candidates.mapNotNull { it.activeContentVersionId },
         )
         return resolveOfflineReadyItemIds(candidates, cachedByItemId, cachedByVersion)
+    }
+
+    private suspend fun runInitialPostSignInHydrationIfNeeded(
+        current: AppSettings,
+        queueItems: List<PlaybackQueueItem>,
+        cachedItemIds: Set<Int>,
+    ): Set<Int> {
+        if (!pendingInitialPostSignInHydration) return cachedItemIds
+        pendingInitialPostSignInHydration = false
+        if (!current.autoDownloadSavedArticles) return cachedItemIds
+        var offlineReadyIds = cachedItemIds
+        var remainingTargets = selectInitialQueueHydrationTargets(
+            queueItems = queueItems,
+            cachedItemIds = offlineReadyIds,
+        )
+        if (remainingTargets.isEmpty()) return offlineReadyIds
+        repeat(INITIAL_SIGN_IN_HYDRATION_ATTEMPTS) { attempt ->
+            val attempts = repository.prefetchItemTexts(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                itemIds = remainingTargets,
+            )
+            val terminalFailedIds = attempts
+                .filterNot { it.success || it.retryable }
+                .map { it.itemId }
+                .toSet()
+            offlineReadyIds = resolveOfflineReadyIds(queueItems)
+            remainingTargets = selectInitialQueueHydrationTargets(
+                queueItems = queueItems,
+                cachedItemIds = offlineReadyIds,
+            ).filterNot { terminalFailedIds.contains(it) }
+            logInitialHydrationAttempt(
+                phase = "initial",
+                attempt = attempt + 1,
+                requestedIds = attempts.map { it.itemId },
+                attempts = attempts,
+                unresolvedIds = remainingTargets,
+            )
+            if (remainingTargets.isEmpty()) {
+                return offlineReadyIds
+            }
+            if (attempt < INITIAL_SIGN_IN_HYDRATION_ATTEMPTS - 1) {
+                delay(INITIAL_SIGN_IN_HYDRATION_RETRY_DELAY_MS)
+            }
+        }
+        if (remainingTargets.isNotEmpty()) {
+            initialPostSignInHydrationJob?.cancel()
+            initialPostSignInHydrationJob = viewModelScope.launch {
+                continueInitialPostSignInHydration(
+                    current = current,
+                    targetItemIds = remainingTargets,
+                )
+            }
+        }
+        return offlineReadyIds
+    }
+
+    private suspend fun continueInitialPostSignInHydration(
+        current: AppSettings,
+        targetItemIds: List<Int>,
+    ) {
+        var remainingTargets = targetItemIds.distinct()
+        repeat(INITIAL_SIGN_IN_BACKGROUND_HYDRATION_ATTEMPTS) { attempt ->
+            if (remainingTargets.isEmpty()) return
+            val attempts = repository.prefetchItemTexts(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                itemIds = remainingTargets,
+            )
+            val terminalFailedIds = attempts
+                .filterNot { it.success || it.retryable }
+                .map { it.itemId }
+                .toSet()
+            val cachedTargetIds = repository.getCachedItemIds(remainingTargets)
+            if (cachedTargetIds.isNotEmpty()) {
+                _cachedItemIds.value = resolveOfflineReadyIds(_queueItems.value)
+            }
+            remainingTargets = remainingTargets.filterNot {
+                cachedTargetIds.contains(it) || terminalFailedIds.contains(it)
+            }
+            logInitialHydrationAttempt(
+                phase = "background",
+                attempt = attempt + 1,
+                requestedIds = attempts.map { it.itemId },
+                attempts = attempts,
+                unresolvedIds = remainingTargets,
+            )
+            if (remainingTargets.isEmpty()) return
+            if (attempt < INITIAL_SIGN_IN_BACKGROUND_HYDRATION_ATTEMPTS - 1) {
+                delay(INITIAL_SIGN_IN_BACKGROUND_HYDRATION_RETRY_DELAY_MS)
+            }
+        }
+        if (remainingTargets.isNotEmpty()) {
+            Log.w(
+                INITIAL_SIGN_IN_HYDRATION_DEBUG_TAG,
+                "unresolvedAfterBackground itemIds=${remainingTargets.joinToString(",")}",
+            )
+        }
+    }
+
+    private fun logInitialHydrationAttempt(
+        phase: String,
+        attempt: Int,
+        requestedIds: List<Int>,
+        attempts: List<ItemTextPrefetchAttempt>,
+        unresolvedIds: List<Int>,
+    ) {
+        if (!BuildConfig.DEBUG) return
+        val failures = attempts
+            .filterNot { it.success }
+            .joinToString(";") { "${it.itemId}:${it.errorSummary.orEmpty()}" }
+        Log.d(
+            INITIAL_SIGN_IN_HYDRATION_DEBUG_TAG,
+            "phase=$phase attempt=$attempt requested=${requestedIds.joinToString(",")} unresolved=${unresolvedIds.joinToString(",")} failures=$failures",
+        )
     }
 
     private fun updateSyncBadgeState(pendingCount: Int = _pendingProgressCount.value) {
@@ -2404,8 +2567,10 @@ private fun MimeoApp(vm: AppViewModel) {
                         composable(ROUTE_SIGN_IN) {
                             SignInScreen(
                                 initialServerUrl = settings.baseUrl,
+                                initialAutoDownloadEnabled = settings.autoDownloadSavedArticles,
                                 signInState = signInState,
                                 onSignIn = vm::signIn,
+                                onAutoDownloadChanged = vm::saveAutoDownloadSavedArticles,
                                 onOpenAdvancedSettings = { nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true } },
                                 onClearError = vm::clearSignInError,
                             )

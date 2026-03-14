@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.data.ApiClient
+import com.mimeo.android.data.ApiException
 import com.mimeo.android.data.AppDatabase
 import com.mimeo.android.data.QueueFetchResult
 import com.mimeo.android.data.entities.NowPlayingEntity
@@ -21,6 +22,13 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+
+data class ItemTextPrefetchAttempt(
+    val itemId: Int,
+    val success: Boolean,
+    val errorSummary: String? = null,
+    val retryable: Boolean = true,
+)
 
 data class ItemTextResult(
     val payload: ItemTextResponse,
@@ -103,7 +111,11 @@ class PlaybackRepository(
     ): QueueFetchResult {
         val queueResult = apiClient.getQueue(baseUrl, token, playlistId = playlistId)
         val queue = queueResult.payload
-        val targets = queue.items.take(prefetchCount.coerceIn(1, PREFETCH_MAX))
+        val targets = if (prefetchCount <= 0) {
+            emptyList()
+        } else {
+            queue.items.take(prefetchCount.coerceAtMost(PREFETCH_MAX))
+        }
         for (item in targets) {
             runCatching { apiClient.getItemText(baseUrl, token, item.itemId) }
                 .onSuccess { payload -> cacheItem(payload) }
@@ -119,6 +131,33 @@ class PlaybackRepository(
             )
         }
         return queueResult.copy(debugSnapshot = snapshot)
+    }
+
+    suspend fun prefetchItemTexts(
+        baseUrl: String,
+        token: String,
+        itemIds: List<Int>,
+    ): List<ItemTextPrefetchAttempt> {
+        return itemIds.distinct().map { itemId ->
+            try {
+                val payload = apiClient.getItemText(baseUrl, token, itemId)
+                cacheItem(payload)
+                ItemTextPrefetchAttempt(itemId = itemId, success = true)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                val summary = when (error) {
+                    is ApiException -> "api:${error.statusCode}:${error.message.orEmpty()}"
+                    else -> "${error::class.simpleName}:${error.message.orEmpty()}"
+                }.take(240)
+                ItemTextPrefetchAttempt(
+                    itemId = itemId,
+                    success = false,
+                    errorSummary = summary,
+                    retryable = isRetryablePrefetchFailure(error),
+                )
+            }
+        }
     }
 
     suspend fun listPlaylists(baseUrl: String, token: String): List<PlaylistSummary> {
@@ -518,6 +557,22 @@ class PlaybackRepository(
 
     private fun isRetryableProgressFailure(error: Exception): Boolean {
         return error is IOException
+    }
+
+    private fun isRetryablePrefetchFailure(error: Exception): Boolean {
+        return when (error) {
+            is IOException -> true
+            is ApiException -> {
+                when {
+                    error.statusCode == 404 -> false
+                    error.statusCode == 409 &&
+                        error.message.orEmpty().contains("No active content", ignoreCase = true) -> false
+                    error.statusCode in 500..599 -> true
+                    else -> false
+                }
+            }
+            else -> false
+        }
     }
 
     private fun truncateError(message: String?): String? {
