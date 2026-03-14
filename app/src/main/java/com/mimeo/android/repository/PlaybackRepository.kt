@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.data.ApiClient
+import com.mimeo.android.data.ApiException
 import com.mimeo.android.data.AppDatabase
 import com.mimeo.android.data.QueueFetchResult
 import com.mimeo.android.data.entities.NowPlayingEntity
@@ -26,6 +27,7 @@ data class ItemTextPrefetchAttempt(
     val itemId: Int,
     val success: Boolean,
     val errorSummary: String? = null,
+    val retryable: Boolean = true,
 )
 
 data class ItemTextResult(
@@ -145,13 +147,14 @@ class PlaybackRepository(
                 throw error
             } catch (error: Exception) {
                 val summary = when (error) {
-                    is com.mimeo.android.data.ApiException -> "api:${error.statusCode}:${error.message.orEmpty()}"
+                    is ApiException -> "api:${error.statusCode}:${error.message.orEmpty()}"
                     else -> "${error::class.simpleName}:${error.message.orEmpty()}"
                 }.take(240)
                 ItemTextPrefetchAttempt(
                     itemId = itemId,
                     success = false,
                     errorSummary = summary,
+                    retryable = isRetryablePrefetchFailure(error),
                 )
             }
         }
@@ -554,6 +557,22 @@ class PlaybackRepository(
 
     private fun isRetryableProgressFailure(error: Exception): Boolean {
         return error is IOException
+    }
+
+    private fun isRetryablePrefetchFailure(error: Exception): Boolean {
+        return when (error) {
+            is IOException -> true
+            is ApiException -> {
+                when {
+                    error.statusCode == 404 -> false
+                    error.statusCode == 409 &&
+                        error.message.orEmpty().contains("No active content", ignoreCase = true) -> false
+                    error.statusCode in 500..599 -> true
+                    else -> false
+                }
+            }
+            else -> false
+        }
     }
 
     private fun truncateError(message: String?): String? {

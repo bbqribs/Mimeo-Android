@@ -2095,11 +2095,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 token = current.apiToken,
                 itemIds = remainingTargets,
             )
+            val terminalFailedIds = attempts
+                .filterNot { it.success || it.retryable }
+                .map { it.itemId }
+                .toSet()
             offlineReadyIds = resolveOfflineReadyIds(queueItems)
             remainingTargets = selectInitialQueueHydrationTargets(
                 queueItems = queueItems,
                 cachedItemIds = offlineReadyIds,
-            )
+            ).filterNot { terminalFailedIds.contains(it) }
             logInitialHydrationAttempt(
                 phase = "initial",
                 attempt = attempt + 1,
@@ -2138,11 +2142,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 token = current.apiToken,
                 itemIds = remainingTargets,
             )
+            val terminalFailedIds = attempts
+                .filterNot { it.success || it.retryable }
+                .map { it.itemId }
+                .toSet()
             val cachedTargetIds = repository.getCachedItemIds(remainingTargets)
             if (cachedTargetIds.isNotEmpty()) {
                 _cachedItemIds.value = resolveOfflineReadyIds(_queueItems.value)
             }
-            remainingTargets = remainingTargets.filterNot { cachedTargetIds.contains(it) }
+            remainingTargets = remainingTargets.filterNot {
+                cachedTargetIds.contains(it) || terminalFailedIds.contains(it)
+            }
             logInitialHydrationAttempt(
                 phase = "background",
                 attempt = attempt + 1,
