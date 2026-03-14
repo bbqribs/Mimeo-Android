@@ -137,6 +137,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -167,6 +168,8 @@ private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
 private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
 private const val DEBUG_TARGET_ITEM_ID = 409
 private const val INITIAL_SIGN_IN_AUTO_DOWNLOAD_LIMIT = 2_147_483_647
+private const val INITIAL_SIGN_IN_HYDRATION_ATTEMPTS = 3
+private const val INITIAL_SIGN_IN_HYDRATION_RETRY_DELAY_MS = 300L
 
 private data class BottomNavDestination(
     val route: String,
@@ -2072,17 +2075,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (!pendingInitialPostSignInHydration) return cachedItemIds
         pendingInitialPostSignInHydration = false
         if (!current.autoDownloadSavedArticles) return cachedItemIds
-        val targets = selectInitialQueueHydrationTargets(
+        var offlineReadyIds = cachedItemIds
+        var remainingTargets = selectInitialQueueHydrationTargets(
             queueItems = queueItems,
-            cachedItemIds = cachedItemIds,
+            cachedItemIds = offlineReadyIds,
         )
-        if (targets.isEmpty()) return cachedItemIds
-        repository.prefetchItemTexts(
-            baseUrl = current.baseUrl,
-            token = current.apiToken,
-            itemIds = targets,
-        )
-        return resolveOfflineReadyIds(queueItems)
+        if (remainingTargets.isEmpty()) return offlineReadyIds
+        repeat(INITIAL_SIGN_IN_HYDRATION_ATTEMPTS) { attempt ->
+            repository.prefetchItemTexts(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                itemIds = remainingTargets,
+            )
+            offlineReadyIds = resolveOfflineReadyIds(queueItems)
+            remainingTargets = selectInitialQueueHydrationTargets(
+                queueItems = queueItems,
+                cachedItemIds = offlineReadyIds,
+            )
+            if (remainingTargets.isEmpty()) {
+                return offlineReadyIds
+            }
+            if (attempt < INITIAL_SIGN_IN_HYDRATION_ATTEMPTS - 1) {
+                delay(INITIAL_SIGN_IN_HYDRATION_RETRY_DELAY_MS)
+            }
+        }
+        return offlineReadyIds
     }
 
     private fun updateSyncBadgeState(pendingCount: Int = _pendingProgressCount.value) {
