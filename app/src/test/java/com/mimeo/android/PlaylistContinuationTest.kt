@@ -26,6 +26,16 @@ class PlaylistContinuationTest {
         assertNull(resolveNextPlaylistScopedSessionIndex(session, currentId = 10))
     }
 
+    @Test
+    fun advancesToNextItemForSmartQueueSession() {
+        val session = session(
+            sourcePlaylistId = resolveSessionSourcePlaylistId(null),
+            currentIndex = 0,
+            itemIds = listOf(10, 20, 30),
+        )
+        assertEquals(1, resolveNextPlaylistScopedSessionIndex(session, currentId = 10))
+    }
+
     private fun session(
         sourcePlaylistId: Int?,
         currentIndex: Int,

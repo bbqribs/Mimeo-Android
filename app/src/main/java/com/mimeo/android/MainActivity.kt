@@ -176,6 +176,7 @@ private const val INITIAL_SIGN_IN_HYDRATION_ATTEMPTS = 3
 private const val INITIAL_SIGN_IN_HYDRATION_RETRY_DELAY_MS = 300L
 private const val INITIAL_SIGN_IN_BACKGROUND_HYDRATION_ATTEMPTS = 10
 private const val INITIAL_SIGN_IN_BACKGROUND_HYDRATION_RETRY_DELAY_MS = 500L
+private const val SMART_QUEUE_SESSION_CONTEXT_ID = -1
 
 private data class BottomNavDestination(
     val route: String,
@@ -217,6 +218,10 @@ internal fun resolveNextPlaylistScopedSessionIndex(
     val idx = session.items.indexOfFirst { it.itemId == currentId }.let { if (it >= 0) it else session.currentIndex }
     if (idx >= session.items.lastIndex) return null
     return idx + 1
+}
+
+internal fun resolveSessionSourcePlaylistId(selectedPlaylistId: Int?): Int {
+    return selectedPlaylistId ?: SMART_QUEUE_SESSION_CONTEXT_ID
 }
 
 data class PendingRetryBatchResult(
@@ -1948,7 +1953,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val session = repository.startSession(
                 queueItems = queue,
                 startItemId = fallbackItemId,
-                sourcePlaylistId = settings.value.selectedPlaylistId,
+                sourcePlaylistId = resolveSessionSourcePlaylistId(settings.value.selectedPlaylistId),
             )
             applySessionSnapshot(session)
             return session.currentItem?.itemId ?: fallbackItemId
@@ -1965,7 +1970,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val session = repository.startSession(
                 queueItems = queue,
                 startItemId = startItemId,
-                sourcePlaylistId = settings.value.selectedPlaylistId,
+                sourcePlaylistId = resolveSessionSourcePlaylistId(settings.value.selectedPlaylistId),
             )
             applySessionSnapshot(session)
         }
@@ -2087,7 +2092,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val session = repository.startSession(
             queueItems = queue,
             startItemId = currentId,
-            sourcePlaylistId = settings.value.selectedPlaylistId,
+            sourcePlaylistId = resolveSessionSourcePlaylistId(settings.value.selectedPlaylistId),
         )
         applySessionSnapshot(session)
         return session
