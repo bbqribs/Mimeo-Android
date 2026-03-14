@@ -639,6 +639,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun signOut() {
+        viewModelScope.launch {
+            settingsStore.saveTokenOnly("")
+            requestNavigation(ROUTE_SIGN_IN)
+        }
+    }
+
     fun signIn(serverUrl: String, username: String, password: String) {
         viewModelScope.launch {
             _signInState.value = SignInState.Loading
@@ -2606,6 +2613,7 @@ private fun MimeoApp(vm: AppViewModel) {
                             SettingsScreen(
                                 vm = vm,
                                 onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
+                                onSignOut = vm::signOut,
                             )
                         }
                         composable(ROUTE_SETTINGS_DIAGNOSTICS) {

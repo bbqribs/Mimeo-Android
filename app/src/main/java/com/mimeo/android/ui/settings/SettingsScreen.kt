@@ -57,6 +57,7 @@ private const val PREVIEW_PARAGRAPH_2 = "Use this preview to check rhythm, parag
 fun SettingsScreen(
     vm: AppViewModel,
     onOpenDiagnostics: () -> Unit,
+    onSignOut: () -> Unit,
 ) {
     val clipboardManager = LocalClipboardManager.current
     val settings by vm.settings.collectAsState()
@@ -111,6 +112,7 @@ fun SettingsScreen(
     var testRequested by remember { mutableStateOf(false) }
     var showDefaultSavePlaylistDialog by remember { mutableStateOf(false) }
     var showFontMenu by remember { mutableStateOf(false) }
+    var showSignOutDialog by remember { mutableStateOf(false) }
 
     fun selectedModeBaseUrl(): String {
         return when (connectionMode) {
@@ -364,6 +366,22 @@ fun SettingsScreen(
                                 ) { Text("Copy") }
                             }
                         }
+                    }
+                }
+                HorizontalDivider(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    thickness = 1.dp,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = { showSignOutDialog = true }) {
+                        Text(
+                            text = "Sign out",
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
             }
@@ -654,6 +672,32 @@ fun SettingsScreen(
         SettingsSectionSeparator()
     }
 
+    if (showSignOutDialog) {
+        AlertDialog(
+            onDismissRequest = { showSignOutDialog = false },
+            title = { Text("Sign out?") },
+            text = { Text(signOutConfirmationMessage()) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSignOutDialog = false
+                        onSignOut()
+                    },
+                ) {
+                    Text(
+                        text = "Sign out",
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSignOutDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
     if (showDefaultSavePlaylistDialog) {
         AlertDialog(
             onDismissRequest = { showDefaultSavePlaylistDialog = false },
@@ -804,3 +848,6 @@ private fun SettingsSectionSeparator() {
         thickness = 1.dp,
     )
 }
+
+internal fun signOutConfirmationMessage(): String =
+    "Your sign-in session will end. Server URL and other settings are kept."
