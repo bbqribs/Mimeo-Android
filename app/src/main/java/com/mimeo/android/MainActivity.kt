@@ -74,6 +74,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavType
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -187,6 +188,12 @@ data class UiSnackbarMessage(
     val actionKey: String? = null,
     val duration: SnackbarDuration = SnackbarDuration.Short,
 )
+
+internal fun isStaleTokenAuthFailure(error: Throwable): Boolean {
+    return error is ApiException && error.statusCode == 401
+}
+
+internal fun staleTokenSignInMessage(): String = "Session expired. Please sign in again."
 
 internal fun isNoActiveContentError(error: Throwable): Boolean {
     return error is ApiException &&
@@ -369,6 +376,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val pendingNavigationRoute: StateFlow<String?> = _pendingNavigationRoute.asStateFlow()
     private val _settingsScrollOffset = MutableStateFlow(0)
     val settingsScrollOffset: StateFlow<Int> = _settingsScrollOffset.asStateFlow()
+    private val authFailureMutex = Mutex()
+    private var authFailureHandledThisSession = false
     private var lastPendingAutoRetryAtMs: Long = 0L
     private var pendingInitialPostSignInHydration = false
     private var initialPostSignInHydrationJob: Job? = null
@@ -392,6 +401,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     _playlists.value = emptyList()
                 }
                 if (previous.apiToken.isBlank() && next.apiToken.isNotBlank()) {
+                    authFailureHandledThisSession = false
                     pendingInitialPostSignInHydration = true
                     loadQueue()
                 } else if (previous.apiToken.isNotBlank() && next.apiToken.isBlank()) {
@@ -676,10 +686,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     connectionMode = connectionMode,
                     apiToken = response.token,
                 )
+                authFailureHandledThisSession = false
                 _signInState.value = SignInState.Idle
                 requestNavigation(ROUTE_UP_NEXT)
             } catch (error: Exception) {
                 _signInState.value = SignInState.Error(resolveSignInErrorMessage(error))
+            }
+        }
+    }
+
+    private suspend fun handleAuthFailureIfNeeded(error: Throwable): Boolean {
+        if (!isStaleTokenAuthFailure(error)) return false
+        return authFailureMutex.withLock {
+            if (authFailureHandledThisSession || settings.value.apiToken.isBlank()) {
+                true
+            } else {
+                authFailureHandledThisSession = true
+                settingsStore.saveTokenOnly("")
+                _signInState.value = SignInState.Error(staleTokenSignInMessage())
+                requestNavigation(ROUTE_SIGN_IN)
+                true
             }
         }
     }
@@ -953,6 +979,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     loadQueueOnce(autoRetryPendingSaves = false)
                 }
             } catch (e: ApiException) {
+                if (handleAuthFailureIfNeeded(e)) {
+                    return@launch
+                }
                 _statusMessage.value = ConnectionTestMessageResolver.forApiFailure(
                     mode = current.connectionMode,
                     baseUrl = current.baseUrl,
@@ -1107,6 +1136,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             Result.success(Unit)
         } catch (e: ApiException) {
+            if (handleAuthFailureIfNeeded(e)) {
+                _queueOffline.value = false
+                updateSyncBadgeState()
+                return@withLock Result.failure(e)
+            }
             if (
                 e.statusCode in 500..599 &&
                 applySavedQueueSnapshot(
@@ -1416,6 +1450,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             updateSyncBadgeState()
             Result.success(Unit)
         } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
             if (isNetworkError(error)) {
                 _queueOffline.value = true
                 updateSyncBadgeState()
@@ -1611,6 +1648,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
             Result.failure(error)
         }
     }
@@ -1711,6 +1751,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 updateSyncBadgeState(syncResult.pendingCount)
             } catch (e: Exception) {
+                if (handleAuthFailureIfNeeded(e)) {
+                    updateSyncBadgeState()
+                    return@launch
+                }
                 if (isNetworkError(e)) {
                     _queueOffline.value = true
                 }
@@ -1747,6 +1791,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
             if (isNoActiveContentError(error)) {
                 _noActiveContentItemIds.update { previous -> previous + itemId }
             }
@@ -1800,6 +1847,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
             if (isNetworkError(error)) {
                 _queueOffline.value = true
                 updateSyncBadgeState()
@@ -1826,6 +1876,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
             if (isNetworkError(error)) {
                 _queueOffline.value = true
                 _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
@@ -1851,6 +1904,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
             if (isNetworkError(error)) {
                 _queueOffline.value = true
                 _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
@@ -2510,7 +2566,19 @@ private fun MimeoApp(vm: AppViewModel) {
 
     LaunchedEffect(pendingNavigationRoute) {
         pendingNavigationRoute?.let { route ->
-            nav.navigate(route) { launchSingleTop = true }
+            if (route == ROUTE_SIGN_IN) {
+                nav.navigate(route) {
+                    popUpTo(nav.graph.findStartDestination().id) { inclusive = true }
+                    launchSingleTop = true
+                }
+            } else if (route == ROUTE_UP_NEXT && currentRoute == ROUTE_SIGN_IN) {
+                nav.navigate(route) {
+                    popUpTo(ROUTE_SIGN_IN) { inclusive = true }
+                    launchSingleTop = true
+                }
+            } else {
+                nav.navigate(route) { launchSingleTop = true }
+            }
             vm.consumePendingNavigation(route)
         }
     }

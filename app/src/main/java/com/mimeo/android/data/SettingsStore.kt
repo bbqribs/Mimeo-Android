@@ -282,6 +282,12 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun saveTokenOnly(apiToken: String) {
+        context.dataStore.edit { prefs ->
+            prefs[tokenKey] = apiToken.trim()
+        }
+    }
+
     suspend fun savePlayerControlsMode(playerControlsMode: PlayerControlsMode) {
         context.dataStore.edit { prefs ->
             prefs[playerControlsModeKey] = playerControlsMode.name
