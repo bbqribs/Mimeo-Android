@@ -177,6 +177,7 @@ private const val INITIAL_SIGN_IN_HYDRATION_RETRY_DELAY_MS = 300L
 private const val INITIAL_SIGN_IN_BACKGROUND_HYDRATION_ATTEMPTS = 10
 private const val INITIAL_SIGN_IN_BACKGROUND_HYDRATION_RETRY_DELAY_MS = 500L
 private const val SMART_QUEUE_SESSION_CONTEXT_ID = -1
+private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 
 private data class BottomNavDestination(
     val route: String,
@@ -2081,6 +2082,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val nextIndex = resolveNextPlaylistScopedSessionIndex(session, currentId) ?: return null
         val updated = repository.setCurrentIndex(nextIndex) ?: session.copy(currentIndex = nextIndex)
         _nowPlayingSession.value = updated
+        Log.d(
+            LOCUS_CONTINUATION_DEBUG_TAG,
+            "vm.nextPlaylistScopedSessionItemId currentId=$currentId nextIndex=$nextIndex nextId=${updated.currentItem?.itemId} sourcePlaylistId=${updated.sourcePlaylistId}",
+        )
         return updated.currentItem?.itemId
     }
 
@@ -2530,6 +2535,12 @@ private fun MimeoApp(vm: AppViewModel) {
         if (args.containsKey("itemId")) args.getInt("itemId").takeIf { it > 0 } else null
     }
     val requestedPlayerItemId = sessionNowPlayingItemId ?: routeItemId
+    LaunchedEffect(sessionNowPlayingItemId, routeItemId, requestedPlayerItemId, currentRoute) {
+        Log.d(
+            LOCUS_CONTINUATION_DEBUG_TAG,
+            "mimeoApp route=$currentRoute routeItemId=$routeItemId sessionItemId=$sessionNowPlayingItemId requestedItemId=$requestedPlayerItemId",
+        )
+    }
     val selectedTab = when {
         currentRoute.startsWith(ROUTE_LOCUS) -> ROUTE_LOCUS
         currentRoute.startsWith(ROUTE_COLLECTIONS) -> ROUTE_COLLECTIONS
