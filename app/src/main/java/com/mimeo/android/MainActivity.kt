@@ -201,16 +201,6 @@ internal fun selectInitialQueueHydrationTargets(
         .toList()
 }
 
-internal fun consumeInitialQueuePrefetchCount(
-    autoDownloadEnabled: Boolean,
-    hydrationPending: Boolean,
-    limit: Int = INITIAL_SIGN_IN_AUTO_DOWNLOAD_LIMIT,
-): Pair<Int, Boolean> {
-    if (!hydrationPending) return 0 to false
-    if (!autoDownloadEnabled) return 0 to false
-    return limit.coerceAtLeast(0) to false
-}
-
 private fun isLikelyPhysicalDevice(): Boolean {
     val fingerprint = Build.FINGERPRINT.lowercase()
     val model = Build.MODEL.lowercase()
@@ -978,19 +968,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }.getOrNull()?.let { loaded ->
                 _playlists.value = loaded
             }
-            val (initialPrefetchCount, remainingHydrationPending) = consumeInitialQueuePrefetchCount(
-                autoDownloadEnabled = current.autoDownloadSavedArticles,
-                hydrationPending = pendingInitialPostSignInHydration,
-            )
-            pendingInitialPostSignInHydration = remainingHydrationPending
             val queueResult = repository.loadQueueAndPrefetch(
                 current.baseUrl,
                 current.apiToken,
                 playlistId = current.selectedPlaylistId,
-                prefetchCount = initialPrefetchCount,
+                prefetchCount = 0,
             )
             val queue = queueResult.payload
             var offlineReadyIds = resolveOfflineReadyIds(queue.items)
+            offlineReadyIds = runInitialPostSignInHydrationIfNeeded(
+                current = current,
+                queueItems = queue.items,
+                cachedItemIds = offlineReadyIds,
+            )
             offlineReadyIds = ensurePendingItemsOfflineReady(
                 queueItems = queue.items,
                 selectedPlaylistId = current.selectedPlaylistId,
@@ -2071,6 +2061,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             candidates.mapNotNull { it.activeContentVersionId },
         )
         return resolveOfflineReadyItemIds(candidates, cachedByItemId, cachedByVersion)
+    }
+
+    private suspend fun runInitialPostSignInHydrationIfNeeded(
+        current: AppSettings,
+        queueItems: List<PlaybackQueueItem>,
+        cachedItemIds: Set<Int>,
+    ): Set<Int> {
+        if (!pendingInitialPostSignInHydration) return cachedItemIds
+        pendingInitialPostSignInHydration = false
+        if (!current.autoDownloadSavedArticles) return cachedItemIds
+        val targets = selectInitialQueueHydrationTargets(
+            queueItems = queueItems,
+            cachedItemIds = cachedItemIds,
+        )
+        if (targets.isEmpty()) return cachedItemIds
+        repository.prefetchItemTexts(
+            baseUrl = current.baseUrl,
+            token = current.apiToken,
+            itemIds = targets,
+        )
+        return resolveOfflineReadyIds(queueItems)
     }
 
     private fun updateSyncBadgeState(pendingCount: Int = _pendingProgressCount.value) {

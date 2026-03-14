@@ -125,6 +125,17 @@ class PlaybackRepository(
         return queueResult.copy(debugSnapshot = snapshot)
     }
 
+    suspend fun prefetchItemTexts(
+        baseUrl: String,
+        token: String,
+        itemIds: List<Int>,
+    ) {
+        itemIds.distinct().forEach { itemId ->
+            runCatching { apiClient.getItemText(baseUrl, token, itemId) }
+                .onSuccess { payload -> cacheItem(payload) }
+        }
+    }
+
     suspend fun listPlaylists(baseUrl: String, token: String): List<PlaylistSummary> {
         return apiClient.getPlaylists(baseUrl, token)
     }
