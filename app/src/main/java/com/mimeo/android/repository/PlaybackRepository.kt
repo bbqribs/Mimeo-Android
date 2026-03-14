@@ -22,6 +22,12 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 
+data class ItemTextPrefetchAttempt(
+    val itemId: Int,
+    val success: Boolean,
+    val errorSummary: String? = null,
+)
+
 data class ItemTextResult(
     val payload: ItemTextResponse,
     val usingCache: Boolean,
@@ -129,10 +135,25 @@ class PlaybackRepository(
         baseUrl: String,
         token: String,
         itemIds: List<Int>,
-    ) {
-        itemIds.distinct().forEach { itemId ->
-            runCatching { apiClient.getItemText(baseUrl, token, itemId) }
-                .onSuccess { payload -> cacheItem(payload) }
+    ): List<ItemTextPrefetchAttempt> {
+        return itemIds.distinct().map { itemId ->
+            try {
+                val payload = apiClient.getItemText(baseUrl, token, itemId)
+                cacheItem(payload)
+                ItemTextPrefetchAttempt(itemId = itemId, success = true)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                val summary = when (error) {
+                    is com.mimeo.android.data.ApiException -> "api:${error.statusCode}:${error.message.orEmpty()}"
+                    else -> "${error::class.simpleName}:${error.message.orEmpty()}"
+                }.take(240)
+                ItemTextPrefetchAttempt(
+                    itemId = itemId,
+                    success = false,
+                    errorSummary = summary,
+                )
+            }
         }
     }
 

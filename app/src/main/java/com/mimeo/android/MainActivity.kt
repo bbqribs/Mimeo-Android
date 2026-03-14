@@ -103,6 +103,7 @@ import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.repository.ItemTextResult
+import com.mimeo.android.repository.ItemTextPrefetchAttempt
 import com.mimeo.android.repository.FoldersRepository
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.NowPlayingSessionItem
@@ -168,6 +169,7 @@ private const val ACTION_KEY_OPEN_DIAGNOSTICS = "open_diagnostics"
 private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
 private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
 private const val DEBUG_TARGET_ITEM_ID = 409
+private const val INITIAL_SIGN_IN_HYDRATION_DEBUG_TAG = "MimeoSignInHydration"
 private const val INITIAL_SIGN_IN_AUTO_DOWNLOAD_LIMIT = 2_147_483_647
 private const val INITIAL_SIGN_IN_HYDRATION_ATTEMPTS = 3
 private const val INITIAL_SIGN_IN_HYDRATION_RETRY_DELAY_MS = 300L
@@ -2088,7 +2090,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
         if (remainingTargets.isEmpty()) return offlineReadyIds
         repeat(INITIAL_SIGN_IN_HYDRATION_ATTEMPTS) { attempt ->
-            repository.prefetchItemTexts(
+            val attempts = repository.prefetchItemTexts(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
                 itemIds = remainingTargets,
@@ -2097,6 +2099,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             remainingTargets = selectInitialQueueHydrationTargets(
                 queueItems = queueItems,
                 cachedItemIds = offlineReadyIds,
+            )
+            logInitialHydrationAttempt(
+                phase = "initial",
+                attempt = attempt + 1,
+                requestedIds = attempts.map { it.itemId },
+                attempts = attempts,
+                unresolvedIds = remainingTargets,
             )
             if (remainingTargets.isEmpty()) {
                 return offlineReadyIds
@@ -2124,7 +2133,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         var remainingTargets = targetItemIds.distinct()
         repeat(INITIAL_SIGN_IN_BACKGROUND_HYDRATION_ATTEMPTS) { attempt ->
             if (remainingTargets.isEmpty()) return
-            repository.prefetchItemTexts(
+            val attempts = repository.prefetchItemTexts(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
                 itemIds = remainingTargets,
@@ -2134,11 +2143,41 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _cachedItemIds.value = resolveOfflineReadyIds(_queueItems.value)
             }
             remainingTargets = remainingTargets.filterNot { cachedTargetIds.contains(it) }
+            logInitialHydrationAttempt(
+                phase = "background",
+                attempt = attempt + 1,
+                requestedIds = attempts.map { it.itemId },
+                attempts = attempts,
+                unresolvedIds = remainingTargets,
+            )
             if (remainingTargets.isEmpty()) return
             if (attempt < INITIAL_SIGN_IN_BACKGROUND_HYDRATION_ATTEMPTS - 1) {
                 delay(INITIAL_SIGN_IN_BACKGROUND_HYDRATION_RETRY_DELAY_MS)
             }
         }
+        if (remainingTargets.isNotEmpty()) {
+            Log.w(
+                INITIAL_SIGN_IN_HYDRATION_DEBUG_TAG,
+                "unresolvedAfterBackground itemIds=${remainingTargets.joinToString(",")}",
+            )
+        }
+    }
+
+    private fun logInitialHydrationAttempt(
+        phase: String,
+        attempt: Int,
+        requestedIds: List<Int>,
+        attempts: List<ItemTextPrefetchAttempt>,
+        unresolvedIds: List<Int>,
+    ) {
+        if (!BuildConfig.DEBUG) return
+        val failures = attempts
+            .filterNot { it.success }
+            .joinToString(";") { "${it.itemId}:${it.errorSummary.orEmpty()}" }
+        Log.d(
+            INITIAL_SIGN_IN_HYDRATION_DEBUG_TAG,
+            "phase=$phase attempt=$attempt requested=${requestedIds.joinToString(",")} unresolved=${unresolvedIds.joinToString(",")} failures=$failures",
+        )
     }
 
     private fun updateSyncBadgeState(pendingCount: Int = _pendingProgressCount.value) {
