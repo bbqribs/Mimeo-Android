@@ -926,21 +926,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _testingConnection.value = true
             try {
                 val version = apiClient.getDebugVersion(current.baseUrl, current.apiToken)
-                settingsStore.saveConnectionTestSuccess(
-                    mode = current.connectionMode,
-                    baseUrl = current.baseUrl,
-                    gitSha = version.gitSha,
-                )
-                _statusMessage.value = ConnectionTestMessageResolver.connected(
-                    mode = current.connectionMode,
-                    baseUrl = current.baseUrl,
-                    gitSha = version.gitSha,
-                )
-                _queueOffline.value = false
-                updateSyncBadgeState()
                 val retrySummary = retryAllPendingManualSaves()
-                if (retrySummary.successCount >= 0) {
+                val queueResult = if (retrySummary.successCount >= 0) {
                     loadQueueOnce(autoRetryPendingSaves = false)
+                } else {
+                    Result.success(Unit)
+                }
+                if (queueResult.isSuccess && settings.value.apiToken.isNotBlank() && _signInState.value !is SignInState.Error) {
+                    settingsStore.saveConnectionTestSuccess(
+                        mode = current.connectionMode,
+                        baseUrl = current.baseUrl,
+                        gitSha = version.gitSha,
+                    )
+                    _statusMessage.value = ConnectionTestMessageResolver.connected(
+                        mode = current.connectionMode,
+                        baseUrl = current.baseUrl,
+                        gitSha = version.gitSha,
+                    )
+                    _queueOffline.value = false
+                    updateSyncBadgeState()
                 }
             } catch (e: ApiException) {
                 _statusMessage.value = ConnectionTestMessageResolver.forApiFailure(
