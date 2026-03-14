@@ -580,13 +580,13 @@ fun PlayerScreen(
 
         lastHandledDoneUtteranceId = transition.handledUtteranceId
         pendingDoneEvent = null
-        val finishedChunk = chunks[safe.chunkIndex]
-        setPlaybackPosition(safe.chunkIndex, finishedChunk.length)
 
         if (transition.shouldPlayNextChunk) {
             val next = transition.nextPosition.chunkIndex
             debugLog("advance chunk ${safe.chunkIndex} -> $next")
             continuationLog("doneEffect nextChunk currentItem=$currentItemId nextChunk=$next")
+            val finishedChunk = chunks[safe.chunkIndex]
+            setPlaybackPosition(safe.chunkIndex, finishedChunk.length)
             setPlaybackPosition(next, 0)
             playChunk(next, 0)
         } else if (transition.reachedEnd) {
