@@ -598,22 +598,25 @@ fun PlayerScreen(
             val playlistScoped = vm.isCurrentSessionPlaylistScoped()
             val shouldAutoAdvance = vm.shouldAutoAdvanceAfterCompletion()
             if (playlistScoped || shouldAutoAdvance) {
-                val nextId = if (playlistScoped) {
-                    vm.nextPlaylistScopedSessionItemId(currentItemId)
-                } else {
-                    vm.nextSessionItemId(currentItemId)
-                }
-                continuationLog("doneEffect resolvedNextId currentItem=$currentItemId nextId=$nextId")
-                if (nextId == null) {
-                    uiMessage = "Completed"
-                } else {
-                    stopSpeaking(forceSync = false)
-                    continuationLog("doneEffect switching currentItem $currentItemId -> $nextId")
-                    currentItemId = nextId
-                    vm.setPlaybackPosition(nextId, 0, 0)
-                    autoPlayAfterLoad = true
-                    continuationLog("doneEffect navigating nextId=$nextId")
-                    onOpenItem(nextId)
+                val finishedItemId = currentItemId
+                actionScope.launch {
+                    val nextId = if (playlistScoped) {
+                        vm.nextPlaylistScopedSessionItemId(finishedItemId)
+                    } else {
+                        vm.nextSessionItemId(finishedItemId)
+                    }
+                    continuationLog("doneEffect resolvedNextId currentItem=$finishedItemId nextId=$nextId")
+                    if (nextId == null) {
+                        uiMessage = "Completed"
+                    } else {
+                        stopSpeaking(forceSync = false)
+                        continuationLog("doneEffect switching currentItem $finishedItemId -> $nextId")
+                        currentItemId = nextId
+                        vm.setPlaybackPosition(nextId, 0, 0)
+                        autoPlayAfterLoad = true
+                        continuationLog("doneEffect navigating nextId=$nextId")
+                        onOpenItem(nextId)
+                    }
                 }
             } else {
                 uiMessage = "Completed"
