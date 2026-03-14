@@ -138,6 +138,7 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -170,6 +171,8 @@ private const val DEBUG_TARGET_ITEM_ID = 409
 private const val INITIAL_SIGN_IN_AUTO_DOWNLOAD_LIMIT = 2_147_483_647
 private const val INITIAL_SIGN_IN_HYDRATION_ATTEMPTS = 3
 private const val INITIAL_SIGN_IN_HYDRATION_RETRY_DELAY_MS = 300L
+private const val INITIAL_SIGN_IN_BACKGROUND_HYDRATION_ATTEMPTS = 10
+private const val INITIAL_SIGN_IN_BACKGROUND_HYDRATION_RETRY_DELAY_MS = 500L
 
 private data class BottomNavDestination(
     val route: String,
@@ -350,6 +353,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val settingsScrollOffset: StateFlow<Int> = _settingsScrollOffset.asStateFlow()
     private var lastPendingAutoRetryAtMs: Long = 0L
     private var pendingInitialPostSignInHydration = false
+    private var initialPostSignInHydrationJob: Job? = null
     private val connectivityManager =
         application.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
     private var connectivityCallback: ConnectivityManager.NetworkCallback? = null
@@ -361,6 +365,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             settingsStore.settingsFlow.collect { next ->
                 _settings.value = next
                 if (next.apiToken.isBlank()) {
+                    initialPostSignInHydrationJob?.cancel()
+                    initialPostSignInHydrationJob = null
                     _queueItems.value = emptyList()
                     _cachedItemIds.value = emptySet()
                     _queueOffline.value = false
@@ -2099,7 +2105,40 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 delay(INITIAL_SIGN_IN_HYDRATION_RETRY_DELAY_MS)
             }
         }
+        if (remainingTargets.isNotEmpty()) {
+            initialPostSignInHydrationJob?.cancel()
+            initialPostSignInHydrationJob = viewModelScope.launch {
+                continueInitialPostSignInHydration(
+                    current = current,
+                    targetItemIds = remainingTargets,
+                )
+            }
+        }
         return offlineReadyIds
+    }
+
+    private suspend fun continueInitialPostSignInHydration(
+        current: AppSettings,
+        targetItemIds: List<Int>,
+    ) {
+        var remainingTargets = targetItemIds.distinct()
+        repeat(INITIAL_SIGN_IN_BACKGROUND_HYDRATION_ATTEMPTS) { attempt ->
+            if (remainingTargets.isEmpty()) return
+            repository.prefetchItemTexts(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                itemIds = remainingTargets,
+            )
+            val cachedTargetIds = repository.getCachedItemIds(remainingTargets)
+            if (cachedTargetIds.isNotEmpty()) {
+                _cachedItemIds.value = resolveOfflineReadyIds(_queueItems.value)
+            }
+            remainingTargets = remainingTargets.filterNot { cachedTargetIds.contains(it) }
+            if (remainingTargets.isEmpty()) return
+            if (attempt < INITIAL_SIGN_IN_BACKGROUND_HYDRATION_ATTEMPTS - 1) {
+                delay(INITIAL_SIGN_IN_BACKGROUND_HYDRATION_RETRY_DELAY_MS)
+            }
+        }
     }
 
     private fun updateSyncBadgeState(pendingCount: Int = _pendingProgressCount.value) {
