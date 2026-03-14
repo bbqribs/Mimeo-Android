@@ -188,6 +188,12 @@ data class UiSnackbarMessage(
     val duration: SnackbarDuration = SnackbarDuration.Short,
 )
 
+internal fun isStaleTokenAuthFailure(error: Throwable): Boolean {
+    return error is ApiException && error.statusCode == 401
+}
+
+internal fun staleTokenSignInMessage(): String = "Session expired. Please sign in again."
+
 data class PendingRetryBatchResult(
     val successCount: Int,
     val firstFailureResult: ShareSaveResult? = null,
@@ -353,6 +359,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val pendingNavigationRoute: StateFlow<String?> = _pendingNavigationRoute.asStateFlow()
     private val _settingsScrollOffset = MutableStateFlow(0)
     val settingsScrollOffset: StateFlow<Int> = _settingsScrollOffset.asStateFlow()
+    private val authFailureMutex = Mutex()
+    private var authFailureHandledThisSession = false
     private var lastPendingAutoRetryAtMs: Long = 0L
     private var pendingInitialPostSignInHydration = false
     private var initialPostSignInHydrationJob: Job? = null
@@ -375,6 +383,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     _playlists.value = emptyList()
                 }
                 if (previous.apiToken.isBlank() && next.apiToken.isNotBlank()) {
+                    authFailureHandledThisSession = false
                     pendingInitialPostSignInHydration = true
                     loadQueue()
                 } else if (previous.apiToken.isNotBlank() && next.apiToken.isBlank()) {
@@ -641,6 +650,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun signOut() {
         viewModelScope.launch {
+            authFailureHandledThisSession = false
             settingsStore.saveTokenOnly("")
             requestNavigation(ROUTE_SIGN_IN)
         }
@@ -666,10 +676,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     connectionMode = connectionMode,
                     apiToken = response.token,
                 )
+                authFailureHandledThisSession = false
                 _signInState.value = SignInState.Idle
                 requestNavigation(ROUTE_UP_NEXT)
             } catch (error: Exception) {
                 _signInState.value = SignInState.Error(resolveSignInErrorMessage(error))
+            }
+        }
+    }
+
+    private suspend fun handleAuthFailureIfNeeded(error: Throwable): Boolean {
+        if (!isStaleTokenAuthFailure(error)) return false
+        return authFailureMutex.withLock {
+            if (authFailureHandledThisSession || settings.value.apiToken.isBlank()) {
+                true
+            } else {
+                authFailureHandledThisSession = true
+                settingsStore.saveTokenOnly("")
+                _signInState.value = SignInState.Error(staleTokenSignInMessage())
+                requestNavigation(ROUTE_SIGN_IN)
+                true
             }
         }
     }
@@ -947,6 +973,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     updateSyncBadgeState()
                 }
             } catch (e: ApiException) {
+                if (handleAuthFailureIfNeeded(e)) {
+                    return@launch
+                }
                 _statusMessage.value = ConnectionTestMessageResolver.forApiFailure(
                     mode = current.connectionMode,
                     baseUrl = current.baseUrl,
