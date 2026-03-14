@@ -192,6 +192,7 @@ internal fun selectInitialQueueHydrationTargets(
 ): List<Int> {
     if (limit <= 0) return emptyList()
     return queueItems
+        .sortedByDescending { it.createdAt ?: "" }
         .asSequence()
         .filterNot { isTerminalPendingProcessingStatus(it.status) }
         .map { it.itemId }
