@@ -135,6 +135,7 @@ private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 internal enum class PlaybackOpenIntent {
     ManualOpen,
     AutoContinue,
+    Replay,
 }
 
 internal fun resolveSeededPlaybackPosition(
@@ -145,7 +146,8 @@ internal fun resolveSeededPlaybackPosition(
     positionForPercent: (Int) -> PlaybackPosition,
 ): PlaybackPosition {
     return when (openIntent) {
-        PlaybackOpenIntent.AutoContinue -> PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
+        PlaybackOpenIntent.AutoContinue,
+        PlaybackOpenIntent.Replay -> PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
         PlaybackOpenIntent.ManualOpen -> {
             if (
                 saved.chunkIndex == 0 &&
@@ -208,7 +210,15 @@ fun PlayerScreen(
     var pendingDoneEvent by remember { mutableStateOf<PlaybackDoneEvent?>(null) }
     var lastHandledDoneUtteranceId by remember { mutableStateOf<String?>(null) }
     var autoPlayAfterLoad by remember { mutableStateOf(false) }
-    var pendingOpenIntent by remember { mutableStateOf(PlaybackOpenIntent.ManualOpen) }
+    var pendingOpenIntent by remember {
+        mutableStateOf(
+            if (vm.isItemCompletedForPlaybackStart(initialItemId)) {
+                PlaybackOpenIntent.Replay
+            } else {
+                PlaybackOpenIntent.ManualOpen
+            },
+        )
+    }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
@@ -467,6 +477,11 @@ fun PlayerScreen(
     LaunchedEffect(initialItemId) {
         if (resolvedInitial) return@LaunchedEffect
         val resolvedId = vm.resolveInitialPlayerItemId(initialItemId)
+        pendingOpenIntent = if (vm.isItemCompletedForPlaybackStart(resolvedId)) {
+            PlaybackOpenIntent.Replay
+        } else {
+            PlaybackOpenIntent.ManualOpen
+        }
         currentItemId = resolvedId
         resolvedInitial = true
     }
@@ -479,7 +494,11 @@ fun PlayerScreen(
             "requestedItemEffect target=$target current=$currentItemId autoPlayAfterLoad=$autoPlayAfterLoad",
         )
         stopSpeaking(forceSync = true)
-        pendingOpenIntent = PlaybackOpenIntent.ManualOpen
+        pendingOpenIntent = if (vm.isItemCompletedForPlaybackStart(target)) {
+            PlaybackOpenIntent.Replay
+        } else {
+            PlaybackOpenIntent.ManualOpen
+        }
         currentItemId = target
         autoPlayAfterLoad = false
     }

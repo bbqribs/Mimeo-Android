@@ -44,4 +44,17 @@ class PlaybackOpenIntentTest {
 
         assertEquals(PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0), seeded)
     }
+
+    @Test
+    fun replayAlwaysStartsFromBeginning() {
+        val seeded = resolveSeededPlaybackPosition(
+            saved = PlaybackPosition(chunkIndex = 4, offsetInChunkChars = 300),
+            knownProgress = 100,
+            hasChunks = true,
+            openIntent = PlaybackOpenIntent.Replay,
+            positionForPercent = { PlaybackPosition(chunkIndex = 7, offsetInChunkChars = 40) },
+        )
+
+        assertEquals(PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0), seeded)
+    }
 }
