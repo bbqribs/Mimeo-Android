@@ -132,6 +132,35 @@ private const val PLAYBACK_SPEED_STEPS = 69
 private val PLAYBACK_SPEED_PILLS = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
 private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 
+internal enum class PlaybackOpenIntent {
+    ManualOpen,
+    AutoContinue,
+}
+
+internal fun resolveSeededPlaybackPosition(
+    saved: PlaybackPosition,
+    knownProgress: Int,
+    hasChunks: Boolean,
+    openIntent: PlaybackOpenIntent,
+    positionForPercent: (Int) -> PlaybackPosition,
+): PlaybackPosition {
+    return when (openIntent) {
+        PlaybackOpenIntent.AutoContinue -> PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
+        PlaybackOpenIntent.ManualOpen -> {
+            if (
+                saved.chunkIndex == 0 &&
+                saved.offsetInChunkChars == 0 &&
+                knownProgress > 0 &&
+                hasChunks
+            ) {
+                positionForPercent(knownProgress)
+            } else {
+                saved
+            }
+        }
+    }
+}
+
 private fun debugLog(message: String) {
     if (DEBUG_PLAYBACK) {
         println("[Mimeo][player] $message")
@@ -179,6 +208,7 @@ fun PlayerScreen(
     var pendingDoneEvent by remember { mutableStateOf<PlaybackDoneEvent?>(null) }
     var lastHandledDoneUtteranceId by remember { mutableStateOf<String?>(null) }
     var autoPlayAfterLoad by remember { mutableStateOf(false) }
+    var pendingOpenIntent by remember { mutableStateOf(PlaybackOpenIntent.ManualOpen) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
@@ -449,6 +479,7 @@ fun PlayerScreen(
             "requestedItemEffect target=$target current=$currentItemId autoPlayAfterLoad=$autoPlayAfterLoad",
         )
         stopSpeaking(forceSync = true)
+        pendingOpenIntent = PlaybackOpenIntent.ManualOpen
         currentItemId = target
         autoPlayAfterLoad = false
     }
@@ -505,18 +536,16 @@ fun PlayerScreen(
 
                 val saved = vm.getPlaybackPosition(currentItemId)
                 val knownProgress = vm.knownProgressForItem(currentItemId)
-                val seeded = if (
-                    saved.chunkIndex == 0 &&
-                    saved.offsetInChunkChars == 0 &&
-                    knownProgress > 0 &&
-                    chunks.isNotEmpty()
-                ) {
-                    positionForPercent(knownProgress)
-                } else {
-                    saved
-                }
+                val seeded = resolveSeededPlaybackPosition(
+                    saved = saved,
+                    knownProgress = knownProgress,
+                    hasChunks = chunks.isNotEmpty(),
+                    openIntent = pendingOpenIntent,
+                    positionForPercent = ::positionForPercent,
+                )
                 val safe = normalizedPosition(seeded)
                 vm.setPlaybackPosition(currentItemId, safe.chunkIndex, safe.offsetInChunkChars)
+                pendingOpenIntent = PlaybackOpenIntent.ManualOpen
 
                 if (autoPlayAfterLoad && chunks.isNotEmpty()) {
                     continuationLog(
@@ -531,6 +560,7 @@ fun PlayerScreen(
                 if (err is CancellationException) {
                     return@onFailure
                 }
+                pendingOpenIntent = PlaybackOpenIntent.ManualOpen
                 uiMessage = if (err is ApiException && err.statusCode == 401) {
                     "Unauthorized-check token"
                 } else if (isNetworkError(err)) {
@@ -611,6 +641,7 @@ fun PlayerScreen(
                     } else {
                         stopSpeaking(forceSync = false)
                         continuationLog("doneEffect switching currentItem $finishedItemId -> $nextId")
+                        pendingOpenIntent = PlaybackOpenIntent.AutoContinue
                         currentItemId = nextId
                         vm.setPlaybackPosition(nextId, 0, 0)
                         autoPlayAfterLoad = true
