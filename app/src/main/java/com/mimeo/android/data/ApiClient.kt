@@ -63,6 +63,12 @@ private data class AuthTokenPayload(
     @kotlinx.serialization.SerialName("device_name") val deviceName: String,
 )
 
+@Serializable
+private data class ChangePasswordPayload(
+    @kotlinx.serialization.SerialName("old_password") val oldPassword: String,
+    @kotlinx.serialization.SerialName("new_password") val newPassword: String,
+)
+
 class ApiClient(
     private val okHttpClient: OkHttpClient = OkHttpClient(),
     private val json: Json = Json { ignoreUnknownKeys = true },
@@ -99,6 +105,26 @@ class ApiClient(
             .post(body)
             .build()
         executeJson(request) { payload -> json.decodeFromString<AuthTokenResponse>(payload) }
+    }
+
+    suspend fun postChangePassword(
+        baseUrl: String,
+        token: String,
+        oldPassword: String,
+        newPassword: String,
+    ) = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(
+            ChangePasswordPayload(
+                oldPassword = oldPassword,
+                newPassword = newPassword,
+            ),
+        ).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/auth/change-password"))
+            .header("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+        executeNoBody(request)
     }
 
     suspend fun getQueue(baseUrl: String, token: String, playlistId: Int? = null): QueueFetchResult = withContext(Dispatchers.IO) {

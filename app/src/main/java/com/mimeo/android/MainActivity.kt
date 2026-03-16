@@ -123,7 +123,11 @@ import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
 import com.mimeo.android.ui.settings.ConnectionTestMessageResolver
+import com.mimeo.android.ui.settings.PasswordChangeState
 import com.mimeo.android.ui.settings.SettingsScreen
+import com.mimeo.android.ui.settings.passwordChangeSuccessMessage
+import com.mimeo.android.ui.settings.resolvePasswordChangeError
+import com.mimeo.android.ui.settings.validatePasswordChangeInput
 import com.mimeo.android.ui.player.PlayerScreen
 import com.mimeo.android.ui.playlists.PlaylistsScreen
 import com.mimeo.android.ui.queue.QueueScreen
@@ -372,6 +376,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val testingConnection: StateFlow<Boolean> = _testingConnection.asStateFlow()
     private val _signInState = MutableStateFlow<SignInState>(SignInState.Idle)
     val signInState: StateFlow<SignInState> = _signInState.asStateFlow()
+    private val _passwordChangeState = MutableStateFlow<PasswordChangeState>(PasswordChangeState.Idle)
+    val passwordChangeState: StateFlow<PasswordChangeState> = _passwordChangeState.asStateFlow()
 
     private val _diagnosticsRows = MutableStateFlow<List<ConnectivityDiagnosticRow>>(emptyList())
     val diagnosticsRows: StateFlow<List<ConnectivityDiagnosticRow>> = _diagnosticsRows.asStateFlow()
@@ -694,11 +700,54 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun clearPasswordChangeState() {
+        _passwordChangeState.value = PasswordChangeState.Idle
+    }
+
     fun signOut() {
         viewModelScope.launch {
             authFailureHandledThisSession = false
             settingsStore.saveTokenOnly("")
             requestNavigation(ROUTE_SIGN_IN)
+        }
+    }
+
+    fun changePassword(
+        currentPassword: String,
+        newPassword: String,
+        confirmNewPassword: String,
+    ) {
+        val validationError = validatePasswordChangeInput(
+            currentPassword = currentPassword,
+            newPassword = newPassword,
+            confirmNewPassword = confirmNewPassword,
+        )
+        if (validationError != null) {
+            _passwordChangeState.value = PasswordChangeState.Error(validationError)
+            return
+        }
+
+        viewModelScope.launch {
+            _passwordChangeState.value = PasswordChangeState.Submitting
+            val current = settings.value
+            try {
+                apiClient.postChangePassword(
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
+                    oldPassword = currentPassword,
+                    newPassword = newPassword,
+                )
+                val message = passwordChangeSuccessMessage()
+                _passwordChangeState.value = PasswordChangeState.Success(message)
+                showSnackbar(message)
+            } catch (error: Exception) {
+                val resolution = resolvePasswordChangeError(error)
+                if (resolution.staleAuth && handleAuthFailureIfNeeded(error)) {
+                    _passwordChangeState.value = PasswordChangeState.Idle
+                } else {
+                    _passwordChangeState.value = PasswordChangeState.Error(resolution.message)
+                }
+            }
         }
     }
 
@@ -2826,6 +2875,8 @@ private fun MimeoApp(vm: AppViewModel) {
                             SettingsScreen(
                                 vm = vm,
                                 onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
+                                onChangePassword = vm::changePassword,
+                                onClearPasswordChangeState = vm::clearPasswordChangeState,
                                 onSignOut = vm::signOut,
                             )
                         }
