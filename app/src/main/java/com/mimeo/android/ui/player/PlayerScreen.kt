@@ -167,6 +167,10 @@ private fun continuationLog(message: String) {
     Log.d(LOCUS_CONTINUATION_DEBUG_TAG, message)
 }
 
+private fun playableChunkLength(chunk: PlaybackChunk): Int {
+    return chunk.text.length.coerceAtLeast(0)
+}
+
 @Composable
 fun PlayerScreen(
     vm: AppViewModel,
@@ -314,13 +318,13 @@ fun PlayerScreen(
                 if (event.itemId != latestItemId) return@TtsController
                 if (event.chunkIndex != latestPosition.chunkIndex) return@TtsController
                 val safeIndex = event.chunkIndex.coerceIn(0, currentChunks.lastIndex)
-                val safeOffset = event.absoluteOffsetInChunk.coerceIn(0, currentChunks[safeIndex].length)
+                val safeOffset = event.absoluteOffsetInChunk.coerceIn(0, playableChunkLength(currentChunks[safeIndex]))
                 val safeRange = if (BuildConfig.DEBUG && settings.forceSentenceHighlightFallback) {
                     null
                 } else {
                     event.activeRangeInChunk?.let { range ->
-                        val start = range.first.coerceIn(0, currentChunks[safeIndex].length)
-                        val endExclusive = (range.last + 1).coerceIn(0, currentChunks[safeIndex].length)
+                        val start = range.first.coerceIn(0, playableChunkLength(currentChunks[safeIndex]))
+                        val endExclusive = (range.last + 1).coerceIn(0, playableChunkLength(currentChunks[safeIndex]))
                         if (endExclusive > start) start until endExclusive else null
                     }
                 }
@@ -352,7 +356,7 @@ fun PlayerScreen(
     fun normalizedPosition(position: PlaybackPosition): PlaybackPosition {
         if (chunks.isEmpty()) return PlaybackPosition()
         val safeIndex = normalizedChunkIndex(position.chunkIndex)
-        val safeOffset = position.offsetInChunkChars.coerceIn(0, chunks[safeIndex].length)
+        val safeOffset = position.offsetInChunkChars.coerceIn(0, playableChunkLength(chunks[safeIndex]))
         return PlaybackPosition(chunkIndex = safeIndex, offsetInChunkChars = safeOffset)
     }
 
@@ -373,10 +377,10 @@ fun PlayerScreen(
         val targetAbsolute = ((total.toLong() * boundedPercent) / 100L).toInt().coerceIn(0, total)
         var consumed = 0
         chunks.forEachIndexed { idx, chunk ->
-            val chunkSpan = chunk.length.coerceAtLeast(1)
+            val chunkSpan = playableChunkLength(chunk).coerceAtLeast(1)
             val chunkEnd = consumed + chunkSpan
             if (targetAbsolute <= chunkEnd || idx == chunks.lastIndex) {
-                val offset = (targetAbsolute - consumed).coerceIn(0, chunk.length)
+                val offset = (targetAbsolute - consumed).coerceIn(0, playableChunkLength(chunk))
                 return PlaybackPosition(chunkIndex = idx, offsetInChunkChars = offset)
             }
             consumed = chunkEnd
@@ -390,7 +394,7 @@ fun PlayerScreen(
             return
         }
         val safeIndex = normalizedChunkIndex(chunkIndex)
-        val safeOffset = offsetInChunkChars.coerceIn(0, chunks[safeIndex].length)
+        val safeOffset = offsetInChunkChars.coerceIn(0, playableChunkLength(chunks[safeIndex]))
         debugLog("setPosition item=$currentItemId chunk=$safeIndex offset=$safeOffset")
         vm.setPlaybackPosition(currentItemId, safeIndex, safeOffset)
     }
@@ -408,8 +412,9 @@ fun PlayerScreen(
         if (chunks.isEmpty()) return
         val safeIndex = normalizedChunkIndex(chunkIndex)
         val chunk = chunks[safeIndex]
-        val safeOffset = offsetInChunkChars.coerceIn(0, chunk.length)
-        val speakText = if (safeOffset > 0 && safeOffset < chunk.text.length) {
+        val maxPlayableOffset = playableChunkLength(chunk)
+        val safeOffset = offsetInChunkChars.coerceIn(0, maxPlayableOffset)
+        val speakText = if (safeOffset > 0 && safeOffset < maxPlayableOffset) {
             chunk.text.substring(safeOffset)
         } else {
             chunk.text
@@ -634,7 +639,7 @@ fun PlayerScreen(
             debugLog("advance chunk ${safe.chunkIndex} -> $next")
             continuationLog("doneEffect nextChunk currentItem=$currentItemId nextChunk=$next")
             val finishedChunk = chunks[safe.chunkIndex]
-            setPlaybackPosition(safe.chunkIndex, finishedChunk.length)
+            setPlaybackPosition(safe.chunkIndex, playableChunkLength(finishedChunk))
             setPlaybackPosition(next, 0)
             playChunk(next, 0)
         } else if (transition.reachedEnd) {
@@ -818,7 +823,7 @@ fun PlayerScreen(
                 } else if (chunks.isNotEmpty()) {
                     val livePosition = normalizedPosition(vm.getPlaybackPosition(currentItemId))
                     val restartFromStart = livePosition.chunkIndex == chunks.lastIndex &&
-                        livePosition.offsetInChunkChars >= chunks.last().length
+                        livePosition.offsetInChunkChars >= playableChunkLength(chunks.last())
                     if (restartFromStart) {
                         setPlaybackPosition(0, 0)
                         nearEndForcedForItemId = -1
