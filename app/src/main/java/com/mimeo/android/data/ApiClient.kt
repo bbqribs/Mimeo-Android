@@ -119,12 +119,24 @@ class ApiClient(
                 newPassword = newPassword,
             ),
         ).toRequestBody("application/json".toMediaType())
-        val request = Request.Builder()
-            .url(resolveUrl(baseUrl, "/auth/change-password"))
-            .header("Authorization", "Bearer $token")
-            .post(body)
-            .build()
-        executeNoBody(request)
+        val endpoints = listOf("/auth/change-password", "/auth/change_password")
+        var lastError: ApiException? = null
+        for ((index, endpoint) in endpoints.withIndex()) {
+            val request = Request.Builder()
+                .url(resolveUrl(baseUrl, endpoint))
+                .header("Authorization", "Bearer $token")
+                .post(body)
+                .build()
+            try {
+                executeNoBody(request)
+                return@withContext
+            } catch (error: ApiException) {
+                lastError = error
+                val shouldTryFallback = error.statusCode == 404 && index < endpoints.lastIndex
+                if (!shouldTryFallback) throw error
+            }
+        }
+        throw lastError ?: ApiException(500, "Couldn't change password. Please try again.")
     }
 
     suspend fun getQueue(baseUrl: String, token: String, playlistId: Int? = null): QueueFetchResult = withContext(Dispatchers.IO) {
