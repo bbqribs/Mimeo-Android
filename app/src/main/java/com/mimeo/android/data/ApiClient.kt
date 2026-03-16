@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -135,6 +136,24 @@ class ApiClient(
                 val shouldTryFallback = error.statusCode == 404 && index < endpoints.lastIndex
                 if (!shouldTryFallback) throw error
             }
+        }
+        try {
+            // Compatibility fallback for servers exposing only the web self-service route.
+            val formBody = FormBody.Builder()
+                .add("old_password", oldPassword)
+                .add("new_password", newPassword)
+                .add("confirm_new_password", newPassword)
+                .build()
+            val request = Request.Builder()
+                .url(resolveUrl(baseUrl, "/account/change-password"))
+                .header("Authorization", "Bearer $token")
+                .post(formBody)
+                .build()
+            executeNoBody(request)
+            return@withContext
+        } catch (error: ApiException) {
+            if (error.statusCode != 404) throw error
+            lastError = error
         }
         throw lastError ?: ApiException(500, "Couldn't change password. Please try again.")
     }
