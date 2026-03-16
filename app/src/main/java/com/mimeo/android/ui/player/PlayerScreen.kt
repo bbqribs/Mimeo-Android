@@ -499,7 +499,24 @@ fun PlayerScreen(
     LaunchedEffect(requestedItemId, resolvedInitial) {
         if (!resolvedInitial) return@LaunchedEffect
         val target = requestedItemId ?: return@LaunchedEffect
-        if (target == currentItemId) return@LaunchedEffect
+        if (target == currentItemId) {
+            pendingOpenIntent = if (vm.isItemCompletedForPlaybackStart(target)) {
+                PlaybackOpenIntent.Replay
+            } else {
+                PlaybackOpenIntent.ManualOpen
+            }
+            autoPlayAfterLoad = false
+            preserveVisibleContentOnReload = false
+            reloadNonce += 1
+            continuationLog(
+                "requestedItemEffect sameItemReload target=$target reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
+            )
+            Log.d(
+                MANUAL_OPEN_DEBUG_TAG,
+                "sameItemReload item=$target intent=$pendingOpenIntent reloadNonce=$reloadNonce",
+            )
+            return@LaunchedEffect
+        }
         continuationLog(
             "requestedItemEffect target=$target current=$currentItemId autoPlayAfterLoad=$autoPlayAfterLoad",
         )
