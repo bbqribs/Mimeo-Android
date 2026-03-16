@@ -816,8 +816,9 @@ fun PlayerScreen(
                 if (isSpeaking || isAutoPlaying) {
                     stopSpeaking(forceSync = true)
                 } else if (chunks.isNotEmpty()) {
-                    val restartFromStart = safePosition.chunkIndex == chunks.lastIndex &&
-                        safePosition.offsetInChunkChars >= chunks.last().length
+                    val livePosition = normalizedPosition(vm.getPlaybackPosition(currentItemId))
+                    val restartFromStart = livePosition.chunkIndex == chunks.lastIndex &&
+                        livePosition.offsetInChunkChars >= chunks.last().length
                     if (restartFromStart) {
                         setPlaybackPosition(0, 0)
                         nearEndForcedForItemId = -1
@@ -827,7 +828,7 @@ fun PlayerScreen(
                     val positionToPlay = if (restartFromStart) {
                         PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
                     } else {
-                        safePosition
+                        livePosition
                     }
                     readerScrollTriggerSignal += 1
                     playChunk(positionToPlay.chunkIndex, positionToPlay.offsetInChunkChars)
