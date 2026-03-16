@@ -57,6 +57,15 @@ class PasswordChangeSupportTest {
             ).message,
         )
         assertEquals(
+            "Password change needs a user sign-in token. Sign out, then sign in.",
+            resolvePasswordChangeError(
+                ApiException(
+                    403,
+                    """HTTP 403: {"detail":"Password change is not available for operator tokens"}""",
+                ),
+            ).message,
+        )
+        assertEquals(
             "Password change is not available on this server yet.",
             resolvePasswordChangeError(
                 ApiException(404, """HTTP 404: {"detail":"Not Found"}"""),

@@ -451,11 +451,7 @@ class ApiClient(
     }
 
     private fun throwApiException(statusCode: Int, body: String): Nothing {
-        val message = when (statusCode) {
-            401 -> "Unauthorized-check token"
-            403 -> "Forbidden"
-            else -> if (body.isNotBlank()) "HTTP $statusCode: $body" else "HTTP $statusCode"
-        }
+        val message = if (body.isNotBlank()) "HTTP $statusCode: $body" else "HTTP $statusCode"
         throw ApiException(statusCode, message)
     }
 

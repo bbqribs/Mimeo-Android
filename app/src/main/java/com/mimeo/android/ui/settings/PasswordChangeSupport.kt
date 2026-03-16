@@ -65,6 +65,18 @@ internal fun resolvePasswordChangeError(error: Throwable): PasswordChangeResolut
                         )
                     }
                 }
+                403 -> {
+                    val operatorToken = detail.orEmpty().contains("operator token", ignoreCase = true)
+                    if (operatorToken) {
+                        PasswordChangeResolution(
+                            message = "Password change needs a user sign-in token. Sign out, then sign in.",
+                        )
+                    } else {
+                        PasswordChangeResolution(
+                            message = "Password change is not allowed for this session.",
+                        )
+                    }
+                }
                 in 500..599 -> PasswordChangeResolution(
                     message = "Couldn't change password. Please try again.",
                 )
