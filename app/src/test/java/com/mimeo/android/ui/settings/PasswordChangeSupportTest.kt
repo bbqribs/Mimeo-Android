@@ -24,12 +24,12 @@ class PasswordChangeSupportTest {
     @Test
     fun `validates minimum length guidance`() {
         assertEquals(
-            "New password must be at least 8 characters",
+            "New password must be at least 12 characters",
             validatePasswordChangeInput("current-password", "short", "short"),
         )
         assertEquals(
             null,
-            validatePasswordChangeInput("current-password", "long-enough", "long-enough"),
+            validatePasswordChangeInput("current-password", "long-enough12", "long-enough12"),
         )
     }
 

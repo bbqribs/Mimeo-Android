@@ -7,7 +7,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-internal const val PASSWORD_CHANGE_MIN_LENGTH = 8
+internal const val PASSWORD_CHANGE_MIN_LENGTH = 12
 
 sealed interface PasswordChangeState {
     data object Idle : PasswordChangeState
