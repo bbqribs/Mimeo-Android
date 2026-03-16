@@ -73,9 +73,9 @@ Manual-open start position does not use session `lastReadPercent` or cached loca
 ### For completed/replay detection
 `isItemCompletedForPlaybackStart(itemId)` (`MainActivity.kt`) currently checks:
 - `shouldReplayCompletedItem(knownFurthestForItem(itemId))`
-- `knownFurthestForItem(itemId) = max(queueItem.furthestPercent, sessionItem.lastReadPercent)`
+- `knownFurthestForItem(itemId) = queueItem.furthestPercent`
 
-So completed detection is based on merged furthest-like signals.
+So completed/replay detection is based on queue furthest progress.
 
 ## 3) Update Flow Summary
 
@@ -144,8 +144,7 @@ Status vs contract: aligns with recent queue/offline behavior tickets.
 - No-active-content classification/message covered by `NoActiveContentStateTest`.
 
 ### Ambiguities to keep explicit
-- Done/replay is tied to merged percent signals and threshold, not a dedicated completed flag in Android playback state.
-- If backend and session values drift, `max(...)` can bias toward older higher progress even when user might expect latest-position semantics.
+- Done/replay is tied to queue furthest threshold, not a dedicated completed flag in Android playback state.
 
 ## 7) Recommended Follow-up Tickets (No Behavior Change In This Audit)
 

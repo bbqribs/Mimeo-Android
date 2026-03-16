@@ -2100,12 +2100,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun knownFurthestForItem(itemId: Int): Int {
-        val queueFurthest = queueItems.value.firstOrNull { it.itemId == itemId }?.furthestPercent ?: 0
-        val sessionFurthest = nowPlayingSession.value
-            ?.items
-            ?.firstOrNull { it.itemId == itemId }
-            ?.lastReadPercent ?: 0
-        return maxOf(queueFurthest, sessionFurthest)
+        return queueItems.value.firstOrNull { it.itemId == itemId }?.furthestPercent ?: 0
     }
 
     fun isItemCompletedForPlaybackStart(itemId: Int): Boolean {
