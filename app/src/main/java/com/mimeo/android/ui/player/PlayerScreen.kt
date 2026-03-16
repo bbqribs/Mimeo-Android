@@ -131,6 +131,7 @@ private const val PLAYBACK_SPEED_STEP = 0.05f
 private const val PLAYBACK_SPEED_STEPS = 69
 private val PLAYBACK_SPEED_PILLS = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
 private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
+private const val MANUAL_OPEN_DEBUG_TAG = "MimeoManualOpen"
 
 internal enum class PlaybackOpenIntent {
     ManualOpen,
@@ -223,7 +224,10 @@ fun PlayerScreen(
     var hasRefreshProblem by rememberSaveable { mutableStateOf(false) }
     var preserveVisibleContentOnReload by remember { mutableStateOf(false) }
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
-    val readerScrollState = rememberSaveable(currentItemId, saver = ScrollState.Saver) { ScrollState(0) }
+    var readerViewportSessionNonce by rememberSaveable { mutableIntStateOf(0) }
+    val readerScrollState = rememberSaveable(currentItemId, readerViewportSessionNonce, saver = ScrollState.Saver) {
+        ScrollState(0)
+    }
     var activeChunkRange by remember { mutableStateOf<IntRange?>(null) }
     var readerScrollTriggerSignal by rememberSaveable { mutableIntStateOf(0) }
     var readerSelectionResetSignal by rememberSaveable { mutableIntStateOf(0) }
@@ -567,7 +571,13 @@ fun PlayerScreen(
                     positionForPercent = ::positionForPercent,
                 )
                 val safe = normalizedPosition(seeded)
+                readerViewportSessionNonce += 1
                 vm.setPlaybackPosition(currentItemId, safe.chunkIndex, safe.offsetInChunkChars)
+                Log.d(
+                    MANUAL_OPEN_DEBUG_TAG,
+                    "loadSeed item=$currentItemId intent=$pendingOpenIntent knownProgress=$knownProgress " +
+                        "seededChunk=${safe.chunkIndex} seededOffset=${safe.offsetInChunkChars}",
+                )
                 pendingOpenIntent = PlaybackOpenIntent.ManualOpen
 
                 if (autoPlayAfterLoad && chunks.isNotEmpty()) {
@@ -835,6 +845,11 @@ fun PlayerScreen(
                     } else {
                         livePosition
                     }
+                    Log.d(
+                        MANUAL_OPEN_DEBUG_TAG,
+                        "playTap item=$currentItemId restart=$restartFromStart " +
+                            "playChunk=${positionToPlay.chunkIndex} playOffset=${positionToPlay.offsetInChunkChars}",
+                    )
                     readerScrollTriggerSignal += 1
                     playChunk(positionToPlay.chunkIndex, positionToPlay.offsetInChunkChars)
                 }
