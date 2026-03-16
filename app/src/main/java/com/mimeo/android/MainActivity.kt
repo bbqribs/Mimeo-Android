@@ -211,6 +211,10 @@ internal fun isNoActiveContentAttempt(attempt: ItemTextPrefetchAttempt): Boolean
 
 internal fun noActiveContentOfflineMessage(): String = "Not available for offline reading"
 
+internal fun shouldReplayCompletedItem(furthestPercent: Int): Boolean {
+    return furthestPercent >= DONE_PERCENT_THRESHOLD
+}
+
 internal fun resolveNextPlaylistScopedSessionIndex(
     session: NowPlayingSession,
     currentId: Int,
@@ -2058,6 +2062,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ?.firstOrNull { it.itemId == itemId }
             ?.lastReadPercent ?: 0
         return maxOf(queueFurthest, sessionFurthest)
+    }
+
+    fun isItemCompletedForPlaybackStart(itemId: Int): Boolean {
+        return shouldReplayCompletedItem(knownFurthestForItem(itemId))
     }
 
     suspend fun setNowPlayingCurrentItem(itemId: Int) {
