@@ -41,6 +41,12 @@ class PasswordChangeSupportTest {
         assertEquals("Current password is incorrect", wrongPassword.message)
         assertFalse(wrongPassword.staleAuth)
 
+        val genericWrongPassword = resolvePasswordChangeError(
+            ApiException(401, """HTTP 401: {"detail":"Invalid credentials or password"}"""),
+        )
+        assertEquals("Current password is incorrect", genericWrongPassword.message)
+        assertFalse(genericWrongPassword.staleAuth)
+
         val staleAuth = resolvePasswordChangeError(
             ApiException(401, """HTTP 401: {"detail":"Invalid token"}"""),
         )

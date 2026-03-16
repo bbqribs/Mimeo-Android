@@ -52,11 +52,18 @@ internal fun resolvePasswordChangeError(error: Throwable): PasswordChangeResolut
                     message = "Password change is not available on this server yet.",
                 )
                 401 -> {
-                    val wrongCurrentPassword = detail.orEmpty().contains("current password", ignoreCase = true) ||
-                        detail.orEmpty().contains("old password", ignoreCase = true) ||
-                        detail.orEmpty().contains("old_password", ignoreCase = true) ||
-                        detail.orEmpty().contains("incorrect password", ignoreCase = true)
-                    if (wrongCurrentPassword) {
+                    val detailText = detail.orEmpty()
+                    val wrongCurrentPassword = detailText.contains("current password", ignoreCase = true) ||
+                        detailText.contains("old password", ignoreCase = true) ||
+                        detailText.contains("old_password", ignoreCase = true) ||
+                        detailText.contains("incorrect password", ignoreCase = true) ||
+                        detailText.contains("invalid credentials or password", ignoreCase = true) ||
+                        detailText.contains("invalid username or password", ignoreCase = true)
+                    val tokenOrSessionFailure = detailText.contains("invalid token", ignoreCase = true) ||
+                        detailText.contains("token expired", ignoreCase = true) ||
+                        detailText.contains("session expired", ignoreCase = true) ||
+                        detailText.contains("session not found", ignoreCase = true)
+                    if (wrongCurrentPassword || !tokenOrSessionFailure) {
                         PasswordChangeResolution(message = "Current password is incorrect")
                     } else {
                         PasswordChangeResolution(
