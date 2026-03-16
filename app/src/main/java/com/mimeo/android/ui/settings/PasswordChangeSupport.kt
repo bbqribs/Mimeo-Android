@@ -48,6 +48,9 @@ internal fun resolvePasswordChangeError(error: Throwable): PasswordChangeResolut
                 400, 422 -> PasswordChangeResolution(
                     message = detail ?: "Check the password fields and try again.",
                 )
+                404 -> PasswordChangeResolution(
+                    message = "Password change is not available on this server yet.",
+                )
                 401 -> {
                     val wrongCurrentPassword = detail.orEmpty().contains("current password", ignoreCase = true) ||
                         detail.orEmpty().contains("old password", ignoreCase = true) ||

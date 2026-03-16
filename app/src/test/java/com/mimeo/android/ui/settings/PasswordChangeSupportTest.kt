@@ -57,6 +57,12 @@ class PasswordChangeSupportTest {
             ).message,
         )
         assertEquals(
+            "Password change is not available on this server yet.",
+            resolvePasswordChangeError(
+                ApiException(404, """HTTP 404: {"detail":"Not Found"}"""),
+            ).message,
+        )
+        assertEquals(
             "Couldn't change password. Check your connection and try again.",
             resolvePasswordChangeError(IOException("timeout")).message,
         )
