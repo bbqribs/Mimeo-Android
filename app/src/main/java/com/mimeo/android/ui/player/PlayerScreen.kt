@@ -369,12 +369,19 @@ fun PlayerScreen(
         if (chunks.isEmpty()) return PlaybackPosition()
         val boundedPercent = percent.coerceIn(0, 100)
         if (boundedPercent <= 0) return PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
-        val total = totalCharsForPercent().coerceAtLeast(1)
+        val total = chunks.sumOf { it.length.coerceAtLeast(1) }.coerceAtLeast(1)
         val targetAbsolute = ((total.toLong() * boundedPercent) / 100L).toInt().coerceIn(0, total)
-        val idx = chunks.indexOfFirst { targetAbsolute <= it.endChar }.let { if (it >= 0) it else chunks.lastIndex }
-        val chunk = chunks[idx]
-        val offset = (targetAbsolute - chunk.startChar).coerceIn(0, chunk.length)
-        return PlaybackPosition(chunkIndex = idx, offsetInChunkChars = offset)
+        var consumed = 0
+        chunks.forEachIndexed { idx, chunk ->
+            val chunkSpan = chunk.length.coerceAtLeast(1)
+            val chunkEnd = consumed + chunkSpan
+            if (targetAbsolute <= chunkEnd || idx == chunks.lastIndex) {
+                val offset = (targetAbsolute - consumed).coerceIn(0, chunk.length)
+                return PlaybackPosition(chunkIndex = idx, offsetInChunkChars = offset)
+            }
+            consumed = chunkEnd
+        }
+        return PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
     }
 
     fun setPlaybackPosition(chunkIndex: Int, offsetInChunkChars: Int) {
