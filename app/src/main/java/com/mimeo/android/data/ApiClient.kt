@@ -114,46 +114,61 @@ class ApiClient(
         oldPassword: String,
         newPassword: String,
     ) = withContext(Dispatchers.IO) {
-        val body = json.encodeToString(
+        val jsonBody = json.encodeToString(
             ChangePasswordPayload(
                 oldPassword = oldPassword,
                 newPassword = newPassword,
             ),
         ).toRequestBody("application/json".toMediaType())
-        val endpoints = listOf("/auth/change-password", "/auth/change_password")
+        val jsonEndpoints = listOf(
+            "/auth/change-password",
+            "/auth/change-password/",
+            "/auth/change_password",
+            "/auth/change_password/",
+            "/api/auth/change-password",
+            "/api/auth/change-password/",
+            "/api/auth/change_password",
+            "/api/auth/change_password/",
+        )
         var lastError: ApiException? = null
-        for ((index, endpoint) in endpoints.withIndex()) {
+        for (endpoint in jsonEndpoints) {
             val request = Request.Builder()
                 .url(resolveUrl(baseUrl, endpoint))
                 .header("Authorization", "Bearer $token")
-                .post(body)
+                .post(jsonBody)
                 .build()
             try {
                 executeNoBody(request)
                 return@withContext
             } catch (error: ApiException) {
                 lastError = error
-                val shouldTryFallback = error.statusCode == 404 && index < endpoints.lastIndex
-                if (!shouldTryFallback) throw error
+                if (error.statusCode != 404) throw error
             }
         }
-        try {
-            // Compatibility fallback for servers exposing only the web self-service route.
+        val formEndpoints = listOf(
+            "/account/change-password",
+            "/account/change-password/",
+            "/api/account/change-password",
+            "/api/account/change-password/",
+        )
+        for (endpoint in formEndpoints) {
             val formBody = FormBody.Builder()
                 .add("old_password", oldPassword)
                 .add("new_password", newPassword)
                 .add("confirm_new_password", newPassword)
                 .build()
             val request = Request.Builder()
-                .url(resolveUrl(baseUrl, "/account/change-password"))
+                .url(resolveUrl(baseUrl, endpoint))
                 .header("Authorization", "Bearer $token")
                 .post(formBody)
                 .build()
-            executeNoBody(request)
-            return@withContext
-        } catch (error: ApiException) {
-            if (error.statusCode != 404) throw error
-            lastError = error
+            try {
+                executeNoBody(request)
+                return@withContext
+            } catch (error: ApiException) {
+                lastError = error
+                if (error.statusCode != 404) throw error
+            }
         }
         throw lastError ?: ApiException(500, "Couldn't change password. Please try again.")
     }
