@@ -2096,12 +2096,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun knownProgressForItem(itemId: Int): Int {
-        val queueProgress = queueItems.value.firstOrNull { it.itemId == itemId }?.progressPercent ?: 0
-        val sessionProgress = nowPlayingSession.value
-            ?.items
-            ?.firstOrNull { it.itemId == itemId }
-            ?.lastReadPercent ?: 0
-        return maxOf(queueProgress, sessionProgress)
+        return queueItems.value.firstOrNull { it.itemId == itemId }?.progressPercent ?: 0
     }
 
     fun knownFurthestForItem(itemId: Int): Int {

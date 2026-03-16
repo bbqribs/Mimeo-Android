@@ -139,7 +139,6 @@ internal enum class PlaybackOpenIntent {
 }
 
 internal fun resolveSeededPlaybackPosition(
-    saved: PlaybackPosition,
     knownProgress: Int,
     hasChunks: Boolean,
     openIntent: PlaybackOpenIntent,
@@ -149,15 +148,10 @@ internal fun resolveSeededPlaybackPosition(
         PlaybackOpenIntent.AutoContinue,
         PlaybackOpenIntent.Replay -> PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
         PlaybackOpenIntent.ManualOpen -> {
-            if (
-                saved.chunkIndex == 0 &&
-                saved.offsetInChunkChars == 0 &&
-                knownProgress > 0 &&
-                hasChunks
-            ) {
+            if (knownProgress > 0 && hasChunks) {
                 positionForPercent(knownProgress)
             } else {
-                saved
+                PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
             }
         }
     }
@@ -553,10 +547,8 @@ fun PlayerScreen(
                     readerScrollTriggerSignal += 1
                 }
 
-                val saved = vm.getPlaybackPosition(currentItemId)
                 val knownProgress = vm.knownProgressForItem(currentItemId)
                 val seeded = resolveSeededPlaybackPosition(
-                    saved = saved,
                     knownProgress = knownProgress,
                     hasChunks = chunks.isNotEmpty(),
                     openIntent = pendingOpenIntent,
