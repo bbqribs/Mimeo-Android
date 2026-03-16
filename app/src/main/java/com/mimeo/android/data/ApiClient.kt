@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -63,6 +64,12 @@ private data class AuthTokenPayload(
     @kotlinx.serialization.SerialName("device_name") val deviceName: String,
 )
 
+@Serializable
+private data class ChangePasswordPayload(
+    @kotlinx.serialization.SerialName("old_password") val oldPassword: String,
+    @kotlinx.serialization.SerialName("new_password") val newPassword: String,
+)
+
 class ApiClient(
     private val okHttpClient: OkHttpClient = OkHttpClient(),
     private val json: Json = Json { ignoreUnknownKeys = true },
@@ -99,6 +106,71 @@ class ApiClient(
             .post(body)
             .build()
         executeJson(request) { payload -> json.decodeFromString<AuthTokenResponse>(payload) }
+    }
+
+    suspend fun postChangePassword(
+        baseUrl: String,
+        token: String,
+        oldPassword: String,
+        newPassword: String,
+    ) = withContext(Dispatchers.IO) {
+        val jsonBody = json.encodeToString(
+            ChangePasswordPayload(
+                oldPassword = oldPassword,
+                newPassword = newPassword,
+            ),
+        ).toRequestBody("application/json".toMediaType())
+        val jsonEndpoints = listOf(
+            "/auth/change-password",
+            "/auth/change-password/",
+            "/auth/change_password",
+            "/auth/change_password/",
+            "/api/auth/change-password",
+            "/api/auth/change-password/",
+            "/api/auth/change_password",
+            "/api/auth/change_password/",
+        )
+        var lastError: ApiException? = null
+        for (endpoint in jsonEndpoints) {
+            val request = Request.Builder()
+                .url(resolveUrl(baseUrl, endpoint))
+                .header("Authorization", "Bearer $token")
+                .post(jsonBody)
+                .build()
+            try {
+                executeNoBody(request)
+                return@withContext
+            } catch (error: ApiException) {
+                lastError = error
+                if (error.statusCode != 404) throw error
+            }
+        }
+        val formEndpoints = listOf(
+            "/account/change-password",
+            "/account/change-password/",
+            "/api/account/change-password",
+            "/api/account/change-password/",
+        )
+        for (endpoint in formEndpoints) {
+            val formBody = FormBody.Builder()
+                .add("old_password", oldPassword)
+                .add("new_password", newPassword)
+                .add("confirm_new_password", newPassword)
+                .build()
+            val request = Request.Builder()
+                .url(resolveUrl(baseUrl, endpoint))
+                .header("Authorization", "Bearer $token")
+                .post(formBody)
+                .build()
+            try {
+                executeNoBody(request)
+                return@withContext
+            } catch (error: ApiException) {
+                lastError = error
+                if (error.statusCode != 404) throw error
+            }
+        }
+        throw lastError ?: ApiException(500, "Couldn't change password. Please try again.")
     }
 
     suspend fun getQueue(baseUrl: String, token: String, playlistId: Int? = null): QueueFetchResult = withContext(Dispatchers.IO) {
@@ -379,11 +451,7 @@ class ApiClient(
     }
 
     private fun throwApiException(statusCode: Int, body: String): Nothing {
-        val message = when (statusCode) {
-            401 -> "Unauthorized-check token"
-            403 -> "Forbidden"
-            else -> if (body.isNotBlank()) "HTTP $statusCode: $body" else "HTTP $statusCode"
-        }
+        val message = if (body.isNotBlank()) "HTTP $statusCode: $body" else "HTTP $statusCode"
         throw ApiException(statusCode, message)
     }
 

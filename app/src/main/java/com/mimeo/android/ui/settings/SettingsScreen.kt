@@ -34,7 +34,9 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,6 +59,8 @@ private const val PREVIEW_PARAGRAPH_2 = "Use this preview to check rhythm, parag
 fun SettingsScreen(
     vm: AppViewModel,
     onOpenDiagnostics: () -> Unit,
+    onChangePassword: (String, String, String) -> Unit,
+    onClearPasswordChangeState: () -> Unit,
     onSignOut: () -> Unit,
 ) {
     val clipboardManager = LocalClipboardManager.current
@@ -65,6 +69,7 @@ fun SettingsScreen(
     val statusMessage by vm.statusMessage.collectAsState()
     val testingConnection by vm.testingConnection.collectAsState()
     val connectionTestSuccessByMode by vm.connectionTestSuccessByMode.collectAsState()
+    val passwordChangeState by vm.passwordChangeState.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val scrollState = rememberScrollState()
     var restoredScrollOffset by remember { mutableStateOf(false) }
@@ -112,7 +117,11 @@ fun SettingsScreen(
     var testRequested by remember { mutableStateOf(false) }
     var showDefaultSavePlaylistDialog by remember { mutableStateOf(false) }
     var showFontMenu by remember { mutableStateOf(false) }
+    var showPasswordChangeDialog by remember { mutableStateOf(false) }
     var showSignOutDialog by remember { mutableStateOf(false) }
+    var currentPassword by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmNewPassword by remember { mutableStateOf("") }
 
     fun selectedModeBaseUrl(): String {
         return when (connectionMode) {
@@ -218,6 +227,16 @@ fun SettingsScreen(
 
     LaunchedEffect(scrollState) {
         snapshotFlow { scrollState.value }.collect { vm.setSettingsScrollOffset(it) }
+    }
+
+    LaunchedEffect(passwordChangeState) {
+        if (passwordChangeState is PasswordChangeState.Success) {
+            showPasswordChangeDialog = false
+            currentPassword = ""
+            newPassword = ""
+            confirmNewPassword = ""
+            onClearPasswordChangeState()
+        }
     }
 
     val defaultSavePlaylistName = playlists.firstOrNull { it.id == settings.defaultSavePlaylistId }?.name ?: "Smart Queue"
@@ -366,6 +385,22 @@ fun SettingsScreen(
                                 ) { Text("Copy") }
                             }
                         }
+                    }
+                }
+                HorizontalDivider(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    thickness = 1.dp,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = {
+                        showPasswordChangeDialog = true
+                        onClearPasswordChangeState()
+                    }) {
+                        Text("Change password")
                     }
                 }
                 HorizontalDivider(
@@ -695,6 +730,96 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showSignOutDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (showPasswordChangeDialog) {
+        val passwordChangeError = (passwordChangeState as? PasswordChangeState.Error)?.message
+        val isSubmittingPasswordChange = passwordChangeState is PasswordChangeState.Submitting
+        AlertDialog(
+            onDismissRequest = {
+                if (!isSubmittingPasswordChange) {
+                    showPasswordChangeDialog = false
+                    onClearPasswordChangeState()
+                }
+            },
+            title = { Text("Change password") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = currentPassword,
+                        onValueChange = {
+                            currentPassword = it
+                            if (passwordChangeState is PasswordChangeState.Error) onClearPasswordChangeState()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Current password") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        singleLine = true,
+                        enabled = !isSubmittingPasswordChange,
+                    )
+                    OutlinedTextField(
+                        value = newPassword,
+                        onValueChange = {
+                            newPassword = it
+                            if (passwordChangeState is PasswordChangeState.Error) onClearPasswordChangeState()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("New password") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        singleLine = true,
+                        enabled = !isSubmittingPasswordChange,
+                    )
+                    OutlinedTextField(
+                        value = confirmNewPassword,
+                        onValueChange = {
+                            confirmNewPassword = it
+                            if (passwordChangeState is PasswordChangeState.Error) onClearPasswordChangeState()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Confirm new password") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        singleLine = true,
+                        enabled = !isSubmittingPasswordChange,
+                    )
+                    Text(
+                        text = "Use at least $PASSWORD_CHANGE_MIN_LENGTH characters.",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (!passwordChangeError.isNullOrBlank()) {
+                        Text(
+                            text = passwordChangeError,
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !isSubmittingPasswordChange,
+                    onClick = {
+                        onChangePassword(currentPassword, newPassword, confirmNewPassword)
+                    },
+                ) {
+                    Text(if (isSubmittingPasswordChange) "Changing..." else "Change password")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !isSubmittingPasswordChange,
+                    onClick = {
+                        showPasswordChangeDialog = false
+                        onClearPasswordChangeState()
+                    },
+                ) {
                     Text("Cancel")
                 }
             },
