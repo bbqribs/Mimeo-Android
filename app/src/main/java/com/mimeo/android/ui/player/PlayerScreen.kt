@@ -180,6 +180,7 @@ fun PlayerScreen(
     requestedItemId: Int? = null,
     startExpanded: Boolean = false,
     locusTapSignal: Int = 0,
+    openRequestSignal: Int = 0,
     onOpenItem: (Int) -> Unit,
     onRequestBack: () -> Unit = {},
     onOpenDiagnostics: () -> Unit,
@@ -234,6 +235,7 @@ fun PlayerScreen(
     var selectionClearArmed by rememberSaveable { mutableStateOf(false) }
     var backClearPrimedAtMs by rememberSaveable { mutableLongStateOf(0L) }
     var lastHandledLocusTapSignal by rememberSaveable { mutableIntStateOf(locusTapSignal) }
+    var lastHandledOpenRequestSignal by rememberSaveable { mutableIntStateOf(openRequestSignal) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
@@ -534,6 +536,29 @@ fun PlayerScreen(
         if (locusTapSignal == lastHandledLocusTapSignal) return@LaunchedEffect
         lastHandledLocusTapSignal = locusTapSignal
         readerScrollTriggerSignal += 1
+    }
+
+    LaunchedEffect(openRequestSignal, resolvedInitial, requestedItemId) {
+        if (!resolvedInitial) return@LaunchedEffect
+        if (openRequestSignal == lastHandledOpenRequestSignal) return@LaunchedEffect
+        lastHandledOpenRequestSignal = openRequestSignal
+        val target = requestedItemId ?: currentItemId
+        if (target != currentItemId) return@LaunchedEffect
+        pendingOpenIntent = if (vm.isItemCompletedForPlaybackStart(target)) {
+            PlaybackOpenIntent.Replay
+        } else {
+            PlaybackOpenIntent.ManualOpen
+        }
+        autoPlayAfterLoad = false
+        preserveVisibleContentOnReload = false
+        reloadNonce += 1
+        continuationLog(
+            "openRequest sameItemReload target=$target reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
+        )
+        Log.d(
+            MANUAL_OPEN_DEBUG_TAG,
+            "openRequest sameItemReload item=$target intent=$pendingOpenIntent reloadNonce=$reloadNonce",
+        )
     }
 
     LaunchedEffect(compactControlsOnly) {

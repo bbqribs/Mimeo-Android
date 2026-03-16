@@ -2602,7 +2602,7 @@ private fun MimeoApp(vm: AppViewModel) {
     val routeItemId = navBackStack?.arguments?.let { args ->
         if (args.containsKey("itemId")) args.getInt("itemId").takeIf { it > 0 } else null
     }
-    val requestedPlayerItemId = sessionNowPlayingItemId ?: routeItemId
+    val requestedPlayerItemId = routeItemId ?: sessionNowPlayingItemId
     LaunchedEffect(sessionNowPlayingItemId, routeItemId, requestedPlayerItemId, currentRoute) {
         Log.d(
             LOCUS_CONTINUATION_DEBUG_TAG,
@@ -2635,6 +2635,7 @@ private fun MimeoApp(vm: AppViewModel) {
     val compactControlsOnly = !isOnLocusRoute
     val showCompactControls = settings.persistentPlayerEnabled
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
+    var playerOpenRequestSignal by rememberSaveable { mutableIntStateOf(0) }
     var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
     val nowPlayingStripTitle = nowPlayingSession
         ?.currentItem
@@ -2901,7 +2902,10 @@ private fun MimeoApp(vm: AppViewModel) {
                                     vm.showSnackbar(message, actionLabel, actionKey)
                                 },
                                 focusItemId = focusItemId,
-                                onOpenPlayer = { itemId -> nav.navigate("$ROUTE_LOCUS/$itemId") },
+                                onOpenPlayer = { itemId ->
+                                    playerOpenRequestSignal += 1
+                                    nav.navigate("$ROUTE_LOCUS/$itemId")
+                                },
                                 onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                             )
                         }
@@ -2923,6 +2927,7 @@ private fun MimeoApp(vm: AppViewModel) {
                             requestedItemId = requestedPlayerItemId,
                             startExpanded = isOnLocusRoute && routeItemId != null,
                             locusTapSignal = locusTabTapSignal,
+                            openRequestSignal = playerOpenRequestSignal,
                             onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
                             onRequestBack = {
                                 val popped = nav.popBackStack()
