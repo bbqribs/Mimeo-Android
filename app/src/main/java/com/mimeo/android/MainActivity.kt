@@ -11,6 +11,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Bundle
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
@@ -182,6 +183,7 @@ private const val INITIAL_SIGN_IN_BACKGROUND_HYDRATION_ATTEMPTS = 10
 private const val INITIAL_SIGN_IN_BACKGROUND_HYDRATION_RETRY_DELAY_MS = 500L
 private const val SMART_QUEUE_SESSION_CONTEXT_ID = -1
 private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
+private const val LOCUS_OPEN_TRANSITION_HOLD_MS = 500L
 
 private data class BottomNavDestination(
     val route: String,
@@ -2627,11 +2629,17 @@ private fun MimeoApp(vm: AppViewModel) {
             },
         )
     }
-    val compactControlsOnly = !isOnLocusRoute
     val showCompactControls = settings.persistentPlayerEnabled
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var playerOpenRequestSignal by rememberSaveable { mutableIntStateOf(0) }
     var pendingLocusOpen by rememberSaveable { mutableStateOf(false) }
+    var pendingLocusOpenUntilMs by rememberSaveable { mutableStateOf(0L) }
+    val holdLocusTransition =
+        pendingLocusOpen &&
+            !isOnLocusRoute &&
+            SystemClock.elapsedRealtime() < pendingLocusOpenUntilMs
+    val presentingLocus = isOnLocusRoute || holdLocusTransition
+    val compactControlsOnly = !presentingLocus
     var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
     val nowPlayingStripTitle = nowPlayingSession
         ?.currentItem
@@ -2718,6 +2726,7 @@ private fun MimeoApp(vm: AppViewModel) {
     LaunchedEffect(currentRoute) {
         if (currentRoute.startsWith(ROUTE_LOCUS)) {
             pendingLocusOpen = false
+            pendingLocusOpenUntilMs = 0L
         }
         if (currentRoute == previousRoute) return@LaunchedEffect
         val wasOnLocus = previousRoute.startsWith(ROUTE_LOCUS)
@@ -2745,10 +2754,22 @@ private fun MimeoApp(vm: AppViewModel) {
         previousRoute = currentRoute
     }
 
+    LaunchedEffect(pendingLocusOpen, currentRoute, pendingLocusOpenUntilMs) {
+        if (!pendingLocusOpen || currentRoute.startsWith(ROUTE_LOCUS)) return@LaunchedEffect
+        val remaining = pendingLocusOpenUntilMs - SystemClock.elapsedRealtime()
+        if (remaining > 0L) {
+            delay(remaining)
+        }
+        if (pendingLocusOpen && !currentRoute.startsWith(ROUTE_LOCUS)) {
+            pendingLocusOpen = false
+            pendingLocusOpenUntilMs = 0L
+        }
+    }
+
     Scaffold(
         bottomBar = {
             AnimatedVisibility(
-                visible = !requiresSignIn && !(isOnLocusRoute && readerChromeHidden),
+                visible = !requiresSignIn && !(presentingLocus && readerChromeHidden),
                 enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(150)),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
             ) {
@@ -2793,7 +2814,7 @@ private fun MimeoApp(vm: AppViewModel) {
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                if (showGlobalBanner && !isOnLocusRoute) {
+                if (showGlobalBanner && !presentingLocus) {
                     StatusBanner(
                         stateLabel = bannerStateLabel,
                         summary = bannerSummary,
@@ -2904,6 +2925,7 @@ private fun MimeoApp(vm: AppViewModel) {
                                 onOpenPlayer = { itemId ->
                                     playerOpenRequestSignal += 1
                                     pendingLocusOpen = true
+                                    pendingLocusOpenUntilMs = SystemClock.elapsedRealtime() + LOCUS_OPEN_TRANSITION_HOLD_MS
                                     nav.navigate("$ROUTE_LOCUS/$itemId") {
                                         launchSingleTop = true
                                     }
@@ -2919,7 +2941,7 @@ private fun MimeoApp(vm: AppViewModel) {
                         }
                     }
 
-                    if (!requiresSignIn && requestedPlayerItemId != null && !(pendingLocusOpen && !isOnLocusRoute)) {
+                    if (!requiresSignIn && requestedPlayerItemId != null) {
                         PlayerScreen(
                             vm = vm,
                             onShowSnackbar = { message, actionLabel, actionKey ->
@@ -2927,7 +2949,7 @@ private fun MimeoApp(vm: AppViewModel) {
                             },
                             initialItemId = requestedPlayerItemId,
                             requestedItemId = requestedPlayerItemId,
-                            startExpanded = isOnLocusRoute && routeItemId != null,
+                            startExpanded = presentingLocus && routeItemId != null,
                             locusTapSignal = locusTabTapSignal,
                             openRequestSignal = playerOpenRequestSignal,
                             onOpenItem = { nextId ->
@@ -2980,7 +3002,7 @@ private fun MimeoApp(vm: AppViewModel) {
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.ime)
-                    .padding(bottom = if (isOnLocusRoute && readerChromeHidden) 12.dp else 76.dp),
+                    .padding(bottom = if (presentingLocus && readerChromeHidden) 12.dp else 76.dp),
             )
         }
     }
