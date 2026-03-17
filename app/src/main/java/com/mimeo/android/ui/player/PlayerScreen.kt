@@ -484,14 +484,17 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(initialItemId) {
+    LaunchedEffect(initialItemId, requestedItemId) {
         if (resolvedInitial) return@LaunchedEffect
-        val resolvedId = vm.resolveInitialPlayerItemId(initialItemId)
+        val resolvedId = requestedItemId ?: vm.resolveInitialPlayerItemId(initialItemId)
         pendingOpenIntent = if (vm.isItemCompletedForPlaybackStart(resolvedId)) {
             PlaybackOpenIntent.Replay
         } else {
             PlaybackOpenIntent.ManualOpen
         }
+        continuationLog(
+            "initialResolve initial=$initialItemId requested=$requestedItemId resolved=$resolvedId",
+        )
         currentItemId = resolvedId
         resolvedInitial = true
     }
