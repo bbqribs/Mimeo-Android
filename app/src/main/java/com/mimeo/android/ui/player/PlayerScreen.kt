@@ -248,6 +248,10 @@ fun PlayerScreen(
     val settings by vm.settings.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
+    val switchingRequestedItem =
+        resolvedInitial &&
+            requestedItemId != null &&
+            requestedItemId != currentItemId
     val currentPosition = playbackPositionByItem[currentItemId] ?: PlaybackPosition()
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -947,7 +951,17 @@ fun PlayerScreen(
         }
     }
 
-    if (compactControlsOnly) {
+    if (switchingRequestedItem && !compactControlsOnly) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .then(modifier),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator()
+        }
+    } else if (compactControlsOnly) {
         if (showCompactControls) {
             Box(
                 modifier = Modifier
