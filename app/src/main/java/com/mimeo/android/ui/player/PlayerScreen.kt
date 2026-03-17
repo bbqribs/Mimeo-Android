@@ -963,6 +963,7 @@ fun PlayerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
                 .then(modifier),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
