@@ -2631,6 +2631,7 @@ private fun MimeoApp(vm: AppViewModel) {
     val showCompactControls = settings.persistentPlayerEnabled
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var playerOpenRequestSignal by rememberSaveable { mutableIntStateOf(0) }
+    var pendingLocusOpen by rememberSaveable { mutableStateOf(false) }
     var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
     val nowPlayingStripTitle = nowPlayingSession
         ?.currentItem
@@ -2715,6 +2716,9 @@ private fun MimeoApp(vm: AppViewModel) {
     }
 
     LaunchedEffect(currentRoute) {
+        if (currentRoute.startsWith(ROUTE_LOCUS)) {
+            pendingLocusOpen = false
+        }
         if (currentRoute == previousRoute) return@LaunchedEffect
         val wasOnLocus = previousRoute.startsWith(ROUTE_LOCUS)
         val nowOnLocus = currentRoute.startsWith(ROUTE_LOCUS)
@@ -2899,6 +2903,7 @@ private fun MimeoApp(vm: AppViewModel) {
                                 focusItemId = focusItemId,
                                 onOpenPlayer = { itemId ->
                                     playerOpenRequestSignal += 1
+                                    pendingLocusOpen = true
                                     nav.navigate("$ROUTE_LOCUS/$itemId") {
                                         launchSingleTop = true
                                     }
@@ -2914,7 +2919,7 @@ private fun MimeoApp(vm: AppViewModel) {
                         }
                     }
 
-                    if (!requiresSignIn && requestedPlayerItemId != null) {
+                    if (!requiresSignIn && requestedPlayerItemId != null && !(pendingLocusOpen && !isOnLocusRoute)) {
                         PlayerScreen(
                             vm = vm,
                             onShowSnackbar = { message, actionLabel, actionKey ->
