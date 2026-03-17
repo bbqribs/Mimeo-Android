@@ -252,6 +252,8 @@ fun PlayerScreen(
             resolvedInitial &&
             requestedItemId != null &&
             requestedItemId != currentItemId
+    val hasStalePayloadForCurrentItem =
+        textPayload?.itemId?.let { it != currentItemId } == true
     val currentPosition = playbackPositionByItem[currentItemId] ?: PlaybackPosition()
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -961,7 +963,7 @@ fun PlayerScreen(
         }
     }
 
-    if (waitingForRequestedItem) {
+    if (waitingForRequestedItem || hasStalePayloadForCurrentItem) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
