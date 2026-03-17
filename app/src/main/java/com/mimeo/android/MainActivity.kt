@@ -2593,11 +2593,16 @@ private fun MimeoApp(vm: AppViewModel) {
     val statusMessage by vm.statusMessage.collectAsState()
     val pendingNavigationRoute by vm.pendingNavigationRoute.collectAsState()
     val requiresSignIn = settings.apiToken.isBlank()
+    var pendingLocusOpen by rememberSaveable { mutableStateOf(false) }
+    var pendingLocusItemId by rememberSaveable { mutableIntStateOf(-1) }
     val sessionNowPlayingItemId = vm.currentNowPlayingItemId()
     val routeItemId = navBackStack?.arguments?.let { args ->
         if (args.containsKey("itemId")) args.getInt("itemId").takeIf { it > 0 } else null
     }
-    val requestedPlayerItemId = routeItemId ?: sessionNowPlayingItemId
+    val requestedPlayerItemId =
+        routeItemId
+            ?: pendingLocusItemId.takeIf { pendingLocusOpen && it > 0 }
+            ?: sessionNowPlayingItemId
     LaunchedEffect(sessionNowPlayingItemId, routeItemId, requestedPlayerItemId, currentRoute) {
         Log.d(
             LOCUS_CONTINUATION_DEBUG_TAG,
@@ -2630,7 +2635,6 @@ private fun MimeoApp(vm: AppViewModel) {
     val showCompactControls = settings.persistentPlayerEnabled
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var playerOpenRequestSignal by rememberSaveable { mutableIntStateOf(0) }
-    var pendingLocusOpen by rememberSaveable { mutableStateOf(false) }
     val presentingLocus = isOnLocusRoute
     val compactControlsOnly = !isOnLocusRoute
     var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
@@ -2719,6 +2723,7 @@ private fun MimeoApp(vm: AppViewModel) {
     LaunchedEffect(currentRoute) {
         if (currentRoute.startsWith(ROUTE_LOCUS)) {
             pendingLocusOpen = false
+            pendingLocusItemId = -1
         }
         if (currentRoute == previousRoute) return@LaunchedEffect
         val wasOnLocus = previousRoute.startsWith(ROUTE_LOCUS)
@@ -2751,6 +2756,7 @@ private fun MimeoApp(vm: AppViewModel) {
         delay(750)
         if (pendingLocusOpen && !currentRoute.startsWith(ROUTE_LOCUS)) {
             pendingLocusOpen = false
+            pendingLocusItemId = -1
         }
     }
 
@@ -2913,6 +2919,7 @@ private fun MimeoApp(vm: AppViewModel) {
                                 onOpenPlayer = { itemId ->
                                     playerOpenRequestSignal += 1
                                     pendingLocusOpen = true
+                                    pendingLocusItemId = itemId
                                     nav.navigate("$ROUTE_LOCUS/$itemId") {
                                         launchSingleTop = true
                                     }

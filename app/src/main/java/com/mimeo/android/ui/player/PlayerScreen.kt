@@ -195,8 +195,8 @@ fun PlayerScreen(
     onChevronSnapChange: (PlayerChevronSnapEdge) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    var currentItemId by rememberSaveable { mutableIntStateOf(initialItemId) }
-    var resolvedInitial by rememberSaveable { mutableStateOf(false) }
+    var currentItemId by rememberSaveable(initialItemId) { mutableIntStateOf(initialItemId) }
+    var resolvedInitial by rememberSaveable(initialItemId) { mutableStateOf(false) }
     var reloadNonce by rememberSaveable { mutableIntStateOf(0) }
     var textPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
     var usingCachedText by remember { mutableStateOf(false) }
@@ -247,6 +247,11 @@ fun PlayerScreen(
     val settings by vm.settings.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
+    val waitingForRequestedItem =
+        !compactControlsOnly &&
+            resolvedInitial &&
+            requestedItemId != null &&
+            requestedItemId != currentItemId
     val currentPosition = playbackPositionByItem[currentItemId] ?: PlaybackPosition()
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -953,7 +958,14 @@ fun PlayerScreen(
         }
     }
 
-    if (compactControlsOnly) {
+    if (waitingForRequestedItem) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .then(modifier),
+        )
+    } else if (compactControlsOnly) {
         if (showCompactControls) {
             Box(
                 modifier = Modifier
