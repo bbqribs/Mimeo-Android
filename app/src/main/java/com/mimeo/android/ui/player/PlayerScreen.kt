@@ -1100,7 +1100,7 @@ fun PlayerScreen(
                                 currentChunkOffsetInChars = safePosition.offsetInChunkChars,
                                 activeRangeInChunk = activeChunkRange,
                                 scrollTriggerSignal = readerScrollTriggerSignal,
-                                autoScrollWhileListening = settings.autoScrollWhileListening,
+                                autoScrollWhileListening = settings.autoScrollWhileListening && (isSpeaking || isAutoPlaying),
                                 readingFontSizeSp = settings.readingFontSizeSp,
                                 readingFontOption = settings.readingFontOption,
                                 readingLineHeightPercent = settings.readingLineHeightPercent,
