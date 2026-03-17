@@ -584,9 +584,6 @@ fun PlayerScreen(
                     "loadItem success item=$currentItemId chunks=${chunks.size} usingCache=$usingCachedText autoPlayAfterLoad=$autoPlayAfterLoad",
                 )
                 preserveVisibleContentOnReload = false
-                if (!preservingVisibleContent) {
-                    readerScrollTriggerSignal += 1
-                }
 
                 val knownProgress = vm.knownProgressForItem(currentItemId)
                 val seeded = resolveSeededPlaybackPosition(
@@ -598,6 +595,9 @@ fun PlayerScreen(
                 val safe = normalizedPosition(seeded)
                 readerViewportSessionNonce += 1
                 vm.setPlaybackPosition(currentItemId, safe.chunkIndex, safe.offsetInChunkChars)
+                if (!preservingVisibleContent) {
+                    readerScrollTriggerSignal += 1
+                }
                 Log.d(
                     MANUAL_OPEN_DEBUG_TAG,
                     "loadSeed item=$currentItemId intent=$pendingOpenIntent knownProgress=$knownProgress " +

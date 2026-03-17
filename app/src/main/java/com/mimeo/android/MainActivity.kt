@@ -2931,9 +2931,9 @@ private fun MimeoApp(vm: AppViewModel) {
                                 }
                             },
                             onRequestBack = {
-                                val popped = nav.popBackStack()
-                                if (!popped) {
-                                    nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
+                                nav.navigate(ROUTE_UP_NEXT) {
+                                    popUpTo(ROUTE_LOCUS) { inclusive = true }
+                                    launchSingleTop = true
                                 }
                             },
                             onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
