@@ -38,7 +38,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
@@ -500,6 +499,13 @@ fun PlayerScreen(
             "requestedItemEffect target=$target current=$currentItemId autoPlayAfterLoad=$autoPlayAfterLoad",
         )
         stopSpeaking(forceSync = true)
+        // Clear current body immediately so the previously viewed article cannot flash
+        // while the newly requested item is loading.
+        preserveVisibleContentOnReload = false
+        textPayload = null
+        usingCachedText = false
+        chunks = emptyList()
+        isLoading = false
         pendingOpenIntent = if (vm.isItemCompletedForPlaybackStart(target)) {
             PlaybackOpenIntent.Replay
         } else {
@@ -1069,13 +1075,7 @@ fun PlayerScreen(
                             Spacer(modifier = Modifier)
                         },
                     )
-                    if (isLoading) {
-                        CircularProgressIndicator()
-                    }
                 } else {
-                    if (isLoading) {
-                        CircularProgressIndicator()
-                    }
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
