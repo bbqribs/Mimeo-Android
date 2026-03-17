@@ -2899,7 +2899,9 @@ private fun MimeoApp(vm: AppViewModel) {
                                 focusItemId = focusItemId,
                                 onOpenPlayer = { itemId ->
                                     playerOpenRequestSignal += 1
-                                    nav.navigate("$ROUTE_LOCUS/$itemId")
+                                    nav.navigate("$ROUTE_LOCUS/$itemId") {
+                                        launchSingleTop = true
+                                    }
                                 },
                                 onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                             )
@@ -2923,7 +2925,11 @@ private fun MimeoApp(vm: AppViewModel) {
                             startExpanded = isOnLocusRoute && routeItemId != null,
                             locusTapSignal = locusTabTapSignal,
                             openRequestSignal = playerOpenRequestSignal,
-                            onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
+                            onOpenItem = { nextId ->
+                                nav.navigate("$ROUTE_LOCUS/$nextId") {
+                                    launchSingleTop = true
+                                }
+                            },
                             onRequestBack = {
                                 val popped = nav.popBackStack()
                                 if (!popped) {
