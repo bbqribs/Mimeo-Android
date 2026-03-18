@@ -55,4 +55,35 @@ class PlaybackObservabilityTest {
         assertTrue(lines[4].contains("pending=true"))
         assertTrue(lines[4].contains("settled=false"))
     }
+
+    @Test
+    fun loadingPlaceholderShownDuringHandoffOrLoad() {
+        val waitingForRequestedItem = shouldShowReaderLoadingPlaceholder(
+            waitingForRequestedItem = true,
+            hasStalePayloadForCurrentItem = false,
+            isLoading = false,
+            transitionSettled = false,
+        )
+        val activeLoad = shouldShowReaderLoadingPlaceholder(
+            waitingForRequestedItem = false,
+            hasStalePayloadForCurrentItem = false,
+            isLoading = true,
+            transitionSettled = false,
+        )
+
+        assertTrue(waitingForRequestedItem)
+        assertTrue(activeLoad)
+    }
+
+    @Test
+    fun loadingPlaceholderHiddenWhenTransitionSettledAndIdle() {
+        val show = shouldShowReaderLoadingPlaceholder(
+            waitingForRequestedItem = false,
+            hasStalePayloadForCurrentItem = false,
+            isLoading = false,
+            transitionSettled = true,
+        )
+
+        assertEquals(false, show)
+    }
 }
