@@ -1898,6 +1898,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return fetchItemText(itemId).map { Unit }
     }
 
+    fun warmItemTextForPlayer(itemId: Int) {
+        viewModelScope.launch {
+            fetchItemText(itemId)
+        }
+    }
+
     suspend fun refreshCurrentPlayerItem(itemId: Int): Result<Unit> {
         val current = settings.value
         if (current.apiToken.isBlank()) {
@@ -2096,21 +2102,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun knownProgressForItem(itemId: Int): Int {
-        val queueProgress = queueItems.value.firstOrNull { it.itemId == itemId }?.progressPercent ?: 0
-        val sessionProgress = nowPlayingSession.value
-            ?.items
-            ?.firstOrNull { it.itemId == itemId }
-            ?.lastReadPercent ?: 0
-        return maxOf(queueProgress, sessionProgress)
+        return queueItems.value.firstOrNull { it.itemId == itemId }?.progressPercent ?: 0
     }
 
     fun knownFurthestForItem(itemId: Int): Int {
-        val queueFurthest = queueItems.value.firstOrNull { it.itemId == itemId }?.furthestPercent ?: 0
-        val sessionFurthest = nowPlayingSession.value
-            ?.items
-            ?.firstOrNull { it.itemId == itemId }
-            ?.lastReadPercent ?: 0
-        return maxOf(queueFurthest, sessionFurthest)
+        return queueItems.value.firstOrNull { it.itemId == itemId }?.furthestPercent ?: 0
     }
 
     fun isItemCompletedForPlaybackStart(itemId: Int): Boolean {
@@ -2603,11 +2599,16 @@ private fun MimeoApp(vm: AppViewModel) {
     val statusMessage by vm.statusMessage.collectAsState()
     val pendingNavigationRoute by vm.pendingNavigationRoute.collectAsState()
     val requiresSignIn = settings.apiToken.isBlank()
+    var pendingLocusOpen by rememberSaveable { mutableStateOf(false) }
+    var pendingLocusItemId by rememberSaveable { mutableIntStateOf(-1) }
     val sessionNowPlayingItemId = vm.currentNowPlayingItemId()
     val routeItemId = navBackStack?.arguments?.let { args ->
         if (args.containsKey("itemId")) args.getInt("itemId").takeIf { it > 0 } else null
     }
-    val requestedPlayerItemId = sessionNowPlayingItemId ?: routeItemId
+    val requestedPlayerItemId =
+        routeItemId
+            ?: pendingLocusItemId.takeIf { pendingLocusOpen && it > 0 }
+            ?: sessionNowPlayingItemId
     LaunchedEffect(sessionNowPlayingItemId, routeItemId, requestedPlayerItemId, currentRoute) {
         Log.d(
             LOCUS_CONTINUATION_DEBUG_TAG,
@@ -2637,9 +2638,11 @@ private fun MimeoApp(vm: AppViewModel) {
             },
         )
     }
-    val compactControlsOnly = !isOnLocusRoute
     val showCompactControls = settings.persistentPlayerEnabled
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
+    var playerOpenRequestSignal by rememberSaveable { mutableIntStateOf(0) }
+    val presentingLocus = isOnLocusRoute
+    val compactControlsOnly = !isOnLocusRoute
     var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
     val nowPlayingStripTitle = nowPlayingSession
         ?.currentItem
@@ -2724,6 +2727,10 @@ private fun MimeoApp(vm: AppViewModel) {
     }
 
     LaunchedEffect(currentRoute) {
+        if (currentRoute.startsWith(ROUTE_LOCUS)) {
+            pendingLocusOpen = false
+            pendingLocusItemId = -1
+        }
         if (currentRoute == previousRoute) return@LaunchedEffect
         val wasOnLocus = previousRoute.startsWith(ROUTE_LOCUS)
         val nowOnLocus = currentRoute.startsWith(ROUTE_LOCUS)
@@ -2750,10 +2757,19 @@ private fun MimeoApp(vm: AppViewModel) {
         previousRoute = currentRoute
     }
 
+    LaunchedEffect(pendingLocusOpen, currentRoute) {
+        if (!pendingLocusOpen || currentRoute.startsWith(ROUTE_LOCUS)) return@LaunchedEffect
+        delay(750)
+        if (pendingLocusOpen && !currentRoute.startsWith(ROUTE_LOCUS)) {
+            pendingLocusOpen = false
+            pendingLocusItemId = -1
+        }
+    }
+
     Scaffold(
         bottomBar = {
             AnimatedVisibility(
-                visible = !requiresSignIn && !(isOnLocusRoute && readerChromeHidden),
+                visible = !requiresSignIn && !(presentingLocus && readerChromeHidden),
                 enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(150)),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
             ) {
@@ -2798,7 +2814,7 @@ private fun MimeoApp(vm: AppViewModel) {
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                if (showGlobalBanner && !isOnLocusRoute) {
+                if (showGlobalBanner && !presentingLocus) {
                     StatusBanner(
                         stateLabel = bannerStateLabel,
                         summary = bannerSummary,
@@ -2906,7 +2922,18 @@ private fun MimeoApp(vm: AppViewModel) {
                                     vm.showSnackbar(message, actionLabel, actionKey)
                                 },
                                 focusItemId = focusItemId,
-                                onOpenPlayer = { itemId -> nav.navigate("$ROUTE_LOCUS/$itemId") },
+                                onOpenPlayer = { itemId ->
+                                    val shouldForceSameItemReload =
+                                        sessionNowPlayingItemId != null && sessionNowPlayingItemId == itemId
+                                    if (shouldForceSameItemReload) {
+                                        playerOpenRequestSignal += 1
+                                    }
+                                    pendingLocusOpen = true
+                                    pendingLocusItemId = itemId
+                                    nav.navigate("$ROUTE_LOCUS/$itemId") {
+                                        launchSingleTop = true
+                                    }
+                                },
                                 onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                             )
                         }
@@ -2918,7 +2945,7 @@ private fun MimeoApp(vm: AppViewModel) {
                         }
                     }
 
-                    if (!requiresSignIn && requestedPlayerItemId != null) {
+                    if (!requiresSignIn && requestedPlayerItemId != null && !(pendingLocusOpen && !isOnLocusRoute)) {
                         PlayerScreen(
                             vm = vm,
                             onShowSnackbar = { message, actionLabel, actionKey ->
@@ -2928,11 +2955,16 @@ private fun MimeoApp(vm: AppViewModel) {
                             requestedItemId = requestedPlayerItemId,
                             startExpanded = isOnLocusRoute && routeItemId != null,
                             locusTapSignal = locusTabTapSignal,
-                            onOpenItem = { nextId -> nav.navigate("$ROUTE_LOCUS/$nextId") },
+                            openRequestSignal = playerOpenRequestSignal,
+                            onOpenItem = { nextId ->
+                                nav.navigate("$ROUTE_LOCUS/$nextId") {
+                                    launchSingleTop = true
+                                }
+                            },
                             onRequestBack = {
-                                val popped = nav.popBackStack()
-                                if (!popped) {
-                                    nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
+                                nav.navigate(ROUTE_UP_NEXT) {
+                                    popUpTo(ROUTE_LOCUS) { inclusive = true }
+                                    launchSingleTop = true
                                 }
                             },
                             onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
@@ -2974,7 +3006,7 @@ private fun MimeoApp(vm: AppViewModel) {
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.ime)
-                    .padding(bottom = if (isOnLocusRoute && readerChromeHidden) 12.dp else 76.dp),
+                    .padding(bottom = if (presentingLocus && readerChromeHidden) 12.dp else 76.dp),
             )
         }
     }

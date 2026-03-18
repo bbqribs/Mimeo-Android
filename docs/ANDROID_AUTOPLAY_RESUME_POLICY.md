@@ -7,7 +7,8 @@ It builds on `docs/ANDROID_PROGRESS_MODEL.md` and is the contract reference for 
 ## Contract Rules
 
 ### Rule A: Manual open (user-initiated)
-- Resume from prior progress using existing manual-open precedence.
+- Resume from item/queue `progressPercent`.
+- Manual open does not use cached local playback cursor or session `lastReadPercent` as the start-position source.
 
 ### Rule B: Autoplay continuation (automatic)
 - When moving from item A to next item B automatically, B starts from beginning.
@@ -44,31 +45,16 @@ This intent is currently the key branch that prevents autoplay/replay from inher
 ## Focused Test Coverage
 
 - `app/src/test/java/com/mimeo/android/ui/player/PlaybackOpenIntentTest.kt`
-  - manual open percent seeding
-  - manual open exact saved cursor preservation
+  - manual open uses queue progress seeding
+  - manual open disagreement case (cached/session higher than queue still uses queue progress)
   - AutoContinue starts at beginning
   - Replay starts at beginning
 
 - `app/src/test/java/com/mimeo/android/CompletedReplayPolicyTest.kt`
   - done threshold (`98`) used for completed replay decision
 
-## Known Policy Tension (Still Open)
+## Current Contract Status
 
-Manual-open precedence wording in earlier notes can be read as:
-- session progress preferred over backend queue progress.
-
-Current implementation for `knownProgressForItem(...)` is:
-- `max(session.lastReadPercent, queue.progressPercent)`.
-
-This is close in practice but not the same as strict source precedence. Keep this as a separate policy decision; do not fold it into autoplay tickets by accident.
-
-## Recommended Next Implementation Slice
-
-Smallest bounded follow-up after this contract audit:
-
-`Android — manual-open precedence refinement when session progress and queue progress disagree`
-
-Scope for that ticket:
-- decide strict precedence rule
-- adjust `knownProgressForItem(...)` only if policy explicitly approved
-- keep autoplay/replay behavior unchanged
+Manual-open precedence is now settled and aligned:
+- queue/item `progressPercent` is the manual-open source of truth for start position.
+- autoplay/replay intent-based start-from-beginning behavior remains unchanged.

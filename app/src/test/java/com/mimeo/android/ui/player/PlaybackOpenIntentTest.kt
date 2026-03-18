@@ -9,7 +9,6 @@ class PlaybackOpenIntentTest {
     @Test
     fun manualOpenUsesPercentSeedWhenSavedPositionIsZero() {
         val seeded = resolveSeededPlaybackPosition(
-            saved = PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0),
             knownProgress = 65,
             hasChunks = true,
             openIntent = PlaybackOpenIntent.ManualOpen,
@@ -20,22 +19,38 @@ class PlaybackOpenIntentTest {
     }
 
     @Test
-    fun manualOpenPreservesExactSavedPosition() {
+    fun manualOpenUsesQueueProgressWhenCachedPositionWouldDisagree() {
         val seeded = resolveSeededPlaybackPosition(
-            saved = PlaybackPosition(chunkIndex = 3, offsetInChunkChars = 120),
-            knownProgress = 65,
+            knownProgress = 25,
+            hasChunks = true,
+            openIntent = PlaybackOpenIntent.ManualOpen,
+            positionForPercent = { percent ->
+                if (percent == 25) {
+                    PlaybackPosition(chunkIndex = 2, offsetInChunkChars = 10)
+                } else {
+                    PlaybackPosition(chunkIndex = 9, offsetInChunkChars = 999)
+                }
+            },
+        )
+
+        assertEquals(PlaybackPosition(chunkIndex = 2, offsetInChunkChars = 10), seeded)
+    }
+
+    @Test
+    fun manualOpenFallsBackToBeginningWhenQueueProgressIsUnknown() {
+        val seeded = resolveSeededPlaybackPosition(
+            knownProgress = 0,
             hasChunks = true,
             openIntent = PlaybackOpenIntent.ManualOpen,
             positionForPercent = { PlaybackPosition(chunkIndex = 6, offsetInChunkChars = 50) },
         )
 
-        assertEquals(PlaybackPosition(chunkIndex = 3, offsetInChunkChars = 120), seeded)
+        assertEquals(PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0), seeded)
     }
 
     @Test
     fun autoContinueAlwaysStartsFromBeginning() {
         val seeded = resolveSeededPlaybackPosition(
-            saved = PlaybackPosition(chunkIndex = 4, offsetInChunkChars = 300),
             knownProgress = 80,
             hasChunks = true,
             openIntent = PlaybackOpenIntent.AutoContinue,
@@ -48,7 +63,6 @@ class PlaybackOpenIntentTest {
     @Test
     fun replayAlwaysStartsFromBeginning() {
         val seeded = resolveSeededPlaybackPosition(
-            saved = PlaybackPosition(chunkIndex = 4, offsetInChunkChars = 300),
             knownProgress = 100,
             hasChunks = true,
             openIntent = PlaybackOpenIntent.Replay,

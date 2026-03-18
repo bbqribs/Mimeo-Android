@@ -1,7 +1,6 @@
 package com.mimeo.android.ui.player
 
 import android.os.Build
-import android.os.SystemClock
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -39,7 +38,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
@@ -131,6 +129,7 @@ private const val PLAYBACK_SPEED_STEP = 0.05f
 private const val PLAYBACK_SPEED_STEPS = 69
 private val PLAYBACK_SPEED_PILLS = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
 private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
+private const val MANUAL_OPEN_DEBUG_TAG = "MimeoManualOpen"
 
 internal enum class PlaybackOpenIntent {
     ManualOpen,
@@ -139,7 +138,6 @@ internal enum class PlaybackOpenIntent {
 }
 
 internal fun resolveSeededPlaybackPosition(
-    saved: PlaybackPosition,
     knownProgress: Int,
     hasChunks: Boolean,
     openIntent: PlaybackOpenIntent,
@@ -149,15 +147,10 @@ internal fun resolveSeededPlaybackPosition(
         PlaybackOpenIntent.AutoContinue,
         PlaybackOpenIntent.Replay -> PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
         PlaybackOpenIntent.ManualOpen -> {
-            if (
-                saved.chunkIndex == 0 &&
-                saved.offsetInChunkChars == 0 &&
-                knownProgress > 0 &&
-                hasChunks
-            ) {
+            if (knownProgress > 0 && hasChunks) {
                 positionForPercent(knownProgress)
             } else {
-                saved
+                PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
             }
         }
     }
@@ -173,6 +166,10 @@ private fun continuationLog(message: String) {
     Log.d(LOCUS_CONTINUATION_DEBUG_TAG, message)
 }
 
+private fun playableChunkLength(chunk: PlaybackChunk): Int {
+    return chunk.text.length.coerceAtLeast(0)
+}
+
 @Composable
 fun PlayerScreen(
     vm: AppViewModel,
@@ -181,6 +178,7 @@ fun PlayerScreen(
     requestedItemId: Int? = null,
     startExpanded: Boolean = false,
     locusTapSignal: Int = 0,
+    openRequestSignal: Int = 0,
     onOpenItem: (Int) -> Unit,
     onRequestBack: () -> Unit = {},
     onOpenDiagnostics: () -> Unit,
@@ -197,8 +195,8 @@ fun PlayerScreen(
     onChevronSnapChange: (PlayerChevronSnapEdge) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    var currentItemId by rememberSaveable { mutableIntStateOf(initialItemId) }
-    var resolvedInitial by rememberSaveable { mutableStateOf(false) }
+    var currentItemId by rememberSaveable(initialItemId) { mutableIntStateOf(initialItemId) }
+    var resolvedInitial by rememberSaveable(initialItemId) { mutableStateOf(false) }
     var reloadNonce by rememberSaveable { mutableIntStateOf(0) }
     var textPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
     var usingCachedText by remember { mutableStateOf(false) }
@@ -224,14 +222,18 @@ fun PlayerScreen(
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
     var hasRefreshProblem by rememberSaveable { mutableStateOf(false) }
     var preserveVisibleContentOnReload by remember { mutableStateOf(false) }
+    var bodyRevealReady by remember { mutableStateOf(false) }
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
-    val readerScrollState = rememberSaveable(currentItemId, saver = ScrollState.Saver) { ScrollState(0) }
+    var readerViewportSessionNonce by rememberSaveable { mutableIntStateOf(0) }
+    val readerScrollState = rememberSaveable(currentItemId, readerViewportSessionNonce, saver = ScrollState.Saver) {
+        ScrollState(0)
+    }
     var activeChunkRange by remember { mutableStateOf<IntRange?>(null) }
     var readerScrollTriggerSignal by rememberSaveable { mutableIntStateOf(0) }
     var readerSelectionResetSignal by rememberSaveable { mutableIntStateOf(0) }
     var selectionClearArmed by rememberSaveable { mutableStateOf(false) }
-    var backClearPrimedAtMs by rememberSaveable { mutableLongStateOf(0L) }
     var lastHandledLocusTapSignal by rememberSaveable { mutableIntStateOf(locusTapSignal) }
+    var lastHandledOpenRequestSignal by rememberSaveable { mutableIntStateOf(openRequestSignal) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
@@ -246,6 +248,19 @@ fun PlayerScreen(
     val settings by vm.settings.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
+    val waitingForRequestedItem =
+        !compactControlsOnly &&
+            resolvedInitial &&
+            requestedItemId != null &&
+            requestedItemId != currentItemId
+    val hasStalePayloadForCurrentItem =
+        textPayload?.itemId?.let { it != currentItemId } == true
+    val transitionSettled = !waitingForRequestedItem && !hasStalePayloadForCurrentItem && bodyRevealReady
+    val bodyContentAlpha by animateFloatAsState(
+        targetValue = if (transitionSettled) 1f else 0f,
+        animationSpec = tween(durationMillis = 140),
+        label = "locusBodyAlpha",
+    )
     val currentPosition = playbackPositionByItem[currentItemId] ?: PlaybackPosition()
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -277,13 +292,9 @@ fun PlayerScreen(
         selectionClearArmed = false
     }
     BackHandler(enabled = !compactControlsOnly && isExpanded) {
-        val now = SystemClock.elapsedRealtime()
-        val withinSecondPressWindow = (now - backClearPrimedAtMs) <= 1500L
-        if (selectionClearArmed || hasActiveSelection || !withinSecondPressWindow) {
+        if (selectionClearArmed || hasActiveSelection) {
             clearActiveSelection()
-            backClearPrimedAtMs = now
         } else {
-            backClearPrimedAtMs = 0L
             onRequestBack()
         }
     }
@@ -320,13 +331,13 @@ fun PlayerScreen(
                 if (event.itemId != latestItemId) return@TtsController
                 if (event.chunkIndex != latestPosition.chunkIndex) return@TtsController
                 val safeIndex = event.chunkIndex.coerceIn(0, currentChunks.lastIndex)
-                val safeOffset = event.absoluteOffsetInChunk.coerceIn(0, currentChunks[safeIndex].length)
+                val safeOffset = event.absoluteOffsetInChunk.coerceIn(0, playableChunkLength(currentChunks[safeIndex]))
                 val safeRange = if (BuildConfig.DEBUG && settings.forceSentenceHighlightFallback) {
                     null
                 } else {
                     event.activeRangeInChunk?.let { range ->
-                        val start = range.first.coerceIn(0, currentChunks[safeIndex].length)
-                        val endExclusive = (range.last + 1).coerceIn(0, currentChunks[safeIndex].length)
+                        val start = range.first.coerceIn(0, playableChunkLength(currentChunks[safeIndex]))
+                        val endExclusive = (range.last + 1).coerceIn(0, playableChunkLength(currentChunks[safeIndex]))
                         if (endExclusive > start) start until endExclusive else null
                     }
                 }
@@ -358,7 +369,7 @@ fun PlayerScreen(
     fun normalizedPosition(position: PlaybackPosition): PlaybackPosition {
         if (chunks.isEmpty()) return PlaybackPosition()
         val safeIndex = normalizedChunkIndex(position.chunkIndex)
-        val safeOffset = position.offsetInChunkChars.coerceIn(0, chunks[safeIndex].length)
+        val safeOffset = position.offsetInChunkChars.coerceIn(0, playableChunkLength(chunks[safeIndex]))
         return PlaybackPosition(chunkIndex = safeIndex, offsetInChunkChars = safeOffset)
     }
 
@@ -375,12 +386,19 @@ fun PlayerScreen(
         if (chunks.isEmpty()) return PlaybackPosition()
         val boundedPercent = percent.coerceIn(0, 100)
         if (boundedPercent <= 0) return PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
-        val total = totalCharsForPercent().coerceAtLeast(1)
+        val total = chunks.sumOf { it.length.coerceAtLeast(1) }.coerceAtLeast(1)
         val targetAbsolute = ((total.toLong() * boundedPercent) / 100L).toInt().coerceIn(0, total)
-        val idx = chunks.indexOfFirst { targetAbsolute <= it.endChar }.let { if (it >= 0) it else chunks.lastIndex }
-        val chunk = chunks[idx]
-        val offset = (targetAbsolute - chunk.startChar).coerceIn(0, chunk.length)
-        return PlaybackPosition(chunkIndex = idx, offsetInChunkChars = offset)
+        var consumed = 0
+        chunks.forEachIndexed { idx, chunk ->
+            val chunkSpan = playableChunkLength(chunk).coerceAtLeast(1)
+            val chunkEnd = consumed + chunkSpan
+            if (targetAbsolute <= chunkEnd || idx == chunks.lastIndex) {
+                val offset = (targetAbsolute - consumed).coerceIn(0, playableChunkLength(chunk))
+                return PlaybackPosition(chunkIndex = idx, offsetInChunkChars = offset)
+            }
+            consumed = chunkEnd
+        }
+        return PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
     }
 
     fun setPlaybackPosition(chunkIndex: Int, offsetInChunkChars: Int) {
@@ -389,7 +407,7 @@ fun PlayerScreen(
             return
         }
         val safeIndex = normalizedChunkIndex(chunkIndex)
-        val safeOffset = offsetInChunkChars.coerceIn(0, chunks[safeIndex].length)
+        val safeOffset = offsetInChunkChars.coerceIn(0, playableChunkLength(chunks[safeIndex]))
         debugLog("setPosition item=$currentItemId chunk=$safeIndex offset=$safeOffset")
         vm.setPlaybackPosition(currentItemId, safeIndex, safeOffset)
     }
@@ -407,8 +425,9 @@ fun PlayerScreen(
         if (chunks.isEmpty()) return
         val safeIndex = normalizedChunkIndex(chunkIndex)
         val chunk = chunks[safeIndex]
-        val safeOffset = offsetInChunkChars.coerceIn(0, chunk.length)
-        val speakText = if (safeOffset > 0 && safeOffset < chunk.text.length) {
+        val maxPlayableOffset = playableChunkLength(chunk)
+        val safeOffset = offsetInChunkChars.coerceIn(0, maxPlayableOffset)
+        val speakText = if (safeOffset > 0 && safeOffset < maxPlayableOffset) {
             chunk.text.substring(safeOffset)
         } else {
             chunk.text
@@ -474,14 +493,17 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(initialItemId) {
+    LaunchedEffect(initialItemId, requestedItemId) {
         if (resolvedInitial) return@LaunchedEffect
-        val resolvedId = vm.resolveInitialPlayerItemId(initialItemId)
+        val resolvedId = requestedItemId ?: vm.resolveInitialPlayerItemId(initialItemId)
         pendingOpenIntent = if (vm.isItemCompletedForPlaybackStart(resolvedId)) {
             PlaybackOpenIntent.Replay
         } else {
             PlaybackOpenIntent.ManualOpen
         }
+        continuationLog(
+            "initialResolve initial=$initialItemId requested=$requestedItemId resolved=$resolvedId",
+        )
         currentItemId = resolvedId
         resolvedInitial = true
     }
@@ -494,6 +516,14 @@ fun PlayerScreen(
             "requestedItemEffect target=$target current=$currentItemId autoPlayAfterLoad=$autoPlayAfterLoad",
         )
         stopSpeaking(forceSync = true)
+        // Clear current body immediately so the previously viewed article cannot flash
+        // while the newly requested item is loading.
+        preserveVisibleContentOnReload = false
+        bodyRevealReady = false
+        textPayload = null
+        usingCachedText = false
+        chunks = emptyList()
+        isLoading = false
         pendingOpenIntent = if (vm.isItemCompletedForPlaybackStart(target)) {
             PlaybackOpenIntent.Replay
         } else {
@@ -507,6 +537,30 @@ fun PlayerScreen(
         if (locusTapSignal == lastHandledLocusTapSignal) return@LaunchedEffect
         lastHandledLocusTapSignal = locusTapSignal
         readerScrollTriggerSignal += 1
+    }
+
+    LaunchedEffect(openRequestSignal, resolvedInitial, requestedItemId) {
+        if (!resolvedInitial) return@LaunchedEffect
+        if (openRequestSignal == lastHandledOpenRequestSignal) return@LaunchedEffect
+        lastHandledOpenRequestSignal = openRequestSignal
+        val target = requestedItemId ?: currentItemId
+        if (target != currentItemId) return@LaunchedEffect
+        pendingOpenIntent = if (vm.isItemCompletedForPlaybackStart(target)) {
+            PlaybackOpenIntent.Replay
+        } else {
+            PlaybackOpenIntent.ManualOpen
+        }
+        autoPlayAfterLoad = false
+        preserveVisibleContentOnReload = false
+        bodyRevealReady = false
+        reloadNonce += 1
+        continuationLog(
+            "openRequest sameItemReload target=$target reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
+        )
+        Log.d(
+            MANUAL_OPEN_DEBUG_TAG,
+            "openRequest sameItemReload item=$target intent=$pendingOpenIntent reloadNonce=$reloadNonce",
+        )
     }
 
     LaunchedEffect(compactControlsOnly) {
@@ -524,6 +578,7 @@ fun PlayerScreen(
         stopSpeaking(forceSync = false)
         vm.setNowPlayingCurrentItem(currentItemId)
         isLoading = !preservingVisibleContent
+        bodyRevealReady = preservingVisibleContent
         uiMessage = null
         if (!preservingVisibleContent) {
             textPayload = null
@@ -549,21 +604,25 @@ fun PlayerScreen(
                     "loadItem success item=$currentItemId chunks=${chunks.size} usingCache=$usingCachedText autoPlayAfterLoad=$autoPlayAfterLoad",
                 )
                 preserveVisibleContentOnReload = false
-                if (!preservingVisibleContent) {
-                    readerScrollTriggerSignal += 1
-                }
 
-                val saved = vm.getPlaybackPosition(currentItemId)
                 val knownProgress = vm.knownProgressForItem(currentItemId)
                 val seeded = resolveSeededPlaybackPosition(
-                    saved = saved,
                     knownProgress = knownProgress,
                     hasChunks = chunks.isNotEmpty(),
                     openIntent = pendingOpenIntent,
                     positionForPercent = ::positionForPercent,
                 )
                 val safe = normalizedPosition(seeded)
+                readerViewportSessionNonce += 1
                 vm.setPlaybackPosition(currentItemId, safe.chunkIndex, safe.offsetInChunkChars)
+                if (!preservingVisibleContent) {
+                    readerScrollTriggerSignal += 1
+                }
+                Log.d(
+                    MANUAL_OPEN_DEBUG_TAG,
+                    "loadSeed item=$currentItemId intent=$pendingOpenIntent knownProgress=$knownProgress " +
+                        "seededChunk=${safe.chunkIndex} seededOffset=${safe.offsetInChunkChars}",
+                )
                 pendingOpenIntent = PlaybackOpenIntent.ManualOpen
 
                 if (autoPlayAfterLoad && chunks.isNotEmpty()) {
@@ -589,6 +648,11 @@ fun PlayerScreen(
                 }
                 preserveVisibleContentOnReload = false
             }
+        if (!preservingVisibleContent) {
+            // Let ReaderBody apply the seeded scroll position before first reveal.
+            delay(110)
+            bodyRevealReady = true
+        }
         isLoading = false
     }
 
@@ -635,7 +699,7 @@ fun PlayerScreen(
             debugLog("advance chunk ${safe.chunkIndex} -> $next")
             continuationLog("doneEffect nextChunk currentItem=$currentItemId nextChunk=$next")
             val finishedChunk = chunks[safe.chunkIndex]
-            setPlaybackPosition(safe.chunkIndex, finishedChunk.length)
+            setPlaybackPosition(safe.chunkIndex, playableChunkLength(finishedChunk))
             setPlaybackPosition(next, 0)
             playChunk(next, 0)
         } else if (transition.reachedEnd) {
@@ -817,8 +881,9 @@ fun PlayerScreen(
                 if (isSpeaking || isAutoPlaying) {
                     stopSpeaking(forceSync = true)
                 } else if (chunks.isNotEmpty()) {
-                    val restartFromStart = safePosition.chunkIndex == chunks.lastIndex &&
-                        safePosition.offsetInChunkChars >= chunks.last().length
+                    val livePosition = normalizedPosition(vm.getPlaybackPosition(currentItemId))
+                    val restartFromStart = livePosition.chunkIndex == chunks.lastIndex &&
+                        livePosition.offsetInChunkChars >= playableChunkLength(chunks.last())
                     if (restartFromStart) {
                         setPlaybackPosition(0, 0)
                         nearEndForcedForItemId = -1
@@ -828,8 +893,13 @@ fun PlayerScreen(
                     val positionToPlay = if (restartFromStart) {
                         PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
                     } else {
-                        safePosition
+                        livePosition
                     }
+                    Log.d(
+                        MANUAL_OPEN_DEBUG_TAG,
+                        "playTap item=$currentItemId restart=$restartFromStart " +
+                            "playChunk=${positionToPlay.chunkIndex} playOffset=${positionToPlay.offsetInChunkChars}",
+                    )
                     readerScrollTriggerSignal += 1
                     playChunk(positionToPlay.chunkIndex, positionToPlay.offsetInChunkChars)
                 }
@@ -908,7 +978,14 @@ fun PlayerScreen(
         }
     }
 
-    if (compactControlsOnly) {
+    if (waitingForRequestedItem || hasStalePayloadForCurrentItem) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .then(modifier),
+        )
+    } else if (compactControlsOnly) {
         if (showCompactControls) {
             Box(
                 modifier = Modifier
@@ -924,6 +1001,7 @@ fun PlayerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
                 .then(modifier),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
@@ -1029,13 +1107,7 @@ fun PlayerScreen(
                             Spacer(modifier = Modifier)
                         },
                     )
-                    if (isLoading) {
-                        CircularProgressIndicator()
-                    }
                 } else {
-                    if (isLoading) {
-                        CircularProgressIndicator()
-                    }
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1061,7 +1133,7 @@ fun PlayerScreen(
                                 currentChunkOffsetInChars = safePosition.offsetInChunkChars,
                                 activeRangeInChunk = activeChunkRange,
                                 scrollTriggerSignal = readerScrollTriggerSignal,
-                                autoScrollWhileListening = settings.autoScrollWhileListening,
+                                autoScrollWhileListening = settings.autoScrollWhileListening && (isSpeaking || isAutoPlaying),
                                 readingFontSizeSp = settings.readingFontSizeSp,
                                 readingFontOption = settings.readingFontOption,
                                 readingLineHeightPercent = settings.readingLineHeightPercent,
@@ -1069,11 +1141,17 @@ fun PlayerScreen(
                                 paragraphSpacing = settings.readingParagraphSpacing,
                                 selectionResetSignal = readerSelectionResetSignal,
                                 scrollState = readerScrollState,
-                                modifier = Modifier.fillMaxSize(),
+                                showEmptyPlaceholder = transitionSettled && !isLoading,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer { alpha = bodyContentAlpha },
                             )
                             androidx.compose.animation.AnimatedVisibility(
-                                visible = !readerChromeHidden,
-                                enter = slideInVertically(initialOffsetY = { -it / 2 }) + fadeIn(animationSpec = tween(150)),
+                                visible = !readerChromeHidden && transitionSettled,
+                                enter = slideInVertically(
+                                    initialOffsetY = { -it / 2 },
+                                    animationSpec = tween(durationMillis = 140, delayMillis = 40),
+                                ) + fadeIn(animationSpec = tween(durationMillis = 120, delayMillis = 40)),
                                 exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(animationSpec = tween(120)),
                                 modifier = Modifier
                                     .align(Alignment.TopCenter)
@@ -1162,8 +1240,11 @@ fun PlayerScreen(
                                 )
                             }
                             androidx.compose.animation.AnimatedVisibility(
-                                visible = !readerChromeHidden,
-                                enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(150)),
+                                visible = !readerChromeHidden && transitionSettled,
+                                enter = slideInVertically(
+                                    initialOffsetY = { it / 2 },
+                                    animationSpec = tween(durationMillis = 140, delayMillis = 40),
+                                ) + fadeIn(animationSpec = tween(durationMillis = 120, delayMillis = 40)),
                                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
@@ -1176,8 +1257,11 @@ fun PlayerScreen(
                 }
                 if (!isExpanded) {
                     AnimatedVisibility(
-                        visible = !readerChromeHidden,
-                        enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(150)),
+                        visible = !readerChromeHidden && transitionSettled,
+                        enter = slideInVertically(
+                            initialOffsetY = { it / 2 },
+                            animationSpec = tween(durationMillis = 140, delayMillis = 40),
+                        ) + fadeIn(animationSpec = tween(durationMillis = 120, delayMillis = 40)),
                         exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
                     ) {
                         renderPlayerDock()

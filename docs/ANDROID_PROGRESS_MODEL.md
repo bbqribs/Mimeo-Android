@@ -58,7 +58,7 @@ Done is threshold-derived for most UI behavior, plus explicit done/reset API act
 
 ### For playback start position
 Effective precedence depends on open intent:
-- `ManualOpen`: use saved chunk/offset unless it is zero, then seed from `knownProgress`
+- `ManualOpen`: seed from queue/item `progressPercent` (`knownProgressForItem`) and fall back to beginning when unknown/zero
 - `AutoContinue`: force beginning `(0,0)`
 - `Replay`: force beginning `(0,0)`
 
@@ -66,16 +66,16 @@ Implemented in `resolveSeededPlaybackPosition(...)` (`PlayerScreen.kt`).
 
 ### For `knownProgress`
 `knownProgressForItem(itemId)` (`MainActivity.kt`) currently returns:
-- `max(queueItem.progressPercent, sessionItem.lastReadPercent)`
+- `queueItem.progressPercent` only
 
-This is a merged source, not strictly "session wins" or "backend wins".
+Manual-open start position does not use session `lastReadPercent` or cached local playback cursor as an override.
 
 ### For completed/replay detection
 `isItemCompletedForPlaybackStart(itemId)` (`MainActivity.kt`) currently checks:
 - `shouldReplayCompletedItem(knownFurthestForItem(itemId))`
-- `knownFurthestForItem(itemId) = max(queueItem.furthestPercent, sessionItem.lastReadPercent)`
+- `knownFurthestForItem(itemId) = queueItem.furthestPercent`
 
-So completed detection is based on merged furthest-like signals.
+So completed/replay detection is based on queue furthest progress.
 
 ## 3) Update Flow Summary
 
@@ -106,7 +106,7 @@ Direction:
 ## 4) Playback Behavior As Shipped
 
 ### Manual open
-Manual open resumes existing cursor when present; otherwise seeds from known percent.
+Manual open starts from queue/item `progressPercent`-derived position, and starts at beginning when queue progress is unknown/zero.
 
 Status vs policy note: matches current policy note.
 
@@ -143,18 +143,11 @@ Status vs contract: aligns with recent queue/offline behavior tickets.
 - Completed threshold behavior (`98`) covered by `CompletedReplayPolicyTest`.
 - No-active-content classification/message covered by `NoActiveContentStateTest`.
 
-### Divergence or risk candidates
-- Policy phrasing in `ANDROID_AUTOPLAY_RESUME_POLICY.md` says session progress should beat backend queue progress for manual open.
-- Current shipped `knownProgressForItem(...)` uses `max(session, queue)`.
-- In most real cases this is equivalent to "take furthest seen", but it is not the same rule and should be treated as a follow-up decision.
-
 ### Ambiguities to keep explicit
-- Done/replay is tied to merged percent signals and threshold, not a dedicated completed flag in Android playback state.
-- If backend and session values drift, `max(...)` can bias toward older higher progress even when user might expect latest-position semantics.
+- Done/replay is tied to queue furthest threshold, not a dedicated completed flag in Android playback state.
 
 ## 7) Recommended Follow-up Tickets (No Behavior Change In This Audit)
 
-1. `Android progress policy follow-up: decide manual-open precedence when session and queue percent disagree`.
-2. `Android progress observability: add debug-only surface showing queue progress vs session progress vs chunk cursor for active item`.
+1. `Android progress observability: add debug-only surface showing queue progress vs session progress vs chunk cursor for active item`.
 
 These are policy/observability follow-ups; this audit intentionally does not change runtime behavior.

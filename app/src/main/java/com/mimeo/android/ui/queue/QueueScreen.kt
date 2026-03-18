@@ -694,6 +694,7 @@ fun QueueScreen(
                                     "playlist=${settings.selectedPlaylistId ?: "smart"} " +
                                     "displayedHead=${displayedItems.take(8).joinToString { it.itemId.toString() }}",
                             )
+                            vm.warmItemTextForPlayer(item.itemId)
                             vm.startNowPlayingSession(
                                 startItemId = item.itemId,
                                 orderedQueueItems = displayedItems,
