@@ -1898,6 +1898,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return fetchItemText(itemId).map { Unit }
     }
 
+    fun warmItemTextForPlayer(itemId: Int) {
+        viewModelScope.launch {
+            fetchItemText(itemId)
+        }
+    }
+
     suspend fun refreshCurrentPlayerItem(itemId: Int): Result<Unit> {
         val current = settings.value
         if (current.apiToken.isBlank()) {
