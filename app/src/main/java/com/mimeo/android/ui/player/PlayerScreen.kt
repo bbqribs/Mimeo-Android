@@ -254,6 +254,12 @@ fun PlayerScreen(
             requestedItemId != currentItemId
     val hasStalePayloadForCurrentItem =
         textPayload?.itemId?.let { it != currentItemId } == true
+    val transitionSettled = !waitingForRequestedItem && !hasStalePayloadForCurrentItem
+    val bodyContentAlpha by animateFloatAsState(
+        targetValue = if (transitionSettled) 1f else 0f,
+        animationSpec = tween(durationMillis = 140),
+        label = "locusBodyAlpha",
+    )
     val currentPosition = playbackPositionByItem[currentItemId] ?: PlaybackPosition()
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -1126,11 +1132,16 @@ fun PlayerScreen(
                                 paragraphSpacing = settings.readingParagraphSpacing,
                                 selectionResetSignal = readerSelectionResetSignal,
                                 scrollState = readerScrollState,
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer { alpha = bodyContentAlpha },
                             )
                             androidx.compose.animation.AnimatedVisibility(
-                                visible = !readerChromeHidden,
-                                enter = slideInVertically(initialOffsetY = { -it / 2 }) + fadeIn(animationSpec = tween(150)),
+                                visible = !readerChromeHidden && transitionSettled,
+                                enter = slideInVertically(
+                                    initialOffsetY = { -it / 2 },
+                                    animationSpec = tween(durationMillis = 140, delayMillis = 40),
+                                ) + fadeIn(animationSpec = tween(durationMillis = 120, delayMillis = 40)),
                                 exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(animationSpec = tween(120)),
                                 modifier = Modifier
                                     .align(Alignment.TopCenter)
@@ -1219,8 +1230,11 @@ fun PlayerScreen(
                                 )
                             }
                             androidx.compose.animation.AnimatedVisibility(
-                                visible = !readerChromeHidden,
-                                enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(150)),
+                                visible = !readerChromeHidden && transitionSettled,
+                                enter = slideInVertically(
+                                    initialOffsetY = { it / 2 },
+                                    animationSpec = tween(durationMillis = 140, delayMillis = 40),
+                                ) + fadeIn(animationSpec = tween(durationMillis = 120, delayMillis = 40)),
                                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
@@ -1233,8 +1247,11 @@ fun PlayerScreen(
                 }
                 if (!isExpanded) {
                     AnimatedVisibility(
-                        visible = !readerChromeHidden,
-                        enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(150)),
+                        visible = !readerChromeHidden && transitionSettled,
+                        enter = slideInVertically(
+                            initialOffsetY = { it / 2 },
+                            animationSpec = tween(durationMillis = 140, delayMillis = 40),
+                        ) + fadeIn(animationSpec = tween(durationMillis = 120, delayMillis = 40)),
                         exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
                     ) {
                         renderPlayerDock()
