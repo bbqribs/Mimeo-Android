@@ -93,6 +93,9 @@ fun SettingsScreen(
     var forceSentenceHighlightFallback by remember(settings.forceSentenceHighlightFallback) {
         mutableStateOf(settings.forceSentenceHighlightFallback)
     }
+    var showPlaybackDiagnostics by remember(settings.showPlaybackDiagnostics) {
+        mutableStateOf(settings.showPlaybackDiagnostics)
+    }
     var keepShareResultNotifications by remember(settings.keepShareResultNotifications) {
         mutableStateOf(settings.keepShareResultNotifications)
     }
@@ -152,6 +155,7 @@ fun SettingsScreen(
             autoScrollWhileListening = autoScrollWhileListening,
             continuousNowPlayingMarquee = continuousNowPlayingMarquee,
             forceSentenceHighlightFallback = forceSentenceHighlightFallback,
+            showPlaybackDiagnostics = showPlaybackDiagnostics,
             keepShareResultNotifications = keepShareResultNotifications,
             autoDownloadSavedArticles = autoDownloadSavedArticles,
         )
@@ -679,7 +683,47 @@ fun SettingsScreen(
                         )
                     }
                 }
-                if (BuildConfig.DEBUG) {
+            }
+        }
+        SettingsSectionSeparator()
+
+        if (BuildConfig.DEBUG) {
+            SettingsSectionHeader(
+                title = "Developer",
+                subtitle = "Debug-only diagnostics and playback instrumentation controls.",
+            )
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text("Developer")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text("Playback diagnostics strip")
+                            Text(
+                                text = "Show open/playback handoff diagnostics at the bottom of Locus.",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = showPlaybackDiagnostics,
+                            onCheckedChange = {
+                                showPlaybackDiagnostics = it
+                                vm.saveShowPlaybackDiagnostics(it)
+                            },
+                        )
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -706,8 +750,8 @@ fun SettingsScreen(
                     }
                 }
             }
+            SettingsSectionSeparator()
         }
-        SettingsSectionSeparator()
     }
 
     if (showSignOutDialog) {

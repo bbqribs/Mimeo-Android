@@ -498,6 +498,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         autoScrollWhileListening: Boolean,
         continuousNowPlayingMarquee: Boolean,
         forceSentenceHighlightFallback: Boolean,
+        showPlaybackDiagnostics: Boolean,
         keepShareResultNotifications: Boolean,
         autoDownloadSavedArticles: Boolean,
     ) {
@@ -514,6 +515,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 autoScrollWhileListening = autoScrollWhileListening,
                 continuousNowPlayingMarquee = continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = forceSentenceHighlightFallback,
+                showPlaybackDiagnostics = showPlaybackDiagnostics,
                 keepShareResultNotifications = keepShareResultNotifications,
                 autoDownloadSavedArticles = autoDownloadSavedArticles,
                 playbackSpeed = settings.value.playbackSpeed,
@@ -553,6 +555,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
+                showPlaybackDiagnostics = settings.value.showPlaybackDiagnostics,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 autoDownloadSavedArticles = settings.value.autoDownloadSavedArticles,
                 playbackSpeed = settings.value.playbackSpeed,
@@ -585,6 +588,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
+                showPlaybackDiagnostics = settings.value.showPlaybackDiagnostics,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 autoDownloadSavedArticles = settings.value.autoDownloadSavedArticles,
                 playbackSpeed = playbackSpeed,
@@ -1592,6 +1596,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _settings.update { current -> current.copy(forceSentenceHighlightFallback = enabled) }
             settingsStore.saveForceSentenceHighlightFallback(enabled)
+        }
+    }
+
+    fun saveShowPlaybackDiagnostics(enabled: Boolean) {
+        viewModelScope.launch {
+            _settings.update { current -> current.copy(showPlaybackDiagnostics = enabled) }
+            settingsStore.saveShowPlaybackDiagnostics(enabled)
         }
     }
 
