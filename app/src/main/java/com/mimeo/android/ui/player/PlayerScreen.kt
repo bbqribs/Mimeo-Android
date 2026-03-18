@@ -137,6 +137,61 @@ internal enum class PlaybackOpenIntent {
     Replay,
 }
 
+internal data class PlaybackOpenDiagnosticsSnapshot(
+    val itemId: Int,
+    val requestedItemId: Int?,
+    val openIntent: PlaybackOpenIntent,
+    val startSource: String,
+    val knownProgress: Int,
+    val seededPosition: PlaybackPosition,
+)
+
+internal data class PlaybackObservabilityUiState(
+    val currentItemId: Int,
+    val requestedItemId: Int?,
+    val openIntent: PlaybackOpenIntent?,
+    val startSource: String?,
+    val knownProgress: Int?,
+    val seededChunk: Int?,
+    val seededOffset: Int?,
+    val handoffPending: Boolean,
+    val handoffSettled: Boolean,
+    val autoPath: Boolean,
+)
+
+internal fun resolveOpenStartSource(
+    openIntent: PlaybackOpenIntent,
+    knownProgress: Int,
+    hasChunks: Boolean,
+): String {
+    return when (openIntent) {
+        PlaybackOpenIntent.AutoContinue -> "autocontinue:start_of_item"
+        PlaybackOpenIntent.Replay -> "replay:start_of_item"
+        PlaybackOpenIntent.ManualOpen -> {
+            if (knownProgress > 0 && hasChunks) {
+                "manual:queue_progress_percent"
+            } else {
+                "manual:start_of_item"
+            }
+        }
+    }
+}
+
+internal fun playbackObservabilityLines(state: PlaybackObservabilityUiState): List<String> {
+    val openIntentLabel = state.openIntent?.name ?: "pending"
+    val sourceLabel = state.startSource ?: "pending"
+    val knownProgressLabel = state.knownProgress?.toString() ?: "pending"
+    val seededChunkLabel = state.seededChunk?.toString() ?: "pending"
+    val seededOffsetLabel = state.seededOffset?.toString() ?: "pending"
+    return listOf(
+        "item current=${state.currentItemId} requested=${state.requestedItemId ?: "none"}",
+        "open_intent=$openIntentLabel auto_path=${state.autoPath}",
+        "start_source=$sourceLabel known_progress=$knownProgressLabel",
+        "seed chunk=$seededChunkLabel offset=$seededOffsetLabel",
+        "handoff pending=${state.handoffPending} settled=${state.handoffSettled}",
+    )
+}
+
 internal fun resolveSeededPlaybackPosition(
     knownProgress: Int,
     hasChunks: Boolean,
@@ -234,6 +289,7 @@ fun PlayerScreen(
     var selectionClearArmed by rememberSaveable { mutableStateOf(false) }
     var lastHandledLocusTapSignal by rememberSaveable { mutableIntStateOf(locusTapSignal) }
     var lastHandledOpenRequestSignal by rememberSaveable { mutableIntStateOf(openRequestSignal) }
+    var lastOpenDiagnostics by remember { mutableStateOf<PlaybackOpenDiagnosticsSnapshot?>(null) }
     var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
     var lastSyncedPercent by remember { mutableIntStateOf(-1) }
     var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
@@ -613,6 +669,19 @@ fun PlayerScreen(
                     positionForPercent = ::positionForPercent,
                 )
                 val safe = normalizedPosition(seeded)
+                val startSource = resolveOpenStartSource(
+                    openIntent = pendingOpenIntent,
+                    knownProgress = knownProgress,
+                    hasChunks = chunks.isNotEmpty(),
+                )
+                lastOpenDiagnostics = PlaybackOpenDiagnosticsSnapshot(
+                    itemId = currentItemId,
+                    requestedItemId = requestedItemId,
+                    openIntent = pendingOpenIntent,
+                    startSource = startSource,
+                    knownProgress = knownProgress,
+                    seededPosition = safe,
+                )
                 readerViewportSessionNonce += 1
                 vm.setPlaybackPosition(currentItemId, safe.chunkIndex, safe.offsetInChunkChars)
                 if (!preservingVisibleContent) {
@@ -622,6 +691,11 @@ fun PlayerScreen(
                     MANUAL_OPEN_DEBUG_TAG,
                     "loadSeed item=$currentItemId intent=$pendingOpenIntent knownProgress=$knownProgress " +
                         "seededChunk=${safe.chunkIndex} seededOffset=${safe.offsetInChunkChars}",
+                )
+                continuationLog(
+                    "openDiagnostics item=$currentItemId requested=$requestedItemId intent=$pendingOpenIntent " +
+                        "source=$startSource knownProgress=$knownProgress seededChunk=${safe.chunkIndex} seededOffset=${safe.offsetInChunkChars} " +
+                        "handoffPending=$waitingForRequestedItem stalePayload=$hasStalePayloadForCurrentItem settled=$transitionSettled",
                 )
                 pendingOpenIntent = PlaybackOpenIntent.ManualOpen
 
@@ -977,6 +1051,18 @@ fun PlayerScreen(
             )
         }
     }
+    val observabilityUiState = PlaybackObservabilityUiState(
+        currentItemId = currentItemId,
+        requestedItemId = requestedItemId,
+        openIntent = lastOpenDiagnostics?.openIntent,
+        startSource = lastOpenDiagnostics?.startSource,
+        knownProgress = lastOpenDiagnostics?.knownProgress,
+        seededChunk = lastOpenDiagnostics?.seededPosition?.chunkIndex,
+        seededOffset = lastOpenDiagnostics?.seededPosition?.offsetInChunkChars,
+        handoffPending = waitingForRequestedItem || hasStalePayloadForCurrentItem,
+        handoffSettled = transitionSettled,
+        autoPath = isAutoPlaying,
+    )
 
     if (waitingForRequestedItem || hasStalePayloadForCurrentItem) {
         Box(
@@ -1267,6 +1353,12 @@ fun PlayerScreen(
                         renderPlayerDock()
                     }
                 }
+                if (BuildConfig.DEBUG) {
+                    PlaybackObservabilityStrip(
+                        lines = playbackObservabilityLines(observabilityUiState),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
     }
@@ -1300,6 +1392,35 @@ fun PlayerScreen(
         )
     }
 
+}
+
+@Composable
+private fun PlaybackObservabilityStrip(
+    lines: List<String>,
+    modifier: Modifier = Modifier,
+) {
+    ElevatedCard(modifier = modifier) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = "Playback diagnostics (debug)",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            lines.forEach { line ->
+                Text(
+                    text = line,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
 }
 
 @Composable

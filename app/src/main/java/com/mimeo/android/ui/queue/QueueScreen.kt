@@ -692,7 +692,8 @@ fun QueueScreen(
                                 LOCUS_CONTINUATION_DEBUG_TAG,
                                 "queue.openPlayer tapped=${item.itemId} sort=${selectedSort.name} " +
                                     "playlist=${settings.selectedPlaylistId ?: "smart"} " +
-                                    "displayedHead=${displayedItems.take(8).joinToString { it.itemId.toString() }}",
+                                    "displayedHead=${displayedItems.take(8).joinToString { it.itemId.toString() }} " +
+                                    "sessionBefore=${vm.currentNowPlayingItemId()}",
                             )
                             vm.warmItemTextForPlayer(item.itemId)
                             vm.startNowPlayingSession(
