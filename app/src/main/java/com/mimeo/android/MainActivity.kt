@@ -2609,10 +2609,11 @@ private fun MimeoApp(vm: AppViewModel) {
         routeItemId
             ?: pendingLocusItemId.takeIf { pendingLocusOpen && it > 0 }
             ?: sessionNowPlayingItemId
-    LaunchedEffect(sessionNowPlayingItemId, routeItemId, requestedPlayerItemId, currentRoute) {
+    LaunchedEffect(sessionNowPlayingItemId, routeItemId, requestedPlayerItemId, currentRoute, pendingLocusOpen, pendingLocusItemId) {
         Log.d(
             LOCUS_CONTINUATION_DEBUG_TAG,
-            "mimeoApp route=$currentRoute routeItemId=$routeItemId sessionItemId=$sessionNowPlayingItemId requestedItemId=$requestedPlayerItemId",
+            "mimeoApp route=$currentRoute routeItemId=$routeItemId sessionItemId=$sessionNowPlayingItemId requestedItemId=$requestedPlayerItemId " +
+                "handoffPending=$pendingLocusOpen handoffTarget=$pendingLocusItemId",
         )
     }
     val selectedTab = when {
