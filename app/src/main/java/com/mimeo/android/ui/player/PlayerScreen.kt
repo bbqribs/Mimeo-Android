@@ -222,6 +222,7 @@ fun PlayerScreen(
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
     var hasRefreshProblem by rememberSaveable { mutableStateOf(false) }
     var preserveVisibleContentOnReload by remember { mutableStateOf(false) }
+    var bodyRevealReady by remember { mutableStateOf(false) }
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     var readerViewportSessionNonce by rememberSaveable { mutableIntStateOf(0) }
     val readerScrollState = rememberSaveable(currentItemId, readerViewportSessionNonce, saver = ScrollState.Saver) {
@@ -254,7 +255,7 @@ fun PlayerScreen(
             requestedItemId != currentItemId
     val hasStalePayloadForCurrentItem =
         textPayload?.itemId?.let { it != currentItemId } == true
-    val transitionSettled = !waitingForRequestedItem && !hasStalePayloadForCurrentItem
+    val transitionSettled = !waitingForRequestedItem && !hasStalePayloadForCurrentItem && bodyRevealReady
     val bodyContentAlpha by animateFloatAsState(
         targetValue = if (transitionSettled) 1f else 0f,
         animationSpec = tween(durationMillis = 140),
@@ -518,6 +519,7 @@ fun PlayerScreen(
         // Clear current body immediately so the previously viewed article cannot flash
         // while the newly requested item is loading.
         preserveVisibleContentOnReload = false
+        bodyRevealReady = false
         textPayload = null
         usingCachedText = false
         chunks = emptyList()
@@ -550,6 +552,7 @@ fun PlayerScreen(
         }
         autoPlayAfterLoad = false
         preserveVisibleContentOnReload = false
+        bodyRevealReady = false
         reloadNonce += 1
         continuationLog(
             "openRequest sameItemReload target=$target reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
@@ -575,6 +578,7 @@ fun PlayerScreen(
         stopSpeaking(forceSync = false)
         vm.setNowPlayingCurrentItem(currentItemId)
         isLoading = !preservingVisibleContent
+        bodyRevealReady = preservingVisibleContent
         uiMessage = null
         if (!preservingVisibleContent) {
             textPayload = null
@@ -644,6 +648,11 @@ fun PlayerScreen(
                 }
                 preserveVisibleContentOnReload = false
             }
+        if (!preservingVisibleContent) {
+            // Let ReaderBody apply the seeded scroll position before first reveal.
+            delay(110)
+            bodyRevealReady = true
+        }
         isLoading = false
     }
 
