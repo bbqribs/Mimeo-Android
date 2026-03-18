@@ -49,6 +49,8 @@ class SettingsStore(private val context: Context) {
         booleanPreferencesKey("continuous_now_playing_marquee")
     private val forceSentenceHighlightFallbackKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("force_sentence_highlight_fallback")
+    private val showPlaybackDiagnosticsKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("show_playback_diagnostics")
     private val keepShareResultNotificationsKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("keep_share_result_notifications")
     private val autoDownloadSavedArticlesKey: Preferences.Key<Boolean> =
@@ -109,6 +111,7 @@ class SettingsStore(private val context: Context) {
             autoScrollWhileListening = prefs[autoScrollWhileListeningKey] ?: true,
             continuousNowPlayingMarquee = prefs[continuousNowPlayingMarqueeKey] ?: true,
             forceSentenceHighlightFallback = prefs[forceSentenceHighlightFallbackKey] ?: false,
+            showPlaybackDiagnostics = prefs[showPlaybackDiagnosticsKey] ?: false,
             keepShareResultNotifications = prefs[keepShareResultNotificationsKey] ?: false,
             autoDownloadSavedArticles = prefs[autoDownloadSavedArticlesKey] ?: true,
             playbackSpeed = prefs[playbackSpeedKey] ?: 1.0f,
@@ -158,6 +161,7 @@ class SettingsStore(private val context: Context) {
         autoScrollWhileListening: Boolean,
         continuousNowPlayingMarquee: Boolean,
         forceSentenceHighlightFallback: Boolean,
+        showPlaybackDiagnostics: Boolean,
         keepShareResultNotifications: Boolean,
         autoDownloadSavedArticles: Boolean,
         playbackSpeed: Float,
@@ -185,6 +189,7 @@ class SettingsStore(private val context: Context) {
             prefs[autoScrollWhileListeningKey] = autoScrollWhileListening
             prefs[continuousNowPlayingMarqueeKey] = continuousNowPlayingMarquee
             prefs[forceSentenceHighlightFallbackKey] = forceSentenceHighlightFallback
+            prefs[showPlaybackDiagnosticsKey] = showPlaybackDiagnostics
             prefs[keepShareResultNotificationsKey] = keepShareResultNotifications
             prefs[autoDownloadSavedArticlesKey] = autoDownloadSavedArticles
             prefs[playbackSpeedKey] = playbackSpeed
@@ -242,6 +247,12 @@ class SettingsStore(private val context: Context) {
     suspend fun saveForceSentenceHighlightFallback(forceSentenceHighlightFallback: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[forceSentenceHighlightFallbackKey] = forceSentenceHighlightFallback
+        }
+    }
+
+    suspend fun saveShowPlaybackDiagnostics(showPlaybackDiagnostics: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[showPlaybackDiagnosticsKey] = showPlaybackDiagnostics
         }
     }
 

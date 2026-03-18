@@ -1353,7 +1353,7 @@ fun PlayerScreen(
                         renderPlayerDock()
                     }
                 }
-                if (BuildConfig.DEBUG) {
+                if (BuildConfig.DEBUG && settings.showPlaybackDiagnostics) {
                     PlaybackObservabilityStrip(
                         lines = playbackObservabilityLines(observabilityUiState),
                         modifier = Modifier.fillMaxWidth(),
