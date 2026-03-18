@@ -64,6 +64,7 @@ fun ReaderBody(
     paragraphSpacing: ParagraphSpacingOption,
     selectionResetSignal: Int,
     scrollState: ScrollState,
+    showEmptyPlaceholder: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val paragraphSpacingDp = when (paragraphSpacing) {
@@ -185,14 +186,23 @@ fun ReaderBody(
                         }
                     }
                 } else {
-                    Text(
-                        text = fullText?.ifBlank { "No readable text available." } ?: "No readable text available.",
-                        modifier = Modifier
-                            .widthIn(max = readingMaxWidthDp.dp)
-                            .fillMaxWidth()
-                            .verticalScroll(scrollState),
-                        style = readingTextStyle,
-                    )
+                    if (showEmptyPlaceholder) {
+                        Text(
+                            text = fullText?.ifBlank { "No readable text available." } ?: "No readable text available.",
+                            modifier = Modifier
+                                .widthIn(max = readingMaxWidthDp.dp)
+                                .fillMaxWidth()
+                                .verticalScroll(scrollState),
+                            style = readingTextStyle,
+                        )
+                    } else {
+                        Spacer(
+                            modifier = Modifier
+                                .widthIn(max = readingMaxWidthDp.dp)
+                                .fillMaxWidth()
+                                .verticalScroll(scrollState),
+                        )
+                    }
                 }
             }
         }

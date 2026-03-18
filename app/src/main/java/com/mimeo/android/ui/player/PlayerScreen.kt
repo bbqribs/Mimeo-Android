@@ -1141,6 +1141,7 @@ fun PlayerScreen(
                                 paragraphSpacing = settings.readingParagraphSpacing,
                                 selectionResetSignal = readerSelectionResetSignal,
                                 scrollState = readerScrollState,
+                                showEmptyPlaceholder = transitionSettled && !isLoading,
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .graphicsLayer { alpha = bodyContentAlpha },
