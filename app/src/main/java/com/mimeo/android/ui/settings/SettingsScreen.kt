@@ -725,7 +725,8 @@ fun SettingsScreen(
                             enabled = ttsEngineReady,
                             onClick = { showTtsLocaleMenu = true },
                         ) {
-                            Text("Choose language/accent ▼")
+                            val selectedLocaleLabel = ttsLocaleOptions.firstOrNull { it.tag == selectedTtsLocaleTag }?.label
+                            Text("Language: ${selectedLocaleLabel ?: "Any"} ▼")
                         }
                         DropdownMenu(
                             expanded = showTtsLocaleMenu,
@@ -739,7 +740,15 @@ fun SettingsScreen(
                             }
                             ttsLocaleOptions.forEach { option ->
                                 DropdownMenuItem(
-                                    text = { Text(option.label) },
+                                    text = {
+                                        Text(
+                                            if (option.tag == selectedTtsLocaleTag) {
+                                                "✓ ${option.label}"
+                                            } else {
+                                                option.label
+                                            },
+                                        )
+                                    },
                                     onClick = {
                                         showTtsLocaleMenu = false
                                         selectedTtsLocaleTag = option.tag
@@ -772,14 +781,23 @@ fun SettingsScreen(
                             enabled = ttsEngineReady,
                             onClick = { showTtsVoiceMenu = true },
                         ) {
-                            Text("Choose voice ▼")
+                            val selectedVoiceLabel = selected?.voiceLabel ?: "System default"
+                            Text("Voice: $selectedVoiceLabel ▼")
                         }
                         DropdownMenu(
                             expanded = showTtsVoiceMenu,
                             onDismissRequest = { showTtsVoiceMenu = false },
                         ) {
                             DropdownMenuItem(
-                                text = { Text(engineDefaultTtsVoiceLabel) },
+                                text = {
+                                    Text(
+                                        if (ttsVoiceName.trim().isBlank()) {
+                                            "✓ $engineDefaultTtsVoiceLabel"
+                                        } else {
+                                            engineDefaultTtsVoiceLabel
+                                        },
+                                    )
+                                },
                                 onClick = {
                                     showTtsVoiceMenu = false
                                     ttsVoiceName = ""
@@ -792,7 +810,15 @@ fun SettingsScreen(
                             )
                             filteredVoiceOptions.forEach { option ->
                                 DropdownMenuItem(
-                                    text = { Text(option.voiceLabel) },
+                                    text = {
+                                        Text(
+                                            if (option.name.equals(ttsVoiceName.trim(), ignoreCase = true)) {
+                                                "✓ ${option.voiceLabel}"
+                                            } else {
+                                                option.voiceLabel
+                                            },
+                                        )
+                                    },
                                     onClick = {
                                         showTtsVoiceMenu = false
                                         ttsVoiceName = option.name
@@ -1398,11 +1424,12 @@ internal fun mapTtsVoiceOptions(descriptors: List<TtsVoiceDescriptor>): List<Tts
             }
             val networkLabel = if (descriptor.requiresNetwork) "online" else "offline"
             val qualitySuffix = qualityLabel?.let { " - $it" }.orEmpty()
+            val compactVoiceName = compactVoiceNameLabel(descriptor.name.trim(), descriptor.localeTag)
             TtsVoiceOption(
                 name = descriptor.name.trim(),
                 localeTag = descriptor.localeTag,
                 localeLabel = localeLabel,
-                voiceLabel = "${descriptor.name.trim()} - $networkLabel$qualitySuffix",
+                voiceLabel = "$compactVoiceName - $networkLabel$qualitySuffix",
             )
         }
         .distinctBy { it.name.lowercase(Locale.US) }
@@ -1427,6 +1454,25 @@ private fun humanReadableLocaleLabel(localeTag: String): String {
     val language = locale.getDisplayLanguage(Locale.US).ifBlank { normalized }
     val country = locale.getDisplayCountry(Locale.US)
     return if (country.isBlank()) language else "$language ($country)"
+}
+
+private fun compactVoiceNameLabel(rawVoiceName: String, localeTag: String): String {
+    val raw = rawVoiceName.trim()
+    if (raw.isBlank()) return "Unnamed voice"
+    val locale = Locale.forLanguageTag(localeTag)
+    val language = locale.language.trim().lowercase(Locale.US)
+    val country = locale.country.trim().lowercase(Locale.US)
+    var compact = raw
+    if (language.isNotBlank() && country.isNotBlank()) {
+        val localePrefixPattern = Regex("^${Regex.escape(language)}[-_]${Regex.escape(country)}[-_]", RegexOption.IGNORE_CASE)
+        compact = compact.replace(localePrefixPattern, "")
+    }
+    if (compact == raw && language.isNotBlank()) {
+        val languagePrefixPattern = Regex("^${Regex.escape(language)}[-_]", RegexOption.IGNORE_CASE)
+        compact = compact.replace(languagePrefixPattern, "")
+    }
+    compact = compact.trim().replace('_', ' ')
+    return compact.ifBlank { raw }
 }
 
 internal fun resolveConfiguredTtsVoiceName(

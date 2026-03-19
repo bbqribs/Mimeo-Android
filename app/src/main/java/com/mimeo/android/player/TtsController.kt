@@ -49,6 +49,7 @@ class TtsController(
     private val utteranceMetaById = ConcurrentHashMap<String, UtteranceMeta>()
     private val handledDoneUtterances = CopyOnWriteArraySet<String>()
     private var speechRate = 1.0f
+    private var defaultVoiceName: String? = null
     private var preferredVoiceName: String? = null
 
     init {
@@ -58,7 +59,8 @@ class TtsController(
                 initialized = true
                 createdEngine.language = Locale.US
                 createdEngine.setSpeechRate(speechRate)
-                applyPreferredVoiceIfAvailable()
+                defaultVoiceName = createdEngine.defaultVoice?.name?.trim()?.ifBlank { null }
+                applyPreferredOrDefaultVoice()
             } else {
                 mainHandler.post { onError("TTS init failed") }
             }
@@ -174,7 +176,7 @@ class TtsController(
     fun setVoiceName(voiceName: String) {
         preferredVoiceName = voiceName.trim().ifBlank { null }
         if (initialized) {
-            applyPreferredVoiceIfAvailable()
+            applyPreferredOrDefaultVoice()
         }
     }
 
@@ -190,9 +192,27 @@ class TtsController(
         tts.shutdown()
     }
 
-    private fun applyPreferredVoiceIfAvailable() {
-        val preferred = preferredVoiceName ?: return
-        val matchingVoice = tts.voices?.firstOrNull { it.name == preferred } ?: return
-        tts.voice = matchingVoice
+    private fun applyPreferredOrDefaultVoice() {
+        val voices = tts.voices.orEmpty()
+        val preferred = preferredVoiceName
+        if (!preferred.isNullOrBlank()) {
+            val matchingVoice = voices.firstOrNull { voice ->
+                voice.name.equals(preferred, ignoreCase = true)
+            }
+            if (matchingVoice != null) {
+                tts.voice = matchingVoice
+                preferredVoiceName = matchingVoice.name
+                return
+            }
+        }
+        val defaultName = defaultVoiceName
+        if (!defaultName.isNullOrBlank()) {
+            val defaultVoice = voices.firstOrNull { voice ->
+                voice.name.equals(defaultName, ignoreCase = true)
+            }
+            if (defaultVoice != null) {
+                tts.voice = defaultVoice
+            }
+        }
     }
 }
