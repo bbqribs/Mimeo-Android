@@ -320,6 +320,19 @@ fun SettingsScreen(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                Text(
+                    text = formatAuthSessionStatusSummary(
+                        savedToken = settings.apiToken,
+                        editedToken = token,
+                    ),
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = authSessionConsequenceSummary(),
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 val currentModeSnapshot = connectionTestSuccessByMode[connectionMode]
                 val hasUnsavedModeUrlEdit =
                     normalizeConnectionBaseUrl(selectedModeBaseUrl()) != normalizeConnectionBaseUrl(savedModeBaseUrl())
@@ -1023,3 +1036,22 @@ private fun SettingsSectionSeparator() {
 
 internal fun signOutConfirmationMessage(): String =
     "Your sign-in session will end. Server URL and other settings are kept."
+
+internal fun formatAuthSessionStatusSummary(savedToken: String, editedToken: String): String {
+    val savedPresent = savedToken.trim().isNotBlank()
+    val editedNormalized = editedToken.trim()
+    val savedNormalized = savedToken.trim()
+    return when {
+        !savedPresent ->
+            "Session: not signed in. Use Sign In to create a user-linked device session token."
+        editedNormalized != savedNormalized ->
+            "Session: signed in. Advanced token field has unsaved edits; Save applies token replacement."
+        else ->
+            "Session: signed in with saved device session token."
+    }
+}
+
+internal fun authSessionConsequenceSummary(): String =
+    "If auth is stale/invalid, the app returns to Sign In. " +
+        "Sign out clears only this device session token (URL/mode stay). " +
+        "Change password keeps this device signed in and revokes other sessions."
