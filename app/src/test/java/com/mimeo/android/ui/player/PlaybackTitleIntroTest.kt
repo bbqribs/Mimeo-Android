@@ -135,6 +135,21 @@ class PlaybackTitleIntroTest {
     }
 
     @Test
+    fun `prefix skip is delimiter agnostic for source tail`() {
+        val title = "UK sets targets to boost steel making and cut imports | BBC News"
+        val opening = "UK sets targets to boost steel making and cut imports IMAGE SOURCE,PA MEDIA..."
+        val skip = computeTitlePrefixSkipChars(
+            title = title,
+            openingText = opening,
+            minMatchedWords = 3,
+        )
+
+        assertTrue(skip > 0)
+        val remainder = opening.substring(skip).trimStart()
+        assertTrue(remainder.startsWith("IMAGE SOURCE", ignoreCase = true))
+    }
+
+    @Test
     fun `prefix skip does not modify resumed nonzero playback position`() {
         val opening = "Tories only party with a plan, says Badenoch as she launches election campaign."
         val start = applyTitlePrefixSkipToStartPosition(
