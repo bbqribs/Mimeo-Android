@@ -1,6 +1,8 @@
 package com.mimeo.android.ui.player
 
 import com.mimeo.android.model.PlaybackChunk
+import com.mimeo.android.model.PlaybackPosition
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -33,14 +35,14 @@ class PlaybackTitleIntroTest {
     }
 
     @Test
-    fun `duplicate title suppression skips intro when opening body repeats title`() {
+    fun `duplicate title no longer suppresses intro`() {
         val shouldUse = shouldSpeakTitleBeforeBody(
             enabled = true,
             title = "Iran's Leaders Play Diplomatic Hardball",
             chunks = listOf(sampleChunk("Iran's Leaders Play Diplomatic Hardball, Emboldened by Oil Shock - WSJ ...")),
         )
 
-        assertFalse(shouldUse)
+        assertTrue(shouldUse)
     }
 
     @Test
@@ -65,6 +67,55 @@ class PlaybackTitleIntroTest {
         assertTrue(shouldAcceptDoneEventChunk(eventChunkIndex = -1, currentChunkIndex = 7))
         assertTrue(shouldAcceptDoneEventChunk(eventChunkIndex = 7, currentChunkIndex = 7))
         assertFalse(shouldAcceptDoneEventChunk(eventChunkIndex = 3, currentChunkIndex = 7))
+    }
+
+    @Test
+    fun `prefix skip requires at least three matched words`() {
+        val skipTwoWords = computeTitlePrefixSkipChars(
+            title = "Tories only",
+            openingText = "Tories only party with a plan, says Badenoch.",
+            minMatchedWords = 3,
+        )
+        val skipThreeWords = computeTitlePrefixSkipChars(
+            title = "Tories only party",
+            openingText = "Tories only party with a plan, says Badenoch.",
+            minMatchedWords = 3,
+        )
+
+        assertEquals(0, skipTwoWords)
+        assertTrue(skipThreeWords > 0)
+    }
+
+    @Test
+    fun `prefix skip advances opening playback offset when intro is enabled`() {
+        val opening = "Tories only party with a plan, says Badenoch as she launches election campaign."
+        val skip = computeTitlePrefixSkipChars(
+            title = "Tories only party with a plan - BBC",
+            openingText = opening,
+            minMatchedWords = 3,
+        )
+        val start = applyTitlePrefixSkipToStartPosition(
+            start = PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0),
+            chunks = listOf(sampleChunk(opening)),
+            skipCharsFromOpening = skip,
+        )
+
+        assertTrue(skip > 0)
+        assertEquals(0, start.chunkIndex)
+        assertEquals(skip, start.offsetInChunkChars)
+    }
+
+    @Test
+    fun `prefix skip does not modify resumed nonzero playback position`() {
+        val opening = "Tories only party with a plan, says Badenoch as she launches election campaign."
+        val start = applyTitlePrefixSkipToStartPosition(
+            start = PlaybackPosition(chunkIndex = 1, offsetInChunkChars = 42),
+            chunks = listOf(sampleChunk(opening), sampleChunk("Second chunk")),
+            skipCharsFromOpening = 20,
+        )
+
+        assertEquals(1, start.chunkIndex)
+        assertEquals(42, start.offsetInChunkChars)
     }
 
     private fun sampleChunk(text: String): PlaybackChunk {

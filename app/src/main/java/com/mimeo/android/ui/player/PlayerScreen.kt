@@ -237,9 +237,7 @@ internal fun shouldSpeakTitleBeforeBody(
     if (!enabled) return false
     val cleanTitle = title?.trim().orEmpty()
     if (cleanTitle.isBlank()) return false
-    val openingText = chunks.firstOrNull()?.text.orEmpty()
-    if (openingText.isBlank()) return true
-    return !isTitleDuplicateOfOpeningText(cleanTitle, openingText)
+    return chunks.firstOrNull()?.text.orEmpty().isNotBlank()
 }
 
 internal fun shouldUseTitleIntroOnPlaybackStart(
@@ -265,6 +263,71 @@ internal fun isTitleDuplicateOfOpeningText(title: String, openingText: String): 
     if (normalizedOpening.startsWith(normalizedTitle)) return true
     if (normalizedTitle.startsWith(normalizedOpening) && normalizedOpening.length >= 24) return true
     return false
+}
+
+internal fun computeTitlePrefixSkipChars(
+    title: String?,
+    openingText: String,
+    minMatchedWords: Int = 3,
+): Int {
+    val cleanTitle = title?.trim().orEmpty()
+    if (cleanTitle.isBlank()) return 0
+    if (openingText.isBlank()) return 0
+
+    val titleWords = tokenizeWordsWithEndOffsets(cleanTitle)
+    val openingWords = tokenizeWordsWithEndOffsets(openingText)
+    if (titleWords.isEmpty() || openingWords.isEmpty()) return 0
+
+    val maxCompare = minOf(titleWords.size, openingWords.size)
+    var matched = 0
+    while (matched < maxCompare) {
+        if (titleWords[matched].word != openingWords[matched].word) break
+        matched += 1
+    }
+    if (matched < minMatchedWords) return 0
+
+    var skipTo = openingWords[matched - 1].endExclusive
+    while (skipTo < openingText.length && !openingText[skipTo].isLetterOrDigit()) {
+        skipTo += 1
+    }
+    return skipTo.coerceIn(0, openingText.length)
+}
+
+internal fun applyTitlePrefixSkipToStartPosition(
+    start: PlaybackPosition,
+    chunks: List<PlaybackChunk>,
+    skipCharsFromOpening: Int,
+): PlaybackPosition {
+    if (skipCharsFromOpening <= 0) return start
+    if (chunks.isEmpty()) return start
+    if (start.chunkIndex != 0 || start.offsetInChunkChars != 0) return start
+
+    var remaining = skipCharsFromOpening
+    var chunkIndex = 0
+    while (chunkIndex < chunks.size) {
+        val len = playableChunkLength(chunks[chunkIndex])
+        if (remaining < len) {
+            return PlaybackPosition(chunkIndex = chunkIndex, offsetInChunkChars = remaining)
+        }
+        remaining -= len
+        chunkIndex += 1
+    }
+    return PlaybackPosition(chunkIndex = chunks.lastIndex, offsetInChunkChars = 0)
+}
+
+private data class WordToken(
+    val word: String,
+    val endExclusive: Int,
+)
+
+private fun tokenizeWordsWithEndOffsets(input: String): List<WordToken> {
+    val matches = Regex("[\\p{L}\\p{N}']+").findAll(input)
+    return matches.map { match ->
+        WordToken(
+            word = match.value.lowercase(Locale.US),
+            endExclusive = match.range.last + 1,
+        )
+    }.toList()
 }
 
 private fun normalizeIntroComparisonText(value: String): String {
@@ -576,7 +639,18 @@ fun PlayerScreen(
         )
         if (shouldSpeakTitleFirst) {
             val title = textPayload?.title?.trim().orEmpty()
-            pendingBodyStartAfterTitleIntro = safe
+            val openingText = chunks.firstOrNull()?.text.orEmpty()
+            val prefixSkipChars = computeTitlePrefixSkipChars(
+                title = title,
+                openingText = openingText,
+                minMatchedWords = 3,
+            )
+            val bodyStart = applyTitlePrefixSkipToStartPosition(
+                start = safe,
+                chunks = chunks,
+                skipCharsFromOpening = prefixSkipChars,
+            )
+            pendingBodyStartAfterTitleIntro = bodyStart
             isAutoPlaying = true
             isSpeaking = true
             ttsController.speakTitleIntro(currentItemId, title)
