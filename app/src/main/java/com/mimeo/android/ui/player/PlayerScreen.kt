@@ -244,11 +244,13 @@ internal fun shouldUseTitleIntroOnPlaybackStart(
     allowTitleIntro: Boolean,
     hasStartedPlaybackForItem: Boolean,
     speakTitleBeforeArticleEnabled: Boolean,
+    startPosition: PlaybackPosition,
     title: String?,
     chunks: List<PlaybackChunk>,
 ): Boolean {
     if (!allowTitleIntro) return false
     if (hasStartedPlaybackForItem) return false
+    if (startPosition.chunkIndex != 0 || startPosition.offsetInChunkChars != 0) return false
     return shouldSpeakTitleBeforeBody(
         enabled = speakTitleBeforeArticleEnabled,
         title = title,
@@ -634,17 +636,22 @@ fun PlayerScreen(
             allowTitleIntro = allowTitleIntro,
             hasStartedPlaybackForItem = hasStartedPlaybackForCurrentItem,
             speakTitleBeforeArticleEnabled = settings.speakTitleBeforeArticle,
+            startPosition = safe,
             title = textPayload?.title,
             chunks = chunks,
         )
         if (shouldSpeakTitleFirst) {
             val title = textPayload?.title?.trim().orEmpty()
             val openingText = chunks.firstOrNull()?.text.orEmpty()
-            val prefixSkipChars = computeTitlePrefixSkipChars(
-                title = title,
-                openingText = openingText,
-                minMatchedWords = 3,
-            )
+            val prefixSkipChars = if (settings.skipDuplicateOpeningAfterTitleIntro) {
+                computeTitlePrefixSkipChars(
+                    title = title,
+                    openingText = openingText,
+                    minMatchedWords = 3,
+                )
+            } else {
+                0
+            }
             val bodyStart = applyTitlePrefixSkipToStartPosition(
                 start = safe,
                 chunks = chunks,

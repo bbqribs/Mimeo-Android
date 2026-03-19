@@ -89,6 +89,9 @@ fun SettingsScreen(
     var speakTitleBeforeArticle by remember(settings.speakTitleBeforeArticle) {
         mutableStateOf(settings.speakTitleBeforeArticle)
     }
+    var skipDuplicateOpeningAfterTitleIntro by remember(settings.skipDuplicateOpeningAfterTitleIntro) {
+        mutableStateOf(settings.skipDuplicateOpeningAfterTitleIntro)
+    }
     var persistentPlayerEnabled by remember(settings.persistentPlayerEnabled) {
         mutableStateOf(settings.persistentPlayerEnabled)
     }
@@ -177,6 +180,7 @@ fun SettingsScreen(
             token = token,
             autoAdvanceOnCompletion = autoAdvance,
             speakTitleBeforeArticle = speakTitleBeforeArticle,
+            skipDuplicateOpeningAfterTitleIntro = skipDuplicateOpeningAfterTitleIntro,
             persistentPlayerEnabled = persistentPlayerEnabled,
             autoScrollWhileListening = autoScrollWhileListening,
             continuousNowPlayingMarquee = continuousNowPlayingMarquee,
@@ -658,6 +662,30 @@ fun SettingsScreen(
                         onCheckedChange = {
                             speakTitleBeforeArticle = it
                             vm.saveSpeakTitleBeforeArticle(it)
+                        },
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text("Skip duplicated opening after title")
+                        Text(
+                            text = "When title intro is on, skip matching opening words in body playback.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = skipDuplicateOpeningAfterTitleIntro,
+                        onCheckedChange = {
+                            skipDuplicateOpeningAfterTitleIntro = it
+                            vm.saveSkipDuplicateOpeningAfterTitleIntro(it)
                         },
                     )
                 }

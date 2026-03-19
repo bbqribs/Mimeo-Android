@@ -208,6 +208,7 @@ data class AppSettings(
     val apiToken: String = "",
     val autoAdvanceOnCompletion: Boolean = false,
     val speakTitleBeforeArticle: Boolean = false,
+    val skipDuplicateOpeningAfterTitleIntro: Boolean = true,
     val persistentPlayerEnabled: Boolean = true,
     val autoScrollWhileListening: Boolean = true,
     val continuousNowPlayingMarquee: Boolean = true,

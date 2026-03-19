@@ -14,6 +14,7 @@ class PlaybackTitleIntroTest {
             allowTitleIntro = true,
             hasStartedPlaybackForItem = false,
             speakTitleBeforeArticleEnabled = false,
+            startPosition = PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0),
             title = "Example title",
             chunks = listOf(sampleChunk("Body starts here.")),
         )
@@ -27,6 +28,7 @@ class PlaybackTitleIntroTest {
             allowTitleIntro = true,
             hasStartedPlaybackForItem = false,
             speakTitleBeforeArticleEnabled = true,
+            startPosition = PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0),
             title = "Example title",
             chunks = listOf(sampleChunk("Body starts here.")),
         )
@@ -116,6 +118,20 @@ class PlaybackTitleIntroTest {
 
         assertEquals(1, start.chunkIndex)
         assertEquals(42, start.offsetInChunkChars)
+    }
+
+    @Test
+    fun `title intro is skipped for non-top resume start position`() {
+        val shouldUse = shouldUseTitleIntroOnPlaybackStart(
+            allowTitleIntro = true,
+            hasStartedPlaybackForItem = false,
+            speakTitleBeforeArticleEnabled = true,
+            startPosition = PlaybackPosition(chunkIndex = 2, offsetInChunkChars = 10),
+            title = "Example title",
+            chunks = listOf(sampleChunk("Example title then body.")),
+        )
+
+        assertFalse(shouldUse)
     }
 
     private fun sampleChunk(text: String): PlaybackChunk {
