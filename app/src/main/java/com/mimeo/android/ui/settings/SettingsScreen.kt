@@ -92,6 +92,9 @@ fun SettingsScreen(
     var skipDuplicateOpeningAfterTitleIntro by remember(settings.skipDuplicateOpeningAfterTitleIntro) {
         mutableStateOf(settings.skipDuplicateOpeningAfterTitleIntro)
     }
+    var playCompletionCueAtArticleEnd by remember(settings.playCompletionCueAtArticleEnd) {
+        mutableStateOf(settings.playCompletionCueAtArticleEnd)
+    }
     var persistentPlayerEnabled by remember(settings.persistentPlayerEnabled) {
         mutableStateOf(settings.persistentPlayerEnabled)
     }
@@ -181,6 +184,7 @@ fun SettingsScreen(
             autoAdvanceOnCompletion = autoAdvance,
             speakTitleBeforeArticle = speakTitleBeforeArticle,
             skipDuplicateOpeningAfterTitleIntro = skipDuplicateOpeningAfterTitleIntro,
+            playCompletionCueAtArticleEnd = playCompletionCueAtArticleEnd,
             persistentPlayerEnabled = persistentPlayerEnabled,
             autoScrollWhileListening = autoScrollWhileListening,
             continuousNowPlayingMarquee = continuousNowPlayingMarquee,
@@ -760,6 +764,30 @@ fun SettingsScreen(
                             )
                         }
                     }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text("End-of-article completion cue")
+                        Text(
+                            text = "Play a short tone when an article finishes.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = playCompletionCueAtArticleEnd,
+                        onCheckedChange = {
+                            playCompletionCueAtArticleEnd = it
+                            vm.savePlayCompletionCueAtArticleEnd(it)
+                        },
+                    )
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),

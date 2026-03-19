@@ -1,6 +1,8 @@
 package com.mimeo.android.player
 
 import android.content.Context
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
@@ -57,6 +59,7 @@ class TtsController(
     private var defaultVoiceName: String? = null
     private var preferredVoiceName: String? = null
     private var selectedVoiceRequiresNetwork = false
+    private var completionCueToneGenerator: ToneGenerator? = null
 
     init {
         lateinit var createdEngine: TextToSpeech
@@ -215,8 +218,18 @@ class TtsController(
         tts.stop()
     }
 
+    fun playCompletionCue() {
+        if (!initialized) return
+        val tone = completionCueToneGenerator ?: ToneGenerator(AudioManager.STREAM_NOTIFICATION, 45).also {
+            completionCueToneGenerator = it
+        }
+        tone.startTone(ToneGenerator.TONE_PROP_BEEP2, 130)
+    }
+
     fun shutdown() {
         stop()
+        completionCueToneGenerator?.release()
+        completionCueToneGenerator = null
         tts.shutdown()
     }
 
