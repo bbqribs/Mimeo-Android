@@ -500,6 +500,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         forceSentenceHighlightFallback: Boolean,
         showPlaybackDiagnostics: Boolean,
         showQueueCaptureMetadata: Boolean,
+        ttsVoiceName: String,
         keepShareResultNotifications: Boolean,
         autoDownloadSavedArticles: Boolean,
     ) {
@@ -518,6 +519,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 forceSentenceHighlightFallback = forceSentenceHighlightFallback,
                 showPlaybackDiagnostics = showPlaybackDiagnostics,
                 showQueueCaptureMetadata = showQueueCaptureMetadata,
+                ttsVoiceName = ttsVoiceName,
                 keepShareResultNotifications = keepShareResultNotifications,
                 autoDownloadSavedArticles = autoDownloadSavedArticles,
                 playbackSpeed = settings.value.playbackSpeed,
@@ -559,6 +561,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 showPlaybackDiagnostics = settings.value.showPlaybackDiagnostics,
                 showQueueCaptureMetadata = settings.value.showQueueCaptureMetadata,
+                ttsVoiceName = settings.value.ttsVoiceName,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 autoDownloadSavedArticles = settings.value.autoDownloadSavedArticles,
                 playbackSpeed = settings.value.playbackSpeed,
@@ -593,6 +596,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 showPlaybackDiagnostics = settings.value.showPlaybackDiagnostics,
                 showQueueCaptureMetadata = settings.value.showQueueCaptureMetadata,
+                ttsVoiceName = settings.value.ttsVoiceName,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 autoDownloadSavedArticles = settings.value.autoDownloadSavedArticles,
                 playbackSpeed = playbackSpeed,
@@ -1614,6 +1618,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _settings.update { current -> current.copy(showQueueCaptureMetadata = enabled) }
             settingsStore.saveShowQueueCaptureMetadata(enabled)
+        }
+    }
+
+    fun saveTtsVoiceName(ttsVoiceName: String) {
+        viewModelScope.launch {
+            _settings.update { current -> current.copy(ttsVoiceName = ttsVoiceName.trim()) }
+            settingsStore.saveTtsVoiceName(ttsVoiceName)
         }
     }
 

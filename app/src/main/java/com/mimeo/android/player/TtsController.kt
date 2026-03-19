@@ -1,6 +1,8 @@
 package com.mimeo.android.player
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -44,11 +46,16 @@ class TtsController(
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var initialized = false
+    private val connectivityManager =
+        context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
     private val tts: TextToSpeech
     private val generationCounter = AtomicLong(0L)
     private val utteranceMetaById = ConcurrentHashMap<String, UtteranceMeta>()
     private val handledDoneUtterances = CopyOnWriteArraySet<String>()
     private var speechRate = 1.0f
+    private var defaultVoiceName: String? = null
+    private var preferredVoiceName: String? = null
+    private var selectedVoiceRequiresNetwork = false
 
     init {
         lateinit var createdEngine: TextToSpeech
@@ -57,6 +64,8 @@ class TtsController(
                 initialized = true
                 createdEngine.language = Locale.US
                 createdEngine.setSpeechRate(speechRate)
+                defaultVoiceName = createdEngine.defaultVoice?.name?.trim()?.ifBlank { null }
+                applyPreferredOrDefaultVoice()
             } else {
                 mainHandler.post { onError("TTS init failed") }
             }
@@ -142,6 +151,7 @@ class TtsController(
 
     fun speakChunk(itemId: Int, chunkIndex: Int, text: String, baseOffset: Int) {
         if (!initialized || text.isBlank()) return
+        applyPreferredOrDefaultVoice()
         tts.setSpeechRate(speechRate)
         val generation = generationCounter.incrementAndGet()
         val utteranceId = "mimeo-item-$itemId-chunk-$chunkIndex-$generation"
@@ -169,6 +179,13 @@ class TtsController(
         }
     }
 
+    fun setVoiceName(voiceName: String) {
+        preferredVoiceName = voiceName.trim().ifBlank { null }
+        if (initialized) {
+            applyPreferredOrDefaultVoice()
+        }
+    }
+
     fun stop() {
         generationCounter.incrementAndGet()
         utteranceMetaById.clear()
@@ -179,5 +196,42 @@ class TtsController(
     fun shutdown() {
         stop()
         tts.shutdown()
+    }
+
+    private fun applyPreferredOrDefaultVoice() {
+        val voices = tts.voices.orEmpty()
+        val preferred = preferredVoiceName
+        if (!preferred.isNullOrBlank()) {
+            val matchingVoice = voices.firstOrNull { voice ->
+                voice.name.equals(preferred, ignoreCase = true)
+            }
+            if (matchingVoice != null) {
+                tts.voice = matchingVoice
+                preferredVoiceName = matchingVoice.name
+                selectedVoiceRequiresNetwork = matchingVoice.isNetworkConnectionRequired
+                if (selectedVoiceRequiresNetwork && !hasInternetConnection()) {
+                    applyDefaultVoiceIfAvailable(voices)
+                }
+                return
+            }
+        }
+        applyDefaultVoiceIfAvailable(voices)
+    }
+
+    private fun applyDefaultVoiceIfAvailable(voices: Set<android.speech.tts.Voice>) {
+        selectedVoiceRequiresNetwork = false
+        val defaultName = defaultVoiceName
+        if (defaultName.isNullOrBlank()) return
+        val defaultVoice = voices.firstOrNull { voice ->
+            voice.name.equals(defaultName, ignoreCase = true)
+        } ?: return
+        tts.voice = defaultVoice
+    }
+
+    private fun hasInternetConnection(): Boolean {
+        val manager = connectivityManager ?: return false
+        val activeNetwork = manager.activeNetwork ?: return false
+        val capabilities = manager.getNetworkCapabilities(activeNetwork) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 }
