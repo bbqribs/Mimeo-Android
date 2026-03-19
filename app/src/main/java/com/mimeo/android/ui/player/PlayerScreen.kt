@@ -280,15 +280,30 @@ internal fun computeTitlePrefixSkipChars(
     val openingWords = tokenizeWordsWithEndOffsets(openingText)
     if (titleWords.isEmpty() || openingWords.isEmpty()) return 0
 
-    val maxCompare = minOf(titleWords.size, openingWords.size)
+    var titleIndex = 0
+    var openingIndex = 0
     var matched = 0
-    while (matched < maxCompare) {
-        if (titleWords[matched].word != openingWords[matched].word) break
-        matched += 1
+    var lastMatchedOpeningIndex = -1
+    while (titleIndex < titleWords.size && openingIndex < openingWords.size) {
+        val titleWord = titleWords[titleIndex].word
+        val openingWord = openingWords[openingIndex].word
+        if (titleWord == openingWord) {
+            matched += 1
+            lastMatchedOpeningIndex = openingIndex
+            titleIndex += 1
+            openingIndex += 1
+            continue
+        }
+        if (isSkippableOpeningFillerWord(openingWord)) {
+            openingIndex += 1
+            continue
+        }
+        break
     }
     if (matched < minMatchedWords) return 0
+    if (lastMatchedOpeningIndex < 0) return 0
 
-    var skipTo = openingWords[matched - 1].endExclusive
+    var skipTo = openingWords[lastMatchedOpeningIndex].endExclusive
     while (skipTo < openingText.length && !openingText[skipTo].isLetterOrDigit()) {
         skipTo += 1
     }
@@ -321,6 +336,10 @@ private data class WordToken(
     val word: String,
     val endExclusive: Int,
 )
+
+private fun isSkippableOpeningFillerWord(word: String): Boolean {
+    return word in setOf("a", "an", "the", "is", "are", "was", "were", "to", "of", "and")
+}
 
 private fun tokenizeWordsWithEndOffsets(input: String): List<WordToken> {
     val matches = Regex("[\\p{L}\\p{N}']+").findAll(input)

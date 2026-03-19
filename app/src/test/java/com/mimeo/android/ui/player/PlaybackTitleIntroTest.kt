@@ -108,6 +108,18 @@ class PlaybackTitleIntroTest {
     }
 
     @Test
+    fun `prefix skip tolerates filler words in opening sentence`() {
+        val opening = "Tories are the only party with a plan, says Badenoch."
+        val skip = computeTitlePrefixSkipChars(
+            title = "Tories only party with a plan - BBC",
+            openingText = opening,
+            minMatchedWords = 3,
+        )
+
+        assertTrue(skip > 0)
+    }
+
+    @Test
     fun `prefix skip does not modify resumed nonzero playback position`() {
         val opening = "Tories only party with a plan, says Badenoch as she launches election campaign."
         val start = applyTitlePrefixSkipToStartPosition(
