@@ -276,34 +276,49 @@ internal fun computeTitlePrefixSkipChars(
     if (cleanTitle.isBlank()) return 0
     if (openingText.isBlank()) return 0
 
-    val titleWords = tokenizeWordsWithEndOffsets(cleanTitle)
     val openingWords = tokenizeWordsWithEndOffsets(openingText)
-    if (titleWords.isEmpty() || openingWords.isEmpty()) return 0
+    if (openingWords.isEmpty()) return 0
 
-    var titleIndex = 0
-    var openingIndex = 0
-    var matched = 0
-    var lastMatchedOpeningIndex = -1
-    while (titleIndex < titleWords.size && openingIndex < openingWords.size) {
-        val titleWord = titleWords[titleIndex].word
-        val openingWord = openingWords[openingIndex].word
-        if (titleWord == openingWord) {
-            matched += 1
-            lastMatchedOpeningIndex = openingIndex
-            titleIndex += 1
-            openingIndex += 1
-            continue
+    val titleCandidates = listOf(cleanTitle, stripLikelySourceSuffix(cleanTitle))
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+    var bestSkip = 0
+    for (candidate in titleCandidates) {
+        val candidateWords = tokenizeWordsWithEndOffsets(candidate)
+        if (candidateWords.isEmpty()) continue
+        var titleIndex = 0
+        var openingIndex = 0
+        var matched = 0
+        var lastMatchedOpeningIndex = -1
+        while (titleIndex < candidateWords.size && openingIndex < openingWords.size) {
+            val titleWord = candidateWords[titleIndex].word
+            val openingWord = openingWords[openingIndex].word
+            if (titleWord == openingWord) {
+                matched += 1
+                lastMatchedOpeningIndex = openingIndex
+                titleIndex += 1
+                openingIndex += 1
+                continue
+            }
+            if (isSkippableOpeningFillerWord(openingWord)) {
+                openingIndex += 1
+                continue
+            }
+            break
         }
-        if (isSkippableOpeningFillerWord(openingWord)) {
-            openingIndex += 1
-            continue
+        if (matched < minMatchedWords) continue
+        if (lastMatchedOpeningIndex < 0) continue
+        var skipTo = openingWords[lastMatchedOpeningIndex].endExclusive
+        while (skipTo < openingText.length && !openingText[skipTo].isLetterOrDigit()) {
+            skipTo += 1
         }
-        break
+        if (skipTo > bestSkip) {
+            bestSkip = skipTo
+        }
     }
-    if (matched < minMatchedWords) return 0
-    if (lastMatchedOpeningIndex < 0) return 0
-
-    var skipTo = openingWords[lastMatchedOpeningIndex].endExclusive
+    if (bestSkip <= 0) return 0
+    var skipTo = bestSkip
     while (skipTo < openingText.length && !openingText[skipTo].isLetterOrDigit()) {
         skipTo += 1
     }
@@ -339,6 +354,16 @@ private data class WordToken(
 
 private fun isSkippableOpeningFillerWord(word: String): Boolean {
     return word in setOf("a", "an", "the", "is", "are", "was", "were", "to", "of", "and")
+}
+
+private fun stripLikelySourceSuffix(title: String): String {
+    val parts = title.split(" - ")
+    if (parts.size < 2) return title
+    val leading = parts.first().trim()
+    val trailing = parts.last().trim()
+    if (leading.isBlank() || trailing.isBlank()) return title
+    val trailingWordCount = tokenizeWordsWithEndOffsets(trailing).size
+    return if (trailingWordCount in 1..4) leading else title
 }
 
 private fun tokenizeWordsWithEndOffsets(input: String): List<WordToken> {
