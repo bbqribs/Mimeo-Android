@@ -225,6 +225,10 @@ internal fun resolveSeededPlaybackPosition(
     }
 }
 
+internal fun shouldAcceptDoneEventChunk(eventChunkIndex: Int, currentChunkIndex: Int): Boolean {
+    return eventChunkIndex == TITLE_INTRO_CHUNK_INDEX || eventChunkIndex == currentChunkIndex
+}
+
 internal fun shouldSpeakTitleBeforeBody(
     enabled: Boolean,
     title: String?,
@@ -428,7 +432,7 @@ fun PlayerScreen(
                 val currentChunks = latestChunks
                 if (currentChunks.isEmpty()) return@TtsController
                 if (event.itemId != latestItemId) return@TtsController
-                if (event.chunkIndex != latestPosition.chunkIndex) {
+                if (!shouldAcceptDoneEventChunk(event.chunkIndex, latestPosition.chunkIndex)) {
                     debugLog("ignore stale onDone utterance=${event.utteranceId} eventChunk=${event.chunkIndex} currentChunk=${latestPosition.chunkIndex}")
                     return@TtsController
                 }

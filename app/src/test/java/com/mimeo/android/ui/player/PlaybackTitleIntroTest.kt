@@ -60,6 +60,13 @@ class PlaybackTitleIntroTest {
         assertFalse(nullTitle)
     }
 
+    @Test
+    fun `title intro done event is accepted regardless of current chunk`() {
+        assertTrue(shouldAcceptDoneEventChunk(eventChunkIndex = -1, currentChunkIndex = 7))
+        assertTrue(shouldAcceptDoneEventChunk(eventChunkIndex = 7, currentChunkIndex = 7))
+        assertFalse(shouldAcceptDoneEventChunk(eventChunkIndex = 3, currentChunkIndex = 7))
+    }
+
     private fun sampleChunk(text: String): PlaybackChunk {
         return PlaybackChunk(
             index = 0,
@@ -69,4 +76,3 @@ class PlaybackTitleIntroTest {
         )
     }
 }
-
