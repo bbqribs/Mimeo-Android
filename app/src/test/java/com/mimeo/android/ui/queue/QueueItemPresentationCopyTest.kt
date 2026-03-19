@@ -25,7 +25,7 @@ class QueueItemPresentationCopyTest {
             noActiveContent = false,
         )
 
-        assertEquals(com.mimeo.android.R.drawable.msr_check_circle_24, iconRes)
+        assertEquals(com.mimeo.android.R.drawable.ic_book_closed_24, iconRes)
     }
 
     @Test
@@ -36,7 +36,7 @@ class QueueItemPresentationCopyTest {
             noActiveContent = false,
         )
 
-        assertEquals(com.mimeo.android.R.drawable.ic_book_closed_24, iconRes)
+        assertEquals(com.mimeo.android.R.drawable.ic_book_closed_plain_24, iconRes)
     }
 
     @Test

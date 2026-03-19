@@ -1642,8 +1642,8 @@ internal fun queueProgressIconRes(
 ): Int {
     return when {
         noActiveContent -> R.drawable.msr_error_circle_24
-        isDone -> R.drawable.msr_check_circle_24
-        progress <= 0 -> R.drawable.ic_book_closed_24
+        isDone -> R.drawable.ic_book_closed_24
+        progress <= 0 -> R.drawable.ic_book_closed_plain_24
         else -> R.drawable.ic_book_open_24
     }
 }
