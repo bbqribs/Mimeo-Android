@@ -109,7 +109,13 @@ fun SettingsScreen(
     }
     var ttsEngineReady by remember { mutableStateOf(false) }
     var ttsVoiceOptions by remember { mutableStateOf<List<TtsVoiceOption>>(emptyList()) }
-    var showVoiceMenu by remember { mutableStateOf(false) }
+    var ttsLocaleOptions by remember { mutableStateOf<List<TtsLocaleOption>>(emptyList()) }
+    var selectedTtsLocaleTag by remember { mutableStateOf("") }
+    var showTtsLocaleMenu by remember { mutableStateOf(false) }
+    var showTtsVoiceMenu by remember { mutableStateOf(false) }
+    var engineDefaultTtsVoiceName by remember { mutableStateOf("") }
+    var engineDefaultTtsVoiceLabel by remember { mutableStateOf("System default") }
+    var ttsFallbackMessage by remember { mutableStateOf<String?>(null) }
     var ttsPreviewing by remember { mutableStateOf(false) }
     var ttsEngine by remember { mutableStateOf<TextToSpeech?>(null) }
     var keepShareResultNotifications by remember(settings.keepShareResultNotifications) {
@@ -221,11 +227,29 @@ fun SettingsScreen(
             }
             .orEmpty()
         val options = mapTtsVoiceOptions(descriptors)
+        val localeOptions = mapTtsLocaleOptions(options)
+        val defaultVoiceName = engine.defaultVoice?.name?.trim().orEmpty()
+        val defaultVoiceLabel = options.firstOrNull { it.name == defaultVoiceName }?.let { option ->
+            "System default: ${option.localeLabel} / ${option.voiceLabel}"
+        } ?: "System default"
         ttsVoiceOptions = options
-        val resolved = resolveConfiguredTtsVoiceName(ttsVoiceName, options)
-        if (resolved != ttsVoiceName) {
-            ttsVoiceName = resolved
-            vm.saveTtsVoiceName(resolved)
+        ttsLocaleOptions = localeOptions
+        engineDefaultTtsVoiceName = defaultVoiceName
+        engineDefaultTtsVoiceLabel = defaultVoiceLabel
+        val resolution = resolveConfiguredTtsVoiceSelection(ttsVoiceName, options)
+        ttsFallbackMessage = resolution.message
+        if (resolution.resolvedVoiceName != ttsVoiceName) {
+            ttsVoiceName = resolution.resolvedVoiceName
+            vm.saveTtsVoiceName(resolution.resolvedVoiceName)
+        }
+        val resolvedLocaleTag = options
+            .firstOrNull { it.name == resolution.resolvedVoiceName }
+            ?.localeTag
+            .orEmpty()
+        selectedTtsLocaleTag = if (resolvedLocaleTag.isNotBlank()) {
+            resolvedLocaleTag
+        } else {
+            localeOptions.firstOrNull()?.tag.orEmpty()
         }
     }
 
@@ -663,37 +687,116 @@ fun SettingsScreen(
                                 "TTS engine not ready."
                             } else {
                                 val selected = ttsVoiceOptions.firstOrNull { it.name == ttsVoiceName.trim() }
-                                "Selected: ${selected?.label ?: "System default"}"
+                                if (selected == null) {
+                                    "Selected: $engineDefaultTtsVoiceLabel"
+                                } else {
+                                    "Selected: ${selected.localeLabel} / ${selected.voiceLabel}"
+                                }
                             },
                             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                             color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        if (!ttsFallbackMessage.isNullOrBlank()) {
+                            Text(
+                                text = ttsFallbackMessage.orEmpty(),
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
-                    Column(horizontalAlignment = Alignment.End) {
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(horizontalAlignment = Alignment.Start) {
+                        Text(
+                            text = if (selectedTtsLocaleTag.isBlank()) {
+                                "Language/accent: Any"
+                            } else {
+                                val selectedLocaleLabel = ttsLocaleOptions.firstOrNull { it.tag == selectedTtsLocaleTag }?.label
+                                "Language/accent: ${selectedLocaleLabel ?: selectedTtsLocaleTag}"
+                            },
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         TextButton(
                             enabled = ttsEngineReady,
-                            onClick = { showVoiceMenu = true },
+                            onClick = { showTtsLocaleMenu = true },
+                        ) {
+                            Text("Choose language/accent ▼")
+                        }
+                        DropdownMenu(
+                            expanded = showTtsLocaleMenu,
+                            onDismissRequest = { showTtsLocaleMenu = false },
+                        ) {
+                            if (ttsLocaleOptions.isEmpty()) {
+                                DropdownMenuItem(
+                                    text = { Text("No language options") },
+                                    onClick = { showTtsLocaleMenu = false },
+                                )
+                            }
+                            ttsLocaleOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.label) },
+                                    onClick = {
+                                        showTtsLocaleMenu = false
+                                        selectedTtsLocaleTag = option.tag
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(horizontalAlignment = Alignment.Start) {
+                        val filteredVoiceOptions = ttsVoiceOptions.filter { option ->
+                            selectedTtsLocaleTag.isBlank() || option.localeTag == selectedTtsLocaleTag
+                        }
+                        val selected = ttsVoiceOptions.firstOrNull { it.name == ttsVoiceName.trim() }
+                        Text(
+                            text = if (selected == null) {
+                                "Voice: $engineDefaultTtsVoiceLabel"
+                            } else {
+                                "Voice: ${selected.voiceLabel}"
+                            },
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        TextButton(
+                            enabled = ttsEngineReady,
+                            onClick = { showTtsVoiceMenu = true },
                         ) {
                             Text("Choose voice ▼")
                         }
                         DropdownMenu(
-                            expanded = showVoiceMenu,
-                            onDismissRequest = { showVoiceMenu = false },
+                            expanded = showTtsVoiceMenu,
+                            onDismissRequest = { showTtsVoiceMenu = false },
                         ) {
                             DropdownMenuItem(
-                                text = { Text("System default") },
+                                text = { Text(engineDefaultTtsVoiceLabel) },
                                 onClick = {
-                                    showVoiceMenu = false
+                                    showTtsVoiceMenu = false
                                     ttsVoiceName = ""
+                                    selectedTtsLocaleTag = ttsVoiceOptions
+                                        .firstOrNull { it.name == engineDefaultTtsVoiceName }
+                                        ?.localeTag
+                                        .orEmpty()
                                     vm.saveTtsVoiceName("")
                                 },
                             )
-                            ttsVoiceOptions.forEach { option ->
+                            filteredVoiceOptions.forEach { option ->
                                 DropdownMenuItem(
-                                    text = { Text(option.label) },
+                                    text = { Text(option.voiceLabel) },
                                     onClick = {
-                                        showVoiceMenu = false
+                                        showTtsVoiceMenu = false
                                         ttsVoiceName = option.name
+                                        selectedTtsLocaleTag = option.localeTag
                                         vm.saveTtsVoiceName(option.name)
                                     },
                                 )
@@ -1247,7 +1350,19 @@ internal data class TtsVoiceDescriptor(
 
 internal data class TtsVoiceOption(
     val name: String,
+    val localeTag: String,
+    val localeLabel: String,
+    val voiceLabel: String,
+)
+
+internal data class TtsLocaleOption(
+    val tag: String,
     val label: String,
+)
+
+internal data class TtsVoiceSelectionResolution(
+    val resolvedVoiceName: String,
+    val message: String? = null,
 )
 
 private fun Voice.toDescriptor(): TtsVoiceDescriptor {
@@ -1272,7 +1387,7 @@ internal fun mapTtsVoiceOptions(descriptors: List<TtsVoiceDescriptor>): List<Tts
                 .thenBy { it.name.lowercase(Locale.US) },
         )
         .map { descriptor ->
-            val localeLabel = descriptor.localeTag.ifBlank { "unknown locale" }
+            val localeLabel = humanReadableLocaleLabel(descriptor.localeTag)
             val qualityLabel = when (descriptor.quality) {
                 Voice.QUALITY_VERY_HIGH -> "very high"
                 Voice.QUALITY_HIGH -> "high"
@@ -1285,7 +1400,9 @@ internal fun mapTtsVoiceOptions(descriptors: List<TtsVoiceDescriptor>): List<Tts
             val qualitySuffix = qualityLabel?.let { " - $it" }.orEmpty()
             TtsVoiceOption(
                 name = descriptor.name.trim(),
-                label = "$localeLabel - ${descriptor.name.trim()} - $networkLabel$qualitySuffix",
+                localeTag = descriptor.localeTag,
+                localeLabel = localeLabel,
+                voiceLabel = "${descriptor.name.trim()} - $networkLabel$qualitySuffix",
             )
         }
         .distinctBy { it.name.lowercase(Locale.US) }
@@ -1293,14 +1410,48 @@ internal fun mapTtsVoiceOptions(descriptors: List<TtsVoiceDescriptor>): List<Tts
     return preferred
 }
 
+internal fun mapTtsLocaleOptions(options: List<TtsVoiceOption>): List<TtsLocaleOption> {
+    return options
+        .asSequence()
+        .map { option -> option.localeTag to option.localeLabel }
+        .distinctBy { (tag, _) -> tag.lowercase(Locale.US) }
+        .sortedBy { (_, label) -> label.lowercase(Locale.US) }
+        .map { (tag, label) -> TtsLocaleOption(tag = tag, label = label) }
+        .toList()
+}
+
+private fun humanReadableLocaleLabel(localeTag: String): String {
+    val normalized = localeTag.trim()
+    if (normalized.isBlank()) return "Unknown locale"
+    val locale = Locale.forLanguageTag(normalized)
+    val language = locale.getDisplayLanguage(Locale.US).ifBlank { normalized }
+    val country = locale.getDisplayCountry(Locale.US)
+    return if (country.isBlank()) language else "$language ($country)"
+}
+
 internal fun resolveConfiguredTtsVoiceName(
     configuredVoiceName: String,
     availableOptions: List<TtsVoiceOption>,
 ): String {
+    return resolveConfiguredTtsVoiceSelection(configuredVoiceName, availableOptions).resolvedVoiceName
+}
+
+internal fun resolveConfiguredTtsVoiceSelection(
+    configuredVoiceName: String,
+    availableOptions: List<TtsVoiceOption>,
+): TtsVoiceSelectionResolution {
     val normalizedConfigured = configuredVoiceName.trim()
-    if (normalizedConfigured.isBlank()) return ""
-    val found = availableOptions.any { option ->
+    if (normalizedConfigured.isBlank()) {
+        return TtsVoiceSelectionResolution(resolvedVoiceName = "")
+    }
+    val found = availableOptions.firstOrNull { option ->
         option.name.equals(normalizedConfigured, ignoreCase = true)
     }
-    return if (found) normalizedConfigured else ""
+    if (found != null) {
+        return TtsVoiceSelectionResolution(resolvedVoiceName = normalizedConfigured)
+    }
+    return TtsVoiceSelectionResolution(
+        resolvedVoiceName = "",
+        message = "Saved voice unavailable. Using engine default voice.",
+    )
 }

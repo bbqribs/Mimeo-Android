@@ -37,7 +37,8 @@ class TtsVoiceSupportTest {
         assertTrue(options.any { it.name == "en-GB-1" })
         assertTrue(options.any { it.name == "en-US-1" })
         val enUs = options.first { it.name == "en-US-1" }
-        assertTrue(enUs.label.contains("offline"))
+        assertTrue(enUs.voiceLabel.contains("offline"))
+        assertTrue(enUs.localeLabel.contains("English"))
     }
 
     @Test
@@ -45,7 +46,12 @@ class TtsVoiceSupportTest {
         val resolved = resolveConfiguredTtsVoiceName(
             configuredVoiceName = "En-Us-1",
             availableOptions = listOf(
-                TtsVoiceOption(name = "en-us-1", label = "en-US - en-us-1 - offline"),
+                TtsVoiceOption(
+                    name = "en-us-1",
+                    localeTag = "en-US",
+                    localeLabel = "English (United States)",
+                    voiceLabel = "en-us-1 - offline",
+                ),
             ),
         )
 
@@ -57,10 +63,43 @@ class TtsVoiceSupportTest {
         val resolved = resolveConfiguredTtsVoiceName(
             configuredVoiceName = "en-US-missing",
             availableOptions = listOf(
-                TtsVoiceOption(name = "en-US-available", label = "en-US - en-US-available - offline"),
+                TtsVoiceOption(
+                    name = "en-US-available",
+                    localeTag = "en-US",
+                    localeLabel = "English (United States)",
+                    voiceLabel = "en-US-available - offline",
+                ),
             ),
         )
 
         assertEquals("", resolved)
+    }
+
+    @Test
+    fun `mapTtsLocaleOptions groups voices by locale tag`() {
+        val locales = mapTtsLocaleOptions(
+            listOf(
+                TtsVoiceOption("en-1", "en-US", "English (United States)", "v1"),
+                TtsVoiceOption("en-2", "en-US", "English (United States)", "v2"),
+                TtsVoiceOption("de-1", "de-DE", "German (Germany)", "v3"),
+            ),
+        )
+
+        assertEquals(2, locales.size)
+        assertTrue(locales.any { it.tag == "en-US" })
+        assertTrue(locales.any { it.tag == "de-DE" })
+    }
+
+    @Test
+    fun `resolveConfiguredTtsVoiceSelection returns fallback message when unavailable`() {
+        val resolution = resolveConfiguredTtsVoiceSelection(
+            configuredVoiceName = "missing",
+            availableOptions = listOf(
+                TtsVoiceOption("present", "en-US", "English (United States)", "present - offline"),
+            ),
+        )
+
+        assertEquals("", resolution.resolvedVoiceName)
+        assertTrue(resolution.message.orEmpty().contains("Saved voice unavailable"))
     }
 }
