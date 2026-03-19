@@ -1609,6 +1609,41 @@ private fun isPendingFailureState(message: String): Boolean {
     return isPendingProcessingFailureMessage(message)
 }
 
+internal fun queueProgressStateLabel(
+    progress: Int,
+    isDone: Boolean,
+    cached: Boolean,
+    noActiveContent: Boolean,
+): String {
+    return when {
+        noActiveContent && !cached -> "Unavailable"
+        isDone -> "Done"
+        progress <= 0 -> "Unread"
+        else -> "In progress"
+    }
+}
+
+internal fun queueTapHintLabel(cached: Boolean, noActiveContent: Boolean): String {
+    return when {
+        noActiveContent && !cached -> "Tap opens details. Offline text not available."
+        cached -> "Tap opens reader/player at saved progress."
+        else -> "Tap opens reader/player. Use menu for offline download."
+    }
+}
+
+internal fun queueCaptureStrategyLabel(strategyUsed: String?): String? {
+    val normalized = strategyUsed
+        ?.trim()
+        ?.lowercase()
+        ?.replace('_', ' ')
+        ?.takeIf { it.isNotBlank() }
+        ?: return null
+    val humanized = normalized.split(' ')
+        .filter { it.isNotBlank() }
+        .joinToString(" ") { token -> token.replaceFirstChar { it.uppercase() } }
+    return "Capture: $humanized"
+}
+
 @Composable
 private fun QueueItemCard(
     item: PlaybackQueueItem,
@@ -1625,6 +1660,14 @@ private fun QueueItemCard(
     val source = item.host?.ifBlank { null } ?: "Unknown source"
     val progress = item.progressPercent
     val isDone = item.furthestPercent >= DONE_PERCENT_THRESHOLD
+    val progressStateLabel = queueProgressStateLabel(
+        progress = progress,
+        isDone = isDone,
+        cached = cached,
+        noActiveContent = noActiveContent,
+    )
+    val captureStrategyLabel = queueCaptureStrategyLabel(item.strategyUsed)
+    val tapHintLabel = queueTapHintLabel(cached = cached, noActiveContent = noActiveContent)
     val primaryTextColor = if (cached) {
         MaterialTheme.colorScheme.onSurface
     } else if (noActiveContent) {
@@ -1710,7 +1753,7 @@ private fun QueueItemCard(
             ) {
                 Text(
                     modifier = Modifier.weight(1f),
-                    text = source,
+                    text = listOfNotNull(source, captureStrategyLabel).joinToString("  •  "),
                     style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
                     color = if (noActiveContent && !cached) {
                         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
@@ -1726,7 +1769,7 @@ private fun QueueItemCard(
                 ) {
                     if (noActiveContent && !cached) {
                         Text(
-                            text = "No active content",
+                            text = progressStateLabel,
                             style = MaterialTheme.typography.labelSmall,
                             color = secondaryTextColor,
                         )
@@ -1738,7 +1781,7 @@ private fun QueueItemCard(
                         )
                     } else {
                         Text(
-                            text = "$progress%",
+                            text = "$progressStateLabel  $progress%",
                             style = MaterialTheme.typography.labelSmall,
                             color = secondaryTextColor,
                         )
@@ -1753,6 +1796,13 @@ private fun QueueItemCard(
                     }
                 }
             }
+            Text(
+                text = tapHintLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
