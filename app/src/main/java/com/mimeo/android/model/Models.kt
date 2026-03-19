@@ -207,6 +207,7 @@ data class AppSettings(
     val remoteBaseUrl: String = "",
     val apiToken: String = "",
     val autoAdvanceOnCompletion: Boolean = false,
+    val speakTitleBeforeArticle: Boolean = false,
     val persistentPlayerEnabled: Boolean = true,
     val autoScrollWhileListening: Boolean = true,
     val continuousNowPlayingMarquee: Boolean = true,

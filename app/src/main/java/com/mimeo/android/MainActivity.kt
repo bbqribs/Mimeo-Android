@@ -494,6 +494,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         remoteBaseUrl: String,
         token: String,
         autoAdvanceOnCompletion: Boolean,
+        speakTitleBeforeArticle: Boolean,
         persistentPlayerEnabled: Boolean,
         autoScrollWhileListening: Boolean,
         continuousNowPlayingMarquee: Boolean,
@@ -513,6 +514,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 remoteBaseUrl = remoteBaseUrl,
                 apiToken = token,
                 autoAdvanceOnCompletion = autoAdvanceOnCompletion,
+                speakTitleBeforeArticle = speakTitleBeforeArticle,
                 persistentPlayerEnabled = persistentPlayerEnabled,
                 autoScrollWhileListening = autoScrollWhileListening,
                 continuousNowPlayingMarquee = continuousNowPlayingMarquee,
@@ -555,6 +557,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 remoteBaseUrl = settings.value.remoteBaseUrl,
                 apiToken = settings.value.apiToken,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
+                speakTitleBeforeArticle = settings.value.speakTitleBeforeArticle,
                 persistentPlayerEnabled = settings.value.persistentPlayerEnabled,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
@@ -590,6 +593,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 remoteBaseUrl = settings.value.remoteBaseUrl,
                 apiToken = settings.value.apiToken,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
+                speakTitleBeforeArticle = settings.value.speakTitleBeforeArticle,
                 persistentPlayerEnabled = settings.value.persistentPlayerEnabled,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
@@ -628,6 +632,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _settings.value = current.copy(autoAdvanceOnCompletion = enabled)
         viewModelScope.launch {
             settingsStore.saveAutoAdvanceOnCompletion(enabled)
+        }
+    }
+
+    fun saveSpeakTitleBeforeArticle(enabled: Boolean) {
+        val current = settings.value
+        _settings.value = current.copy(speakTitleBeforeArticle = enabled)
+        viewModelScope.launch {
+            settingsStore.saveSpeakTitleBeforeArticle(enabled)
         }
     }
 
