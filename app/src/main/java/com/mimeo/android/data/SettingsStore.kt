@@ -41,6 +41,10 @@ class SettingsStore(private val context: Context) {
     private val tokenKey: Preferences.Key<String> = stringPreferencesKey("api_token")
     private val autoAdvanceOnCompletionKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("auto_advance_on_completion")
+    private val speakTitleBeforeArticleKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("speak_title_before_article")
+    private val skipDuplicateOpeningAfterTitleIntroKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("skip_duplicate_opening_after_title_intro")
     private val persistentPlayerEnabledKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("persistent_player_enabled")
     private val autoScrollWhileListeningKey: Preferences.Key<Boolean> =
@@ -111,6 +115,8 @@ class SettingsStore(private val context: Context) {
             remoteBaseUrl = remoteBaseUrl,
             apiToken = prefs[tokenKey] ?: "",
             autoAdvanceOnCompletion = prefs[autoAdvanceOnCompletionKey] ?: false,
+            speakTitleBeforeArticle = prefs[speakTitleBeforeArticleKey] ?: false,
+            skipDuplicateOpeningAfterTitleIntro = prefs[skipDuplicateOpeningAfterTitleIntroKey] ?: true,
             persistentPlayerEnabled = prefs[persistentPlayerEnabledKey] ?: true,
             autoScrollWhileListening = prefs[autoScrollWhileListeningKey] ?: true,
             continuousNowPlayingMarquee = prefs[continuousNowPlayingMarqueeKey] ?: true,
@@ -163,6 +169,8 @@ class SettingsStore(private val context: Context) {
         remoteBaseUrl: String,
         apiToken: String,
         autoAdvanceOnCompletion: Boolean,
+        speakTitleBeforeArticle: Boolean,
+        skipDuplicateOpeningAfterTitleIntro: Boolean,
         persistentPlayerEnabled: Boolean,
         autoScrollWhileListening: Boolean,
         continuousNowPlayingMarquee: Boolean,
@@ -193,6 +201,8 @@ class SettingsStore(private val context: Context) {
             prefs[remoteBaseUrlKey] = remoteBaseUrl.trim()
             prefs[tokenKey] = apiToken.trim()
             prefs[autoAdvanceOnCompletionKey] = autoAdvanceOnCompletion
+            prefs[speakTitleBeforeArticleKey] = speakTitleBeforeArticle
+            prefs[skipDuplicateOpeningAfterTitleIntroKey] = skipDuplicateOpeningAfterTitleIntro
             prefs[persistentPlayerEnabledKey] = persistentPlayerEnabled
             prefs[autoScrollWhileListeningKey] = autoScrollWhileListening
             prefs[continuousNowPlayingMarqueeKey] = continuousNowPlayingMarquee
@@ -287,6 +297,18 @@ class SettingsStore(private val context: Context) {
     suspend fun saveAutoAdvanceOnCompletion(autoAdvanceOnCompletion: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[autoAdvanceOnCompletionKey] = autoAdvanceOnCompletion
+        }
+    }
+
+    suspend fun saveSpeakTitleBeforeArticle(speakTitleBeforeArticle: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[speakTitleBeforeArticleKey] = speakTitleBeforeArticle
+        }
+    }
+
+    suspend fun saveSkipDuplicateOpeningAfterTitleIntro(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[skipDuplicateOpeningAfterTitleIntroKey] = enabled
         }
     }
 

@@ -15,6 +15,7 @@ import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.atomic.AtomicLong
 
 private const val DEBUG_PLAYBACK = false
+const val TITLE_INTRO_CHUNK_INDEX = -1
 
 data class TtsChunkProgressEvent(
     val utteranceId: String,
@@ -170,6 +171,27 @@ class TtsController(
             println("[Mimeo][tts] speak utteranceId=$utteranceId item=$itemId chunk=$chunkIndex base=$baseOffset")
         }
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+    }
+
+    fun speakTitleIntro(itemId: Int, titleText: String) {
+        val clean = titleText.trim()
+        if (!initialized || clean.isBlank()) return
+        applyPreferredOrDefaultVoice()
+        tts.setSpeechRate(speechRate)
+        val generation = generationCounter.incrementAndGet()
+        val utteranceId = "mimeo-item-$itemId-title-intro-$generation"
+        handledDoneUtterances.remove(utteranceId)
+        utteranceMetaById[utteranceId] = UtteranceMeta(
+            itemId = itemId,
+            chunkIndex = TITLE_INTRO_CHUNK_INDEX,
+            baseOffset = 0,
+            chunkTextLength = clean.length.coerceAtLeast(0),
+            generation = generation,
+        )
+        val params = Bundle().apply {
+            putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
+        }
+        tts.speak(clean, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
     }
 
     fun setSpeechRate(rate: Float) {

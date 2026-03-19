@@ -98,6 +98,7 @@ import com.mimeo.android.model.calculateCanonicalPercent
 import com.mimeo.android.model.positionFromAbsoluteOffset
 import com.mimeo.android.player.TtsChunkDoneEvent
 import com.mimeo.android.player.TtsChunkProgressEvent
+import com.mimeo.android.player.TITLE_INTRO_CHUNK_INDEX
 import com.mimeo.android.player.TtsController
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
@@ -224,6 +225,140 @@ internal fun resolveSeededPlaybackPosition(
     }
 }
 
+internal fun shouldAcceptDoneEventChunk(eventChunkIndex: Int, currentChunkIndex: Int): Boolean {
+    return eventChunkIndex == TITLE_INTRO_CHUNK_INDEX || eventChunkIndex == currentChunkIndex
+}
+
+internal fun shouldSpeakTitleBeforeBody(
+    enabled: Boolean,
+    title: String?,
+    chunks: List<PlaybackChunk>,
+): Boolean {
+    if (!enabled) return false
+    val cleanTitle = title?.trim().orEmpty()
+    if (cleanTitle.isBlank()) return false
+    return chunks.firstOrNull()?.text.orEmpty().isNotBlank()
+}
+
+internal fun shouldUseTitleIntroOnPlaybackStart(
+    allowTitleIntro: Boolean,
+    hasStartedPlaybackForItem: Boolean,
+    speakTitleBeforeArticleEnabled: Boolean,
+    startPosition: PlaybackPosition,
+    title: String?,
+    chunks: List<PlaybackChunk>,
+): Boolean {
+    if (!allowTitleIntro) return false
+    if (hasStartedPlaybackForItem) return false
+    if (startPosition.chunkIndex != 0 || startPosition.offsetInChunkChars != 0) return false
+    return shouldSpeakTitleBeforeBody(
+        enabled = speakTitleBeforeArticleEnabled,
+        title = title,
+        chunks = chunks,
+    )
+}
+
+internal fun isTitleDuplicateOfOpeningText(title: String, openingText: String): Boolean {
+    val normalizedTitle = normalizeIntroComparisonText(title)
+    val normalizedOpening = normalizeIntroComparisonText(openingText)
+    if (normalizedTitle.isBlank() || normalizedOpening.isBlank()) return false
+    if (normalizedOpening.startsWith(normalizedTitle)) return true
+    if (normalizedTitle.startsWith(normalizedOpening) && normalizedOpening.length >= 24) return true
+    return false
+}
+
+internal fun computeTitlePrefixSkipChars(
+    title: String?,
+    openingText: String,
+    minMatchedWords: Int = 3,
+): Int {
+    val cleanTitle = title?.trim().orEmpty()
+    if (cleanTitle.isBlank()) return 0
+    if (openingText.isBlank()) return 0
+
+    val titleWords = tokenizeWordsWithEndOffsets(cleanTitle)
+    val openingWords = tokenizeWordsWithEndOffsets(openingText)
+    if (titleWords.isEmpty() || openingWords.isEmpty()) return 0
+
+    var titleIndex = 0
+    var openingIndex = 0
+    var matched = 0
+    var lastMatchedOpeningIndex = -1
+    while (titleIndex < titleWords.size && openingIndex < openingWords.size) {
+        val titleWord = titleWords[titleIndex].word
+        val openingWord = openingWords[openingIndex].word
+        if (titleWord == openingWord) {
+            matched += 1
+            lastMatchedOpeningIndex = openingIndex
+            titleIndex += 1
+            openingIndex += 1
+            continue
+        }
+        if (isSkippableOpeningFillerWord(openingWord)) {
+            openingIndex += 1
+            continue
+        }
+        break
+    }
+    if (matched < minMatchedWords) return 0
+    if (lastMatchedOpeningIndex < 0) return 0
+
+    var skipTo = openingWords[lastMatchedOpeningIndex].endExclusive
+    while (skipTo < openingText.length && !openingText[skipTo].isLetterOrDigit()) {
+        skipTo += 1
+    }
+    return skipTo.coerceIn(0, openingText.length)
+}
+
+internal fun applyTitlePrefixSkipToStartPosition(
+    start: PlaybackPosition,
+    chunks: List<PlaybackChunk>,
+    skipCharsFromOpening: Int,
+): PlaybackPosition {
+    if (skipCharsFromOpening <= 0) return start
+    if (chunks.isEmpty()) return start
+    if (start.chunkIndex != 0 || start.offsetInChunkChars != 0) return start
+
+    var remaining = skipCharsFromOpening
+    var chunkIndex = 0
+    while (chunkIndex < chunks.size) {
+        val len = playableChunkLength(chunks[chunkIndex])
+        if (remaining < len) {
+            return PlaybackPosition(chunkIndex = chunkIndex, offsetInChunkChars = remaining)
+        }
+        remaining -= len
+        chunkIndex += 1
+    }
+    return PlaybackPosition(chunkIndex = chunks.lastIndex, offsetInChunkChars = 0)
+}
+
+private data class WordToken(
+    val word: String,
+    val endExclusive: Int,
+)
+
+private fun isSkippableOpeningFillerWord(word: String): Boolean {
+    return word in setOf("a", "an", "the", "is", "are", "was", "were", "to", "of", "and")
+}
+
+private fun tokenizeWordsWithEndOffsets(input: String): List<WordToken> {
+    val matches = Regex("[\\p{L}\\p{N}']+").findAll(input)
+    return matches.map { match ->
+        WordToken(
+            word = match.value.lowercase(Locale.US),
+            endExclusive = match.range.last + 1,
+        )
+    }.toList()
+}
+
+private fun normalizeIntroComparisonText(value: String): String {
+    return value
+        .lowercase(Locale.US)
+        .replace(Regex("[^a-z0-9\\s]"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+}
+
 private fun debugLog(message: String) {
     if (DEBUG_PLAYBACK) {
         println("[Mimeo][player] $message")
@@ -276,6 +411,8 @@ fun PlayerScreen(
     var pendingDoneEvent by remember { mutableStateOf<PlaybackDoneEvent?>(null) }
     var lastHandledDoneUtteranceId by remember { mutableStateOf<String?>(null) }
     var autoPlayAfterLoad by remember { mutableStateOf(false) }
+    var pendingBodyStartAfterTitleIntro by remember { mutableStateOf<PlaybackPosition?>(null) }
+    var hasStartedPlaybackForCurrentItem by rememberSaveable(initialItemId) { mutableStateOf(false) }
     var pendingOpenIntent by remember {
         mutableStateOf(
             if (vm.isItemCompletedForPlaybackStart(initialItemId)) {
@@ -379,7 +516,7 @@ fun PlayerScreen(
                 val currentChunks = latestChunks
                 if (currentChunks.isEmpty()) return@TtsController
                 if (event.itemId != latestItemId) return@TtsController
-                if (event.chunkIndex != latestPosition.chunkIndex) {
+                if (!shouldAcceptDoneEventChunk(event.chunkIndex, latestPosition.chunkIndex)) {
                     debugLog("ignore stale onDone utterance=${event.utteranceId} eventChunk=${event.chunkIndex} currentChunk=${latestPosition.chunkIndex}")
                     return@TtsController
                 }
@@ -508,7 +645,46 @@ fun PlayerScreen(
             text = speakText,
             baseOffset = safeOffset,
         )
+        hasStartedPlaybackForCurrentItem = true
         isSpeaking = true
+    }
+
+    fun startPlaybackAtPosition(position: PlaybackPosition, allowTitleIntro: Boolean) {
+        val safe = normalizedPosition(position)
+        val shouldSpeakTitleFirst = shouldUseTitleIntroOnPlaybackStart(
+            allowTitleIntro = allowTitleIntro,
+            hasStartedPlaybackForItem = hasStartedPlaybackForCurrentItem,
+            speakTitleBeforeArticleEnabled = settings.speakTitleBeforeArticle,
+            startPosition = safe,
+            title = textPayload?.title,
+            chunks = chunks,
+        )
+        if (shouldSpeakTitleFirst) {
+            val title = textPayload?.title?.trim().orEmpty()
+            val openingText = chunks.firstOrNull()?.text.orEmpty()
+            val prefixSkipChars = if (settings.skipDuplicateOpeningAfterTitleIntro) {
+                computeTitlePrefixSkipChars(
+                    title = title,
+                    openingText = openingText,
+                    minMatchedWords = 3,
+                )
+            } else {
+                0
+            }
+            val bodyStart = applyTitlePrefixSkipToStartPosition(
+                start = safe,
+                chunks = chunks,
+                skipCharsFromOpening = prefixSkipChars,
+            )
+            pendingBodyStartAfterTitleIntro = bodyStart
+            isAutoPlaying = true
+            isSpeaking = true
+            ttsController.speakTitleIntro(currentItemId, title)
+        } else {
+            pendingBodyStartAfterTitleIntro = null
+            isAutoPlaying = true
+            playChunk(safe.chunkIndex, safe.offsetInChunkChars)
+        }
     }
 
     suspend fun syncProgress(force: Boolean = false) {
@@ -548,6 +724,7 @@ fun PlayerScreen(
         ttsController.stop()
         isSpeaking = false
         isAutoPlaying = false
+        pendingBodyStartAfterTitleIntro = null
         activeChunkRange = null
         if (forceSync) {
             actionScope.launch { syncProgress(force = true) }
@@ -592,6 +769,7 @@ fun PlayerScreen(
         textPayload = null
         usingCachedText = false
         chunks = emptyList()
+        hasStartedPlaybackForCurrentItem = false
         isLoading = true
         pendingOpenIntent = if (vm.isItemCompletedForPlaybackStart(target)) {
             PlaybackOpenIntent.Replay
@@ -623,6 +801,7 @@ fun PlayerScreen(
         preserveVisibleContentOnReload = false
         bodyRevealReady = false
         isLoading = true
+        hasStartedPlaybackForCurrentItem = false
         reloadNonce += 1
         continuationLog(
             "openRequest sameItemReload target=$target reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
@@ -657,6 +836,7 @@ fun PlayerScreen(
         }
         pendingDoneEvent = null
         activeChunkRange = null
+        pendingBodyStartAfterTitleIntro = null
         lastHandledDoneUtteranceId = null
         lastSyncedPercent = -1
         lastSyncedAbsoluteChars = -1
@@ -718,8 +898,10 @@ fun PlayerScreen(
                         "loadItem autoplay item=$currentItemId chunk=${safe.chunkIndex} offset=${safe.offsetInChunkChars}",
                     )
                     autoPlayAfterLoad = false
-                    isAutoPlaying = true
-                    playChunk(safe.chunkIndex, safe.offsetInChunkChars)
+                    startPlaybackAtPosition(
+                        position = safe,
+                        allowTitleIntro = true,
+                    )
                 }
             }
             .onFailure { err ->
@@ -752,6 +934,15 @@ fun PlayerScreen(
 
     LaunchedEffect(pendingDoneEvent, isAutoPlaying, chunks.size) {
         val event = pendingDoneEvent ?: return@LaunchedEffect
+        if (event.chunkIndex == TITLE_INTRO_CHUNK_INDEX) {
+            val pendingStart = pendingBodyStartAfterTitleIntro
+            pendingDoneEvent = null
+            if (event.itemId == currentItemId && pendingStart != null) {
+                pendingBodyStartAfterTitleIntro = null
+                playChunk(pendingStart.chunkIndex, pendingStart.offsetInChunkChars)
+            }
+            return@LaunchedEffect
+        }
         continuationLog(
             "doneEffect start eventItem=${event.itemId} eventChunk=${event.chunkIndex} " +
                 "currentItem=$currentItemId isAutoPlaying=$isAutoPlaying chunks=${chunks.size} " +
@@ -993,7 +1184,10 @@ fun PlayerScreen(
                             "playChunk=${positionToPlay.chunkIndex} playOffset=${positionToPlay.offsetInChunkChars}",
                     )
                     readerScrollTriggerSignal += 1
-                    playChunk(positionToPlay.chunkIndex, positionToPlay.offsetInChunkChars)
+                    startPlaybackAtPosition(
+                        position = positionToPlay,
+                        allowTitleIntro = true,
+                    )
                 }
             },
             onNextSegment = {
