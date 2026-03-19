@@ -40,6 +40,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -190,6 +191,18 @@ internal fun playbackObservabilityLines(state: PlaybackObservabilityUiState): Li
         "seed chunk=$seededChunkLabel offset=$seededOffsetLabel",
         "handoff pending=${state.handoffPending} settled=${state.handoffSettled}",
     )
+}
+
+internal fun shouldShowReaderLoadingPlaceholder(
+    waitingForRequestedItem: Boolean,
+    hasStalePayloadForCurrentItem: Boolean,
+    isLoading: Boolean,
+    transitionSettled: Boolean,
+): Boolean {
+    return waitingForRequestedItem ||
+        hasStalePayloadForCurrentItem ||
+        isLoading ||
+        !transitionSettled
 }
 
 internal fun resolveSeededPlaybackPosition(
@@ -579,7 +592,7 @@ fun PlayerScreen(
         textPayload = null
         usingCachedText = false
         chunks = emptyList()
-        isLoading = false
+        isLoading = true
         pendingOpenIntent = if (vm.isItemCompletedForPlaybackStart(target)) {
             PlaybackOpenIntent.Replay
         } else {
@@ -609,6 +622,7 @@ fun PlayerScreen(
         autoPlayAfterLoad = false
         preserveVisibleContentOnReload = false
         bodyRevealReady = false
+        isLoading = true
         reloadNonce += 1
         continuationLog(
             "openRequest sameItemReload target=$target reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
@@ -1063,14 +1077,23 @@ fun PlayerScreen(
         handoffSettled = transitionSettled,
         autoPath = isAutoPlaying,
     )
+    val showReaderLoadingPlaceholder = shouldShowReaderLoadingPlaceholder(
+        waitingForRequestedItem = waitingForRequestedItem,
+        hasStalePayloadForCurrentItem = hasStalePayloadForCurrentItem,
+        isLoading = isLoading,
+        transitionSettled = transitionSettled,
+    )
 
-    if (waitingForRequestedItem || hasStalePayloadForCurrentItem) {
+    if (showReaderLoadingPlaceholder && !compactControlsOnly) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .then(modifier),
-        )
+            contentAlignment = Alignment.Center,
+        ) {
+            ReaderLoadingPlaceholder()
+        }
     } else if (compactControlsOnly) {
         if (showCompactControls) {
             Box(
@@ -1392,6 +1415,22 @@ fun PlayerScreen(
         )
     }
 
+}
+
+@Composable
+private fun ReaderLoadingPlaceholder() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(20.dp),
+            strokeWidth = 2.dp,
+        )
+    }
 }
 
 @Composable
