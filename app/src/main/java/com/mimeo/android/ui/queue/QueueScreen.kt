@@ -687,6 +687,7 @@ fun QueueScreen(
                         item = item,
                         cached = cachedItemIds.contains(item.itemId),
                         noActiveContent = noActiveContentItemIds.contains(item.itemId),
+                        showQueueCaptureMetadata = settings.showQueueCaptureMetadata,
                         onOpenPlayer = {
                             Log.d(
                                 LOCUS_CONTINUATION_DEBUG_TAG,
@@ -1609,28 +1610,6 @@ private fun isPendingFailureState(message: String): Boolean {
     return isPendingProcessingFailureMessage(message)
 }
 
-internal fun queueProgressStateLabel(
-    progress: Int,
-    isDone: Boolean,
-    cached: Boolean,
-    noActiveContent: Boolean,
-): String {
-    return when {
-        noActiveContent && !cached -> "Unavailable"
-        isDone -> "Done"
-        progress <= 0 -> "Unread"
-        else -> "In progress"
-    }
-}
-
-internal fun queueTapHintLabel(cached: Boolean, noActiveContent: Boolean): String {
-    return when {
-        noActiveContent && !cached -> "Tap opens details. Offline text not available."
-        cached -> "Tap opens reader/player at saved progress."
-        else -> "Tap opens reader/player. Use menu for offline download."
-    }
-}
-
 internal fun queueCaptureStrategyLabel(strategyUsed: String?): String? {
     val normalized = strategyUsed
         ?.trim()
@@ -1644,11 +1623,50 @@ internal fun queueCaptureStrategyLabel(strategyUsed: String?): String? {
     return "Capture: $humanized"
 }
 
+internal fun queueSourceMetadataLine(
+    source: String,
+    captureStrategyLabel: String?,
+    showQueueCaptureMetadata: Boolean,
+): String {
+    return if (showQueueCaptureMetadata && !captureStrategyLabel.isNullOrBlank()) {
+        "$source  •  $captureStrategyLabel"
+    } else {
+        source
+    }
+}
+
+internal fun queueProgressIconRes(
+    progress: Int,
+    isDone: Boolean,
+    noActiveContent: Boolean,
+): Int {
+    return when {
+        noActiveContent -> R.drawable.msr_error_circle_24
+        isDone -> R.drawable.msr_check_circle_24
+        progress <= 0 -> R.drawable.ic_book_closed_24
+        else -> R.drawable.ic_book_open_24
+    }
+}
+
+internal fun queueProgressIconDescription(
+    progress: Int,
+    isDone: Boolean,
+    noActiveContent: Boolean,
+): String {
+    return when {
+        noActiveContent -> "Not available offline"
+        isDone -> "Done"
+        progress <= 0 -> "Unread"
+        else -> "In progress"
+    }
+}
+
 @Composable
 private fun QueueItemCard(
     item: PlaybackQueueItem,
     cached: Boolean,
     noActiveContent: Boolean,
+    showQueueCaptureMetadata: Boolean,
     onOpenPlayer: () -> Unit,
     onDownload: () -> Unit,
     onOpenPlaylistPicker: () -> Unit,
@@ -1660,14 +1678,22 @@ private fun QueueItemCard(
     val source = item.host?.ifBlank { null } ?: "Unknown source"
     val progress = item.progressPercent
     val isDone = item.furthestPercent >= DONE_PERCENT_THRESHOLD
-    val progressStateLabel = queueProgressStateLabel(
+    val captureStrategyLabel = queueCaptureStrategyLabel(item.strategyUsed)
+    val sourceLine = queueSourceMetadataLine(
+        source = source,
+        captureStrategyLabel = captureStrategyLabel,
+        showQueueCaptureMetadata = showQueueCaptureMetadata,
+    )
+    val progressIconRes = queueProgressIconRes(
         progress = progress,
         isDone = isDone,
-        cached = cached,
-        noActiveContent = noActiveContent,
+        noActiveContent = noActiveContent && !cached,
     )
-    val captureStrategyLabel = queueCaptureStrategyLabel(item.strategyUsed)
-    val tapHintLabel = queueTapHintLabel(cached = cached, noActiveContent = noActiveContent)
+    val progressIconDescription = queueProgressIconDescription(
+        progress = progress,
+        isDone = isDone,
+        noActiveContent = noActiveContent && !cached,
+    )
     val primaryTextColor = if (cached) {
         MaterialTheme.colorScheme.onSurface
     } else if (noActiveContent) {
@@ -1753,7 +1779,7 @@ private fun QueueItemCard(
             ) {
                 Text(
                     modifier = Modifier.weight(1f),
-                    text = listOfNotNull(source, captureStrategyLabel).joinToString("  •  "),
+                    text = sourceLine,
                     style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
                     color = if (noActiveContent && !cached) {
                         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
@@ -1769,40 +1795,25 @@ private fun QueueItemCard(
                 ) {
                     if (noActiveContent && !cached) {
                         Text(
-                            text = progressStateLabel,
+                            text = "No active content",
                             style = MaterialTheme.typography.labelSmall,
                             color = secondaryTextColor,
-                        )
-                        Icon(
-                            painter = painterResource(id = R.drawable.msr_error_circle_24),
-                            contentDescription = "Not available offline",
-                            tint = secondaryTextColor,
-                            modifier = Modifier.size(16.dp),
                         )
                     } else {
                         Text(
-                            text = "$progressStateLabel  $progress%",
+                            text = "$progress%",
                             style = MaterialTheme.typography.labelSmall,
                             color = secondaryTextColor,
                         )
-                        Icon(
-                            painter = painterResource(
-                                id = if (isDone) R.drawable.ic_book_closed_24 else R.drawable.ic_book_open_24,
-                            ),
-                            contentDescription = if (isDone) "Done" else "Not done",
-                            tint = secondaryTextColor,
-                            modifier = Modifier.size(16.dp),
-                        )
                     }
+                    Icon(
+                        painter = painterResource(id = progressIconRes),
+                        contentDescription = progressIconDescription,
+                        tint = secondaryTextColor,
+                        modifier = Modifier.size(16.dp),
+                    )
                 }
             }
-            Text(
-                text = tapHintLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
     }
 }

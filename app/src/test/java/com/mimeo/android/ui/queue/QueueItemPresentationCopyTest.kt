@@ -7,54 +7,66 @@ import org.junit.Test
 class QueueItemPresentationCopyTest {
 
     @Test
-    fun progressStateUnavailableWhenNoActiveContentAndNotCached() {
-        val label = queueProgressStateLabel(
+    fun progressIconUsesErrorForUnavailable() {
+        val iconRes = queueProgressIconRes(
             progress = 0,
             isDone = false,
-            cached = false,
             noActiveContent = true,
         )
 
-        assertEquals("Unavailable", label)
+        assertEquals(com.mimeo.android.R.drawable.msr_error_circle_24, iconRes)
     }
 
     @Test
-    fun progressStateDoneWhenCompleted() {
-        val label = queueProgressStateLabel(
+    fun progressIconUsesCheckForDone() {
+        val iconRes = queueProgressIconRes(
             progress = 100,
             isDone = true,
-            cached = false,
             noActiveContent = false,
         )
 
-        assertEquals("Done", label)
+        assertEquals(com.mimeo.android.R.drawable.msr_check_circle_24, iconRes)
     }
 
     @Test
-    fun progressStateUnreadAtZero() {
-        val label = queueProgressStateLabel(
+    fun progressIconUsesClosedBookForUnread() {
+        val iconRes = queueProgressIconRes(
             progress = 0,
             isDone = false,
-            cached = false,
             noActiveContent = false,
         )
 
-        assertEquals("Unread", label)
+        assertEquals(com.mimeo.android.R.drawable.ic_book_closed_24, iconRes)
     }
 
     @Test
-    fun tapHintVariesByAvailability() {
+    fun progressIconUsesOpenBookForInProgress() {
+        val iconRes = queueProgressIconRes(
+            progress = 34,
+            isDone = false,
+            noActiveContent = false,
+        )
+
+        assertEquals(com.mimeo.android.R.drawable.ic_book_open_24, iconRes)
+    }
+
+    @Test
+    fun progressIconDescriptionMatchesState() {
         assertEquals(
-            "Tap opens details. Offline text not available.",
-            queueTapHintLabel(cached = false, noActiveContent = true),
+            "Not available offline",
+            queueProgressIconDescription(progress = 0, isDone = false, noActiveContent = true),
         )
         assertEquals(
-            "Tap opens reader/player at saved progress.",
-            queueTapHintLabel(cached = true, noActiveContent = false),
+            "Done",
+            queueProgressIconDescription(progress = 100, isDone = true, noActiveContent = false),
         )
         assertEquals(
-            "Tap opens reader/player. Use menu for offline download.",
-            queueTapHintLabel(cached = false, noActiveContent = false),
+            "Unread",
+            queueProgressIconDescription(progress = 0, isDone = false, noActiveContent = false),
+        )
+        assertEquals(
+            "In progress",
+            queueProgressIconDescription(progress = 22, isDone = false, noActiveContent = false),
         )
     }
 
@@ -69,5 +81,24 @@ class QueueItemPresentationCopyTest {
         assertNull(queueCaptureStrategyLabel(null))
         assertNull(queueCaptureStrategyLabel("   "))
     }
-}
 
+    @Test
+    fun sourceMetadataLineIncludesCaptureOnlyWhenEnabled() {
+        assertEquals(
+            "example.com",
+            queueSourceMetadataLine(
+                source = "example.com",
+                captureStrategyLabel = "Capture: Reader",
+                showQueueCaptureMetadata = false,
+            ),
+        )
+        assertEquals(
+            "example.com  •  Capture: Reader",
+            queueSourceMetadataLine(
+                source = "example.com",
+                captureStrategyLabel = "Capture: Reader",
+                showQueueCaptureMetadata = true,
+            ),
+        )
+    }
+}

@@ -96,6 +96,9 @@ fun SettingsScreen(
     var showPlaybackDiagnostics by remember(settings.showPlaybackDiagnostics) {
         mutableStateOf(settings.showPlaybackDiagnostics)
     }
+    var showQueueCaptureMetadata by remember(settings.showQueueCaptureMetadata) {
+        mutableStateOf(settings.showQueueCaptureMetadata)
+    }
     var keepShareResultNotifications by remember(settings.keepShareResultNotifications) {
         mutableStateOf(settings.keepShareResultNotifications)
     }
@@ -156,6 +159,7 @@ fun SettingsScreen(
             continuousNowPlayingMarquee = continuousNowPlayingMarquee,
             forceSentenceHighlightFallback = forceSentenceHighlightFallback,
             showPlaybackDiagnostics = showPlaybackDiagnostics,
+            showQueueCaptureMetadata = showQueueCaptureMetadata,
             keepShareResultNotifications = keepShareResultNotifications,
             autoDownloadSavedArticles = autoDownloadSavedArticles,
         )
@@ -734,6 +738,30 @@ fun SettingsScreen(
                             onCheckedChange = {
                                 showPlaybackDiagnostics = it
                                 vm.saveShowPlaybackDiagnostics(it)
+                            },
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text("Queue capture metadata")
+                            Text(
+                                text = "Show strategy/capture metadata on queue rows.",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = showQueueCaptureMetadata,
+                            onCheckedChange = {
+                                showQueueCaptureMetadata = it
+                                vm.saveShowQueueCaptureMetadata(it)
                             },
                         )
                     }

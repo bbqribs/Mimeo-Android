@@ -499,6 +499,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         continuousNowPlayingMarquee: Boolean,
         forceSentenceHighlightFallback: Boolean,
         showPlaybackDiagnostics: Boolean,
+        showQueueCaptureMetadata: Boolean,
         keepShareResultNotifications: Boolean,
         autoDownloadSavedArticles: Boolean,
     ) {
@@ -516,6 +517,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 continuousNowPlayingMarquee = continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = forceSentenceHighlightFallback,
                 showPlaybackDiagnostics = showPlaybackDiagnostics,
+                showQueueCaptureMetadata = showQueueCaptureMetadata,
                 keepShareResultNotifications = keepShareResultNotifications,
                 autoDownloadSavedArticles = autoDownloadSavedArticles,
                 playbackSpeed = settings.value.playbackSpeed,
@@ -556,6 +558,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 showPlaybackDiagnostics = settings.value.showPlaybackDiagnostics,
+                showQueueCaptureMetadata = settings.value.showQueueCaptureMetadata,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 autoDownloadSavedArticles = settings.value.autoDownloadSavedArticles,
                 playbackSpeed = settings.value.playbackSpeed,
@@ -589,6 +592,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 showPlaybackDiagnostics = settings.value.showPlaybackDiagnostics,
+                showQueueCaptureMetadata = settings.value.showQueueCaptureMetadata,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 autoDownloadSavedArticles = settings.value.autoDownloadSavedArticles,
                 playbackSpeed = playbackSpeed,
@@ -1603,6 +1607,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _settings.update { current -> current.copy(showPlaybackDiagnostics = enabled) }
             settingsStore.saveShowPlaybackDiagnostics(enabled)
+        }
+    }
+
+    fun saveShowQueueCaptureMetadata(enabled: Boolean) {
+        viewModelScope.launch {
+            _settings.update { current -> current.copy(showQueueCaptureMetadata = enabled) }
+            settingsStore.saveShowQueueCaptureMetadata(enabled)
         }
     }
 
