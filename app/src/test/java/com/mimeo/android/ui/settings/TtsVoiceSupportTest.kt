@@ -82,12 +82,14 @@ class TtsVoiceSupportTest {
                 TtsVoiceOption("en-1", "en-US", "English (United States)", "v1"),
                 TtsVoiceOption("en-2", "en-US", "English (United States)", "v2"),
                 TtsVoiceOption("de-1", "de-DE", "German (Germany)", "v3"),
+                TtsVoiceOption("uk-1", "en-GB", "English (United Kingdom)", "v4"),
             ),
         )
 
-        assertEquals(2, locales.size)
+        assertEquals(3, locales.size)
         assertTrue(locales.any { it.tag == "en-US" })
         assertTrue(locales.any { it.tag == "de-DE" })
+        assertEquals("en-GB", locales.first().tag)
     }
 
     @Test

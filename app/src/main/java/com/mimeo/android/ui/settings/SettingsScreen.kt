@@ -784,30 +784,23 @@ fun SettingsScreen(
                             val selectedVoiceLabel = selected?.voiceLabel ?: "System default"
                             Text("Voice: $selectedVoiceLabel ▼")
                         }
+                        TextButton(
+                            enabled = ttsEngineReady && ttsVoiceName.trim().isNotBlank(),
+                            onClick = {
+                                ttsVoiceName = ""
+                                selectedTtsLocaleTag = ttsVoiceOptions
+                                    .firstOrNull { it.name == engineDefaultTtsVoiceName }
+                                    ?.localeTag
+                                    .orEmpty()
+                                vm.saveTtsVoiceName("")
+                            },
+                        ) {
+                            Text("Use system default")
+                        }
                         DropdownMenu(
                             expanded = showTtsVoiceMenu,
                             onDismissRequest = { showTtsVoiceMenu = false },
                         ) {
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        if (ttsVoiceName.trim().isBlank()) {
-                                            "✓ $engineDefaultTtsVoiceLabel"
-                                        } else {
-                                            engineDefaultTtsVoiceLabel
-                                        },
-                                    )
-                                },
-                                onClick = {
-                                    showTtsVoiceMenu = false
-                                    ttsVoiceName = ""
-                                    selectedTtsLocaleTag = ttsVoiceOptions
-                                        .firstOrNull { it.name == engineDefaultTtsVoiceName }
-                                        ?.localeTag
-                                        .orEmpty()
-                                    vm.saveTtsVoiceName("")
-                                },
-                            )
                             filteredVoiceOptions.forEach { option ->
                                 DropdownMenuItem(
                                     text = {
@@ -839,7 +832,7 @@ fun SettingsScreen(
                         text = if (ttsEngineReady && ttsVoiceOptions.size <= 1) {
                             "No alternate voices available on this TTS engine."
                         } else {
-                            "Preview phrase: \"$TTS_PREVIEW_PHRASE\""
+                            "Preview phrase: \"$TTS_PREVIEW_PHRASE\". Online voices fall back to system default while offline."
                         },
                         style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                         color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1442,7 +1435,11 @@ internal fun mapTtsLocaleOptions(options: List<TtsVoiceOption>): List<TtsLocaleO
         .asSequence()
         .map { option -> option.localeTag to option.localeLabel }
         .distinctBy { (tag, _) -> tag.lowercase(Locale.US) }
-        .sortedBy { (_, label) -> label.lowercase(Locale.US) }
+        .sortedWith(
+            compareBy<Pair<String, String>> { (tag, _) ->
+                !tag.equals("en-GB", ignoreCase = true)
+            }.thenBy { (_, label) -> label.lowercase(Locale.US) },
+        )
         .map { (tag, label) -> TtsLocaleOption(tag = tag, label = label) }
         .toList()
 }
