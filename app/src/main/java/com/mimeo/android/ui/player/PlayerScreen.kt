@@ -873,6 +873,10 @@ fun PlayerScreen(
         }
     }
 
+    LaunchedEffect(settings.ttsVoiceName) {
+        ttsController.setVoiceName(settings.ttsVoiceName)
+    }
+
     LaunchedEffect(currentItemId, currentPercent) {
         val crossedNearEnd = shouldForceNearEndCommit(
             previousPercent = lastObservedPercent,

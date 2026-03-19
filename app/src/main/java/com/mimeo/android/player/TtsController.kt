@@ -49,6 +49,7 @@ class TtsController(
     private val utteranceMetaById = ConcurrentHashMap<String, UtteranceMeta>()
     private val handledDoneUtterances = CopyOnWriteArraySet<String>()
     private var speechRate = 1.0f
+    private var preferredVoiceName: String? = null
 
     init {
         lateinit var createdEngine: TextToSpeech
@@ -57,6 +58,7 @@ class TtsController(
                 initialized = true
                 createdEngine.language = Locale.US
                 createdEngine.setSpeechRate(speechRate)
+                applyPreferredVoiceIfAvailable()
             } else {
                 mainHandler.post { onError("TTS init failed") }
             }
@@ -169,6 +171,13 @@ class TtsController(
         }
     }
 
+    fun setVoiceName(voiceName: String) {
+        preferredVoiceName = voiceName.trim().ifBlank { null }
+        if (initialized) {
+            applyPreferredVoiceIfAvailable()
+        }
+    }
+
     fun stop() {
         generationCounter.incrementAndGet()
         utteranceMetaById.clear()
@@ -179,5 +188,11 @@ class TtsController(
     fun shutdown() {
         stop()
         tts.shutdown()
+    }
+
+    private fun applyPreferredVoiceIfAvailable() {
+        val preferred = preferredVoiceName ?: return
+        val matchingVoice = tts.voices?.firstOrNull { it.name == preferred } ?: return
+        tts.voice = matchingVoice
     }
 }

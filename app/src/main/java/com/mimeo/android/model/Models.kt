@@ -213,6 +213,7 @@ data class AppSettings(
     val forceSentenceHighlightFallback: Boolean = false,
     val showPlaybackDiagnostics: Boolean = false,
     val showQueueCaptureMetadata: Boolean = false,
+    val ttsVoiceName: String = "",
     val keepShareResultNotifications: Boolean = false,
     val autoDownloadSavedArticles: Boolean = true,
     val playbackSpeed: Float = 1.0f,

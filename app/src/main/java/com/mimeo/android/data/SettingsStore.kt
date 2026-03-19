@@ -53,6 +53,8 @@ class SettingsStore(private val context: Context) {
         booleanPreferencesKey("show_playback_diagnostics")
     private val showQueueCaptureMetadataKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("show_queue_capture_metadata")
+    private val ttsVoiceNameKey: Preferences.Key<String> =
+        stringPreferencesKey("tts_voice_name")
     private val keepShareResultNotificationsKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("keep_share_result_notifications")
     private val autoDownloadSavedArticlesKey: Preferences.Key<Boolean> =
@@ -115,6 +117,7 @@ class SettingsStore(private val context: Context) {
             forceSentenceHighlightFallback = prefs[forceSentenceHighlightFallbackKey] ?: false,
             showPlaybackDiagnostics = prefs[showPlaybackDiagnosticsKey] ?: false,
             showQueueCaptureMetadata = prefs[showQueueCaptureMetadataKey] ?: false,
+            ttsVoiceName = prefs[ttsVoiceNameKey] ?: "",
             keepShareResultNotifications = prefs[keepShareResultNotificationsKey] ?: false,
             autoDownloadSavedArticles = prefs[autoDownloadSavedArticlesKey] ?: true,
             playbackSpeed = prefs[playbackSpeedKey] ?: 1.0f,
@@ -166,6 +169,7 @@ class SettingsStore(private val context: Context) {
         forceSentenceHighlightFallback: Boolean,
         showPlaybackDiagnostics: Boolean,
         showQueueCaptureMetadata: Boolean,
+        ttsVoiceName: String,
         keepShareResultNotifications: Boolean,
         autoDownloadSavedArticles: Boolean,
         playbackSpeed: Float,
@@ -195,6 +199,7 @@ class SettingsStore(private val context: Context) {
             prefs[forceSentenceHighlightFallbackKey] = forceSentenceHighlightFallback
             prefs[showPlaybackDiagnosticsKey] = showPlaybackDiagnostics
             prefs[showQueueCaptureMetadataKey] = showQueueCaptureMetadata
+            prefs[ttsVoiceNameKey] = ttsVoiceName.trim()
             prefs[keepShareResultNotificationsKey] = keepShareResultNotifications
             prefs[autoDownloadSavedArticlesKey] = autoDownloadSavedArticles
             prefs[playbackSpeedKey] = playbackSpeed
@@ -264,6 +269,12 @@ class SettingsStore(private val context: Context) {
     suspend fun saveShowQueueCaptureMetadata(showQueueCaptureMetadata: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[showQueueCaptureMetadataKey] = showQueueCaptureMetadata
+        }
+    }
+
+    suspend fun saveTtsVoiceName(ttsVoiceName: String) {
+        context.dataStore.edit { prefs ->
+            prefs[ttsVoiceNameKey] = ttsVoiceName.trim()
         }
     }
 

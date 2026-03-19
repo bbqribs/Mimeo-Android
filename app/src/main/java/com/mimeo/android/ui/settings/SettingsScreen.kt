@@ -1,5 +1,8 @@
 package com.mimeo.android.ui.settings
 
+import android.app.Application
+import android.speech.tts.TextToSpeech
+import android.speech.tts.Voice
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +23,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -54,6 +58,7 @@ import java.util.Locale
 
 private const val PREVIEW_PARAGRAPH_1 = "Mimeo now remembers your reading layout so Locus feels like a calm, bookish surface instead of a raw text dump."
 private const val PREVIEW_PARAGRAPH_2 = "Use this preview to check rhythm, paragraph spacing, and readability before returning to long-form listening sessions."
+private const val TTS_PREVIEW_PHRASE = "The quick brown fox jumps over the lazy dog."
 
 @Composable
 fun SettingsScreen(
@@ -99,6 +104,14 @@ fun SettingsScreen(
     var showQueueCaptureMetadata by remember(settings.showQueueCaptureMetadata) {
         mutableStateOf(settings.showQueueCaptureMetadata)
     }
+    var ttsVoiceName by remember(settings.ttsVoiceName) {
+        mutableStateOf(settings.ttsVoiceName)
+    }
+    var ttsEngineReady by remember { mutableStateOf(false) }
+    var ttsVoiceOptions by remember { mutableStateOf<List<TtsVoiceOption>>(emptyList()) }
+    var showVoiceMenu by remember { mutableStateOf(false) }
+    var ttsPreviewing by remember { mutableStateOf(false) }
+    var ttsEngine by remember { mutableStateOf<TextToSpeech?>(null) }
     var keepShareResultNotifications by remember(settings.keepShareResultNotifications) {
         mutableStateOf(settings.keepShareResultNotifications)
     }
@@ -160,6 +173,7 @@ fun SettingsScreen(
             forceSentenceHighlightFallback = forceSentenceHighlightFallback,
             showPlaybackDiagnostics = showPlaybackDiagnostics,
             showQueueCaptureMetadata = showQueueCaptureMetadata,
+            ttsVoiceName = ttsVoiceName,
             keepShareResultNotifications = keepShareResultNotifications,
             autoDownloadSavedArticles = autoDownloadSavedArticles,
         )
@@ -198,6 +212,29 @@ fun SettingsScreen(
             readingMaxWidthDp = maxWidthDp,
             readingParagraphSpacing = paragraphSpacing,
         )
+    }
+
+    fun refreshTtsVoices(engine: TextToSpeech) {
+        val descriptors = engine.voices
+            ?.map { voice ->
+                voice.toDescriptor()
+            }
+            .orEmpty()
+        val options = mapTtsVoiceOptions(descriptors)
+        ttsVoiceOptions = options
+        val resolved = resolveConfiguredTtsVoiceName(ttsVoiceName, options)
+        if (resolved != ttsVoiceName) {
+            ttsVoiceName = resolved
+            vm.saveTtsVoiceName(resolved)
+        }
+    }
+
+    fun applyCurrentTtsVoice(engine: TextToSpeech) {
+        val selectedName = ttsVoiceName.trim()
+        if (selectedName.isBlank()) return
+        engine.voices?.firstOrNull { it.name == selectedName }?.let { selected ->
+            engine.voice = selected
+        }
     }
 
     LaunchedEffect(testRequested, testingConnection, statusMessage) {
@@ -245,6 +282,32 @@ fun SettingsScreen(
             confirmNewPassword = ""
             onClearPasswordChangeState()
         }
+    }
+
+    DisposableEffect(Unit) {
+        lateinit var createdEngine: TextToSpeech
+        createdEngine = TextToSpeech(vm.getApplication<Application>().applicationContext) { status ->
+            ttsEngineReady = status == TextToSpeech.SUCCESS
+            if (ttsEngineReady) {
+                refreshTtsVoices(createdEngine)
+                applyCurrentTtsVoice(createdEngine)
+            } else {
+                ttsVoiceOptions = emptyList()
+            }
+        }
+        ttsEngine = createdEngine
+        onDispose {
+            ttsPreviewing = false
+            ttsEngine = null
+            createdEngine.stop()
+            createdEngine.shutdown()
+        }
+    }
+
+    LaunchedEffect(ttsVoiceName, ttsEngineReady) {
+        val engine = ttsEngine ?: return@LaunchedEffect
+        if (!ttsEngineReady) return@LaunchedEffect
+        applyCurrentTtsVoice(engine)
     }
 
     val defaultSavePlaylistName = playlists.firstOrNull { it.id == settings.defaultSavePlaylistId }?.name ?: "Smart Queue"
@@ -584,6 +647,96 @@ fun SettingsScreen(
                             vm.saveContinuousNowPlayingMarquee(it)
                         },
                     )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text("TTS voice")
+                        Text(
+                            text = if (!ttsEngineReady) {
+                                "TTS engine not ready."
+                            } else {
+                                val selected = ttsVoiceOptions.firstOrNull { it.name == ttsVoiceName.trim() }
+                                "Selected: ${selected?.label ?: "System default"}"
+                            },
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        TextButton(
+                            enabled = ttsEngineReady,
+                            onClick = { showVoiceMenu = true },
+                        ) {
+                            Text("Choose voice ▼")
+                        }
+                        DropdownMenu(
+                            expanded = showVoiceMenu,
+                            onDismissRequest = { showVoiceMenu = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("System default") },
+                                onClick = {
+                                    showVoiceMenu = false
+                                    ttsVoiceName = ""
+                                    vm.saveTtsVoiceName("")
+                                },
+                            )
+                            ttsVoiceOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.label) },
+                                    onClick = {
+                                        showVoiceMenu = false
+                                        ttsVoiceName = option.name
+                                        vm.saveTtsVoiceName(option.name)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = if (ttsEngineReady && ttsVoiceOptions.size <= 1) {
+                            "No alternate voices available on this TTS engine."
+                        } else {
+                            "Preview phrase: \"$TTS_PREVIEW_PHRASE\""
+                        },
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Button(
+                        enabled = ttsEngineReady,
+                        onClick = {
+                            val engine = ttsEngine
+                            if (engine == null || !ttsEngineReady) {
+                                vm.showSnackbar("TTS preview unavailable")
+                                return@Button
+                            }
+                            applyCurrentTtsVoice(engine)
+                            ttsPreviewing = true
+                            engine.speak(
+                                TTS_PREVIEW_PHRASE,
+                                TextToSpeech.QUEUE_FLUSH,
+                                null,
+                                "mimeo-tts-preview-${System.currentTimeMillis()}",
+                            )
+                            ttsPreviewing = false
+                        },
+                    ) { Text(if (ttsPreviewing) "Playing..." else "Preview") }
                 }
                 Text("Emulator default: http://10.0.2.2:8000")
             }
@@ -1083,3 +1236,71 @@ internal fun authSessionConsequenceSummary(): String =
     "If auth is stale/invalid, the app returns to Sign In. " +
         "Sign out clears only this device session token (URL/mode stay). " +
         "Change password keeps this device signed in and revokes other sessions."
+
+internal data class TtsVoiceDescriptor(
+    val name: String,
+    val localeTag: String,
+    val quality: Int,
+    val latency: Int,
+    val requiresNetwork: Boolean,
+)
+
+internal data class TtsVoiceOption(
+    val name: String,
+    val label: String,
+)
+
+private fun Voice.toDescriptor(): TtsVoiceDescriptor {
+    return TtsVoiceDescriptor(
+        name = name.orEmpty(),
+        localeTag = locale?.toLanguageTag().orEmpty(),
+        quality = quality,
+        latency = latency,
+        requiresNetwork = isNetworkConnectionRequired,
+    )
+}
+
+internal fun mapTtsVoiceOptions(descriptors: List<TtsVoiceDescriptor>): List<TtsVoiceOption> {
+    val preferred = descriptors
+        .asSequence()
+        .filter { it.name.isNotBlank() }
+        .sortedWith(
+            compareBy<TtsVoiceDescriptor> { it.requiresNetwork }
+                .thenByDescending { it.quality }
+                .thenBy { it.latency }
+                .thenBy { it.localeTag.lowercase(Locale.US) }
+                .thenBy { it.name.lowercase(Locale.US) },
+        )
+        .map { descriptor ->
+            val localeLabel = descriptor.localeTag.ifBlank { "unknown locale" }
+            val qualityLabel = when (descriptor.quality) {
+                Voice.QUALITY_VERY_HIGH -> "very high"
+                Voice.QUALITY_HIGH -> "high"
+                Voice.QUALITY_NORMAL -> "normal"
+                Voice.QUALITY_LOW -> "low"
+                Voice.QUALITY_VERY_LOW -> "very low"
+                else -> null
+            }
+            val networkLabel = if (descriptor.requiresNetwork) "online" else "offline"
+            val qualitySuffix = qualityLabel?.let { " - $it" }.orEmpty()
+            TtsVoiceOption(
+                name = descriptor.name.trim(),
+                label = "$localeLabel - ${descriptor.name.trim()} - $networkLabel$qualitySuffix",
+            )
+        }
+        .distinctBy { it.name.lowercase(Locale.US) }
+        .toList()
+    return preferred
+}
+
+internal fun resolveConfiguredTtsVoiceName(
+    configuredVoiceName: String,
+    availableOptions: List<TtsVoiceOption>,
+): String {
+    val normalizedConfigured = configuredVoiceName.trim()
+    if (normalizedConfigured.isBlank()) return ""
+    val found = availableOptions.any { option ->
+        option.name.equals(normalizedConfigured, ignoreCase = true)
+    }
+    return if (found) normalizedConfigured else ""
+}
