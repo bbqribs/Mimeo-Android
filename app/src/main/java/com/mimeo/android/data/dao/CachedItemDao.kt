@@ -24,6 +24,9 @@ interface CachedItemDao {
     )
     suspend fun findCachedActiveContentVersionIds(versionIds: List<Int>): List<Int>
 
+    @Query("DELETE FROM cached_items WHERE itemId = :itemId")
+    suspend fun deleteByItemId(itemId: Int)
+
     /**
      * Emits the full set of cached item IDs whenever the [cached_items] table changes.
      * Used by the ViewModel to reactively update offline-ready state when [AutoDownloadWorker]

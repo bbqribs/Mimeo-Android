@@ -77,6 +77,9 @@
 17. [x] Player chrome compression slice: persistent title strip + 3-state controls with chevron mode transitions and persisted settings.
 18. [x] Header action polish: refresh visual states unified and speed control updated to compact panel styling with preserved speed semantics.
 
+## Testing debt
+- [ ] NoActiveContentStore Worker→ViewModel integration test: verify that IDs written by the worker during a download run are correctly read back and merged into the ViewModel's `noActiveContentItemIds` on the next queue load. Needs ViewModel testing infrastructure (e.g. `TestCoroutineDispatcher` + fake repository) not yet established in this project.
+
 ## Later
 - [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.
 - [ ] Persist last segment index per item in DataStore for cross-process resume.
