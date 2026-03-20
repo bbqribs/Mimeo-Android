@@ -71,6 +71,20 @@ class QueueAutoDownloadTargetSelectionTest {
         assertEquals(emptyList<Int>(), targets)
     }
 
+    @Test
+    fun `refresh mode can include all visible uncached items`() {
+        val targets = selectAutoDownloadTargetsForNewlySurfacedItems(
+            autoDownloadEnabled = true,
+            queueItems = listOf(item(7), item(8), item(9)),
+            previousVisibleItemIds = linkedSetOf(7, 8, 9),
+            cachedItemIds = setOf(8),
+            knownNoActiveContentItemIds = setOf(9),
+            includeAllVisibleUncached = true,
+        )
+
+        assertEquals(listOf(7), targets)
+    }
+
     private fun item(itemId: Int): PlaybackQueueItem {
         return PlaybackQueueItem(
             itemId = itemId,

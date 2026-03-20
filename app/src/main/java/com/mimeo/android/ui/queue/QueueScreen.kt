@@ -267,7 +267,7 @@ fun QueueScreen(
     suspend fun refreshQueueContent() {
         if (refreshActionState == RefreshActionVisualState.Refreshing) return
         refreshActionState = RefreshActionVisualState.Refreshing
-        val result = vm.loadQueueOnce()
+        val result = vm.loadQueueOnce(forceAutoDownloadAllVisibleUncached = true)
         hasRefreshProblem = result.isFailure
         refreshActionState = if (result.isSuccess) {
             RefreshActionVisualState.Success

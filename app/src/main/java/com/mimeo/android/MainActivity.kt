@@ -261,6 +261,7 @@ internal fun selectAutoDownloadTargetsForNewlySurfacedItems(
     previousVisibleItemIds: Set<Int>,
     cachedItemIds: Set<Int>,
     knownNoActiveContentItemIds: Set<Int>,
+    includeAllVisibleUncached: Boolean = false,
 ): List<Int> {
     if (!autoDownloadEnabled) return emptyList()
     return queueItems
@@ -270,7 +271,7 @@ internal fun selectAutoDownloadTargetsForNewlySurfacedItems(
         .filterNot { cachedItemIds.contains(it) }
         .filterNot { knownNoActiveContentItemIds.contains(it) }
         .filter { itemId ->
-            previousVisibleItemIds.isEmpty() || !previousVisibleItemIds.contains(itemId)
+            includeAllVisibleUncached || previousVisibleItemIds.isEmpty() || !previousVisibleItemIds.contains(itemId)
         }
         .toList()
 }
@@ -1157,7 +1158,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    suspend fun loadQueueOnce(autoRetryPendingSaves: Boolean = true): Result<Unit> = queueLoadMutex.withLock {
+    suspend fun loadQueueOnce(
+        autoRetryPendingSaves: Boolean = true,
+        forceAutoDownloadAllVisibleUncached: Boolean = false,
+    ): Result<Unit> = queueLoadMutex.withLock {
         val current = settings.value
         val wasOffline = _queueOffline.value
         val previousVisibleItemIds = _queueItems.value.mapTo(linkedSetOf()) { it.itemId }
@@ -1208,6 +1212,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 queueItems = queue.items,
                 previousVisibleItemIds = previousVisibleItemIds,
                 offlineReadyIds = offlineReadyIds,
+                includeAllVisibleUncached = forceAutoDownloadAllVisibleUncached,
             )
             _queueItems.value = queue.items
             val appliedSnapshot = queueResult.debugSnapshot.copy(
@@ -1273,6 +1278,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     queueItems = refreshedQueue.items,
                     previousVisibleItemIds = previousVisibleAfterAutoRetryIds,
                     offlineReadyIds = refreshedOfflineReadyIds,
+                    includeAllVisibleUncached = forceAutoDownloadAllVisibleUncached,
                 )
                 _queueItems.value = refreshedQueue.items
                 val refreshedSnapshot = refreshedQueueResult.debugSnapshot.copy(
@@ -1456,6 +1462,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         queueItems: List<PlaybackQueueItem>,
         previousVisibleItemIds: Set<Int>,
         offlineReadyIds: Set<Int>,
+        includeAllVisibleUncached: Boolean,
     ): Set<Int> {
         val targets = selectAutoDownloadTargetsForNewlySurfacedItems(
             autoDownloadEnabled = current.autoDownloadSavedArticles,
@@ -1463,6 +1470,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             previousVisibleItemIds = previousVisibleItemIds,
             cachedItemIds = offlineReadyIds,
             knownNoActiveContentItemIds = _noActiveContentItemIds.value,
+            includeAllVisibleUncached = includeAllVisibleUncached,
         )
         if (targets.isEmpty()) return offlineReadyIds
         val attempts = repository.prefetchItemTexts(
