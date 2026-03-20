@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.mimeo.android.data.entities.CachedItemEntity
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CachedItemDao {
@@ -22,4 +23,15 @@ interface CachedItemDao {
             "WHERE activeContentVersionId IS NOT NULL AND activeContentVersionId IN (:versionIds)"
     )
     suspend fun findCachedActiveContentVersionIds(versionIds: List<Int>): List<Int>
+
+    @Query("DELETE FROM cached_items WHERE itemId = :itemId")
+    suspend fun deleteByItemId(itemId: Int)
+
+    /**
+     * Emits the full set of cached item IDs whenever the [cached_items] table changes.
+     * Used by the ViewModel to reactively update offline-ready state when [AutoDownloadWorker]
+     * writes new rows, without requiring a manual queue refresh.
+     */
+    @Query("SELECT itemId FROM cached_items")
+    fun observeAllCachedItemIds(): Flow<List<Int>>
 }
