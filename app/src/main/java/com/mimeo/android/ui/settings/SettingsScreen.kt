@@ -409,6 +409,21 @@ fun SettingsScreen(
                     label = { Text("${connectionMode.displayName()} Base URL") },
                     singleLine = true,
                 )
+                val endpointValidation = validateConnectionEndpoint(connectionMode, selectedModeBaseUrl())
+                endpointValidation.blockingError?.let { message ->
+                    Text(
+                        text = message,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.error,
+                    )
+                }
+                endpointValidation.warnings.forEach { warning ->
+                    Text(
+                        text = warning,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text(
                     text = connectionModeBaseUrlGuidance(connectionMode),
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
@@ -466,10 +481,23 @@ fun SettingsScreen(
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { saveCurrent() }) { Text("Save") }
                     Button(
-                        enabled = !testingConnection,
+                        enabled = endpointValidation.blockingError == null,
                         onClick = {
+                            if (endpointValidation.blockingError != null) {
+                                vm.showSnackbar(endpointValidation.blockingError)
+                            } else {
+                                saveCurrent()
+                            }
+                        },
+                    ) { Text("Save") }
+                    Button(
+                        enabled = !testingConnection && endpointValidation.blockingError == null,
+                        onClick = {
+                            if (endpointValidation.blockingError != null) {
+                                vm.showSnackbar(endpointValidation.blockingError)
+                                return@Button
+                            }
                             saveCurrent()
                             if (token.isBlank()) {
                                 testRequested = false
@@ -1403,11 +1431,11 @@ private fun ConnectionMode.description(): String = when (this) {
 
 internal fun connectionModeBaseUrlGuidance(mode: ConnectionMode): String = when (mode) {
     ConnectionMode.LOCAL ->
-        "Use local/emulator host URL (typically http://10.0.2.2:8000 for emulator workflows)."
+        "Use local/emulator host URL (typically http://10.0.2.2:8000). Base URL should be http(s)://host[:port] with no path."
     ConnectionMode.LAN ->
         "Use your server LAN URL (for example http://192.168.x.y:8000) when phone and server share the same network."
     ConnectionMode.REMOTE ->
-        "Use your Tailscale/VPN URL (for example http://100.x.y.z:8000 or your secure remote host). If using 192.168.x.y, use LAN mode instead."
+        "Use your Tailscale/VPN URL (for example http://100.x.y.z:8000 or your secure remote host). HTTP over trusted Tailscale/VPN is supported. If using 192.168.x.y, use LAN mode instead."
 }
 
 private fun connectionModeTokenAuthHelp(mode: ConnectionMode): String = when (mode) {
