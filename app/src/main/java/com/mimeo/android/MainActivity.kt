@@ -151,6 +151,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Dispatchers
@@ -472,6 +474,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             settingsStore.connectionTestSuccessFlow.collect { snapshots ->
                 _connectionTestSuccessByMode.value = snapshots
             }
+        }
+        // Reactively update offline-ready state whenever AutoDownloadWorker writes to the cache.
+        // This eliminates the need for a second manual refresh to see newly downloaded items.
+        viewModelScope.launch {
+            database.cachedItemDao().observeAllCachedItemIds()
+                .distinctUntilChanged()
+                .drop(1) // skip the initial emission — queue load handles the first resolve
+                .collect {
+                    val currentQueue = _queueItems.value
+                    if (currentQueue.isNotEmpty()) {
+                        _cachedItemIds.value = resolveOfflineReadyIds(currentQueue)
+                    }
+                }
         }
         WorkScheduler.enqueueProgressSync(application.applicationContext)
         viewModelScope.launch {
