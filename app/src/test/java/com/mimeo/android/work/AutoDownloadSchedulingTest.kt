@@ -96,6 +96,50 @@ class AutoDownloadSchedulingTest {
         assertEquals(emptyList<Int>(), targets)
     }
 
+    /**
+     * Guard against worker chain growth: if the queue does not change between multiple
+     * queue loads, the passive path produces no targets on the second load, so
+     * enqueueAutoDownload() is never called and no follow-up work is chained.
+     */
+    @Test
+    fun `no chain growth — repeated same visible set produces empty targets on passive path`() {
+        val visibleSet = linkedSetOf(20, 21, 22)
+        // First load: items are new, all targeted.
+        val firstTargets = selectAutoDownloadTargetsForNewlySurfacedItems(
+            autoDownloadEnabled = true,
+            queueItems = listOf(item(20), item(21), item(22)),
+            previousVisibleItemIds = emptySet(),
+            cachedItemIds = emptySet(),
+            knownNoActiveContentItemIds = emptySet(),
+        )
+        assertEquals(listOf(20, 21, 22), firstTargets)
+
+        // Second load (worker may still be running): same visible set, no new targets.
+        val secondTargets = selectAutoDownloadTargetsForNewlySurfacedItems(
+            autoDownloadEnabled = true,
+            queueItems = listOf(item(20), item(21), item(22)),
+            previousVisibleItemIds = visibleSet,
+            cachedItemIds = emptySet(), // worker hasn't finished yet
+            knownNoActiveContentItemIds = emptySet(),
+        )
+        assertEquals("no new targets — enqueueAutoDownload should not be called again",
+            emptyList<Int>(), secondTargets)
+    }
+
+    @Test
+    fun `no chain growth — after worker completes items are cached so future loads skip them`() {
+        // Simulate worker completing: items are now cached.
+        val targets = selectAutoDownloadTargetsForNewlySurfacedItems(
+            autoDownloadEnabled = true,
+            queueItems = listOf(item(20), item(21), item(22)),
+            previousVisibleItemIds = linkedSetOf(20, 21, 22),
+            cachedItemIds = setOf(20, 21, 22), // worker wrote to cache
+            knownNoActiveContentItemIds = emptySet(),
+            includeAllVisibleUncached = false,
+        )
+        assertEquals("cached items should never be re-targeted", emptyList<Int>(), targets)
+    }
+
     @Test
     fun `passive path — newly added item alongside existing — only new item targeted`() {
         val targets = selectAutoDownloadTargetsForNewlySurfacedItems(

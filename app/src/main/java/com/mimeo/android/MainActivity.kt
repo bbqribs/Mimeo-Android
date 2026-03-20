@@ -153,9 +153,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -1460,7 +1462,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return updated
     }
 
-    private fun autoDownloadNewlySurfacedQueueItems(
+    private suspend fun autoDownloadNewlySurfacedQueueItems(
         current: AppSettings,
         queueItems: List<PlaybackQueueItem>,
         previousVisibleItemIds: Set<Int>,
@@ -1468,13 +1470,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         includeAllVisibleUncached: Boolean,
     ): Set<Int> {
         // Merge no-active-content IDs persisted by AutoDownloadWorker from previous runs.
-        val persistedNoContent = noActiveContentStore.getAll()
+        val persistedNoContent = withContext(Dispatchers.IO) { noActiveContentStore.getAll() }
         if (persistedNoContent.isNotEmpty()) {
             _noActiveContentItemIds.update { existing ->
                 retainKnownNoActiveContentIds(queueItems, existing + persistedNoContent)
             }
             // Prune stale IDs to keep the store small.
-            noActiveContentStore.retainOnly(queueItems.mapTo(linkedSetOf()) { it.itemId })
+            val currentQueueIds = queueItems.mapTo(linkedSetOf()) { it.itemId }
+            withContext(Dispatchers.IO) { noActiveContentStore.retainOnly(currentQueueIds) }
         }
 
         val targets = selectAutoDownloadTargetsForNewlySurfacedItems(
