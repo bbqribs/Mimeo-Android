@@ -12,6 +12,7 @@ class QueueItemPresentationCopyTest {
             progress = 0,
             isDone = false,
             noActiveContent = true,
+            failedProcessing = false,
         )
 
         assertEquals(com.mimeo.android.R.drawable.msr_error_circle_24, iconRes)
@@ -23,6 +24,7 @@ class QueueItemPresentationCopyTest {
             progress = 100,
             isDone = true,
             noActiveContent = false,
+            failedProcessing = false,
         )
 
         assertEquals(com.mimeo.android.R.drawable.ic_book_closed_24, iconRes)
@@ -34,6 +36,7 @@ class QueueItemPresentationCopyTest {
             progress = 0,
             isDone = false,
             noActiveContent = false,
+            failedProcessing = false,
         )
 
         assertEquals(com.mimeo.android.R.drawable.ic_book_closed_plain_24, iconRes)
@@ -45,6 +48,7 @@ class QueueItemPresentationCopyTest {
             progress = 34,
             isDone = false,
             noActiveContent = false,
+            failedProcessing = false,
         )
 
         assertEquals(com.mimeo.android.R.drawable.ic_book_open_24, iconRes)
@@ -54,19 +58,23 @@ class QueueItemPresentationCopyTest {
     fun progressIconDescriptionMatchesState() {
         assertEquals(
             "Not available offline",
-            queueProgressIconDescription(progress = 0, isDone = false, noActiveContent = true),
+            queueProgressIconDescription(progress = 0, isDone = false, noActiveContent = true, failedProcessing = false),
         )
         assertEquals(
             "Done",
-            queueProgressIconDescription(progress = 100, isDone = true, noActiveContent = false),
+            queueProgressIconDescription(progress = 100, isDone = true, noActiveContent = false, failedProcessing = false),
         )
         assertEquals(
             "Unread",
-            queueProgressIconDescription(progress = 0, isDone = false, noActiveContent = false),
+            queueProgressIconDescription(progress = 0, isDone = false, noActiveContent = false, failedProcessing = false),
         )
         assertEquals(
             "In progress",
-            queueProgressIconDescription(progress = 22, isDone = false, noActiveContent = false),
+            queueProgressIconDescription(progress = 22, isDone = false, noActiveContent = false, failedProcessing = false),
+        )
+        assertEquals(
+            "Processing failed",
+            queueProgressIconDescription(progress = 22, isDone = false, noActiveContent = false, failedProcessing = true),
         )
     }
 
