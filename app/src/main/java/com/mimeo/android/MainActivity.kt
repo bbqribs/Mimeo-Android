@@ -83,6 +83,7 @@ import androidx.navigation.navArgument
 import com.mimeo.android.data.ApiClient
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.data.AppDatabase
+import com.mimeo.android.data.NoActiveContentStore
 import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
@@ -349,6 +350,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         playbackRepository = repository,
     )
     private val foldersRepository = FoldersRepository(database)
+    private val noActiveContentStore = NoActiveContentStore(application.applicationContext)
 
     private val _settings = MutableStateFlow(AppSettings())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
@@ -444,6 +446,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     _queueItems.value = emptyList()
                     _cachedItemIds.value = emptySet()
                     _noActiveContentItemIds.value = emptySet()
+                    noActiveContentStore.clear()
                     _queueOffline.value = false
                     _playlists.value = emptyList()
                 }
@@ -1457,13 +1460,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return updated
     }
 
-    private suspend fun autoDownloadNewlySurfacedQueueItems(
+    private fun autoDownloadNewlySurfacedQueueItems(
         current: AppSettings,
         queueItems: List<PlaybackQueueItem>,
         previousVisibleItemIds: Set<Int>,
         offlineReadyIds: Set<Int>,
         includeAllVisibleUncached: Boolean,
     ): Set<Int> {
+        // Merge no-active-content IDs persisted by AutoDownloadWorker from previous runs.
+        val persistedNoContent = noActiveContentStore.getAll()
+        if (persistedNoContent.isNotEmpty()) {
+            _noActiveContentItemIds.update { existing ->
+                retainKnownNoActiveContentIds(queueItems, existing + persistedNoContent)
+            }
+            // Prune stale IDs to keep the store small.
+            noActiveContentStore.retainOnly(queueItems.mapTo(linkedSetOf()) { it.itemId })
+        }
+
         val targets = selectAutoDownloadTargetsForNewlySurfacedItems(
             autoDownloadEnabled = current.autoDownloadSavedArticles,
             queueItems = queueItems,
@@ -1473,21 +1486,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             includeAllVisibleUncached = includeAllVisibleUncached,
         )
         if (targets.isEmpty()) return offlineReadyIds
-        val attempts = repository.prefetchItemTexts(
-            baseUrl = current.baseUrl,
-            token = current.apiToken,
-            itemIds = targets,
+
+        WorkScheduler.enqueueAutoDownload(
+            getApplication<Application>().applicationContext,
+            targets,
         )
-        val noActiveContentIds = attempts
-            .filter(::isNoActiveContentAttempt)
-            .map { it.itemId }
-            .toSet()
-        if (noActiveContentIds.isNotEmpty()) {
-            _noActiveContentItemIds.update { previous ->
-                retainKnownNoActiveContentIds(queueItems, previous + noActiveContentIds)
-            }
-        }
-        return resolveOfflineReadyIds(queueItems)
+        // Downloads happen asynchronously; cached IDs will refresh on the next queue load.
+        return offlineReadyIds
     }
 
     private suspend fun reconcilePendingSavesWithQueue(
@@ -1697,6 +1702,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _queueItems.value = emptyList()
                 _cachedItemIds.value = emptySet()
                 _noActiveContentItemIds.value = emptySet()
+                noActiveContentStore.clear()
             }
             loadQueue(autoRetryPendingSaves = false)
         }
