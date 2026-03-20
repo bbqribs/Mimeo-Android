@@ -255,6 +255,26 @@ internal fun selectInitialQueueHydrationTargets(
         .toList()
 }
 
+internal fun selectAutoDownloadTargetsForNewlySurfacedItems(
+    autoDownloadEnabled: Boolean,
+    queueItems: List<PlaybackQueueItem>,
+    previousVisibleItemIds: Set<Int>,
+    cachedItemIds: Set<Int>,
+    knownNoActiveContentItemIds: Set<Int>,
+): List<Int> {
+    if (!autoDownloadEnabled) return emptyList()
+    return queueItems
+        .asSequence()
+        .map { it.itemId }
+        .distinct()
+        .filterNot { cachedItemIds.contains(it) }
+        .filterNot { knownNoActiveContentItemIds.contains(it) }
+        .filter { itemId ->
+            previousVisibleItemIds.isEmpty() || !previousVisibleItemIds.contains(itemId)
+        }
+        .toList()
+}
+
 private fun isLikelyPhysicalDevice(): Boolean {
     val fingerprint = Build.FINGERPRINT.lowercase()
     val model = Build.MODEL.lowercase()
@@ -1140,6 +1160,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun loadQueueOnce(autoRetryPendingSaves: Boolean = true): Result<Unit> = queueLoadMutex.withLock {
         val current = settings.value
         val wasOffline = _queueOffline.value
+        val previousVisibleItemIds = _queueItems.value.mapTo(linkedSetOf()) { it.itemId }
         val snapshotPreloaded = if (_queueItems.value.isEmpty()) {
             applySavedQueueSnapshot(
                 selectedPlaylistId = current.selectedPlaylistId,
@@ -1181,6 +1202,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 selectedPlaylistId = current.selectedPlaylistId,
                 offlineReadyIds = offlineReadyIds,
                 current = current,
+            )
+            offlineReadyIds = autoDownloadNewlySurfacedQueueItems(
+                current = current,
+                queueItems = queue.items,
+                previousVisibleItemIds = previousVisibleItemIds,
+                offlineReadyIds = offlineReadyIds,
             )
             _queueItems.value = queue.items
             val appliedSnapshot = queueResult.debugSnapshot.copy(
@@ -1226,6 +1253,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 lastPendingAutoRetryAtMs = System.currentTimeMillis()
             }
             if (autoRetrySuccessCount > 0) {
+                val previousVisibleAfterAutoRetryIds = _queueItems.value.mapTo(linkedSetOf()) { it.itemId }
                 val refreshedQueueResult = repository.loadQueueAndPrefetch(
                     current.baseUrl,
                     current.apiToken,
@@ -1239,6 +1267,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     selectedPlaylistId = current.selectedPlaylistId,
                     offlineReadyIds = refreshedOfflineReadyIds,
                     current = current,
+                )
+                refreshedOfflineReadyIds = autoDownloadNewlySurfacedQueueItems(
+                    current = current,
+                    queueItems = refreshedQueue.items,
+                    previousVisibleItemIds = previousVisibleAfterAutoRetryIds,
+                    offlineReadyIds = refreshedOfflineReadyIds,
                 )
                 _queueItems.value = refreshedQueue.items
                 val refreshedSnapshot = refreshedQueueResult.debugSnapshot.copy(
@@ -1415,6 +1449,37 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         return updated
+    }
+
+    private suspend fun autoDownloadNewlySurfacedQueueItems(
+        current: AppSettings,
+        queueItems: List<PlaybackQueueItem>,
+        previousVisibleItemIds: Set<Int>,
+        offlineReadyIds: Set<Int>,
+    ): Set<Int> {
+        val targets = selectAutoDownloadTargetsForNewlySurfacedItems(
+            autoDownloadEnabled = current.autoDownloadSavedArticles,
+            queueItems = queueItems,
+            previousVisibleItemIds = previousVisibleItemIds,
+            cachedItemIds = offlineReadyIds,
+            knownNoActiveContentItemIds = _noActiveContentItemIds.value,
+        )
+        if (targets.isEmpty()) return offlineReadyIds
+        val attempts = repository.prefetchItemTexts(
+            baseUrl = current.baseUrl,
+            token = current.apiToken,
+            itemIds = targets,
+        )
+        val noActiveContentIds = attempts
+            .filter(::isNoActiveContentAttempt)
+            .map { it.itemId }
+            .toSet()
+        if (noActiveContentIds.isNotEmpty()) {
+            _noActiveContentItemIds.update { previous ->
+                retainKnownNoActiveContentIds(queueItems, previous + noActiveContentIds)
+            }
+        }
+        return resolveOfflineReadyIds(queueItems)
     }
 
     private suspend fun reconcilePendingSavesWithQueue(
