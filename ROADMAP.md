@@ -38,6 +38,7 @@
 - [x] Playback/open observability + developer toggle: diagnostic state surface for manual-open/autoplay handoff and start-position decisions.
 - [x] Player/reader handoff polish: reduced stale-content flashes and smoother queue-tap -> Locus transition.
 - [x] Autodownload consistency + durability: newly surfaced item targeting, explicit-refresh re-attempt behavior, workerization with backoff, and diagnostics surface.
+- [x] Up Next transition clarity follow-up: explicit failed-processing/no-active-content row states and clearer pending -> saved -> cached visibility after retry/autodownload.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.

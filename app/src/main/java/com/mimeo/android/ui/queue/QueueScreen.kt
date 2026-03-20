@@ -296,6 +296,8 @@ fun QueueScreen(
         pendingItems = pendingManualSaves,
         selectedPlaylistId = settings.selectedPlaylistId,
         queueItems = items,
+        cachedItemIds = cachedItemIds,
+        noActiveContentItemIds = noActiveContentItemIds,
     )
     val hasVisibleQueueContent = displayedItems.isNotEmpty() || projectedPendingItems.isNotEmpty()
     val pullRefreshProgress = (pullRefreshDistancePx / pullRefreshThresholdPx).coerceIn(0f, 1f)
@@ -773,6 +775,7 @@ fun QueueScreen(
                         item = item,
                         cached = cachedItemIds.contains(item.itemId),
                         noActiveContent = noActiveContentItemIds.contains(item.itemId),
+                        failedProcessing = hasFailedPendingProjectionStatus(item),
                         showQueueCaptureMetadata = settings.showQueueCaptureMetadata,
                         onOpenPlayer = {
                             Log.d(
@@ -1250,10 +1253,12 @@ fun QueueScreen(
 
 }
 
-private fun projectPendingItemsForDestination(
+internal fun projectPendingItemsForDestination(
     pendingItems: List<PendingManualSaveItem>,
     selectedPlaylistId: Int?,
     queueItems: List<PlaybackQueueItem>,
+    cachedItemIds: Set<Int>,
+    noActiveContentItemIds: Set<Int>,
 ): List<PendingManualSaveItem> {
     return pendingItems.filter { pending ->
         if (pending.destinationPlaylistId != selectedPlaylistId) {
@@ -1264,7 +1269,11 @@ private fun projectPendingItemsForDestination(
                 item.itemId == resolvedItemId
             } ?: (normalizePendingComparisonUrl(pending.urlInput) == normalizePendingComparisonUrl(item.url))
         } ?: return@filter true
-        hasFailedPendingProjectionStatus(matchedQueueItem) || pending.resolvedItemId == null
+        if (pending.resolvedItemId == null) return@filter true
+        if (hasFailedPendingProjectionStatus(matchedQueueItem)) return@filter true
+        val matchedItemId = matchedQueueItem.itemId
+        if (noActiveContentItemIds.contains(matchedItemId)) return@filter false
+        !cachedItemIds.contains(matchedItemId)
     }
 }
 
@@ -1580,6 +1589,7 @@ private fun PendingProjectedQueueItemCard(
     val primaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f)
     val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
     val failedProcessing = isPendingFailureState(item.lastFailureMessage)
+    val resolvedAwaitingCache = item.resolvedItemId != null && !failedProcessing
     val titleLine = when {
         !item.titleInput.isNullOrBlank() -> item.titleInput
         item.urlInput.isNotBlank() -> item.urlInput
@@ -1659,16 +1669,12 @@ private fun PendingProjectedQueueItemCard(
                 Box(modifier = Modifier.size(8.dp))
                 Icon(
                     painter = painterResource(
-                        id = if (failedProcessing) {
-                            R.drawable.msr_error_circle_24
-                        } else {
-                            R.drawable.msr_sync_problem_24
-                        },
+                        id = if (failedProcessing) R.drawable.msr_error_circle_24 else R.drawable.msr_sync_problem_24,
                     ),
                     contentDescription = if (failedProcessing) {
                         "Pending save failed"
                     } else {
-                        "Pending and unavailable offline"
+                        "Saved and waiting for offline cache"
                     },
                     tint = MaterialTheme.colorScheme.error,
                     modifier = Modifier
@@ -1676,6 +1682,17 @@ private fun PendingProjectedQueueItemCard(
                         .size(16.dp),
                 )
             }
+            Text(
+                text = if (resolvedAwaitingCache) {
+                    "Saved. Caching for offline..."
+                } else {
+                    "Pending save..."
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = secondaryTextColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -1725,9 +1742,10 @@ internal fun queueProgressIconRes(
     progress: Int,
     isDone: Boolean,
     noActiveContent: Boolean,
+    failedProcessing: Boolean,
 ): Int {
     return when {
-        noActiveContent -> R.drawable.msr_error_circle_24
+        noActiveContent || failedProcessing -> R.drawable.msr_error_circle_24
         isDone -> R.drawable.ic_book_closed_24
         progress <= 0 -> R.drawable.ic_book_closed_plain_24
         else -> R.drawable.ic_book_open_24
@@ -1738,9 +1756,11 @@ internal fun queueProgressIconDescription(
     progress: Int,
     isDone: Boolean,
     noActiveContent: Boolean,
+    failedProcessing: Boolean,
 ): String {
     return when {
         noActiveContent -> "Not available offline"
+        failedProcessing -> "Processing failed"
         isDone -> "Done"
         progress <= 0 -> "Unread"
         else -> "In progress"
@@ -1752,6 +1772,7 @@ private fun QueueItemCard(
     item: PlaybackQueueItem,
     cached: Boolean,
     noActiveContent: Boolean,
+    failedProcessing: Boolean,
     showQueueCaptureMetadata: Boolean,
     onOpenPlayer: () -> Unit,
     onDownload: () -> Unit,
@@ -1774,22 +1795,24 @@ private fun QueueItemCard(
         progress = progress,
         isDone = isDone,
         noActiveContent = noActiveContent && !cached,
+        failedProcessing = failedProcessing,
     )
     val progressIconDescription = queueProgressIconDescription(
         progress = progress,
         isDone = isDone,
         noActiveContent = noActiveContent && !cached,
+        failedProcessing = failedProcessing,
     )
     val primaryTextColor = if (cached) {
         MaterialTheme.colorScheme.onSurface
-    } else if (noActiveContent) {
+    } else if (noActiveContent || failedProcessing) {
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f)
     }
     val secondaryTextColor = if (cached) {
         MaterialTheme.colorScheme.onSurfaceVariant
-    } else if (noActiveContent) {
+    } else if (noActiveContent || failedProcessing) {
         MaterialTheme.colorScheme.error.copy(alpha = 0.9f)
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
@@ -1840,6 +1863,7 @@ private fun QueueItemCard(
                                     when {
                                         cached -> "Downloaded"
                                         noActiveContent -> "Unavailable offline"
+                                        failedProcessing -> "Processing failed"
                                         else -> "Download"
                                     },
                                 )
@@ -1867,7 +1891,7 @@ private fun QueueItemCard(
                     modifier = Modifier.weight(1f),
                     text = sourceLine,
                     style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
-                    color = if (noActiveContent && !cached) {
+                    color = if ((noActiveContent || failedProcessing) && !cached) {
                         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
                     } else {
                         secondaryTextColor
@@ -1879,7 +1903,13 @@ private fun QueueItemCard(
                     modifier = Modifier.padding(start = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    if (noActiveContent && !cached) {
+                    if (failedProcessing && !cached) {
+                        Text(
+                            text = "Processing failed",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = secondaryTextColor,
+                        )
+                    } else if (noActiveContent && !cached) {
                         Text(
                             text = "No active content",
                             style = MaterialTheme.typography.labelSmall,
