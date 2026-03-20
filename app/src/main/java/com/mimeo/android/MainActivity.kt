@@ -446,6 +446,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
+            settingsStore.migrateLegacyTokenIfNeeded()
             var previous = _settings.value
             settingsStore.settingsFlow.collect { next ->
                 _settings.value = next

@@ -39,6 +39,7 @@ class SettingsStore(private val context: Context) {
     private val lanBaseUrlKey: Preferences.Key<String> = stringPreferencesKey("lan_base_url")
     private val remoteBaseUrlKey: Preferences.Key<String> = stringPreferencesKey("remote_base_url")
     private val tokenKey: Preferences.Key<String> = stringPreferencesKey("api_token")
+    private val authTokenVersionKey: Preferences.Key<Int> = intPreferencesKey("auth_token_version")
     private val autoAdvanceOnCompletionKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("auto_advance_on_completion")
     private val speakTitleBeforeArticleKey: Preferences.Key<Boolean> =
@@ -98,8 +99,11 @@ class SettingsStore(private val context: Context) {
     private val connectionTestSuccessJsonKey: Preferences.Key<String> =
         stringPreferencesKey("connection_test_success_json")
     private val json = Json { ignoreUnknownKeys = true }
+    private val authTokenStorage = AuthTokenStorage(context)
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->
+        val legacyToken = prefs[tokenKey] ?: ""
+        val persistedToken = authTokenStorage.readToken().ifBlank { legacyToken.trim() }
         val storedBaseUrl = prefs[baseUrlKey] ?: "http://10.0.2.2:8000"
         val parsedConnectionMode = prefs[connectionModeKey]
             ?.let { runCatching { ConnectionMode.valueOf(it) }.getOrNull() }
@@ -117,7 +121,7 @@ class SettingsStore(private val context: Context) {
             localBaseUrl = localBaseUrl,
             lanBaseUrl = lanBaseUrl,
             remoteBaseUrl = remoteBaseUrl,
-            apiToken = prefs[tokenKey] ?: "",
+            apiToken = persistedToken,
             autoAdvanceOnCompletion = prefs[autoAdvanceOnCompletionKey] ?: false,
             speakTitleBeforeArticle = prefs[speakTitleBeforeArticleKey] ?: false,
             skipDuplicateOpeningAfterTitleIntro = prefs[skipDuplicateOpeningAfterTitleIntroKey] ?: true,
@@ -201,13 +205,15 @@ class SettingsStore(private val context: Context) {
         playerChevronSnapEdge: PlayerChevronSnapEdge,
         playerChevronEdgeOffset: Float,
     ) {
+        val tokenWriteResult = authTokenStorage.writeToken(apiToken.trim())
         context.dataStore.edit { prefs ->
             prefs[baseUrlKey] = baseUrl.trim()
             prefs[connectionModeKey] = connectionMode.name
             prefs[localBaseUrlKey] = localBaseUrl.trim()
             prefs[lanBaseUrlKey] = lanBaseUrl.trim()
             prefs[remoteBaseUrlKey] = remoteBaseUrl.trim()
-            prefs[tokenKey] = apiToken.trim()
+            prefs[tokenKey] = if (tokenWriteResult.usedLegacyFallback) apiToken.trim() else ""
+            prefs[authTokenVersionKey] = (prefs[authTokenVersionKey] ?: 0) + 1
             prefs[autoAdvanceOnCompletionKey] = autoAdvanceOnCompletion
             prefs[speakTitleBeforeArticleKey] = speakTitleBeforeArticle
             prefs[skipDuplicateOpeningAfterTitleIntroKey] = skipDuplicateOpeningAfterTitleIntro
@@ -353,10 +359,12 @@ class SettingsStore(private val context: Context) {
     ) {
         val trimmedBaseUrl = baseUrl.trim()
         val trimmedToken = apiToken.trim()
+        val tokenWriteResult = authTokenStorage.writeToken(trimmedToken)
         context.dataStore.edit { prefs ->
             prefs[baseUrlKey] = trimmedBaseUrl
             prefs[connectionModeKey] = connectionMode.name
-            prefs[tokenKey] = trimmedToken
+            prefs[tokenKey] = if (tokenWriteResult.usedLegacyFallback) trimmedToken else ""
+            prefs[authTokenVersionKey] = (prefs[authTokenVersionKey] ?: 0) + 1
             when (connectionMode) {
                 ConnectionMode.LOCAL -> prefs[localBaseUrlKey] = trimmedBaseUrl
                 ConnectionMode.LAN -> prefs[lanBaseUrlKey] = trimmedBaseUrl
@@ -366,8 +374,22 @@ class SettingsStore(private val context: Context) {
     }
 
     suspend fun saveTokenOnly(apiToken: String) {
+        val trimmedToken = apiToken.trim()
+        val tokenWriteResult = authTokenStorage.writeToken(trimmedToken)
         context.dataStore.edit { prefs ->
-            prefs[tokenKey] = apiToken.trim()
+            prefs[tokenKey] = if (tokenWriteResult.usedLegacyFallback) trimmedToken else ""
+            prefs[authTokenVersionKey] = (prefs[authTokenVersionKey] ?: 0) + 1
+        }
+    }
+
+    suspend fun migrateLegacyTokenIfNeeded() {
+        val prefs = context.dataStore.data.first()
+        val legacyToken = prefs[tokenKey]?.trim().orEmpty()
+        if (legacyToken.isBlank()) return
+        val tokenWriteResult = authTokenStorage.migrateLegacyToken(legacyToken)
+        context.dataStore.edit { mutablePrefs ->
+            mutablePrefs[tokenKey] = if (tokenWriteResult.usedLegacyFallback) legacyToken else ""
+            mutablePrefs[authTokenVersionKey] = (mutablePrefs[authTokenVersionKey] ?: 0) + 1
         }
     }
 
