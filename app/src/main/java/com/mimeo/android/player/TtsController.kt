@@ -220,10 +220,10 @@ class TtsController(
 
     fun playCompletionCue() {
         if (!initialized) return
-        val tone = completionCueToneGenerator ?: ToneGenerator(AudioManager.STREAM_NOTIFICATION, 45).also {
+        val tone = completionCueToneGenerator ?: ToneGenerator(AudioManager.STREAM_MUSIC, 80).also {
             completionCueToneGenerator = it
         }
-        tone.startTone(ToneGenerator.TONE_PROP_BEEP2, 130)
+        tone.startTone(ToneGenerator.TONE_PROP_ACK, 240)
     }
 
     fun shutdown() {

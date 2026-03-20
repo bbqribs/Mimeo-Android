@@ -223,7 +223,7 @@ internal fun resolveNextPlaylistScopedSessionIndex(
     session: NowPlayingSession,
     currentId: Int,
 ): Int? {
-    if (session.sourcePlaylistId == null) return null
+    if (session.sourcePlaylistId == null || session.sourcePlaylistId == SMART_QUEUE_SESSION_CONTEXT_ID) return null
     val idx = session.items.indexOfFirst { it.itemId == currentId }.let { if (it >= 0) it else session.currentIndex }
     if (idx >= session.items.lastIndex) return null
     return idx + 1
@@ -2145,7 +2145,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun shouldAutoAdvanceAfterCompletion(): Boolean = settings.value.autoAdvanceOnCompletion
     fun shouldAutoScrollWhileListening(): Boolean = settings.value.autoScrollWhileListening
-    fun isCurrentSessionPlaylistScoped(): Boolean = nowPlayingSession.value?.sourcePlaylistId != null
+    fun isCurrentSessionPlaylistScoped(): Boolean {
+        val sourcePlaylistId = nowPlayingSession.value?.sourcePlaylistId ?: return false
+        return sourcePlaylistId != SMART_QUEUE_SESSION_CONTEXT_ID
+    }
 
     fun baseUrlHintForDevice(isPhysicalDevice: Boolean): String? =
         baseUrlHint(settings.value.baseUrl.trim().trimEnd('/'), isPhysicalDevice)
