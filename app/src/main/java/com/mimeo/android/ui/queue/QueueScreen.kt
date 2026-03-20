@@ -128,6 +128,22 @@ internal fun autoDownloadStatusLines(status: AutoDownloadDiagnostics): List<Stri
         "Skipped: cached=${status.skippedCachedCount.coerceAtLeast(0)} no-active=${status.skippedNoActiveCount.coerceAtLeast(0)}  |  Last run: $runSummary",
     )
 }
+
+internal fun shouldAutoScrollToTopForNewItems(
+    previousDisplayedItemIds: List<Int>,
+    currentDisplayedItemIds: List<Int>,
+    pendingFocusId: Int,
+    hasSearchQuery: Boolean,
+    isDefaultFilterAndSort: Boolean,
+): Boolean {
+    if (pendingFocusId > 0) return false
+    if (hasSearchQuery) return false
+    if (!isDefaultFilterAndSort) return false
+    if (previousDisplayedItemIds.isEmpty()) return false
+    if (currentDisplayedItemIds.isEmpty()) return false
+    val previousSet = previousDisplayedItemIds.toHashSet()
+    return currentDisplayedItemIds.any { it !in previousSet }
+}
 internal enum class ManualSaveMode {
     URL,
     TEXT,
@@ -192,6 +208,7 @@ fun QueueScreen(
     var pullRefreshDistancePx by remember { mutableFloatStateOf(0f) }
     var pendingFocusId by remember { mutableIntStateOf(-1) }
     var previousProjectedPendingIds by remember { mutableStateOf<List<Long>>(emptyList()) }
+    var previousDisplayedItemIds by remember { mutableStateOf<List<Int>>(emptyList()) }
     var playlistMenuExpanded by remember { mutableStateOf(false) }
     var rowMenuItemId by remember { mutableIntStateOf(-1) }
     var playlistPickerItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
@@ -412,6 +429,21 @@ fun QueueScreen(
             listState.animateScrollToItem(0)
         }
         previousProjectedPendingIds = currentIds
+    }
+
+    LaunchedEffect(displayedItems, pendingFocusId, searchQuery, selectedFilter, selectedSort) {
+        val currentIds = displayedItems.map { it.itemId }
+        val shouldScroll = shouldAutoScrollToTopForNewItems(
+            previousDisplayedItemIds = previousDisplayedItemIds,
+            currentDisplayedItemIds = currentIds,
+            pendingFocusId = pendingFocusId,
+            hasSearchQuery = searchQuery.isNotBlank(),
+            isDefaultFilterAndSort = selectedFilter == QueueFilterChip.ALL && selectedSort == QueueSortOption.NEWEST,
+        )
+        if (shouldScroll) {
+            listState.animateScrollToItem(0)
+        }
+        previousDisplayedItemIds = currentIds
     }
 
     Column(
