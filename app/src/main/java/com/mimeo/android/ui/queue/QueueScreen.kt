@@ -588,7 +588,7 @@ fun QueueScreen(
                 }
             }
         }
-        if (BuildConfig.DEBUG || settings.showPlaybackDiagnostics) {
+        if (settings.showAutoDownloadDiagnostics) {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier

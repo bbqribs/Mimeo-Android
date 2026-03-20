@@ -558,6 +558,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         continuousNowPlayingMarquee: Boolean,
         forceSentenceHighlightFallback: Boolean,
         showPlaybackDiagnostics: Boolean,
+        showAutoDownloadDiagnostics: Boolean,
         showQueueCaptureMetadata: Boolean,
         ttsVoiceName: String,
         keepShareResultNotifications: Boolean,
@@ -580,6 +581,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 continuousNowPlayingMarquee = continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = forceSentenceHighlightFallback,
                 showPlaybackDiagnostics = showPlaybackDiagnostics,
+                showAutoDownloadDiagnostics = showAutoDownloadDiagnostics,
                 showQueueCaptureMetadata = showQueueCaptureMetadata,
                 ttsVoiceName = ttsVoiceName,
                 keepShareResultNotifications = keepShareResultNotifications,
@@ -625,6 +627,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 showPlaybackDiagnostics = settings.value.showPlaybackDiagnostics,
+                showAutoDownloadDiagnostics = settings.value.showAutoDownloadDiagnostics,
                 showQueueCaptureMetadata = settings.value.showQueueCaptureMetadata,
                 ttsVoiceName = settings.value.ttsVoiceName,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
@@ -663,6 +666,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 showPlaybackDiagnostics = settings.value.showPlaybackDiagnostics,
+                showAutoDownloadDiagnostics = settings.value.showAutoDownloadDiagnostics,
                 showQueueCaptureMetadata = settings.value.showQueueCaptureMetadata,
                 ttsVoiceName = settings.value.ttsVoiceName,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
@@ -1807,6 +1811,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _settings.update { current -> current.copy(showPlaybackDiagnostics = enabled) }
             settingsStore.saveShowPlaybackDiagnostics(enabled)
+        }
+    }
+
+    fun saveShowAutoDownloadDiagnostics(enabled: Boolean) {
+        viewModelScope.launch {
+            _settings.update { current -> current.copy(showAutoDownloadDiagnostics = enabled) }
+            settingsStore.saveShowAutoDownloadDiagnostics(enabled)
         }
     }
 

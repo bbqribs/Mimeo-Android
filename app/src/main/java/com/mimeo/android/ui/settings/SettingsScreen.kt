@@ -112,6 +112,9 @@ fun SettingsScreen(
     var showPlaybackDiagnostics by remember(settings.showPlaybackDiagnostics) {
         mutableStateOf(settings.showPlaybackDiagnostics)
     }
+    var showAutoDownloadDiagnostics by remember(settings.showAutoDownloadDiagnostics) {
+        mutableStateOf(settings.showAutoDownloadDiagnostics)
+    }
     var showQueueCaptureMetadata by remember(settings.showQueueCaptureMetadata) {
         mutableStateOf(settings.showQueueCaptureMetadata)
     }
@@ -192,6 +195,7 @@ fun SettingsScreen(
             continuousNowPlayingMarquee = continuousNowPlayingMarquee,
             forceSentenceHighlightFallback = forceSentenceHighlightFallback,
             showPlaybackDiagnostics = showPlaybackDiagnostics,
+            showAutoDownloadDiagnostics = showAutoDownloadDiagnostics,
             showQueueCaptureMetadata = showQueueCaptureMetadata,
             ttsVoiceName = ttsVoiceName,
             keepShareResultNotifications = keepShareResultNotifications,
@@ -1111,6 +1115,30 @@ fun SettingsScreen(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
+                            Text("Autodownload diagnostics panel")
+                            Text(
+                                text = "Show autodownload status block in Up Next and details here.",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = showAutoDownloadDiagnostics,
+                            onCheckedChange = {
+                                showAutoDownloadDiagnostics = it
+                                vm.saveShowAutoDownloadDiagnostics(it)
+                            },
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
                             Text("Queue capture metadata")
                             Text(
                                 text = "Show strategy/capture metadata on queue rows.",
@@ -1150,22 +1178,24 @@ fun SettingsScreen(
                             },
                         )
                     }
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text(
-                            text = "Autodownload diagnostics",
-                            style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                        )
-                        autoDownloadStatusLines(autoDownloadDiagnostics).forEach { line ->
+                    if (showAutoDownloadDiagnostics) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
                             Text(
-                                text = line,
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
+                                text = "Autodownload diagnostics",
+                                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                             )
+                            autoDownloadStatusLines(autoDownloadDiagnostics).forEach { line ->
+                                Text(
+                                    text = line,
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
                     }
                 }
