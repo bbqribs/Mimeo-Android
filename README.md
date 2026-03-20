@@ -5,6 +5,10 @@ v0.2 adds offline resilience: local text cache + queued progress retry.
 v0.2.1 adds WorkManager auto-flush, so queued progress sync runs automatically when network returns.
 v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stable mid-session and resume works cleanly.
 
+## Auth setup (normal path)
+- Primary product path: sign in with username/password in-app; Android stores and uses the returned device session token automatically.
+- Advanced/operator fallback: paste a raw device/API token in Settings if needed for diagnostics/recovery workflows.
+
 ## Endpoints used
 - `GET /debug/version` (settings connectivity check)
 - `GET /playback/queue` (playlist candidates)
@@ -105,7 +109,7 @@ Notes:
    ```
 3. In Android app Settings:
    - Base URL: `http://<your-pc-ip>:8000`
-   - API token: your `API_TOKEN` (or a per-device token)
+   - Sign in with username/password (recommended), or use advanced token entry (`API_TOKEN` / per-device token) if needed
 4. Tap **Test connection**.
 
 ## Why cleartext setting was needed
@@ -116,7 +120,7 @@ Notes:
 
 ## MVP smoke steps
 1. Start backend (`Mimeo` repo) and ensure `/debug/version` is reachable.
-2. In app Settings, set base URL + API token.
+2. Sign in with username/password (normal path) or, for advanced/operator workflows, set base URL + token in Settings.
 3. Tap **Test connection** and confirm git SHA appears.
 4. Open Queue and refresh.
 5. Tap an item -> Player -> verify `Segment X / Y` appears.
