@@ -50,6 +50,7 @@ import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.ReaderFontOption
+import com.mimeo.android.ui.queue.autoDownloadStatusLines
 import com.mimeo.android.ui.theme.toFontFamily
 import java.net.URI
 import java.text.SimpleDateFormat
@@ -74,6 +75,7 @@ fun SettingsScreen(
     val statusMessage by vm.statusMessage.collectAsState()
     val testingConnection by vm.testingConnection.collectAsState()
     val connectionTestSuccessByMode by vm.connectionTestSuccessByMode.collectAsState()
+    val autoDownloadDiagnostics by vm.autoDownloadDiagnostics.collectAsState()
     val passwordChangeState by vm.passwordChangeState.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val scrollState = rememberScrollState()
@@ -1147,6 +1149,24 @@ fun SettingsScreen(
                                 vm.saveForceSentenceHighlightFallback(it)
                             },
                         )
+                    }
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = "Autodownload diagnostics",
+                            style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                        )
+                        autoDownloadStatusLines(autoDownloadDiagnostics).forEach { line ->
+                            Text(
+                                text = line,
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }

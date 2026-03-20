@@ -71,6 +71,8 @@ import com.mimeo.android.isTerminalPendingProcessingStatus
 import com.mimeo.android.isNoActiveContentError
 import com.mimeo.android.noActiveContentOfflineMessage
 import com.mimeo.android.data.ApiException
+import com.mimeo.android.model.AutoDownloadDiagnostics
+import com.mimeo.android.model.AutoDownloadWorkerState
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PendingSaveSource
@@ -96,6 +98,36 @@ import java.util.UUID
 private const val DONE_PERCENT_THRESHOLD = 98
 private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
 private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
+
+internal fun autoDownloadWorkerStateLabel(state: AutoDownloadWorkerState): String {
+    return when (state) {
+        AutoDownloadWorkerState.IDLE -> "idle"
+        AutoDownloadWorkerState.QUEUED -> "queued"
+        AutoDownloadWorkerState.RUNNING -> "in progress"
+        AutoDownloadWorkerState.RETRY_PENDING -> "retry pending"
+        AutoDownloadWorkerState.SUCCEEDED -> "succeeded"
+        AutoDownloadWorkerState.COMPLETED_WITH_FAILURES -> "completed with failures"
+        AutoDownloadWorkerState.SKIPPED_ALREADY_CACHED -> "skipped (already cached)"
+        AutoDownloadWorkerState.SKIPPED_DISABLED -> "skipped (disabled)"
+        AutoDownloadWorkerState.SKIPPED_NO_TOKEN -> "skipped (no token)"
+    }
+}
+
+internal fun autoDownloadStatusLines(status: AutoDownloadDiagnostics): List<String> {
+    val enabledLabel = if (status.autoDownloadEnabled) "On" else "Off"
+    val queueCount = status.queueItemCount.coerceAtLeast(0)
+    val readyCount = status.offlineReadyCount.coerceIn(0, maxOf(1, queueCount))
+    val knownNoActive = status.knownNoActiveCount.coerceAtLeast(0)
+    val workerLabel = autoDownloadWorkerStateLabel(status.workerState)
+    val queuedOfCandidate = "${status.queuedCount.coerceAtLeast(0)}/${status.candidateCount.coerceAtLeast(0)}"
+    val scheduleModeLabel = if (status.includeAllVisibleUncached) "refresh-all" else "newly-surfaced"
+    val runSummary = "attempted=${status.attemptedCount.coerceAtLeast(0)} success=${status.successCount.coerceAtLeast(0)} retryable=${status.retryableFailureCount.coerceAtLeast(0)} terminal=${status.terminalFailureCount.coerceAtLeast(0)}"
+    return listOf(
+        "Auto-download: $enabledLabel  |  Offline-ready: $readyCount/$queueCount  |  Known unavailable: $knownNoActive",
+        "Worker: $workerLabel  |  Last schedule: queued $queuedOfCandidate ($scheduleModeLabel)",
+        "Skipped: cached=${status.skippedCachedCount.coerceAtLeast(0)} no-active=${status.skippedNoActiveCount.coerceAtLeast(0)}  |  Last run: $runSummary",
+    )
+}
 internal enum class ManualSaveMode {
     URL,
     TEXT,
@@ -146,6 +178,7 @@ fun QueueScreen(
     val offline by vm.queueOffline.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
     val noActiveContentItemIds by vm.noActiveContentItemIds.collectAsState()
+    val autoDownloadDiagnostics by vm.autoDownloadDiagnostics.collectAsState()
     val pendingManualSaves by vm.pendingManualSaves.collectAsState()
     val pendingManualRetryInProgress by vm.pendingManualRetryInProgress.collectAsState()
     val pendingShareFocusItemId by vm.pendingQueueFocusItemId.collectAsState()
@@ -551,6 +584,27 @@ fun QueueScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+        if (BuildConfig.DEBUG || settings.showPlaybackDiagnostics) {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text("Autodownload status", style = MaterialTheme.typography.labelMedium)
+                    autoDownloadStatusLines(autoDownloadDiagnostics).forEach { line ->
+                        Text(
+                            text = line,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }

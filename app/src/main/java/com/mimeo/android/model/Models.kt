@@ -198,6 +198,38 @@ enum class ConnectionMode {
     REMOTE,
 }
 
+enum class AutoDownloadWorkerState {
+    IDLE,
+    QUEUED,
+    RUNNING,
+    RETRY_PENDING,
+    SUCCEEDED,
+    COMPLETED_WITH_FAILURES,
+    SKIPPED_ALREADY_CACHED,
+    SKIPPED_DISABLED,
+    SKIPPED_NO_TOKEN,
+}
+
+data class AutoDownloadDiagnostics(
+    val autoDownloadEnabled: Boolean = false,
+    val queueItemCount: Int = 0,
+    val offlineReadyCount: Int = 0,
+    val knownNoActiveCount: Int = 0,
+    val lastScheduledAtMs: Long? = null,
+    val candidateCount: Int = 0,
+    val queuedCount: Int = 0,
+    val skippedCachedCount: Int = 0,
+    val skippedNoActiveCount: Int = 0,
+    val includeAllVisibleUncached: Boolean = false,
+    val workerState: AutoDownloadWorkerState = AutoDownloadWorkerState.IDLE,
+    val workerUpdatedAtMs: Long? = null,
+    val attemptedCount: Int = 0,
+    val successCount: Int = 0,
+    val retryableFailureCount: Int = 0,
+    val terminalFailureCount: Int = 0,
+    val noActiveContentCount: Int = 0,
+)
+
 @Serializable
 data class AppSettings(
     val baseUrl: String = "http://10.0.2.2:8000",

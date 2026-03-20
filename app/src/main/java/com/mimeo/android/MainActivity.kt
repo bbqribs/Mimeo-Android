@@ -82,10 +82,12 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mimeo.android.data.ApiClient
 import com.mimeo.android.data.ApiException
+import com.mimeo.android.data.AutoDownloadStatusStore
 import com.mimeo.android.data.AppDatabase
 import com.mimeo.android.data.NoActiveContentStore
 import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
+import com.mimeo.android.model.AutoDownloadDiagnostics
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
 import com.mimeo.android.model.ConnectionMode
@@ -355,6 +357,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     )
     private val foldersRepository = FoldersRepository(database)
     private val noActiveContentStore = NoActiveContentStore(application.applicationContext)
+    private val autoDownloadStatusStore = AutoDownloadStatusStore(application.applicationContext)
 
     private val _settings = MutableStateFlow(AppSettings())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
@@ -389,6 +392,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val cachedItemIds: StateFlow<Set<Int>> = _cachedItemIds.asStateFlow()
     private val _noActiveContentItemIds = MutableStateFlow<Set<Int>>(emptySet())
     val noActiveContentItemIds: StateFlow<Set<Int>> = _noActiveContentItemIds.asStateFlow()
+    private val _autoDownloadDiagnostics = MutableStateFlow(AutoDownloadDiagnostics())
+    val autoDownloadDiagnostics: StateFlow<AutoDownloadDiagnostics> = _autoDownloadDiagnostics.asStateFlow()
     private val _pendingQueueFocusItemId = MutableStateFlow<Int?>(null)
     val pendingQueueFocusItemId: StateFlow<Int?> = _pendingQueueFocusItemId.asStateFlow()
 
@@ -444,6 +449,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             var previous = _settings.value
             settingsStore.settingsFlow.collect { next ->
                 _settings.value = next
+                refreshAutoDownloadDiagnostics()
                 if (next.apiToken.isBlank()) {
                     initialPostSignInHydrationJob?.cancel()
                     initialPostSignInHydrationJob = null
@@ -451,6 +457,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     _cachedItemIds.value = emptySet()
                     _noActiveContentItemIds.value = emptySet()
                     noActiveContentStore.clear()
+                    autoDownloadStatusStore.clear()
+                    refreshAutoDownloadDiagnostics()
                     _queueOffline.value = false
                     _playlists.value = emptyList()
                 }
@@ -484,7 +492,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 .collect {
                     val currentQueue = _queueItems.value
                     if (currentQueue.isNotEmpty()) {
-                        _cachedItemIds.value = resolveOfflineReadyIds(currentQueue)
+                        val offlineReadyIds = resolveOfflineReadyIds(currentQueue)
+                        _cachedItemIds.value = offlineReadyIds
+                        updateAutoDownloadQueueSnapshotDiagnostics(
+                            current = settings.value,
+                            queueItems = currentQueue,
+                            offlineReadyIds = offlineReadyIds,
+                            knownNoActiveIds = _noActiveContentItemIds.value,
+                        )
                     }
                 }
         }
@@ -1252,6 +1267,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 queueItems = queue.items,
                 existing = _noActiveContentItemIds.value,
             )
+            updateAutoDownloadQueueSnapshotDiagnostics(
+                current = current,
+                queueItems = queue.items,
+                offlineReadyIds = offlineReadyIds,
+                knownNoActiveIds = _noActiveContentItemIds.value,
+            )
             settingsStore.saveQueueSnapshot(current.selectedPlaylistId, queue)
             syncPendingSaveProcessingFailures(
                 queueItems = queue.items,
@@ -1317,6 +1338,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _noActiveContentItemIds.value = retainKnownNoActiveContentIds(
                     queueItems = refreshedQueue.items,
                     existing = _noActiveContentItemIds.value,
+                )
+                updateAutoDownloadQueueSnapshotDiagnostics(
+                    current = current,
+                    queueItems = refreshedQueue.items,
+                    offlineReadyIds = refreshedOfflineReadyIds,
+                    knownNoActiveIds = _noActiveContentItemIds.value,
                 )
                 settingsStore.saveQueueSnapshot(current.selectedPlaylistId, refreshedQueue)
                 syncPendingSaveProcessingFailures(
@@ -1408,6 +1435,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _noActiveContentItemIds.value = retainKnownNoActiveContentIds(
             queueItems = snapshot.items,
             existing = _noActiveContentItemIds.value,
+        )
+        updateAutoDownloadQueueSnapshotDiagnostics(
+            current = settings.value,
+            queueItems = snapshot.items,
+            offlineReadyIds = _cachedItemIds.value,
+            knownNoActiveIds = _noActiveContentItemIds.value,
         )
         val appliedSnapshot = QueueFetchDebugSnapshot(
             selectedPlaylistId = selectedPlaylistId,
@@ -1503,6 +1536,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             knownNoActiveContentItemIds = _noActiveContentItemIds.value,
             includeAllVisibleUncached = includeAllVisibleUncached,
         )
+        val distinctQueueItemIds = queueItems.mapTo(linkedSetOf()) { it.itemId }
+        val skippedCachedCount = distinctQueueItemIds.count { offlineReadyIds.contains(it) }
+        val skippedNoActiveCount = distinctQueueItemIds.count { _noActiveContentItemIds.value.contains(it) }
+        autoDownloadStatusStore.recordSchedule(
+            candidateCount = distinctQueueItemIds.size,
+            queuedCount = targets.size,
+            skippedCachedCount = skippedCachedCount,
+            skippedNoActiveCount = skippedNoActiveCount,
+            includeAllVisibleUncached = includeAllVisibleUncached,
+        )
+        refreshAutoDownloadDiagnostics()
         if (targets.isEmpty()) return offlineReadyIds
 
         WorkScheduler.enqueueAutoDownload(
@@ -1511,6 +1555,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
         // Downloads happen asynchronously; cached IDs will refresh on the next queue load.
         return offlineReadyIds
+    }
+
+    private fun updateAutoDownloadQueueSnapshotDiagnostics(
+        current: AppSettings,
+        queueItems: List<PlaybackQueueItem>,
+        offlineReadyIds: Set<Int>,
+        knownNoActiveIds: Set<Int>,
+    ) {
+        autoDownloadStatusStore.recordQueueSnapshot(
+            autoDownloadEnabled = current.autoDownloadSavedArticles,
+            queueItemCount = queueItems.size,
+            offlineReadyCount = offlineReadyIds.size,
+            knownNoActiveCount = knownNoActiveIds.size,
+        )
+        refreshAutoDownloadDiagnostics()
+    }
+
+    private fun refreshAutoDownloadDiagnostics() {
+        _autoDownloadDiagnostics.value = autoDownloadStatusStore.read()
     }
 
     private suspend fun reconcilePendingSavesWithQueue(
