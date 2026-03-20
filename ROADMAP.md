@@ -27,6 +27,17 @@
 - [x] Refresh affordance polish: unified Material refresh action states (idle/spin/success/failure + sync-problem warning) across Queue, Playlists, and Locus with reduced error clutter.
 - [x] Locus speed control polish: compact icon-led trigger + preset capsules + custom slider + stepper row, with tuned icon/typography sizing and consistent narrow-screen layout.
 - [x] Shared chrome polish: persistent title strip typography/link behavior finalized (bold title + italic tappable domain), compact top action bar density, and centered title-strip divider treatment for clearer separation.
+- [x] Auth/session clarity in Settings: explicit signed-in/session-source messaging, sign-out consequences, and stale-auth guidance copy.
+- [x] Phase 3 auth flow complete: sign-in startup gate, username/password sign-in, stale-token recovery, and explicit sign-out path.
+- [x] Token storage hardening: auth token moved off plain settings storage to secure-at-rest path with migration and fallback handling.
+- [x] Endpoint/scheme guardrails: mode-aware URL validation (Local/LAN/Remote), blocking invalid base URLs and warning on common mismatches while keeping HTTP-over-Tailscale supported.
+- [x] TTS voice selection + preview: user-selectable on-device voice/accent with preview phrase and engine-default fallback handling.
+- [x] Title-before-body playback option: optional title intro before article text, duplicate-opening suppression, and autoplay sequencing support.
+- [x] End-of-article completion cue: optional audible completion signal that does not alter queue/progress semantics.
+- [x] Queue metadata/affordance polish: clearer row state indicators and developer-gated capture metadata visibility.
+- [x] Playback/open observability + developer toggle: diagnostic state surface for manual-open/autoplay handoff and start-position decisions.
+- [x] Player/reader handoff polish: reduced stale-content flashes and smoother queue-tap -> Locus transition.
+- [x] Autodownload consistency + durability: newly surfaced item targeting, explicit-refresh re-attempt behavior, workerization with backoff, and diagnostics surface.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
@@ -48,14 +59,14 @@
 - [ ] Backlog: allow sharing plain text and saving it as a readable item, not just URLs.
 
 ### User sign-in (Phase 3)
-- [ ] Username/password sign-in flow — spec ready: `docs/ANDROID_AUTH_PHASE3_SPEC.md`
+- [x] Username/password sign-in flow — shipped per `docs/ANDROID_AUTH_PHASE3_SPEC.md` slice plan (gate, recovery, sign-out, settings coexistence).
 
 ### Next tickets
-- [ ] Share-save destination trust polish: small post-save confirmation surface cleanup if any ambiguity remains after semantics cleanup.
-- [ ] Manual-save failed-attempt recovery queue: keep failed manual saves in a clearable retry queue, preserve user-entered work across offline/interrupted conditions, and auto-retry when connectivity returns.
-- [ ] Up Next pull-to-refresh affordance: add pull-down gesture parity with the refresh button, including visible content pull-from-top and spinner/refresh indicator while loading.
-- [ ] Queue debug cleanup finalization: decide whether to fully remove the debug-only fetch overlay after investigation is complete.
-- [ ] Share plain text capture: convert non-URL shared text into a readable item flow or explicitly reject it with a clearer product decision.
+1. [ ] Offline/download/no-active-content follow-up: make failed-processing/no-active-content rows explicit in Up Next (distinct icon/state), keep retry outcomes visible, and avoid pending-row disappearance gaps.
+2. [ ] Autodownload worker follow-up: tighten no-active-content persistence and queue/list replacement timing so successful retries transition cleanly from pending -> saved -> cached without confusing gaps.
+3. [ ] TTS QoL follow-up: optional completion tone profile tuning + lightweight title-intro controls (per-mode/per-context guardrails, including mid-article resume behavior).
+4. [ ] Queue/player daily-use polish: finish Locus open-transition jitter/flicker edge cases and keep back navigation behavior fully consistent after repeated queue taps.
+5. [ ] Share plain text capture decision ticket: either implement plain-text share ingestion as first-class flow or finalize explicit reject UX with clear reason/hint.
 
 ## Android Redesign v1.1
 1. [~] Foundation: 4-tab nav shell (Up Next / Locus / Collections / Settings) plus black/purple theme foundations.
@@ -84,7 +95,6 @@
 - [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.
 - [ ] Persist last segment index per item in DataStore for cross-process resume.
 - [ ] Add queue filters/sorting controls from playback API query params.
-- [ ] Named playlists and queue management.
 - [ ] Audio focus/media session polish.
 - [ ] Better conflict handling for stale cached versions during long offline sessions.
 - [ ] Replace dev cleartext dependence with HTTPS-friendly transport story for hosted/mobile use.
