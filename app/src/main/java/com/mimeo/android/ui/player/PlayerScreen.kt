@@ -229,6 +229,10 @@ internal fun shouldAcceptDoneEventChunk(eventChunkIndex: Int, currentChunkIndex:
     return eventChunkIndex == TITLE_INTRO_CHUNK_INDEX || eventChunkIndex == currentChunkIndex
 }
 
+internal fun shouldPlayEndOfArticleCompletionCue(enabled: Boolean): Boolean {
+    return enabled
+}
+
 internal fun shouldSpeakTitleBeforeBody(
     enabled: Boolean,
     title: String?,
@@ -984,6 +988,9 @@ fun PlayerScreen(
         } else if (transition.reachedEnd) {
             debugLog("end of item chunk=${safe.chunkIndex}")
             continuationLog("doneEffect reachedEnd currentItem=$currentItemId playlistScoped=${vm.isCurrentSessionPlaylistScoped()}")
+            if (shouldPlayEndOfArticleCompletionCue(settings.playCompletionCueAtArticleEnd)) {
+                ttsController.playCompletionCue()
+            }
             isSpeaking = false
             isAutoPlaying = false
             actionScope.launch { syncProgress(force = true) }

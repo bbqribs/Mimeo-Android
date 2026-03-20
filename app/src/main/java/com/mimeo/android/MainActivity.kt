@@ -223,7 +223,7 @@ internal fun resolveNextPlaylistScopedSessionIndex(
     session: NowPlayingSession,
     currentId: Int,
 ): Int? {
-    if (session.sourcePlaylistId == null) return null
+    if (session.sourcePlaylistId == null || session.sourcePlaylistId == SMART_QUEUE_SESSION_CONTEXT_ID) return null
     val idx = session.items.indexOfFirst { it.itemId == currentId }.let { if (it >= 0) it else session.currentIndex }
     if (idx >= session.items.lastIndex) return null
     return idx + 1
@@ -496,6 +496,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         autoAdvanceOnCompletion: Boolean,
         speakTitleBeforeArticle: Boolean,
         skipDuplicateOpeningAfterTitleIntro: Boolean,
+        playCompletionCueAtArticleEnd: Boolean,
         persistentPlayerEnabled: Boolean,
         autoScrollWhileListening: Boolean,
         continuousNowPlayingMarquee: Boolean,
@@ -517,6 +518,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 autoAdvanceOnCompletion = autoAdvanceOnCompletion,
                 speakTitleBeforeArticle = speakTitleBeforeArticle,
                 skipDuplicateOpeningAfterTitleIntro = skipDuplicateOpeningAfterTitleIntro,
+                playCompletionCueAtArticleEnd = playCompletionCueAtArticleEnd,
                 persistentPlayerEnabled = persistentPlayerEnabled,
                 autoScrollWhileListening = autoScrollWhileListening,
                 continuousNowPlayingMarquee = continuousNowPlayingMarquee,
@@ -561,6 +563,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
                 speakTitleBeforeArticle = settings.value.speakTitleBeforeArticle,
                 skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
+                playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
                 persistentPlayerEnabled = settings.value.persistentPlayerEnabled,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
@@ -598,6 +601,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
                 speakTitleBeforeArticle = settings.value.speakTitleBeforeArticle,
                 skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
+                playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
                 persistentPlayerEnabled = settings.value.persistentPlayerEnabled,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
@@ -652,6 +656,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _settings.value = current.copy(skipDuplicateOpeningAfterTitleIntro = enabled)
         viewModelScope.launch {
             settingsStore.saveSkipDuplicateOpeningAfterTitleIntro(enabled)
+        }
+    }
+
+    fun savePlayCompletionCueAtArticleEnd(enabled: Boolean) {
+        val current = settings.value
+        _settings.value = current.copy(playCompletionCueAtArticleEnd = enabled)
+        viewModelScope.launch {
+            settingsStore.savePlayCompletionCueAtArticleEnd(enabled)
         }
     }
 
@@ -2133,7 +2145,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun shouldAutoAdvanceAfterCompletion(): Boolean = settings.value.autoAdvanceOnCompletion
     fun shouldAutoScrollWhileListening(): Boolean = settings.value.autoScrollWhileListening
-    fun isCurrentSessionPlaylistScoped(): Boolean = nowPlayingSession.value?.sourcePlaylistId != null
+    fun isCurrentSessionPlaylistScoped(): Boolean {
+        val sourcePlaylistId = nowPlayingSession.value?.sourcePlaylistId ?: return false
+        return sourcePlaylistId != SMART_QUEUE_SESSION_CONTEXT_ID
+    }
 
     fun baseUrlHintForDevice(isPhysicalDevice: Boolean): String? =
         baseUrlHint(settings.value.baseUrl.trim().trimEnd('/'), isPhysicalDevice)

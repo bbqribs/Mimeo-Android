@@ -209,6 +209,7 @@ data class AppSettings(
     val autoAdvanceOnCompletion: Boolean = false,
     val speakTitleBeforeArticle: Boolean = false,
     val skipDuplicateOpeningAfterTitleIntro: Boolean = true,
+    val playCompletionCueAtArticleEnd: Boolean = false,
     val persistentPlayerEnabled: Boolean = true,
     val autoScrollWhileListening: Boolean = true,
     val continuousNowPlayingMarquee: Boolean = true,

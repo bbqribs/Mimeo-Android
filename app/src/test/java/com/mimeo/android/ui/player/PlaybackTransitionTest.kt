@@ -8,6 +8,12 @@ import org.junit.Test
 
 class PlaybackTransitionTest {
     @Test
+    fun completionCueToggleControlsCueEligibility() {
+        assertFalse(shouldPlayEndOfArticleCompletionCue(enabled = false))
+        assertTrue(shouldPlayEndOfArticleCompletionCue(enabled = true))
+    }
+
+    @Test
     fun nearEndCommitTriggersOnlyOnThresholdCrossing() {
         assertFalse(shouldForceNearEndCommit(previousPercent = 20, currentPercent = 40))
         assertTrue(shouldForceNearEndCommit(previousPercent = 97, currentPercent = 98))
@@ -68,5 +74,26 @@ class PlaybackTransitionTest {
         assertFalse(duplicate.reachedEnd)
         assertEquals(1, duplicate.nextPosition.chunkIndex)
         assertEquals(12, duplicate.nextPosition.offsetInChunkChars)
+    }
+
+    @Test
+    fun finalChunkDoneReachesEndWithoutAlteringContinuationRules() {
+        val result = applyDoneTransition(
+            event = PlaybackDoneEvent(
+                utteranceId = "utt-end",
+                itemId = 101,
+                chunkIndex = 4,
+            ),
+            currentItemId = 101,
+            currentPosition = PlaybackPosition(chunkIndex = 4, offsetInChunkChars = 88),
+            chunkCount = 5,
+            lastHandledUtteranceId = null,
+        )
+
+        assertTrue(result.shouldHandle)
+        assertFalse(result.shouldPlayNextChunk)
+        assertTrue(result.reachedEnd)
+        assertEquals(4, result.nextPosition.chunkIndex)
+        assertEquals(88, result.nextPosition.offsetInChunkChars)
     }
 }
