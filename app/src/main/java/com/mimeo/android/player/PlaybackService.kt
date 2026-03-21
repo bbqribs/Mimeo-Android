@@ -128,6 +128,11 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
 
     private fun updateSnapshot(next: PlaybackServiceSnapshot) {
         snapshot = next
+        if (next.isPlaying) {
+            requestAudioFocus()
+        } else {
+            abandonAudioFocus()
+        }
         val state = if (next.isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
         mediaSession.setPlaybackState(
             PlaybackStateCompat.Builder()
