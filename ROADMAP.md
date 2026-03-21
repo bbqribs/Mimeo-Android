@@ -65,7 +65,7 @@
 ### Next tickets
 1. [ ] Offline/download/no-active-content follow-up: make failed-processing/no-active-content rows explicit in Up Next (distinct icon/state), keep retry outcomes visible, and avoid pending-row disappearance gaps.
 2. [ ] Autodownload worker follow-up: tighten no-active-content persistence and queue/list replacement timing so successful retries transition cleanly from pending -> saved -> cached without confusing gaps.
-3. [x] TTS QoL follow-up: added title-intro autoplay control and completion-cue autoplay control for more predictable daily playback behavior without changing resume/queue policy.
+3. [ ] TTS QoL follow-up: optional completion tone profile tuning + lightweight title-intro controls (per-mode/per-context guardrails, including mid-article resume behavior).
 4. [ ] Queue/player daily-use polish: finish Locus open-transition jitter/flicker edge cases and keep back navigation behavior fully consistent after repeated queue taps.
 5. [ ] Share plain text capture decision ticket: either implement plain-text share ingestion as first-class flow or finalize explicit reject UX with clear reason/hint.
 

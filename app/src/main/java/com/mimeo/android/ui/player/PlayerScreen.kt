@@ -229,13 +229,8 @@ internal fun shouldAcceptDoneEventChunk(eventChunkIndex: Int, currentChunkIndex:
     return eventChunkIndex == TITLE_INTRO_CHUNK_INDEX || eventChunkIndex == currentChunkIndex
 }
 
-internal fun shouldPlayEndOfArticleCompletionCue(
-    enabled: Boolean,
-    willAutoAdvance: Boolean,
-    enabledDuringAutoAdvance: Boolean,
-): Boolean {
-    if (!enabled) return false
-    return !willAutoAdvance || enabledDuringAutoAdvance
+internal fun shouldPlayEndOfArticleCompletionCue(enabled: Boolean): Boolean {
+    return enabled
 }
 
 internal fun shouldSpeakTitleBeforeBody(
@@ -253,8 +248,6 @@ internal fun shouldUseTitleIntroOnPlaybackStart(
     allowTitleIntro: Boolean,
     hasStartedPlaybackForItem: Boolean,
     speakTitleBeforeArticleEnabled: Boolean,
-    speakTitleBeforeArticleOnAutoplayEnabled: Boolean,
-    openIntent: PlaybackOpenIntent,
     startPosition: PlaybackPosition,
     title: String?,
     chunks: List<PlaybackChunk>,
@@ -262,9 +255,6 @@ internal fun shouldUseTitleIntroOnPlaybackStart(
     if (!allowTitleIntro) return false
     if (hasStartedPlaybackForItem) return false
     if (startPosition.chunkIndex != 0 || startPosition.offsetInChunkChars != 0) return false
-    if (openIntent == PlaybackOpenIntent.AutoContinue && !speakTitleBeforeArticleOnAutoplayEnabled) {
-        return false
-    }
     return shouldSpeakTitleBeforeBody(
         enabled = speakTitleBeforeArticleEnabled,
         title = title,
@@ -669,8 +659,6 @@ fun PlayerScreen(
             allowTitleIntro = allowTitleIntro,
             hasStartedPlaybackForItem = hasStartedPlaybackForCurrentItem,
             speakTitleBeforeArticleEnabled = settings.speakTitleBeforeArticle,
-            speakTitleBeforeArticleOnAutoplayEnabled = settings.speakTitleBeforeArticleOnAutoplay,
-            openIntent = pendingOpenIntent,
             startPosition = safe,
             title = textPayload?.title,
             chunks = chunks,
@@ -1000,20 +988,14 @@ fun PlayerScreen(
         } else if (transition.reachedEnd) {
             debugLog("end of item chunk=${safe.chunkIndex}")
             continuationLog("doneEffect reachedEnd currentItem=$currentItemId playlistScoped=${vm.isCurrentSessionPlaylistScoped()}")
-            val playlistScoped = vm.isCurrentSessionPlaylistScoped()
-            val shouldAutoAdvance = vm.shouldAutoAdvanceAfterCompletion()
-            val willAutoAdvance = playlistScoped || shouldAutoAdvance
-            if (shouldPlayEndOfArticleCompletionCue(
-                    enabled = settings.playCompletionCueAtArticleEnd,
-                    willAutoAdvance = willAutoAdvance,
-                    enabledDuringAutoAdvance = settings.playCompletionCueOnAutoplay,
-                )
-            ) {
+            if (shouldPlayEndOfArticleCompletionCue(settings.playCompletionCueAtArticleEnd)) {
                 ttsController.playCompletionCue()
             }
             isSpeaking = false
             isAutoPlaying = false
             actionScope.launch { syncProgress(force = true) }
+            val playlistScoped = vm.isCurrentSessionPlaylistScoped()
+            val shouldAutoAdvance = vm.shouldAutoAdvanceAfterCompletion()
             if (playlistScoped || shouldAutoAdvance) {
                 val finishedItemId = currentItemId
                 actionScope.launch {
