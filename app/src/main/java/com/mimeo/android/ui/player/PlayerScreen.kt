@@ -559,6 +559,13 @@ fun PlayerScreen(
     LaunchedEffect(initialItemId, requestedItemId) {
         if (resolvedInitial) return@LaunchedEffect
         val resolvedId = requestedItemId ?: vm.resolveInitialPlayerItemId(initialItemId)
+        if (resolvedId == currentItemId) {
+            continuationLog(
+                "initialResolve skipReopen resolved=$resolvedId current=$currentItemId autoPlayAfterLoad=$autoPlayAfterLoad",
+            )
+            resolvedInitial = true
+            return@LaunchedEffect
+        }
         val initialIntent = if (vm.isItemCompletedForPlaybackStart(resolvedId)) {
             PlaybackOpenIntent.Replay
         } else {
