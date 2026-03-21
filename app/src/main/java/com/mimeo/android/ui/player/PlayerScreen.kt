@@ -133,13 +133,13 @@ private val PLAYBACK_SPEED_PILLS = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
 private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 private const val MANUAL_OPEN_DEBUG_TAG = "MimeoManualOpen"
 
-internal enum class PlaybackOpenIntent {
+enum class PlaybackOpenIntent {
     ManualOpen,
     AutoContinue,
     Replay,
 }
 
-internal data class PlaybackOpenDiagnosticsSnapshot(
+data class PlaybackOpenDiagnosticsSnapshot(
     val itemId: Int,
     val requestedItemId: Int?,
     val openIntent: PlaybackOpenIntent,
@@ -402,30 +402,18 @@ fun PlayerScreen(
     onChevronSnapChange: (PlayerChevronSnapEdge) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    var currentItemId by rememberSaveable(initialItemId) { mutableIntStateOf(initialItemId) }
+    val engineState by vm.playbackEngineState.collectAsState()
+    val currentItemId = if (engineState.currentItemId > 0) engineState.currentItemId else initialItemId
     var resolvedInitial by rememberSaveable(initialItemId) { mutableStateOf(false) }
-    var reloadNonce by rememberSaveable { mutableIntStateOf(0) }
+    val reloadNonce = engineState.reloadNonce
     var textPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
     var usingCachedText by remember { mutableStateOf(false) }
     var chunks by remember { mutableStateOf<List<PlaybackChunk>>(emptyList()) }
     var uiMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
-    var isSpeaking by remember { mutableStateOf(false) }
-    var isAutoPlaying by remember { mutableStateOf(false) }
-    var pendingDoneEvent by remember { mutableStateOf<PlaybackDoneEvent?>(null) }
-    var lastHandledDoneUtteranceId by remember { mutableStateOf<String?>(null) }
-    var autoPlayAfterLoad by remember { mutableStateOf(false) }
-    var pendingBodyStartAfterTitleIntro by remember { mutableStateOf<PlaybackPosition?>(null) }
-    var hasStartedPlaybackForCurrentItem by rememberSaveable(initialItemId) { mutableStateOf(false) }
-    var pendingOpenIntent by remember {
-        mutableStateOf(
-            if (vm.isItemCompletedForPlaybackStart(initialItemId)) {
-                PlaybackOpenIntent.Replay
-            } else {
-                PlaybackOpenIntent.ManualOpen
-            },
-        )
-    }
+    val isSpeaking = engineState.isSpeaking
+    val isAutoPlaying = engineState.isAutoPlaying
+    val autoPlayAfterLoad = engineState.autoPlayAfterLoad
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
@@ -437,21 +425,17 @@ fun PlayerScreen(
     val readerScrollState = rememberSaveable(currentItemId, readerViewportSessionNonce, saver = ScrollState.Saver) {
         ScrollState(0)
     }
-    var activeChunkRange by remember { mutableStateOf<IntRange?>(null) }
+    val activeChunkRange = engineState.activeChunkRange
     var readerScrollTriggerSignal by rememberSaveable { mutableIntStateOf(0) }
     var readerSelectionResetSignal by rememberSaveable { mutableIntStateOf(0) }
     var selectionClearArmed by rememberSaveable { mutableStateOf(false) }
     var lastHandledLocusTapSignal by rememberSaveable { mutableIntStateOf(locusTapSignal) }
     var lastHandledOpenRequestSignal by rememberSaveable { mutableIntStateOf(openRequestSignal) }
-    var lastOpenDiagnostics by remember { mutableStateOf<PlaybackOpenDiagnosticsSnapshot?>(null) }
-    var lastProgressSyncAtMs by remember { mutableLongStateOf(0L) }
-    var lastSyncedPercent by remember { mutableIntStateOf(-1) }
-    var lastSyncedAbsoluteChars by remember { mutableIntStateOf(-1) }
+    val lastOpenDiagnostics = engineState.lastOpenDiagnostics
     var lastObservedPercent by remember { mutableIntStateOf(-1) }
     var nearEndForcedForItemId by remember { mutableIntStateOf(-1) }
     var isExpanded by rememberSaveable { mutableStateOf(true) }
     var readerModeEnabled by rememberSaveable { mutableStateOf(false) }
-    val playbackPositionByItem by vm.playbackPositionByItem.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
@@ -471,9 +455,8 @@ fun PlayerScreen(
         animationSpec = tween(durationMillis = 140),
         label = "locusBodyAlpha",
     )
-    val currentPosition = playbackPositionByItem[currentItemId] ?: PlaybackPosition()
+    val currentPosition = engineState.currentPosition
     val actionScope = rememberCoroutineScope()
-    val context = LocalContext.current
     val textToolbar = LocalTextToolbar.current
     val hasActiveSelection = textToolbar.status == TextToolbarStatus.Shown
     val chevronSide = remember(chevronSnapEdge) {
@@ -507,68 +490,6 @@ fun PlayerScreen(
         } else {
             onRequestBack()
         }
-    }
-
-    val latestChunks by rememberUpdatedState(chunks)
-    val latestItemId by rememberUpdatedState(currentItemId)
-    val latestPosition by rememberUpdatedState(currentPosition)
-
-    val ttsController = remember {
-        TtsController(
-            context = context,
-            onChunkDone = { event: TtsChunkDoneEvent ->
-                val currentChunks = latestChunks
-                if (currentChunks.isEmpty()) return@TtsController
-                if (event.itemId != latestItemId) return@TtsController
-                if (!shouldAcceptDoneEventChunk(event.chunkIndex, latestPosition.chunkIndex)) {
-                    debugLog("ignore stale onDone utterance=${event.utteranceId} eventChunk=${event.chunkIndex} currentChunk=${latestPosition.chunkIndex}")
-                    return@TtsController
-                }
-                continuationLog(
-                    "onChunkDone item=${event.itemId} chunk=${event.chunkIndex} " +
-                        "latestItem=$latestItemId latestChunk=${latestPosition.chunkIndex}",
-                )
-                activeChunkRange = null
-                pendingDoneEvent = PlaybackDoneEvent(
-                    utteranceId = event.utteranceId,
-                    itemId = event.itemId,
-                    chunkIndex = event.chunkIndex,
-                )
-            },
-            onChunkProgress = { event: TtsChunkProgressEvent ->
-                val currentChunks = latestChunks
-                if (currentChunks.isEmpty()) return@TtsController
-                if (event.itemId != latestItemId) return@TtsController
-                if (event.chunkIndex != latestPosition.chunkIndex) return@TtsController
-                val safeIndex = event.chunkIndex.coerceIn(0, currentChunks.lastIndex)
-                val safeOffset = event.absoluteOffsetInChunk.coerceIn(0, playableChunkLength(currentChunks[safeIndex]))
-                val safeRange = if (BuildConfig.DEBUG && settings.forceSentenceHighlightFallback) {
-                    null
-                } else {
-                    event.activeRangeInChunk?.let { range ->
-                        val start = range.first.coerceIn(0, playableChunkLength(currentChunks[safeIndex]))
-                        val endExclusive = (range.last + 1).coerceIn(0, playableChunkLength(currentChunks[safeIndex]))
-                        if (endExclusive > start) start until endExclusive else null
-                    }
-                }
-                if (safeRange != activeChunkRange) {
-                    activeChunkRange = safeRange
-                }
-                val currentOffset = latestPosition.offsetInChunkChars.coerceAtLeast(0)
-                if (safeOffset > currentOffset) {
-                    vm.setPlaybackPosition(
-                        itemId = event.itemId,
-                        chunkIndex = safeIndex,
-                        offsetInChunkChars = safeOffset,
-                    )
-                }
-            },
-            onError = {
-                isSpeaking = false
-                isAutoPlaying = false
-                uiMessage = "TTS unavailable. Retry playback."
-            },
-        )
     }
 
     fun normalizedChunkIndex(index: Int): Int {
@@ -631,122 +552,14 @@ fun PlayerScreen(
         setPlaybackPosition(mapped.chunkIndex, mapped.offsetInChunkChars)
     }
 
-    fun playChunk(chunkIndex: Int, offsetInChunkChars: Int) {
-        if (chunks.isEmpty()) return
-        val safeIndex = normalizedChunkIndex(chunkIndex)
-        val chunk = chunks[safeIndex]
-        val maxPlayableOffset = playableChunkLength(chunk)
-        val safeOffset = offsetInChunkChars.coerceIn(0, maxPlayableOffset)
-        val speakText = if (safeOffset > 0 && safeOffset < maxPlayableOffset) {
-            chunk.text.substring(safeOffset)
-        } else {
-            chunk.text
-        }
-        debugLog("play item=$currentItemId chunk=$safeIndex offset=$safeOffset")
-        ttsController.speakChunk(
-            itemId = currentItemId,
-            chunkIndex = safeIndex,
-            text = speakText,
-            baseOffset = safeOffset,
-        )
-        hasStartedPlaybackForCurrentItem = true
-        isSpeaking = true
-    }
-
-    fun startPlaybackAtPosition(position: PlaybackPosition, allowTitleIntro: Boolean) {
-        val safe = normalizedPosition(position)
-        val shouldSpeakTitleFirst = shouldUseTitleIntroOnPlaybackStart(
-            allowTitleIntro = allowTitleIntro,
-            hasStartedPlaybackForItem = hasStartedPlaybackForCurrentItem,
-            speakTitleBeforeArticleEnabled = settings.speakTitleBeforeArticle,
-            startPosition = safe,
-            title = textPayload?.title,
-            chunks = chunks,
-        )
-        if (shouldSpeakTitleFirst) {
-            val title = textPayload?.title?.trim().orEmpty()
-            val openingText = chunks.firstOrNull()?.text.orEmpty()
-            val prefixSkipChars = if (settings.skipDuplicateOpeningAfterTitleIntro) {
-                computeTitlePrefixSkipChars(
-                    title = title,
-                    openingText = openingText,
-                    minMatchedWords = 3,
-                )
-            } else {
-                0
-            }
-            val bodyStart = applyTitlePrefixSkipToStartPosition(
-                start = safe,
-                chunks = chunks,
-                skipCharsFromOpening = prefixSkipChars,
-            )
-            pendingBodyStartAfterTitleIntro = bodyStart
-            isAutoPlaying = true
-            isSpeaking = true
-            ttsController.speakTitleIntro(currentItemId, title)
-        } else {
-            pendingBodyStartAfterTitleIntro = null
-            isAutoPlaying = true
-            playChunk(safe.chunkIndex, safe.offsetInChunkChars)
-        }
-    }
-
-    suspend fun syncProgress(force: Boolean = false) {
-        if (chunks.isEmpty()) return
-        val safePosition = normalizedPosition(currentPosition)
-        val now = System.currentTimeMillis()
-        val totalChars = totalCharsForPercent()
-        val absolute = absoluteCharOffset(totalChars, chunks, safePosition)
-        val percent = calculateCanonicalPercent(totalChars, chunks, safePosition)
-        val advancedPercent = percent > lastSyncedPercent
-        val advancedChars = (absolute - lastSyncedAbsoluteChars) >= PROGRESS_CHAR_STEP
-        val debounced = (now - lastProgressSyncAtMs) < PROGRESS_SYNC_DEBOUNCE_MS
-
-        if (!force && debounced && !advancedPercent && !advancedChars) return
-        if (!force && !advancedPercent && !advancedChars) return
-
-        debugLog("progress item=$currentItemId chunk=${safePosition.chunkIndex} offset=${safePosition.offsetInChunkChars} percent=$percent")
-        vm.postProgress(currentItemId, percent)
-            .onSuccess {
-                if (it.queued) {
-                    uiMessage = "Offline: progress queued"
-                }
-            }
-            .onFailure { error ->
-                if (error is CancellationException) {
-                    return@onFailure
-                }
-                uiMessage = error.message ?: "Progress sync failed"
-            }
-
-        lastProgressSyncAtMs = now
-        lastSyncedPercent = percent
-        lastSyncedAbsoluteChars = absolute
-    }
-
     fun stopSpeaking(forceSync: Boolean) {
-        ttsController.stop()
-        isSpeaking = false
-        isAutoPlaying = false
-        pendingBodyStartAfterTitleIntro = null
-        activeChunkRange = null
-        if (forceSync) {
-            actionScope.launch { syncProgress(force = true) }
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            if (stopPlaybackOnDispose) {
-                ttsController.shutdown()
-            }
-        }
+        vm.playbackPause(forceSync = forceSync)
     }
 
     LaunchedEffect(initialItemId, requestedItemId) {
         if (resolvedInitial) return@LaunchedEffect
         val resolvedId = requestedItemId ?: vm.resolveInitialPlayerItemId(initialItemId)
-        pendingOpenIntent = if (vm.isItemCompletedForPlaybackStart(resolvedId)) {
+        val initialIntent = if (vm.isItemCompletedForPlaybackStart(resolvedId)) {
             PlaybackOpenIntent.Replay
         } else {
             PlaybackOpenIntent.ManualOpen
@@ -754,7 +567,11 @@ fun PlayerScreen(
         continuationLog(
             "initialResolve initial=$initialItemId requested=$requestedItemId resolved=$resolvedId",
         )
-        currentItemId = resolvedId
+        vm.playbackOpenItem(
+            itemId = resolvedId,
+            intent = initialIntent,
+            autoPlayAfterLoad = false,
+        )
         resolvedInitial = true
     }
 
@@ -773,15 +590,17 @@ fun PlayerScreen(
         textPayload = null
         usingCachedText = false
         chunks = emptyList()
-        hasStartedPlaybackForCurrentItem = false
         isLoading = true
-        pendingOpenIntent = if (vm.isItemCompletedForPlaybackStart(target)) {
+        val targetIntent = if (vm.isItemCompletedForPlaybackStart(target)) {
             PlaybackOpenIntent.Replay
         } else {
             PlaybackOpenIntent.ManualOpen
         }
-        currentItemId = target
-        autoPlayAfterLoad = false
+        vm.playbackOpenItem(
+            itemId = target,
+            intent = targetIntent,
+            autoPlayAfterLoad = false,
+        )
     }
 
     LaunchedEffect(locusTapSignal) {
@@ -796,23 +615,21 @@ fun PlayerScreen(
         lastHandledOpenRequestSignal = openRequestSignal
         val target = requestedItemId ?: currentItemId
         if (target != currentItemId) return@LaunchedEffect
-        pendingOpenIntent = if (vm.isItemCompletedForPlaybackStart(target)) {
+        val reloadIntent = if (vm.isItemCompletedForPlaybackStart(target)) {
             PlaybackOpenIntent.Replay
         } else {
             PlaybackOpenIntent.ManualOpen
         }
-        autoPlayAfterLoad = false
+        vm.playbackReloadCurrentItem(reloadIntent)
         preserveVisibleContentOnReload = false
         bodyRevealReady = false
         isLoading = true
-        hasStartedPlaybackForCurrentItem = false
-        reloadNonce += 1
         continuationLog(
-            "openRequest sameItemReload target=$target reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
+            "openRequest sameItemReload target=$target reloadNonce=$reloadNonce autoPlayAfterLoad=false",
         )
         Log.d(
             MANUAL_OPEN_DEBUG_TAG,
-            "openRequest sameItemReload item=$target intent=$pendingOpenIntent reloadNonce=$reloadNonce",
+            "openRequest sameItemReload item=$target intent=$reloadIntent reloadNonce=$reloadNonce",
         )
     }
 
@@ -838,13 +655,6 @@ fun PlayerScreen(
             usingCachedText = false
             chunks = emptyList()
         }
-        pendingDoneEvent = null
-        activeChunkRange = null
-        pendingBodyStartAfterTitleIntro = null
-        lastHandledDoneUtteranceId = null
-        lastSyncedPercent = -1
-        lastSyncedAbsoluteChars = -1
-        lastProgressSyncAtMs = 0L
         lastObservedPercent = -1
         nearEndForcedForItemId = -1
 
@@ -859,60 +669,31 @@ fun PlayerScreen(
                 )
                 preserveVisibleContentOnReload = false
 
-                val knownProgress = vm.knownProgressForItem(currentItemId)
-                val seeded = resolveSeededPlaybackPosition(
-                    knownProgress = knownProgress,
-                    hasChunks = chunks.isNotEmpty(),
-                    openIntent = pendingOpenIntent,
-                    positionForPercent = ::positionForPercent,
-                )
-                val safe = normalizedPosition(seeded)
-                val startSource = resolveOpenStartSource(
-                    openIntent = pendingOpenIntent,
-                    knownProgress = knownProgress,
-                    hasChunks = chunks.isNotEmpty(),
-                )
-                lastOpenDiagnostics = PlaybackOpenDiagnosticsSnapshot(
-                    itemId = currentItemId,
+                vm.playbackApplyLoadedItem(
+                    payload = payload,
+                    chunks = chunks,
                     requestedItemId = requestedItemId,
-                    openIntent = pendingOpenIntent,
-                    startSource = startSource,
-                    knownProgress = knownProgress,
-                    seededPosition = safe,
                 )
                 readerViewportSessionNonce += 1
-                vm.setPlaybackPosition(currentItemId, safe.chunkIndex, safe.offsetInChunkChars)
                 if (!preservingVisibleContent) {
                     readerScrollTriggerSignal += 1
                 }
                 Log.d(
                     MANUAL_OPEN_DEBUG_TAG,
-                    "loadSeed item=$currentItemId intent=$pendingOpenIntent knownProgress=$knownProgress " +
-                        "seededChunk=${safe.chunkIndex} seededOffset=${safe.offsetInChunkChars}",
+                    "loadSeed item=$currentItemId intent=${engineState.openIntent} knownProgress=${vm.knownProgressForItem(currentItemId)} " +
+                        "seededChunk=${engineState.currentPosition.chunkIndex} seededOffset=${engineState.currentPosition.offsetInChunkChars}",
                 )
-                continuationLog(
-                    "openDiagnostics item=$currentItemId requested=$requestedItemId intent=$pendingOpenIntent " +
-                        "source=$startSource knownProgress=$knownProgress seededChunk=${safe.chunkIndex} seededOffset=${safe.offsetInChunkChars} " +
-                        "handoffPending=$waitingForRequestedItem stalePayload=$hasStalePayloadForCurrentItem settled=$transitionSettled",
-                )
-                pendingOpenIntent = PlaybackOpenIntent.ManualOpen
-
                 if (autoPlayAfterLoad && chunks.isNotEmpty()) {
                     continuationLog(
-                        "loadItem autoplay item=$currentItemId chunk=${safe.chunkIndex} offset=${safe.offsetInChunkChars}",
+                        "loadItem autoplay item=$currentItemId chunk=${engineState.currentPosition.chunkIndex} offset=${engineState.currentPosition.offsetInChunkChars}",
                     )
-                    autoPlayAfterLoad = false
-                    startPlaybackAtPosition(
-                        position = safe,
-                        allowTitleIntro = true,
-                    )
+                    vm.playbackMaybeAutoPlayAfterLoad()
                 }
             }
             .onFailure { err ->
                 if (err is CancellationException) {
                     return@onFailure
                 }
-                pendingOpenIntent = PlaybackOpenIntent.ManualOpen
                 uiMessage = if (err is ApiException && err.statusCode == 401) {
                     "Unauthorized-check token"
                 } else if (isNetworkError(err)) {
@@ -930,96 +711,16 @@ fun PlayerScreen(
         isLoading = false
     }
 
-    LaunchedEffect(currentItemId, currentPosition.chunkIndex, currentPosition.offsetInChunkChars, chunks.size) {
-        if (chunks.isNotEmpty()) {
-            syncProgress(force = false)
-        }
-    }
-
-    LaunchedEffect(pendingDoneEvent, isAutoPlaying, chunks.size) {
-        val event = pendingDoneEvent ?: return@LaunchedEffect
-        if (event.chunkIndex == TITLE_INTRO_CHUNK_INDEX) {
-            val pendingStart = pendingBodyStartAfterTitleIntro
-            pendingDoneEvent = null
-            if (event.itemId == currentItemId && pendingStart != null) {
-                pendingBodyStartAfterTitleIntro = null
-                playChunk(pendingStart.chunkIndex, pendingStart.offsetInChunkChars)
-            }
-            return@LaunchedEffect
-        }
-        continuationLog(
-            "doneEffect start eventItem=${event.itemId} eventChunk=${event.chunkIndex} " +
-                "currentItem=$currentItemId isAutoPlaying=$isAutoPlaying chunks=${chunks.size} " +
-                "currentChunk=${currentPosition.chunkIndex}",
-        )
-        if (!isAutoPlaying || chunks.isEmpty()) {
-            continuationLog("doneEffect earlyExit autoPlaying=$isAutoPlaying chunks=${chunks.size}")
-            return@LaunchedEffect
-        }
-        val safe = normalizedPosition(currentPosition)
-        val transition = applyDoneTransition(
-            event = event,
-            currentItemId = currentItemId,
-            currentPosition = safe,
-            chunkCount = chunks.size,
-            lastHandledUtteranceId = lastHandledDoneUtteranceId,
-        )
-        continuationLog(
-            "doneEffect transition shouldHandle=${transition.shouldHandle} " +
-                "playNextChunk=${transition.shouldPlayNextChunk} reachedEnd=${transition.reachedEnd} " +
-                "nextChunk=${transition.nextPosition.chunkIndex}",
-        )
-        if (!transition.shouldHandle) {
-            pendingDoneEvent = null
-            return@LaunchedEffect
-        }
-
-        lastHandledDoneUtteranceId = transition.handledUtteranceId
-        pendingDoneEvent = null
-
-        if (transition.shouldPlayNextChunk) {
-            val next = transition.nextPosition.chunkIndex
-            debugLog("advance chunk ${safe.chunkIndex} -> $next")
-            continuationLog("doneEffect nextChunk currentItem=$currentItemId nextChunk=$next")
-            val finishedChunk = chunks[safe.chunkIndex]
-            setPlaybackPosition(safe.chunkIndex, playableChunkLength(finishedChunk))
-            setPlaybackPosition(next, 0)
-            playChunk(next, 0)
-        } else if (transition.reachedEnd) {
-            debugLog("end of item chunk=${safe.chunkIndex}")
-            continuationLog("doneEffect reachedEnd currentItem=$currentItemId playlistScoped=${vm.isCurrentSessionPlaylistScoped()}")
-            if (shouldPlayEndOfArticleCompletionCue(settings.playCompletionCueAtArticleEnd)) {
-                ttsController.playCompletionCue()
-            }
-            isSpeaking = false
-            isAutoPlaying = false
-            actionScope.launch { syncProgress(force = true) }
-            val playlistScoped = vm.isCurrentSessionPlaylistScoped()
-            val shouldAutoAdvance = vm.shouldAutoAdvanceAfterCompletion()
-            if (playlistScoped || shouldAutoAdvance) {
-                val finishedItemId = currentItemId
-                actionScope.launch {
-                    val nextId = if (playlistScoped) {
-                        vm.nextPlaylistScopedSessionItemId(finishedItemId)
-                    } else {
-                        vm.nextSessionItemId(finishedItemId)
-                    }
-                    continuationLog("doneEffect resolvedNextId currentItem=$finishedItemId nextId=$nextId")
-                    if (nextId == null) {
-                        uiMessage = "Completed"
-                    } else {
-                        stopSpeaking(forceSync = false)
-                        continuationLog("doneEffect switching currentItem $finishedItemId -> $nextId")
-                        pendingOpenIntent = PlaybackOpenIntent.AutoContinue
-                        currentItemId = nextId
-                        vm.setPlaybackPosition(nextId, 0, 0)
-                        autoPlayAfterLoad = true
-                        continuationLog("doneEffect navigating nextId=$nextId")
-                        onOpenItem(nextId)
-                    }
+    LaunchedEffect(Unit) {
+        vm.playbackEngineEvents.collect { event ->
+            when (event) {
+                is PlaybackEngineEvent.NavigateToItem -> {
+                    continuationLog("engineEvent navigate nextId=${event.itemId}")
+                    onOpenItem(event.itemId)
                 }
-            } else {
-                uiMessage = "Completed"
+                is PlaybackEngineEvent.UiMessage -> {
+                    uiMessage = event.message
+                }
             }
         }
     }
@@ -1061,18 +762,13 @@ fun PlayerScreen(
     }
 
     LaunchedEffect(settings.playbackSpeed, currentItemId, safePosition.chunkIndex, safePosition.offsetInChunkChars, chunks.size) {
-        ttsController.setSpeechRate(settings.playbackSpeed)
         if (lastAppliedSpeed == settings.playbackSpeed) return@LaunchedEffect
         lastAppliedSpeed = settings.playbackSpeed
-        if ((isSpeaking || isAutoPlaying) && chunks.isNotEmpty()) {
-            stopSpeaking(forceSync = false)
-            isAutoPlaying = true
-            playChunk(safePosition.chunkIndex, safePosition.offsetInChunkChars)
-        }
+        vm.playbackApplyCurrentSettings()
     }
 
     LaunchedEffect(settings.ttsVoiceName) {
-        ttsController.setVoiceName(settings.ttsVoiceName)
+        vm.playbackApplyCurrentSettings()
     }
 
     LaunchedEffect(currentItemId, currentPercent) {
@@ -1152,19 +848,21 @@ fun PlayerScreen(
                 }
                 val targetPosition = positionForPercent(targetPercent)
                 setPlaybackPosition(targetPosition.chunkIndex, targetPosition.offsetInChunkChars)
-                if (isSpeaking || isAutoPlaying) {
-                    isAutoPlaying = true
-                    playChunk(targetPosition.chunkIndex, targetPosition.offsetInChunkChars)
-                }
+                vm.playbackSeekToChunkOffset(
+                    chunkIndex = targetPosition.chunkIndex,
+                    offsetInChunkChars = targetPosition.offsetInChunkChars,
+                    keepPlaying = isSpeaking || isAutoPlaying,
+                )
             },
             onPreviousSegment = {
                 if (chunks.isNotEmpty() && safePosition.chunkIndex > 0) {
                     val target = safePosition.chunkIndex - 1
                     setPlaybackPosition(target, 0)
-                    if (isSpeaking || isAutoPlaying) {
-                        isAutoPlaying = true
-                        playChunk(target, 0)
-                    }
+                    vm.playbackSeekToChunkOffset(
+                        chunkIndex = target,
+                        offsetInChunkChars = 0,
+                        keepPlaying = isSpeaking || isAutoPlaying,
+                    )
                 }
             },
             onPlayPause = {
@@ -1179,32 +877,24 @@ fun PlayerScreen(
                         nearEndForcedForItemId = -1
                         lastObservedPercent = 0
                     }
-                    isAutoPlaying = true
-                    val positionToPlay = if (restartFromStart) {
-                        PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
-                    } else {
-                        livePosition
-                    }
                     Log.d(
                         MANUAL_OPEN_DEBUG_TAG,
                         "playTap item=$currentItemId restart=$restartFromStart " +
-                            "playChunk=${positionToPlay.chunkIndex} playOffset=${positionToPlay.offsetInChunkChars}",
+                            "playChunk=${livePosition.chunkIndex} playOffset=${livePosition.offsetInChunkChars}",
                     )
                     readerScrollTriggerSignal += 1
-                    startPlaybackAtPosition(
-                        position = positionToPlay,
-                        allowTitleIntro = true,
-                    )
+                    vm.playbackPlay()
                 }
             },
             onNextSegment = {
                 if (chunks.isNotEmpty() && safePosition.chunkIndex < chunks.lastIndex) {
                     val target = safePosition.chunkIndex + 1
                     setPlaybackPosition(target, 0)
-                    if (isSpeaking || isAutoPlaying) {
-                        isAutoPlaying = true
-                        playChunk(target, 0)
-                    }
+                    vm.playbackSeekToChunkOffset(
+                        chunkIndex = target,
+                        offsetInChunkChars = 0,
+                        keepPlaying = isSpeaking || isAutoPlaying,
+                    )
                 }
             },
             onPreviousItem = {
@@ -1214,26 +904,18 @@ fun PlayerScreen(
                         uiMessage = "No previous item"
                     } else {
                         stopSpeaking(forceSync = true)
-                        currentItemId = prevId
                         vm.setPlaybackPosition(prevId, 0, 0)
-                        autoPlayAfterLoad = true
+                        vm.playbackOpenItem(
+                            itemId = prevId,
+                            intent = PlaybackOpenIntent.AutoContinue,
+                            autoPlayAfterLoad = true,
+                        )
                         onOpenItem(prevId)
                     }
                 }
             },
             onNextItem = {
-                actionScope.launch {
-                    val nextId = vm.nextSessionItemId(currentItemId)
-                    if (nextId == null) {
-                        uiMessage = "No next item"
-                    } else {
-                        stopSpeaking(forceSync = true)
-                        currentItemId = nextId
-                        vm.setPlaybackPosition(nextId, 0, 0)
-                        autoPlayAfterLoad = true
-                        onOpenItem(nextId)
-                    }
-                }
+                vm.playbackAdvanceToNextItem()
             },
         )
     }
@@ -1346,7 +1028,7 @@ fun PlayerScreen(
                                         .onSuccess {
                                             localDonePercentOverride = -1
                                             preserveVisibleContentOnReload = true
-                                            reloadNonce += 1
+                                            vm.playbackReloadCurrentItem(PlaybackOpenIntent.ManualOpen)
                                             hasRefreshProblem = false
                                         }
                                         .onFailure { error ->
@@ -1486,7 +1168,7 @@ fun PlayerScreen(
                                                 .onSuccess {
                                                     localDonePercentOverride = -1
                                                     preserveVisibleContentOnReload = true
-                                                    reloadNonce += 1
+                                                    vm.playbackReloadCurrentItem(PlaybackOpenIntent.ManualOpen)
                                                     hasRefreshProblem = false
                                                 }
                                                 .onFailure { error ->

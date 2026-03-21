@@ -93,9 +93,11 @@ import com.mimeo.android.model.ConnectivityDiagnosticRow
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.FolderSummary
+import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaylistEntrySummary
+import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PendingManualSaveItem
@@ -132,6 +134,12 @@ import com.mimeo.android.ui.settings.passwordChangeSuccessMessage
 import com.mimeo.android.ui.settings.resolvePasswordChangeError
 import com.mimeo.android.ui.settings.validatePasswordChangeInput
 import com.mimeo.android.ui.player.PlayerScreen
+import com.mimeo.android.ui.player.PlaybackEngine
+import com.mimeo.android.ui.player.PlaybackEngineEvent
+import com.mimeo.android.ui.player.PlaybackEngineHost
+import com.mimeo.android.ui.player.PlaybackEngineSettings
+import com.mimeo.android.ui.player.PlaybackEngineState
+import com.mimeo.android.ui.player.PlaybackOpenIntent
 import com.mimeo.android.ui.playlists.PlaylistsScreen
 import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.ui.signin.SignInScreen
@@ -151,6 +159,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -425,6 +434,39 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _playbackPositionByItem = MutableStateFlow<Map<Int, PlaybackPosition>>(emptyMap())
     val playbackPositionByItem: StateFlow<Map<Int, PlaybackPosition>> = _playbackPositionByItem.asStateFlow()
+    private val playbackEngine = PlaybackEngine(
+        context = application.applicationContext,
+        scope = viewModelScope,
+        host = object : PlaybackEngineHost {
+            override fun knownProgressForItem(itemId: Int): Int = this@AppViewModel.knownProgressForItem(itemId)
+            override fun knownFurthestForItem(itemId: Int): Int = this@AppViewModel.knownFurthestForItem(itemId)
+            override fun getPlaybackPosition(itemId: Int): PlaybackPosition = this@AppViewModel.getPlaybackPosition(itemId)
+            override fun setPlaybackPosition(itemId: Int, chunkIndex: Int, offsetInChunkChars: Int) {
+                this@AppViewModel.setPlaybackPosition(itemId, chunkIndex, offsetInChunkChars)
+            }
+
+            override suspend fun postProgress(itemId: Int, percent: Int): Result<*> {
+                return this@AppViewModel.postProgress(itemId, percent)
+            }
+
+            override fun shouldAutoAdvanceAfterCompletion(): Boolean = this@AppViewModel.shouldAutoAdvanceAfterCompletion()
+            override fun isCurrentSessionPlaylistScoped(): Boolean = this@AppViewModel.isCurrentSessionPlaylistScoped()
+            override fun currentPlaybackSettings(): PlaybackEngineSettings {
+                return PlaybackEngineSettings(
+                    speakTitleBeforeArticle = settings.value.speakTitleBeforeArticle,
+                    skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
+                    playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
+                    autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
+                    playbackSpeed = settings.value.playbackSpeed,
+                )
+            }
+            override suspend fun nextSessionItemId(currentId: Int): Int? = this@AppViewModel.nextSessionItemId(currentId)
+            override suspend fun nextPlaylistScopedSessionItemId(currentId: Int): Int? =
+                this@AppViewModel.nextPlaylistScopedSessionItemId(currentId)
+        },
+    )
+    val playbackEngineState: StateFlow<PlaybackEngineState> = playbackEngine.state
+    val playbackEngineEvents: SharedFlow<PlaybackEngineEvent> = playbackEngine.events
 
     private val _nowPlayingSession = MutableStateFlow<NowPlayingSession?>(null)
     val nowPlayingSession: StateFlow<NowPlayingSession?> = _nowPlayingSession.asStateFlow()
@@ -541,6 +583,70 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             refreshFolders()
         }
         startConnectivityMonitoring()
+    }
+
+    fun playbackOpenItem(itemId: Int, intent: PlaybackOpenIntent, autoPlayAfterLoad: Boolean = false) {
+        playbackEngine.openItem(itemId, intent, autoPlayAfterLoad)
+    }
+
+    fun playbackReloadCurrentItem(intent: PlaybackOpenIntent) {
+        playbackEngine.reloadCurrentItem(intent)
+    }
+
+    fun playbackApplyLoadedItem(payload: ItemTextResponse, chunks: List<PlaybackChunk>, requestedItemId: Int?) {
+        playbackEngine.applyLoadedItem(payload = payload, loadedChunks = chunks, requestedItemId = requestedItemId)
+    }
+
+    fun playbackMaybeAutoPlayAfterLoad() {
+        playbackEngine.maybeAutoPlayAfterLoad(
+            settings = PlaybackEngineSettings(
+                speakTitleBeforeArticle = settings.value.speakTitleBeforeArticle,
+                skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
+                playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
+                autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
+                playbackSpeed = settings.value.playbackSpeed,
+            ),
+        )
+    }
+
+    fun playbackPlay() {
+        playbackEngine.play(
+            settings = PlaybackEngineSettings(
+                speakTitleBeforeArticle = settings.value.speakTitleBeforeArticle,
+                skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
+                playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
+                autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
+                playbackSpeed = settings.value.playbackSpeed,
+            ),
+        )
+    }
+
+    fun playbackApplyCurrentSettings() {
+        playbackEngine.applyPlaybackSpeed(
+            settings = PlaybackEngineSettings(
+                speakTitleBeforeArticle = settings.value.speakTitleBeforeArticle,
+                skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
+                playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
+                autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
+                playbackSpeed = settings.value.playbackSpeed,
+            ),
+        )
+    }
+
+    fun playbackPause(forceSync: Boolean) {
+        playbackEngine.pause(forceSync = forceSync)
+    }
+
+    fun playbackSeekToChunkOffset(chunkIndex: Int, offsetInChunkChars: Int, keepPlaying: Boolean) {
+        playbackEngine.seekToChunkOffset(
+            chunkIndex = chunkIndex,
+            offsetInChunkChars = offsetInChunkChars,
+            keepPlaying = keepPlaying,
+        )
+    }
+
+    fun playbackAdvanceToNextItem() {
+        playbackEngine.advanceToNextItem()
     }
 
     fun saveSettings(
@@ -2719,6 +2825,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         connectivityCallback = null
+        playbackEngine.shutdown()
         super.onCleared()
     }
 
