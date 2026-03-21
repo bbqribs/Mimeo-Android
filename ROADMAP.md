@@ -39,6 +39,7 @@
 - [x] Player/reader handoff polish: reduced stale-content flashes and smoother queue-tap -> Locus transition.
 - [x] Autodownload consistency + durability: newly surfaced item targeting, explicit-refresh re-attempt behavior, workerization with backoff, and diagnostics surface.
 - [x] Up Next transition clarity follow-up: explicit failed-processing/no-active-content row states and clearer pending -> saved -> cached visibility after retry/autodownload.
+- [x] Mimeo Control Phase 2 Slice 1: app-scoped `PlaybackEngine` extraction shipped; live playback ownership (TTS lifecycle, chunk callbacks, continuation decisions, progress sync triggers) no longer depends on `PlayerScreen` lifecycle.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
@@ -63,6 +64,7 @@
 - [x] Username/password sign-in flow — shipped per `docs/ANDROID_AUTH_PHASE3_SPEC.md` slice plan (gate, recovery, sign-out, settings coexistence).
 
 ### Next tickets
+0. [ ] Mimeo Control Phase 3 foundation (active): Android media-session/background playback integration slice (MediaSession + notification + transport controls + audio focus), built on shipped app-scoped `PlaybackEngine`.
 1. [ ] Offline/download/no-active-content follow-up: make failed-processing/no-active-content rows explicit in Up Next (distinct icon/state), keep retry outcomes visible, and avoid pending-row disappearance gaps.
 2. [ ] Autodownload worker follow-up: tighten no-active-content persistence and queue/list replacement timing so successful retries transition cleanly from pending -> saved -> cached without confusing gaps.
 3. [ ] TTS QoL follow-up: optional completion tone profile tuning + lightweight title-intro controls (per-mode/per-context guardrails, including mid-article resume behavior).
