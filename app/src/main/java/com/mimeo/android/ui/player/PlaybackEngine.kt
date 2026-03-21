@@ -300,7 +300,12 @@ class PlaybackEngine(
                 syncProgress(force = true)
                 if (playlistScoped || shouldAutoAdvance) {
                     val nextId = if (playlistScoped) {
-                        host.nextPlaylistScopedSessionItemId(current.currentItemId)
+                        val scopedNextId = host.nextPlaylistScopedSessionItemId(current.currentItemId)
+                        if (scopedNextId == null && shouldAutoAdvance) {
+                            host.nextSessionItemId(current.currentItemId)
+                        } else {
+                            scopedNextId
+                        }
                     } else {
                         host.nextSessionItemId(current.currentItemId)
                     }
