@@ -47,11 +47,9 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                 MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
                     MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS,
             )
+            setPlaybackToLocal(AudioManager.STREAM_MUSIC)
             setMediaButtonReceiver(
-                MediaButtonReceiver.buildMediaButtonPendingIntent(
-                    this@PlaybackService,
-                    PlaybackStateCompat.ACTION_PLAY_PAUSE,
-                ),
+                mediaButtonServicePendingIntent(),
             )
             setCallback(
                 object : MediaSessionCompat.Callback() {
@@ -80,6 +78,9 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
+            Intent.ACTION_MEDIA_BUTTON -> {
+                MediaButtonReceiver.handleIntent(mediaSession, intent)
+            }
             ACTION_PLAY -> dispatchPlay()
             ACTION_PAUSE -> dispatchPause()
             ACTION_TOGGLE_PLAY_PAUSE -> dispatchToggle()
@@ -241,6 +242,16 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         return PendingIntent.getService(
             this,
             action.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun mediaButtonServicePendingIntent(): PendingIntent {
+        val intent = Intent(Intent.ACTION_MEDIA_BUTTON).setClass(this, PlaybackService::class.java)
+        return PendingIntent.getService(
+            this,
+            0x4D42, // "MB"
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
