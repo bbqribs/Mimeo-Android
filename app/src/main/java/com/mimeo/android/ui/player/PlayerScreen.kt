@@ -612,6 +612,9 @@ fun PlayerScreen(
     LaunchedEffect(openRequestSignal, resolvedInitial, requestedItemId) {
         if (!resolvedInitial) return@LaunchedEffect
         if (openRequestSignal == lastHandledOpenRequestSignal) return@LaunchedEffect
+        // During auto-continue handoff we already have a queued open+autoplay for the next item.
+        // A same-item reload here would clear autoPlayAfterLoad and suppress continuation playback.
+        if (autoPlayAfterLoad) return@LaunchedEffect
         lastHandledOpenRequestSignal = openRequestSignal
         val target = requestedItemId ?: currentItemId
         if (target != currentItemId) return@LaunchedEffect
