@@ -91,11 +91,17 @@ fun SettingsScreen(
     var speakTitleBeforeArticle by remember(settings.speakTitleBeforeArticle) {
         mutableStateOf(settings.speakTitleBeforeArticle)
     }
+    var speakTitleBeforeArticleOnAutoplay by remember(settings.speakTitleBeforeArticleOnAutoplay) {
+        mutableStateOf(settings.speakTitleBeforeArticleOnAutoplay)
+    }
     var skipDuplicateOpeningAfterTitleIntro by remember(settings.skipDuplicateOpeningAfterTitleIntro) {
         mutableStateOf(settings.skipDuplicateOpeningAfterTitleIntro)
     }
     var playCompletionCueAtArticleEnd by remember(settings.playCompletionCueAtArticleEnd) {
         mutableStateOf(settings.playCompletionCueAtArticleEnd)
+    }
+    var playCompletionCueOnAutoplay by remember(settings.playCompletionCueOnAutoplay) {
+        mutableStateOf(settings.playCompletionCueOnAutoplay)
     }
     var persistentPlayerEnabled by remember(settings.persistentPlayerEnabled) {
         mutableStateOf(settings.persistentPlayerEnabled)
@@ -188,8 +194,10 @@ fun SettingsScreen(
             token = token,
             autoAdvanceOnCompletion = autoAdvance,
             speakTitleBeforeArticle = speakTitleBeforeArticle,
+            speakTitleBeforeArticleOnAutoplay = speakTitleBeforeArticleOnAutoplay,
             skipDuplicateOpeningAfterTitleIntro = skipDuplicateOpeningAfterTitleIntro,
             playCompletionCueAtArticleEnd = playCompletionCueAtArticleEnd,
+            playCompletionCueOnAutoplay = playCompletionCueOnAutoplay,
             persistentPlayerEnabled = persistentPlayerEnabled,
             autoScrollWhileListening = autoScrollWhileListening,
             continuousNowPlayingMarquee = continuousNowPlayingMarquee,
@@ -712,6 +720,30 @@ fun SettingsScreen(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
+                        Text("Speak title on autoplay continuation")
+                        Text(
+                            text = "When off, auto-advanced items start body playback directly.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = speakTitleBeforeArticleOnAutoplay,
+                        onCheckedChange = {
+                            speakTitleBeforeArticleOnAutoplay = it
+                            vm.saveSpeakTitleBeforeArticleOnAutoplay(it)
+                        },
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
                         Text("Skip duplicated opening after title")
                         Text(
                             text = "When title intro is on, skip matching opening words in body playback.",
@@ -820,6 +852,30 @@ fun SettingsScreen(
                         onCheckedChange = {
                             playCompletionCueAtArticleEnd = it
                             vm.savePlayCompletionCueAtArticleEnd(it)
+                        },
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text("Play completion cue when auto-advancing")
+                        Text(
+                            text = "When off, cue plays only when playback stops on the current item.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = playCompletionCueOnAutoplay,
+                        onCheckedChange = {
+                            playCompletionCueOnAutoplay = it
+                            vm.savePlayCompletionCueOnAutoplay(it)
                         },
                     )
                 }

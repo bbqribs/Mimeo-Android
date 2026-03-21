@@ -14,6 +14,8 @@ class PlaybackTitleIntroTest {
             allowTitleIntro = true,
             hasStartedPlaybackForItem = false,
             speakTitleBeforeArticleEnabled = false,
+            speakTitleBeforeArticleOnAutoplayEnabled = false,
+            openIntent = PlaybackOpenIntent.ManualOpen,
             startPosition = PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0),
             title = "Example title",
             chunks = listOf(sampleChunk("Body starts here.")),
@@ -28,12 +30,30 @@ class PlaybackTitleIntroTest {
             allowTitleIntro = true,
             hasStartedPlaybackForItem = false,
             speakTitleBeforeArticleEnabled = true,
+            speakTitleBeforeArticleOnAutoplayEnabled = true,
+            openIntent = PlaybackOpenIntent.AutoContinue,
             startPosition = PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0),
             title = "Example title",
             chunks = listOf(sampleChunk("Body starts here.")),
         )
 
         assertTrue(shouldUse)
+    }
+
+    @Test
+    fun `autoplay title intro disabled by default control`() {
+        val shouldUse = shouldUseTitleIntroOnPlaybackStart(
+            allowTitleIntro = true,
+            hasStartedPlaybackForItem = false,
+            speakTitleBeforeArticleEnabled = true,
+            speakTitleBeforeArticleOnAutoplayEnabled = false,
+            openIntent = PlaybackOpenIntent.AutoContinue,
+            startPosition = PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0),
+            title = "Example title",
+            chunks = listOf(sampleChunk("Body starts here.")),
+        )
+
+        assertFalse(shouldUse)
     }
 
     @Test
@@ -168,6 +188,8 @@ class PlaybackTitleIntroTest {
             allowTitleIntro = true,
             hasStartedPlaybackForItem = false,
             speakTitleBeforeArticleEnabled = true,
+            speakTitleBeforeArticleOnAutoplayEnabled = true,
+            openIntent = PlaybackOpenIntent.ManualOpen,
             startPosition = PlaybackPosition(chunkIndex = 2, offsetInChunkChars = 10),
             title = "Example title",
             chunks = listOf(sampleChunk("Example title then body.")),

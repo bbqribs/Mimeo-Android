@@ -9,8 +9,34 @@ import org.junit.Test
 class PlaybackTransitionTest {
     @Test
     fun completionCueToggleControlsCueEligibility() {
-        assertFalse(shouldPlayEndOfArticleCompletionCue(enabled = false))
-        assertTrue(shouldPlayEndOfArticleCompletionCue(enabled = true))
+        assertFalse(
+            shouldPlayEndOfArticleCompletionCue(
+                enabled = false,
+                willAutoAdvance = false,
+                enabledDuringAutoAdvance = false,
+            ),
+        )
+        assertTrue(
+            shouldPlayEndOfArticleCompletionCue(
+                enabled = true,
+                willAutoAdvance = false,
+                enabledDuringAutoAdvance = false,
+            ),
+        )
+        assertFalse(
+            shouldPlayEndOfArticleCompletionCue(
+                enabled = true,
+                willAutoAdvance = true,
+                enabledDuringAutoAdvance = false,
+            ),
+        )
+        assertTrue(
+            shouldPlayEndOfArticleCompletionCue(
+                enabled = true,
+                willAutoAdvance = true,
+                enabledDuringAutoAdvance = true,
+            ),
+        )
     }
 
     @Test

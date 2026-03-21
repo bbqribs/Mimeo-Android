@@ -44,10 +44,14 @@ class SettingsStore(private val context: Context) {
         booleanPreferencesKey("auto_advance_on_completion")
     private val speakTitleBeforeArticleKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("speak_title_before_article")
+    private val speakTitleBeforeArticleOnAutoplayKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("speak_title_before_article_on_autoplay")
     private val skipDuplicateOpeningAfterTitleIntroKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("skip_duplicate_opening_after_title_intro")
     private val playCompletionCueAtArticleEndKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("play_completion_cue_at_article_end")
+    private val playCompletionCueOnAutoplayKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("play_completion_cue_on_autoplay")
     private val persistentPlayerEnabledKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("persistent_player_enabled")
     private val autoScrollWhileListeningKey: Preferences.Key<Boolean> =
@@ -124,8 +128,10 @@ class SettingsStore(private val context: Context) {
             apiToken = persistedToken,
             autoAdvanceOnCompletion = prefs[autoAdvanceOnCompletionKey] ?: false,
             speakTitleBeforeArticle = prefs[speakTitleBeforeArticleKey] ?: false,
+            speakTitleBeforeArticleOnAutoplay = prefs[speakTitleBeforeArticleOnAutoplayKey] ?: false,
             skipDuplicateOpeningAfterTitleIntro = prefs[skipDuplicateOpeningAfterTitleIntroKey] ?: true,
             playCompletionCueAtArticleEnd = prefs[playCompletionCueAtArticleEndKey] ?: false,
+            playCompletionCueOnAutoplay = prefs[playCompletionCueOnAutoplayKey] ?: false,
             persistentPlayerEnabled = prefs[persistentPlayerEnabledKey] ?: true,
             autoScrollWhileListening = prefs[autoScrollWhileListeningKey] ?: true,
             continuousNowPlayingMarquee = prefs[continuousNowPlayingMarqueeKey] ?: true,
@@ -180,8 +186,10 @@ class SettingsStore(private val context: Context) {
         apiToken: String,
         autoAdvanceOnCompletion: Boolean,
         speakTitleBeforeArticle: Boolean,
+        speakTitleBeforeArticleOnAutoplay: Boolean,
         skipDuplicateOpeningAfterTitleIntro: Boolean,
         playCompletionCueAtArticleEnd: Boolean,
+        playCompletionCueOnAutoplay: Boolean,
         persistentPlayerEnabled: Boolean,
         autoScrollWhileListening: Boolean,
         continuousNowPlayingMarquee: Boolean,
@@ -216,8 +224,10 @@ class SettingsStore(private val context: Context) {
             prefs[authTokenVersionKey] = (prefs[authTokenVersionKey] ?: 0) + 1
             prefs[autoAdvanceOnCompletionKey] = autoAdvanceOnCompletion
             prefs[speakTitleBeforeArticleKey] = speakTitleBeforeArticle
+            prefs[speakTitleBeforeArticleOnAutoplayKey] = speakTitleBeforeArticleOnAutoplay
             prefs[skipDuplicateOpeningAfterTitleIntroKey] = skipDuplicateOpeningAfterTitleIntro
             prefs[playCompletionCueAtArticleEndKey] = playCompletionCueAtArticleEnd
+            prefs[playCompletionCueOnAutoplayKey] = playCompletionCueOnAutoplay
             prefs[persistentPlayerEnabledKey] = persistentPlayerEnabled
             prefs[autoScrollWhileListeningKey] = autoScrollWhileListening
             prefs[continuousNowPlayingMarqueeKey] = continuousNowPlayingMarquee
@@ -334,9 +344,21 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun saveSpeakTitleBeforeArticleOnAutoplay(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[speakTitleBeforeArticleOnAutoplayKey] = enabled
+        }
+    }
+
     suspend fun savePlayCompletionCueAtArticleEnd(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[playCompletionCueAtArticleEndKey] = enabled
+        }
+    }
+
+    suspend fun savePlayCompletionCueOnAutoplay(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[playCompletionCueOnAutoplayKey] = enabled
         }
     }
 

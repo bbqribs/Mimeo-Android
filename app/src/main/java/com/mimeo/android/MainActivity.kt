@@ -552,8 +552,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         token: String,
         autoAdvanceOnCompletion: Boolean,
         speakTitleBeforeArticle: Boolean,
+        speakTitleBeforeArticleOnAutoplay: Boolean,
         skipDuplicateOpeningAfterTitleIntro: Boolean,
         playCompletionCueAtArticleEnd: Boolean,
+        playCompletionCueOnAutoplay: Boolean,
         persistentPlayerEnabled: Boolean,
         autoScrollWhileListening: Boolean,
         continuousNowPlayingMarquee: Boolean,
@@ -575,8 +577,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 apiToken = token,
                 autoAdvanceOnCompletion = autoAdvanceOnCompletion,
                 speakTitleBeforeArticle = speakTitleBeforeArticle,
+                speakTitleBeforeArticleOnAutoplay = speakTitleBeforeArticleOnAutoplay,
                 skipDuplicateOpeningAfterTitleIntro = skipDuplicateOpeningAfterTitleIntro,
                 playCompletionCueAtArticleEnd = playCompletionCueAtArticleEnd,
+                playCompletionCueOnAutoplay = playCompletionCueOnAutoplay,
                 persistentPlayerEnabled = persistentPlayerEnabled,
                 autoScrollWhileListening = autoScrollWhileListening,
                 continuousNowPlayingMarquee = continuousNowPlayingMarquee,
@@ -621,8 +625,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 apiToken = settings.value.apiToken,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
                 speakTitleBeforeArticle = settings.value.speakTitleBeforeArticle,
+                speakTitleBeforeArticleOnAutoplay = settings.value.speakTitleBeforeArticleOnAutoplay,
                 skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
                 playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
+                playCompletionCueOnAutoplay = settings.value.playCompletionCueOnAutoplay,
                 persistentPlayerEnabled = settings.value.persistentPlayerEnabled,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
@@ -660,8 +666,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 apiToken = settings.value.apiToken,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
                 speakTitleBeforeArticle = settings.value.speakTitleBeforeArticle,
+                speakTitleBeforeArticleOnAutoplay = settings.value.speakTitleBeforeArticleOnAutoplay,
                 skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
                 playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
+                playCompletionCueOnAutoplay = settings.value.playCompletionCueOnAutoplay,
                 persistentPlayerEnabled = settings.value.persistentPlayerEnabled,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
@@ -720,11 +728,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun saveSpeakTitleBeforeArticleOnAutoplay(enabled: Boolean) {
+        val current = settings.value
+        _settings.value = current.copy(speakTitleBeforeArticleOnAutoplay = enabled)
+        viewModelScope.launch {
+            settingsStore.saveSpeakTitleBeforeArticleOnAutoplay(enabled)
+        }
+    }
+
     fun savePlayCompletionCueAtArticleEnd(enabled: Boolean) {
         val current = settings.value
         _settings.value = current.copy(playCompletionCueAtArticleEnd = enabled)
         viewModelScope.launch {
             settingsStore.savePlayCompletionCueAtArticleEnd(enabled)
+        }
+    }
+
+    fun savePlayCompletionCueOnAutoplay(enabled: Boolean) {
+        val current = settings.value
+        _settings.value = current.copy(playCompletionCueOnAutoplay = enabled)
+        viewModelScope.launch {
+            settingsStore.savePlayCompletionCueOnAutoplay(enabled)
         }
     }
 
