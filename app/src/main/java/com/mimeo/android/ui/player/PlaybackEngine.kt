@@ -297,7 +297,9 @@ class PlaybackEngine(
                     isSpeaking = false,
                     isAutoPlaying = false,
                 )
-                syncProgress(force = true)
+                scope.launch {
+                    syncProgress(force = true)
+                }
                 if (playlistScoped || shouldAutoAdvance) {
                     val nextId = if (playlistScoped) {
                         val scopedNextId = host.nextPlaylistScopedSessionItemId(current.currentItemId)
