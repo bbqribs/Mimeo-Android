@@ -2,8 +2,10 @@ package com.mimeo.android
 
 import android.Manifest
 import android.app.Application
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
@@ -117,6 +119,9 @@ import com.mimeo.android.repository.OfflineReadyCandidate
 import com.mimeo.android.repository.PlaylistMembershipToggleResult
 import com.mimeo.android.repository.PlaybackRepository
 import com.mimeo.android.repository.resolveOfflineReadyItemIds
+import com.mimeo.android.player.PlaybackService
+import com.mimeo.android.player.PlaybackServiceBridge
+import com.mimeo.android.player.PlaybackServiceSnapshot
 import com.mimeo.android.share.ShareSaveCoordinator
 import com.mimeo.android.share.ShareSaveRefreshBus
 import com.mimeo.android.share.ShareSaveResult
@@ -467,6 +472,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     )
     val playbackEngineState: StateFlow<PlaybackEngineState> = playbackEngine.state
     val playbackEngineEvents: SharedFlow<PlaybackEngineEvent> = playbackEngine.events
+    private var playbackServiceBinder: PlaybackService.LocalBinder? = null
+    private var playbackServiceBound: Boolean = false
+    private val playbackServiceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: android.os.IBinder?) {
+            playbackServiceBinder = service as? PlaybackService.LocalBinder
+            playbackServiceBound = playbackServiceBinder != null
+            pushPlaybackServiceSnapshot()
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            playbackServiceBinder = null
+            playbackServiceBound = false
+        }
+    }
 
     private val _nowPlayingSession = MutableStateFlow<NowPlayingSession?>(null)
     val nowPlayingSession: StateFlow<NowPlayingSession?> = _nowPlayingSession.asStateFlow()
@@ -487,6 +506,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var lastConnectivityRefreshAtMs: Long = 0L
 
     init {
+        bindPlaybackService()
+        PlaybackServiceBridge.onPlay = {
+            playbackPlay()
+        }
+        PlaybackServiceBridge.onPause = {
+            playbackPause(forceSync = true)
+        }
+        PlaybackServiceBridge.onTogglePlayPause = {
+            val state = playbackEngineState.value
+            if (state.isSpeaking || state.isAutoPlaying) {
+                playbackPause(forceSync = true)
+            } else {
+                playbackPlay()
+            }
+        }
+        PlaybackServiceBridge.snapshotProvider = {
+            buildPlaybackServiceSnapshot()
+        }
+        viewModelScope.launch {
+            playbackEngineState.collect {
+                pushPlaybackServiceSnapshot()
+            }
+        }
+        viewModelScope.launch {
+            nowPlayingSession.collect {
+                pushPlaybackServiceSnapshot()
+            }
+        }
         viewModelScope.launch {
             settingsStore.migrateLegacyTokenIfNeeded()
             var previous = _settings.value
@@ -647,6 +694,51 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun playbackAdvanceToNextItem() {
         playbackEngine.advanceToNextItem()
+    }
+
+    private fun bindPlaybackService() {
+        val appContext = getApplication<Application>().applicationContext
+        appContext.bindService(
+            Intent(appContext, PlaybackService::class.java),
+            playbackServiceConnection,
+            Context.BIND_AUTO_CREATE,
+        )
+    }
+
+    private fun unbindPlaybackService() {
+        if (!playbackServiceBound) return
+        val appContext = getApplication<Application>().applicationContext
+        appContext.unbindService(playbackServiceConnection)
+        playbackServiceBinder = null
+        playbackServiceBound = false
+    }
+
+    private fun buildPlaybackServiceSnapshot(): PlaybackServiceSnapshot {
+        val engine = playbackEngineState.value
+        val sessionItem = nowPlayingSession.value?.currentItem
+        val title = sessionItem?.title?.takeIf { it.isNotBlank() }
+            ?: sessionItem?.url?.takeIf { it.isNotBlank() }
+            ?: "Mimeo playback"
+        val itemId = if (engine.currentItemId > 0) engine.currentItemId else sessionItem?.itemId
+        return PlaybackServiceSnapshot(
+            itemId = itemId,
+            title = title,
+            isPlaying = engine.isSpeaking || engine.isAutoPlaying,
+        )
+    }
+
+    private fun pushPlaybackServiceSnapshot() {
+        val snapshot = buildPlaybackServiceSnapshot()
+        val appContext = getApplication<Application>().applicationContext
+        if (snapshot.itemId != null) {
+            val startIntent = Intent(appContext, PlaybackService::class.java).apply {
+                action = PlaybackService.ACTION_SYNC_FROM_BRIDGE
+            }
+            ContextCompat.startForegroundService(appContext, startIntent)
+        } else {
+            appContext.stopService(Intent(appContext, PlaybackService::class.java))
+        }
+        playbackServiceBinder?.updateSnapshot(snapshot)
     }
 
     fun saveSettings(
@@ -2825,6 +2917,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         connectivityCallback = null
+        PlaybackServiceBridge.clear()
+        unbindPlaybackService()
         playbackEngine.shutdown()
         super.onCleared()
     }
