@@ -13,6 +13,7 @@ import android.media.AudioManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import android.view.KeyEvent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -24,6 +25,8 @@ import android.support.v4.media.session.PlaybackStateCompat
 import com.mimeo.android.MainActivity
 
 class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
+    private val mediaButtonLogTag = "MimeoMediaButton"
+
     inner class LocalBinder : Binder() {
         fun updateSnapshot(snapshot: PlaybackServiceSnapshot) {
             this@PlaybackService.updateSnapshot(snapshot)
@@ -60,7 +63,9 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                     override fun onPlay() = dispatchPlay()
                     override fun onPause() = dispatchPause()
                     override fun onMediaButtonEvent(mediaButtonEvent: Intent?): Boolean {
-                        return handleMediaButtonIntent(mediaButtonEvent)
+                        val handled = handleMediaButtonIntent(mediaButtonEvent)
+                        Log.d(mediaButtonLogTag, "sessionCallback onMediaButtonEvent handled=$handled")
+                        return handled
                     }
                 },
             )
@@ -80,9 +85,11 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(mediaButtonLogTag, "service onStart action=${intent?.action}")
         when (intent?.action) {
             Intent.ACTION_MEDIA_BUTTON -> {
                 if (!handleMediaButtonIntent(intent)) {
+                    Log.d(mediaButtonLogTag, "service onStart fallback->MediaButtonReceiver.handleIntent")
                     MediaButtonReceiver.handleIntent(mediaSession, intent)
                 }
             }
@@ -231,6 +238,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         mediaButtonReceiverComponent?.let { component ->
             @Suppress("DEPRECATION")
             manager.registerMediaButtonEventReceiver(component)
+            Log.d(mediaButtonLogTag, "registerMediaButtonEventReceiver component=$component hasAudioFocus=$hasAudioFocus")
         }
     }
 
@@ -246,6 +254,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         mediaButtonReceiverComponent?.let { component ->
             @Suppress("DEPRECATION")
             manager.unregisterMediaButtonEventReceiver(component)
+            Log.d(mediaButtonLogTag, "unregisterMediaButtonEventReceiver component=$component")
         }
         hasAudioFocus = false
     }
@@ -273,6 +282,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     private fun handleMediaButtonIntent(intent: Intent?): Boolean {
         val keyEvent = intent?.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT) ?: return false
         if (keyEvent.action != KeyEvent.ACTION_DOWN) return true
+        Log.d(mediaButtonLogTag, "handleMediaButtonIntent key=${keyEvent.keyCode}")
         when (keyEvent.keyCode) {
             KeyEvent.KEYCODE_MEDIA_PAUSE -> dispatchPause()
             KeyEvent.KEYCODE_MEDIA_PLAY -> dispatchPlay()
@@ -281,6 +291,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             -> dispatchToggle()
             else -> return false
         }
+        Log.d(mediaButtonLogTag, "handleMediaButtonIntent dispatched")
         return true
     }
 

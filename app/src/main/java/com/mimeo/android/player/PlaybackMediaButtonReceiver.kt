@@ -3,14 +3,18 @@ package com.mimeo.android.player
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import android.view.KeyEvent
 import androidx.core.content.ContextCompat
 
 class PlaybackMediaButtonReceiver : BroadcastReceiver() {
+    private val tag = "MimeoMediaButton"
+
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_MEDIA_BUTTON) return
         val keyEvent = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT) ?: return
         if (keyEvent.action != KeyEvent.ACTION_DOWN) return
+        Log.d(tag, "receiver key=${keyEvent.keyCode} action=${keyEvent.action}")
         val action = when (keyEvent.keyCode) {
             KeyEvent.KEYCODE_MEDIA_PLAY -> PlaybackService.ACTION_PLAY
             KeyEvent.KEYCODE_MEDIA_PAUSE -> PlaybackService.ACTION_PAUSE
@@ -19,8 +23,8 @@ class PlaybackMediaButtonReceiver : BroadcastReceiver() {
             -> PlaybackService.ACTION_TOGGLE_PLAY_PAUSE
             else -> null
         } ?: return
+        Log.d(tag, "receiver dispatch serviceAction=$action")
         val serviceIntent = Intent(context, PlaybackService::class.java).setAction(action)
         ContextCompat.startForegroundService(context, serviceIntent)
     }
 }
-
