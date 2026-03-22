@@ -108,12 +108,12 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         when (focusChange) {
             AudioManager.AUDIOFOCUS_LOSS,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
-            -> dispatchPause()
+            -> dispatchPause(releaseAudioFocusImmediately = true)
         }
     }
 
     override fun onDestroy() {
-        abandonAudioFocus()
+        abandonAudioFocusNow()
         releaseMediaButtonAnchor()
         mediaSession.release()
         super.onDestroy()
@@ -126,11 +126,13 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
     }
 
-    private fun dispatchPause() {
+    private fun dispatchPause(releaseAudioFocusImmediately: Boolean = false) {
         Log.d(mediaButtonLogTag, "dispatchPause")
         PlaybackServiceBridge.onPause?.invoke()
         PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
-        abandonAudioFocus()
+        if (releaseAudioFocusImmediately) {
+            abandonAudioFocusNow()
+        }
     }
 
     private fun dispatchToggle() {
@@ -153,7 +155,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         if (next.itemId != null && next.isPlaying) {
             requestAudioFocus()
         } else if (next.itemId == null) {
-            abandonAudioFocus()
+            abandonAudioFocusNow()
         }
         val state = if (next.isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
         mediaSession.setPlaybackState(
@@ -184,7 +186,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         } else if (isForeground) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             isForeground = false
-            abandonAudioFocus()
+            abandonAudioFocusNow()
             stopSelf()
         }
     }
@@ -256,7 +258,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         }
     }
 
-    private fun abandonAudioFocus() {
+    private fun abandonAudioFocusNow() {
         if (!hasAudioFocus) return
         val manager = audioManager ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
