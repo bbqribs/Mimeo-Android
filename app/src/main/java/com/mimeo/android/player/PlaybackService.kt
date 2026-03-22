@@ -126,7 +126,12 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                 hasLoadedItem = snapshot.itemId != null,
             )
         when (focusChange) {
-            AudioManager.AUDIOFOCUS_GAIN -> hasAudioFocus = true
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                hasAudioFocus = true
+                if (snapshot.itemId != null) {
+                    startMediaButtonAnchor()
+                }
+            }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK,
             -> {
