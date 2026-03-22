@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
@@ -37,10 +38,12 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     private var audioManager: AudioManager? = null
     private var audioFocusRequest: AudioFocusRequest? = null
     private var hasAudioFocus = false
+    private var mediaButtonReceiverComponent: ComponentName? = null
 
     override fun onCreate() {
         super.onCreate()
         audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        mediaButtonReceiverComponent = ComponentName(this, PlaybackMediaButtonReceiver::class.java)
         ensureNotificationChannel()
         mediaSession = MediaSessionCompat(this, "MimeoPlayback").apply {
             isActive = true
@@ -225,6 +228,10 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             manager.requestAudioFocus(this, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN) ==
                 AudioManager.AUDIOFOCUS_REQUEST_GRANTED
         }
+        mediaButtonReceiverComponent?.let { component ->
+            @Suppress("DEPRECATION")
+            manager.registerMediaButtonEventReceiver(component)
+        }
     }
 
     private fun abandonAudioFocus() {
@@ -235,6 +242,10 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         } else {
             @Suppress("DEPRECATION")
             manager.abandonAudioFocus(this)
+        }
+        mediaButtonReceiverComponent?.let { component ->
+            @Suppress("DEPRECATION")
+            manager.unregisterMediaButtonEventReceiver(component)
         }
         hasAudioFocus = false
     }
@@ -250,8 +261,8 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     }
 
     private fun mediaButtonServicePendingIntent(): PendingIntent {
-        val intent = Intent(Intent.ACTION_MEDIA_BUTTON).setClass(this, PlaybackService::class.java)
-        return PendingIntent.getService(
+        val intent = Intent(Intent.ACTION_MEDIA_BUTTON).setClass(this, PlaybackMediaButtonReceiver::class.java)
+        return PendingIntent.getBroadcast(
             this,
             0x4D42, // "MB"
             intent,
