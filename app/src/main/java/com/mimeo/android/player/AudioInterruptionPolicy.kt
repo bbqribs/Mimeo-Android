@@ -22,13 +22,18 @@ internal class AudioInterruptionPolicy {
                 resumeAfterTransientGain = false
                 AudioInterruptionAction.PauseReleaseFocus
             }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK,
-            -> {
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                 // For TTS we do not duck; we pause and only auto-resume if interruption
                 // is transient and we were actively playing.
                 resumeAfterTransientGain = isCurrentlyPlaying
                 AudioInterruptionAction.PauseKeepFocus
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                // Navigation prompts commonly come through this path. For TTS we pause
+                // and release focus so the other speaker path can run immediately.
+                // Do not auto-resume on gain in this case.
+                resumeAfterTransientGain = false
+                AudioInterruptionAction.PauseReleaseFocus
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
                 val shouldResume = resumeAfterTransientGain && hasLoadedItem && !isCurrentlyPlaying
@@ -48,4 +53,3 @@ internal class AudioInterruptionPolicy {
         resumeAfterTransientGain = false
     }
 }
-

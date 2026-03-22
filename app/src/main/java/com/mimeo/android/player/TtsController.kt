@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
@@ -61,6 +62,7 @@ class TtsController(
     private var preferredVoiceName: String? = null
     private var selectedVoiceRequiresNetwork = false
     private var completionCueToneGenerator: ToneGenerator? = null
+    private var suppressErrorsUntilElapsedMs: Long = 0L
 
     init {
         lateinit var createdEngine: TextToSpeech
@@ -120,6 +122,9 @@ class TtsController(
                 val id = utteranceId ?: "unknown"
                 utteranceMetaById.remove(id)
                 handledDoneUtterances.add(id)
+                if (SystemClock.elapsedRealtime() <= suppressErrorsUntilElapsedMs) {
+                    return
+                }
                 mainHandler.post { onError("TTS error") }
             }
 
@@ -224,6 +229,7 @@ class TtsController(
         generationCounter.incrementAndGet()
         utteranceMetaById.clear()
         handledDoneUtterances.clear()
+        suppressErrorsUntilElapsedMs = SystemClock.elapsedRealtime() + 1_000L
         tts.stop()
     }
 
