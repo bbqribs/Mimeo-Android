@@ -14,6 +14,8 @@ import android.media.AudioTrack
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.KeyEvent
 import androidx.core.app.NotificationCompat
@@ -28,6 +30,10 @@ import com.mimeo.android.MainActivity
 
 class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     private val mediaButtonLogTag = "MimeoMediaButton"
+    private val focusHandler = Handler(Looper.getMainLooper())
+    private val delayedFocusRelease = Runnable {
+        abandonAudioFocusNow()
+    }
 
     inner class LocalBinder : Binder() {
         fun updateSnapshot(snapshot: PlaybackServiceSnapshot) {
@@ -108,12 +114,12 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         when (focusChange) {
             AudioManager.AUDIOFOCUS_LOSS,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
-            -> dispatchPause()
+            -> dispatchPause(releaseAudioFocusImmediately = true)
         }
     }
 
     override fun onDestroy() {
-        abandonAudioFocus()
+        abandonAudioFocusNow()
         releaseMediaButtonAnchor()
         mediaSession.release()
         super.onDestroy()
@@ -121,16 +127,21 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
 
     private fun dispatchPlay() {
         Log.d(mediaButtonLogTag, "dispatchPlay")
+        focusHandler.removeCallbacks(delayedFocusRelease)
         requestAudioFocus()
         PlaybackServiceBridge.onPlay?.invoke()
         PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
     }
 
-    private fun dispatchPause() {
+    private fun dispatchPause(releaseAudioFocusImmediately: Boolean = false) {
         Log.d(mediaButtonLogTag, "dispatchPause")
         PlaybackServiceBridge.onPause?.invoke()
         PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
-        abandonAudioFocus()
+        if (releaseAudioFocusImmediately) {
+            abandonAudioFocusNow()
+        } else {
+            scheduleDelayedAudioFocusRelease()
+        }
     }
 
     private fun dispatchToggle() {
@@ -151,9 +162,10 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         // Relying on per-utterance speaking state causes focus/register churn and
         // allows other media apps to reclaim headset button handling mid-playback.
         if (next.itemId != null && next.isPlaying) {
+            focusHandler.removeCallbacks(delayedFocusRelease)
             requestAudioFocus()
         } else if (next.itemId == null) {
-            abandonAudioFocus()
+            abandonAudioFocusNow()
         }
         val state = if (next.isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
         mediaSession.setPlaybackState(
@@ -184,7 +196,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         } else if (isForeground) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             isForeground = false
-            abandonAudioFocus()
+            abandonAudioFocusNow()
             stopSelf()
         }
     }
@@ -256,7 +268,14 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         }
     }
 
-    private fun abandonAudioFocus() {
+    private fun scheduleDelayedAudioFocusRelease() {
+        focusHandler.removeCallbacks(delayedFocusRelease)
+        focusHandler.postDelayed(delayedFocusRelease, PAUSE_FOCUS_HOLD_MS)
+        Log.d(mediaButtonLogTag, "scheduleAudioFocusRelease delayMs=$PAUSE_FOCUS_HOLD_MS")
+    }
+
+    private fun abandonAudioFocusNow() {
+        focusHandler.removeCallbacks(delayedFocusRelease)
         if (!hasAudioFocus) return
         val manager = audioManager ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -390,6 +409,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
 
     companion object {
         private const val CHANNEL_ID = "mimeo_playback"
+        private const val PAUSE_FOCUS_HOLD_MS = 30_000L
         const val ACTION_PLAY = "com.mimeo.android.player.PLAY"
         const val ACTION_PAUSE = "com.mimeo.android.player.PAUSE"
         const val ACTION_TOGGLE_PLAY_PAUSE = "com.mimeo.android.player.TOGGLE_PLAY_PAUSE"
