@@ -4,8 +4,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioFocusRequest
@@ -28,6 +30,7 @@ import com.mimeo.android.MainActivity
 
 class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     private val mediaButtonLogTag = "MimeoMediaButton"
+    private val interruptionPolicy = AudioInterruptionPolicy()
 
     inner class LocalBinder : Binder() {
         fun updateSnapshot(snapshot: PlaybackServiceSnapshot) {
@@ -44,11 +47,21 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     private var audioFocusRequest: AudioFocusRequest? = null
     private var hasAudioFocus = false
     private var mediaButtonAnchorTrack: AudioTrack? = null
+    private var noisyReceiverRegistered = false
+    private val becomingNoisyReceiver =
+        object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action != AudioManager.ACTION_AUDIO_BECOMING_NOISY) return
+                Log.d(mediaButtonLogTag, "becomingNoisy")
+                handleInterruptionAction(interruptionPolicy.onBecomingNoisy(snapshot.isPlaying))
+            }
+        }
 
     override fun onCreate() {
         super.onCreate()
         audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         ensureNotificationChannel()
+        registerNoisyReceiverIfNeeded()
         mediaSession = MediaSessionCompat(this, "MimeoPlayback").apply {
             isActive = true
             setFlags(
@@ -105,14 +118,28 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     }
 
     override fun onAudioFocusChange(focusChange: Int) {
+        Log.d(mediaButtonLogTag, "onAudioFocusChange focusChange=$focusChange")
+        val action =
+            interruptionPolicy.onAudioFocusChange(
+                focusChange = focusChange,
+                isCurrentlyPlaying = snapshot.isPlaying,
+                hasLoadedItem = snapshot.itemId != null,
+            )
         when (focusChange) {
-            AudioManager.AUDIOFOCUS_LOSS,
+            AudioManager.AUDIOFOCUS_GAIN -> hasAudioFocus = true
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
-            -> dispatchPause(releaseAudioFocusImmediately = true)
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK,
+            -> {
+                hasAudioFocus = false
+                stopMediaButtonAnchor()
+            }
         }
+        handleInterruptionAction(action)
     }
 
     override fun onDestroy() {
+        unregisterNoisyReceiverIfNeeded()
+        interruptionPolicy.clearResumeExpectation()
         abandonAudioFocusNow()
         releaseMediaButtonAnchor()
         mediaSession.release()
@@ -121,13 +148,20 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
 
     private fun dispatchPlay() {
         Log.d(mediaButtonLogTag, "dispatchPlay")
+        interruptionPolicy.clearResumeExpectation()
         requestAudioFocus()
         PlaybackServiceBridge.onPlay?.invoke()
         PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
     }
 
-    private fun dispatchPause(releaseAudioFocusImmediately: Boolean = false) {
+    private fun dispatchPause(
+        releaseAudioFocusImmediately: Boolean = false,
+        clearResumeExpectation: Boolean = true,
+    ) {
         Log.d(mediaButtonLogTag, "dispatchPause")
+        if (clearResumeExpectation) {
+            interruptionPolicy.clearResumeExpectation()
+        }
         PlaybackServiceBridge.onPause?.invoke()
         PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
         if (releaseAudioFocusImmediately) {
@@ -155,6 +189,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         if (next.itemId != null && next.isPlaying) {
             requestAudioFocus()
         } else if (next.itemId == null) {
+            interruptionPolicy.clearResumeExpectation()
             abandonAudioFocusNow()
         }
         val state = if (next.isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
@@ -244,6 +279,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                         .build(),
                 )
                 .setAcceptsDelayedFocusGain(false)
+                .setWillPauseWhenDucked(true)
                 .build()
             audioFocusRequest = request
             manager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
@@ -388,6 +424,35 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             description = "Mimeo playback controls"
         }
         manager.createNotificationChannel(channel)
+    }
+
+    private fun registerNoisyReceiverIfNeeded() {
+        if (noisyReceiverRegistered) return
+        registerReceiver(becomingNoisyReceiver, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY))
+        noisyReceiverRegistered = true
+    }
+
+    private fun unregisterNoisyReceiverIfNeeded() {
+        if (!noisyReceiverRegistered) return
+        try {
+            unregisterReceiver(becomingNoisyReceiver)
+        } catch (_: IllegalArgumentException) {
+        }
+        noisyReceiverRegistered = false
+    }
+
+    private fun handleInterruptionAction(action: AudioInterruptionAction) {
+        when (action) {
+            AudioInterruptionAction.None -> Unit
+            AudioInterruptionAction.PauseReleaseFocus ->
+                dispatchPause(releaseAudioFocusImmediately = true, clearResumeExpectation = false)
+            AudioInterruptionAction.PauseKeepFocus ->
+                dispatchPause(releaseAudioFocusImmediately = false, clearResumeExpectation = false)
+            AudioInterruptionAction.ResumePlayback -> {
+                Log.d(mediaButtonLogTag, "autoResumeAfterTransientGain")
+                dispatchPlay()
+            }
+        }
     }
 
     companion object {
