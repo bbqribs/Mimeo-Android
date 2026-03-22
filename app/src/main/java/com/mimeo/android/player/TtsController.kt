@@ -1,6 +1,7 @@
 package com.mimeo.android.player
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.ConnectivityManager
@@ -66,6 +67,14 @@ class TtsController(
         createdEngine = TextToSpeech(context.applicationContext) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 initialized = true
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    createdEngine.setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build(),
+                    )
+                }
                 createdEngine.language = Locale.US
                 createdEngine.setSpeechRate(speechRate)
                 defaultVoiceName = createdEngine.defaultVoice?.name?.trim()?.ifBlank { null }
