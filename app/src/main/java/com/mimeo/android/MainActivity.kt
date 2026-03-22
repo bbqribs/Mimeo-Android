@@ -474,6 +474,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val playbackEngineEvents: SharedFlow<PlaybackEngineEvent> = playbackEngine.events
     private var playbackServiceBinder: PlaybackService.LocalBinder? = null
     private var playbackServiceBound: Boolean = false
+    private var lastPushedPlaybackServiceSnapshot: PlaybackServiceSnapshot? = null
     private val playbackServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: android.os.IBinder?) {
             playbackServiceBinder = service as? PlaybackService.LocalBinder
@@ -711,6 +712,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         appContext.unbindService(playbackServiceConnection)
         playbackServiceBinder = null
         playbackServiceBound = false
+        lastPushedPlaybackServiceSnapshot = null
     }
 
     private fun buildPlaybackServiceSnapshot(): PlaybackServiceSnapshot {
@@ -729,13 +731,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun pushPlaybackServiceSnapshot() {
         val snapshot = buildPlaybackServiceSnapshot()
+        if (snapshot == lastPushedPlaybackServiceSnapshot) return
+        val previous = lastPushedPlaybackServiceSnapshot
+        lastPushedPlaybackServiceSnapshot = snapshot
         val appContext = getApplication<Application>().applicationContext
-        if (snapshot.itemId != null) {
+        if (snapshot.itemId != null && previous?.itemId == null) {
             val startIntent = Intent(appContext, PlaybackService::class.java).apply {
                 action = PlaybackService.ACTION_SYNC_FROM_BRIDGE
             }
             ContextCompat.startForegroundService(appContext, startIntent)
-        } else {
+        } else if (snapshot.itemId == null && previous?.itemId != null) {
             appContext.stopService(Intent(appContext, PlaybackService::class.java))
         }
         playbackServiceBinder?.updateSnapshot(snapshot)

@@ -4,12 +4,13 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
+import android.media.AudioFormat
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.AudioTrack
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -20,6 +21,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import androidx.media.session.MediaButtonReceiver
 import androidx.media.session.MediaButtonReceiver.handleIntent
+import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import com.mimeo.android.MainActivity
@@ -41,12 +43,11 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     private var audioManager: AudioManager? = null
     private var audioFocusRequest: AudioFocusRequest? = null
     private var hasAudioFocus = false
-    private var mediaButtonReceiverComponent: ComponentName? = null
+    private var mediaButtonAnchorTrack: AudioTrack? = null
 
     override fun onCreate() {
         super.onCreate()
         audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-        mediaButtonReceiverComponent = ComponentName(this, PlaybackMediaButtonReceiver::class.java)
         ensureNotificationChannel()
         mediaSession = MediaSessionCompat(this, "MimeoPlayback").apply {
             isActive = true
@@ -113,23 +114,27 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
 
     override fun onDestroy() {
         abandonAudioFocus()
+        releaseMediaButtonAnchor()
         mediaSession.release()
         super.onDestroy()
     }
 
     private fun dispatchPlay() {
+        Log.d(mediaButtonLogTag, "dispatchPlay")
         requestAudioFocus()
         PlaybackServiceBridge.onPlay?.invoke()
         PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
     }
 
     private fun dispatchPause() {
+        Log.d(mediaButtonLogTag, "dispatchPause")
         PlaybackServiceBridge.onPause?.invoke()
         PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
         abandonAudioFocus()
     }
 
     private fun dispatchToggle() {
+        Log.d(mediaButtonLogTag, "dispatchToggle isPlaying=${snapshot.isPlaying}")
         val toggled = PlaybackServiceBridge.onTogglePlayPause
         if (toggled != null) {
             toggled.invoke()
@@ -141,9 +146,13 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
 
     private fun updateSnapshot(next: PlaybackServiceSnapshot) {
         snapshot = next
-        if (next.isPlaying) {
+        mediaSession.isActive = next.itemId != null
+        // Keep media-button ownership stable for the currently loaded item.
+        // Relying on per-utterance speaking state causes focus/register churn and
+        // allows other media apps to reclaim headset button handling mid-playback.
+        if (next.itemId != null && next.isPlaying) {
             requestAudioFocus()
-        } else {
+        } else if (next.itemId == null) {
             abandonAudioFocus()
         }
         val state = if (next.isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
@@ -154,10 +163,15 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                         PlaybackStateCompat.ACTION_PAUSE or
                         PlaybackStateCompat.ACTION_PLAY_PAUSE,
                 )
+                .setActiveQueueItemId(next.itemId?.toLong() ?: -1L)
                 .setState(state, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1f)
                 .build(),
         )
-        mediaSession.setMetadata(null)
+        mediaSession.setMetadata(
+            MediaMetadataCompat.Builder()
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, next.title.ifBlank { "Mimeo playback" })
+                .build(),
+        )
 
         val notification = buildNotification(next)
         if (next.itemId != null) {
@@ -170,6 +184,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         } else if (isForeground) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             isForeground = false
+            abandonAudioFocus()
             stopSelf()
         }
     }
@@ -223,7 +238,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                 .setAudioAttributes(
                     AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                         .build(),
                 )
                 .setAcceptsDelayedFocusGain(false)
@@ -235,10 +250,9 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             manager.requestAudioFocus(this, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN) ==
                 AudioManager.AUDIOFOCUS_REQUEST_GRANTED
         }
-        mediaButtonReceiverComponent?.let { component ->
-            @Suppress("DEPRECATION")
-            manager.registerMediaButtonEventReceiver(component)
-            Log.d(mediaButtonLogTag, "registerMediaButtonEventReceiver component=$component hasAudioFocus=$hasAudioFocus")
+        Log.d(mediaButtonLogTag, "requestAudioFocus hasAudioFocus=$hasAudioFocus")
+        if (hasAudioFocus) {
+            startMediaButtonAnchor()
         }
     }
 
@@ -251,12 +265,78 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             @Suppress("DEPRECATION")
             manager.abandonAudioFocus(this)
         }
-        mediaButtonReceiverComponent?.let { component ->
-            @Suppress("DEPRECATION")
-            manager.unregisterMediaButtonEventReceiver(component)
-            Log.d(mediaButtonLogTag, "unregisterMediaButtonEventReceiver component=$component")
-        }
+        Log.d(mediaButtonLogTag, "abandonAudioFocus")
         hasAudioFocus = false
+        stopMediaButtonAnchor()
+    }
+
+    private fun startMediaButtonAnchor() {
+        val track = mediaButtonAnchorTrack ?: createMediaButtonAnchorTrack()?.also {
+            mediaButtonAnchorTrack = it
+        } ?: return
+        if (track.playState == AudioTrack.PLAYSTATE_PLAYING) return
+        try {
+            track.play()
+            Log.d(mediaButtonLogTag, "mediaButtonAnchor play")
+        } catch (_: IllegalStateException) {
+            releaseMediaButtonAnchor()
+        }
+    }
+
+    private fun stopMediaButtonAnchor() {
+        val track = mediaButtonAnchorTrack ?: return
+        if (track.playState != AudioTrack.PLAYSTATE_PLAYING) return
+        try {
+            track.pause()
+            track.flush()
+            Log.d(mediaButtonLogTag, "mediaButtonAnchor stop")
+        } catch (_: IllegalStateException) {
+            releaseMediaButtonAnchor()
+        }
+    }
+
+    private fun releaseMediaButtonAnchor() {
+        mediaButtonAnchorTrack?.let { track ->
+            try {
+                track.stop()
+            } catch (_: IllegalStateException) {
+            }
+            track.release()
+        }
+        mediaButtonAnchorTrack = null
+    }
+
+    private fun createMediaButtonAnchorTrack(): AudioTrack? {
+        return try {
+            val sampleRate = 8_000
+            val pcm = ByteArray(sampleRate * 2) // 1 second, 16-bit mono silence
+            val frameCount = pcm.size / 2
+            val track = AudioTrack(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build(),
+                AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(sampleRate)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build(),
+                pcm.size,
+                AudioTrack.MODE_STATIC,
+                AudioManager.AUDIO_SESSION_ID_GENERATE,
+            )
+            val written = track.write(pcm, 0, pcm.size)
+            if (written > 0) {
+                val writtenFrames = written / 2
+                if (writtenFrames > 1) {
+                    track.setLoopPoints(0, writtenFrames, -1)
+                }
+            }
+            track.setVolume(0f)
+            track
+        } catch (_: Throwable) {
+            null
+        }
     }
 
     private fun servicePendingIntent(action: String): PendingIntent {
