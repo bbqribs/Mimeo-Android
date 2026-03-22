@@ -12,6 +12,7 @@ import android.media.AudioManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.view.KeyEvent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.media.app.NotificationCompat.MediaStyle
@@ -56,8 +57,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                     override fun onPlay() = dispatchPlay()
                     override fun onPause() = dispatchPause()
                     override fun onMediaButtonEvent(mediaButtonEvent: Intent?): Boolean {
-                        handleIntent(this@apply, mediaButtonEvent)
-                        return super.onMediaButtonEvent(mediaButtonEvent)
+                        return handleMediaButtonIntent(mediaButtonEvent)
                     }
                 },
             )
@@ -79,7 +79,9 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             Intent.ACTION_MEDIA_BUTTON -> {
-                MediaButtonReceiver.handleIntent(mediaSession, intent)
+                if (!handleMediaButtonIntent(intent)) {
+                    MediaButtonReceiver.handleIntent(mediaSession, intent)
+                }
             }
             ACTION_PLAY -> dispatchPlay()
             ACTION_PAUSE -> dispatchPause()
@@ -255,6 +257,20 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+    }
+
+    private fun handleMediaButtonIntent(intent: Intent?): Boolean {
+        val keyEvent = intent?.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT) ?: return false
+        if (keyEvent.action != KeyEvent.ACTION_DOWN) return true
+        when (keyEvent.keyCode) {
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> dispatchPause()
+            KeyEvent.KEYCODE_MEDIA_PLAY -> dispatchPlay()
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+            KeyEvent.KEYCODE_HEADSETHOOK,
+            -> dispatchToggle()
+            else -> return false
+        }
+        return true
     }
 
     private fun ensureNotificationChannel() {
