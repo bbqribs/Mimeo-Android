@@ -1,5 +1,7 @@
 package com.mimeo.android.ui.settings
 
+import android.content.Intent
+import androidx.compose.ui.text.AnnotatedString
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -10,17 +12,22 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 
 @Composable
 fun ConnectivityDiagnosticsScreen(vm: AppViewModel) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     val settings by vm.settings.collectAsState()
     val rows by vm.diagnosticsRows.collectAsState()
     val running by vm.diagnosticsRunning.collectAsState()
@@ -45,6 +52,39 @@ fun ConnectivityDiagnosticsScreen(vm: AppViewModel) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { vm.runConnectivityDiagnostics(isPhysicalDevice) }, enabled = !running) {
                 Text(if (running) "Running..." else "Run diagnostics")
+            }
+            OutlinedButton(
+                enabled = rows.isNotEmpty() || !lastError.isNullOrBlank(),
+                onClick = {
+                    val exportText = buildConnectivityDiagnosticsExportText(
+                        mode = settings.connectionMode,
+                        baseUrl = settings.baseUrl,
+                        rows = rows,
+                        lastError = lastError,
+                    )
+                    clipboard.setText(AnnotatedString(exportText))
+                    vm.showSnackbar("Diagnostics copied")
+                },
+            ) {
+                Text("Copy")
+            }
+            OutlinedButton(
+                enabled = rows.isNotEmpty() || !lastError.isNullOrBlank(),
+                onClick = {
+                    val exportText = buildConnectivityDiagnosticsExportText(
+                        mode = settings.connectionMode,
+                        baseUrl = settings.baseUrl,
+                        rows = rows,
+                        lastError = lastError,
+                    )
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, exportText)
+                    }
+                    context.startActivity(Intent.createChooser(shareIntent, "Share diagnostics"))
+                },
+            ) {
+                Text("Share")
             }
         }
 
