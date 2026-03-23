@@ -90,7 +90,7 @@ class AudioInterruptionPolicyTest {
     }
 
     @Test
-    fun `gain after ducking loss does not auto resume`() {
+    fun `gain after ducking loss resumes when interruption started while playing`() {
         val policy = AudioInterruptionPolicy()
         policy.onAudioFocusChange(
             focusChange = AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK,
@@ -104,6 +104,6 @@ class AudioInterruptionPolicyTest {
             hasLoadedItem = true,
         )
 
-        assertEquals(AudioInterruptionAction.None, action)
+        assertEquals(AudioInterruptionAction.ResumePlayback, action)
     }
 }

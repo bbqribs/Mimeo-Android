@@ -31,8 +31,8 @@ internal class AudioInterruptionPolicy {
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                 // Navigation prompts commonly come through this path. For TTS we pause
                 // and release focus so the other speaker path can run immediately.
-                // Do not auto-resume on gain in this case.
-                resumeAfterTransientGain = false
+                // Auto-resume on gain only if we were actively playing at interruption.
+                resumeAfterTransientGain = isCurrentlyPlaying
                 AudioInterruptionAction.PauseReleaseFocus
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
