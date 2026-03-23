@@ -71,6 +71,8 @@
 4. [ ] Queue/player daily-use polish: finish Locus open-transition jitter/flicker edge cases and keep back navigation behavior fully consistent after repeated queue taps.
 5. [ ] Queue archive affordance pass: add Archive action to Up Next item overflow and to the Locus action bar for the active item.
 6. [ ] Share plain text capture decision ticket: either implement plain-text share ingestion as first-class flow or finalize explicit reject UX with clear reason/hint.
+7. [ ] UI affordance hint pass: standardize long-press tooltip labels across action icons (queue + locus + settings/dev controls) for discoverability without adding visual clutter.
+8. [ ] Completion-indicator consistency pass: align Up Next done/unread/in-progress icon states with Locus completion icon semantics so the same progress state reads identically in both surfaces.
 
 ## Android Redesign v1.1
 1. [~] Foundation: 4-tab nav shell (Up Next / Locus / Collections / Settings) plus black/purple theme foundations.

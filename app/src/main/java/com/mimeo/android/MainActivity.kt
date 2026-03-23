@@ -2504,7 +2504,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    suspend fun archiveItem(itemId: Int): Result<Unit> {
+    suspend fun archiveItem(itemId: Int, refreshQueue: Boolean = true): Result<Unit> {
         val current = settings.value
         return try {
             repository.archiveItem(current.baseUrl, current.apiToken, itemId)
@@ -2513,11 +2513,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 playbackPause(forceSync = true)
                 clearNowPlayingSessionNow()
             }
-            val refreshResult = loadQueueOnce(autoRetryPendingSaves = false)
-            if (refreshResult.isFailure) {
-                removeArchivedItemLocally(itemId)
-                _statusMessage.value = "Archived; queue refresh failed"
+            if (refreshQueue) {
+                val refreshResult = loadQueueOnce(autoRetryPendingSaves = false)
+                if (refreshResult.isFailure) {
+                    removeArchivedItemLocally(itemId)
+                    _statusMessage.value = "Archived; queue refresh failed"
+                } else {
+                    _statusMessage.value = "Archived"
+                }
             } else {
+                removeArchivedItemLocally(itemId)
                 _statusMessage.value = "Archived"
             }
             _queueOffline.value = false

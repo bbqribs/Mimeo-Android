@@ -33,8 +33,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -87,6 +91,7 @@ import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.ExperimentalMaterial3Api
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
@@ -489,22 +494,26 @@ fun QueueScreen(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        IconButton(onClick = { searchExpanded = !searchExpanded }) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.msr_search_24),
-                                contentDescription = if (searchExpanded) "Close search" else "Search queue",
-                                modifier = Modifier.size(24.dp),
+                        ActionHintTooltip(label = if (searchExpanded) "Close search" else "Search") {
+                            IconButton(onClick = { searchExpanded = !searchExpanded }) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.msr_search_24),
+                                    contentDescription = if (searchExpanded) "Close search" else "Search queue",
+                                    modifier = Modifier.size(24.dp),
+                                )
+                            }
+                        }
+                        ActionHintTooltip(label = "Refresh") {
+                            RefreshActionButton(
+                                state = refreshActionState,
+                                showConnectivityIssue = offline || hasRefreshProblem,
+                                onClick = {
+                                    actionScope.launch { refreshQueueContent() }
+                                },
+                                contentDescription = "Refresh queue and sync progress",
+                                pullProgress = pullRefreshProgress,
                             )
                         }
-                        RefreshActionButton(
-                            state = refreshActionState,
-                            showConnectivityIssue = offline || hasRefreshProblem,
-                            onClick = {
-                                actionScope.launch { refreshQueueContent() }
-                            },
-                            contentDescription = "Refresh queue and sync progress",
-                            pullProgress = pullRefreshProgress,
-                        )
                         IconButton(
                             enabled = !manualSaveInProgress,
                             onClick = {
@@ -555,26 +564,28 @@ fun QueueScreen(
                                 }
                             }
                         }
-                        Box {
-                            IconButton(onClick = { sortMenuExpanded = true }) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.msr_sort_layers_24),
-                                    contentDescription = "Sort queue: ${selectedSort.label}",
-                                    modifier = Modifier.size(24.dp),
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = sortMenuExpanded,
-                                onDismissRequest = { sortMenuExpanded = false },
-                            ) {
-                                QueueSortOption.entries.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = { Text(option.label) },
-                                        onClick = {
-                                            selectedSort = option
-                                            sortMenuExpanded = false
-                                        },
+                        ActionHintTooltip(label = "Sort") {
+                            Box {
+                                IconButton(onClick = { sortMenuExpanded = true }) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.msr_sort_layers_24),
+                                        contentDescription = "Sort queue: ${selectedSort.label}",
+                                        modifier = Modifier.size(24.dp),
                                     )
+                                }
+                                DropdownMenu(
+                                    expanded = sortMenuExpanded,
+                                    onDismissRequest = { sortMenuExpanded = false },
+                                ) {
+                                    QueueSortOption.entries.forEach { option ->
+                                        DropdownMenuItem(
+                                            text = { Text(option.label) },
+                                            onClick = {
+                                                selectedSort = option
+                                                sortMenuExpanded = false
+                                            },
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -758,85 +769,89 @@ fun QueueScreen(
                     items = projectedPendingItems,
                     key = { _, item -> "pending-${item.id}" },
                 ) { index, item ->
-                    PendingProjectedQueueItemCard(
-                        item = item,
-                        retryInProgress = pendingManualRetryInProgress,
-                        onRetry = { retryPendingItem(item) },
-                        onDismiss = { vm.removePendingManualSave(item.id) },
-                        onTap = {
-                            if (isPendingFailureState(item.lastFailureMessage)) {
-                                onShowSnackbar(item.lastFailureMessage, null, null)
-                            }
-                        },
-                    )
-                    if (index < projectedPendingItems.lastIndex || displayedItems.isNotEmpty()) {
-                        ThinQueueDivider()
+                    Column(modifier = Modifier) {
+                        PendingProjectedQueueItemCard(
+                            item = item,
+                            retryInProgress = pendingManualRetryInProgress,
+                            onRetry = { retryPendingItem(item) },
+                            onDismiss = { vm.removePendingManualSave(item.id) },
+                            onTap = {
+                                if (isPendingFailureState(item.lastFailureMessage)) {
+                                    onShowSnackbar(item.lastFailureMessage, null, null)
+                                }
+                            },
+                        )
+                        if (index < projectedPendingItems.lastIndex || displayedItems.isNotEmpty()) {
+                            ThinQueueDivider()
+                        }
                     }
                 }
                 itemsIndexed(
                     items = displayedItems,
                     key = { _, item -> item.itemId },
                 ) { index, item ->
-                    QueueItemCard(
-                        item = item,
-                        cached = cachedItemIds.contains(item.itemId),
-                        noActiveContent = noActiveContentItemIds.contains(item.itemId),
-                        failedProcessing = hasFailedPendingProjectionStatus(item),
-                        showQueueCaptureMetadata = settings.showQueueCaptureMetadata,
-                        onOpenPlayer = {
-                            Log.d(
-                                LOCUS_CONTINUATION_DEBUG_TAG,
-                                "queue.openPlayer tapped=${item.itemId} sort=${selectedSort.name} " +
-                                    "playlist=${settings.selectedPlaylistId ?: "smart"} " +
-                                    "displayedHead=${displayedItems.take(8).joinToString { it.itemId.toString() }} " +
-                                    "sessionBefore=${vm.currentNowPlayingItemId()}",
-                            )
-                            vm.warmItemTextForPlayer(item.itemId)
-                            vm.startNowPlayingSession(
-                                startItemId = item.itemId,
-                                orderedQueueItems = displayedItems,
-                            )
-                            onOpenPlayer(item.itemId)
-                        },
-                        onDownload = {
-                            actionScope.launch {
-                                if (cachedItemIds.contains(item.itemId)) {
-                                    onShowSnackbar("Already available offline", null, null)
-                                    return@launch
-                                }
-                                val result = vm.downloadItemForOffline(item.itemId)
-                                if (result.isSuccess) {
-                                    onShowSnackbar("Downloaded for offline reading", null, null)
-                                } else if (result.exceptionOrNull()?.let(::isNoActiveContentError) == true) {
-                                    onShowSnackbar(noActiveContentOfflineMessage(), null, null)
-                                } else {
-                                    onShowSnackbar("Couldn't download article", null, null)
-                                }
-                            }
-                        },
-                        onOpenPlaylistPicker = {
-                            vm.refreshPlaylists()
-                            playlistPickerItem = item
-                        },
-                        onArchive = {
-                            actionScope.launch {
-                                suppressAutoScrollToTopOnce = true
-                                vm.archiveItem(item.itemId)
-                                    .onSuccess {
-                                        onShowSnackbar("Archived", null, null)
+                    Column(modifier = Modifier) {
+                        QueueItemCard(
+                            item = item,
+                            cached = cachedItemIds.contains(item.itemId),
+                            noActiveContent = noActiveContentItemIds.contains(item.itemId),
+                            failedProcessing = hasFailedPendingProjectionStatus(item),
+                            showQueueCaptureMetadata = settings.showQueueCaptureMetadata,
+                            onOpenPlayer = {
+                                Log.d(
+                                    LOCUS_CONTINUATION_DEBUG_TAG,
+                                    "queue.openPlayer tapped=${item.itemId} sort=${selectedSort.name} " +
+                                        "playlist=${settings.selectedPlaylistId ?: "smart"} " +
+                                        "displayedHead=${displayedItems.take(8).joinToString { it.itemId.toString() }} " +
+                                        "sessionBefore=${vm.currentNowPlayingItemId()}",
+                                )
+                                vm.warmItemTextForPlayer(item.itemId)
+                                vm.startNowPlayingSession(
+                                    startItemId = item.itemId,
+                                    orderedQueueItems = displayedItems,
+                                )
+                                onOpenPlayer(item.itemId)
+                            },
+                            onDownload = {
+                                actionScope.launch {
+                                    if (cachedItemIds.contains(item.itemId)) {
+                                        onShowSnackbar("Already available offline", null, null)
+                                        return@launch
                                     }
-                                    .onFailure {
-                                        suppressAutoScrollToTopOnce = false
-                                        onShowSnackbar("Couldn't archive item", "Diagnostics", "open_diagnostics")
+                                    val result = vm.downloadItemForOffline(item.itemId)
+                                    if (result.isSuccess) {
+                                        onShowSnackbar("Downloaded for offline reading", null, null)
+                                    } else if (result.exceptionOrNull()?.let(::isNoActiveContentError) == true) {
+                                        onShowSnackbar(noActiveContentOfflineMessage(), null, null)
+                                    } else {
+                                        onShowSnackbar("Couldn't download article", null, null)
                                     }
-                            }
-                        },
-                        isMenuExpanded = rowMenuItemId == item.itemId,
-                        onDismissMenu = { rowMenuItemId = -1 },
-                        onExpandMenu = { rowMenuItemId = item.itemId },
-                    )
-                    if (index < displayedItems.lastIndex) {
-                        ThinQueueDivider()
+                                }
+                            },
+                            onOpenPlaylistPicker = {
+                                vm.refreshPlaylists()
+                                playlistPickerItem = item
+                            },
+                            onArchive = {
+                                actionScope.launch {
+                                    suppressAutoScrollToTopOnce = true
+                                    vm.archiveItem(item.itemId, refreshQueue = false)
+                                        .onSuccess {
+                                            onShowSnackbar("Archived", null, null)
+                                        }
+                                        .onFailure {
+                                            suppressAutoScrollToTopOnce = false
+                                            onShowSnackbar("Couldn't archive item", "Diagnostics", "open_diagnostics")
+                                        }
+                                }
+                            },
+                            isMenuExpanded = rowMenuItemId == item.itemId,
+                            onDismissMenu = { rowMenuItemId = -1 },
+                            onExpandMenu = { rowMenuItemId = item.itemId },
+                        )
+                        if (index < displayedItems.lastIndex) {
+                            ThinQueueDivider()
+                        }
                     }
                 }
             }
@@ -1970,6 +1985,21 @@ private fun friendlyPlaylistError(error: Throwable): String {
             }
         }
         else -> "Couldn't update playlist. Check connection, then open Diagnostics."
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun ActionHintTooltip(
+    label: String,
+    content: @Composable () -> Unit,
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState(),
+    ) {
+        content()
     }
 }
 
