@@ -18,6 +18,9 @@ internal fun buildConnectivityDiagnosticsExportText(
     val passCount = rows.count { it.outcome == ConnectivityDiagnosticOutcome.PASS }
     val failCount = rows.count { it.outcome == ConnectivityDiagnosticOutcome.FAIL }
     val infoCount = rows.count { it.outcome == ConnectivityDiagnosticOutcome.INFO }
+    val stableCount = rows.count { it.detail.contains("class=stable") }
+    val flakyCount = rows.count { it.detail.contains("class=flaky") }
+    val downCount = rows.count { it.detail.contains("class=down") }
     val safeBaseUrl = baseUrl.ifBlank { "(unset)" }
     val safeError = lastError?.takeIf { it.isNotBlank() } ?: "none"
 
@@ -27,6 +30,9 @@ internal fun buildConnectivityDiagnosticsExportText(
     lines += "mode: ${mode.name}"
     lines += "base_url: $safeBaseUrl"
     lines += "summary: rows=${rows.size}, pass=$passCount, fail=$failCount, info=$infoCount"
+    if (stableCount + flakyCount + downCount > 0) {
+        lines += "path_quality: stable=$stableCount, flaky=$flakyCount, down=$downCount"
+    }
     lines += "error: $safeError"
     lines += "endpoint_results:"
 

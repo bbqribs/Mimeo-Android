@@ -62,5 +62,45 @@ class ConnectivityDiagnosticsExportTest {
         assertTrue(text.contains("error: none"))
         assertTrue(text.contains("endpoint_results:\n- (none)"))
     }
+
+    @Test
+    fun `export includes path quality summary when classified details are present`() {
+        val rows = listOf(
+            ConnectivityDiagnosticRow(
+                name = "health",
+                url = "http://tailnet/health",
+                outcome = ConnectivityDiagnosticOutcome.PASS,
+                detail = "status=200 (attempts=3/3 latency_ms(p50=45,p95=88), class=stable)",
+                hint = null,
+                checkedAt = "2026-03-23T15:10:00Z",
+            ),
+            ConnectivityDiagnosticRow(
+                name = "debug/version",
+                url = "http://tailnet/debug/version",
+                outcome = ConnectivityDiagnosticOutcome.INFO,
+                detail = "error=timeout (attempts=1/3 latency_ms(p50=500,p95=4000), class=flaky)",
+                hint = "Timeout/no route (probable tailnet-path failure).",
+                checkedAt = "2026-03-23T15:10:04Z",
+            ),
+            ConnectivityDiagnosticRow(
+                name = "debug/python",
+                url = "http://tailnet/debug/python",
+                outcome = ConnectivityDiagnosticOutcome.FAIL,
+                detail = "error=timeout (attempts=0/3 latency_ms(p50=4000,p95=4000), class=down)",
+                hint = "Timeout/no route (probable tailnet-path failure).",
+                checkedAt = "2026-03-23T15:10:08Z",
+            ),
+        )
+
+        val text = buildConnectivityDiagnosticsExportText(
+            mode = ConnectionMode.REMOTE,
+            baseUrl = "http://beh-dec2022.taildacac5.ts.net:8000",
+            rows = rows,
+            lastError = "Timeout/no route (probable tailnet-path failure).",
+            exportedAt = "2026-03-23T15:10:10Z",
+        )
+
+        assertTrue(text.contains("path_quality: stable=1, flaky=1, down=1"))
+    }
 }
 
