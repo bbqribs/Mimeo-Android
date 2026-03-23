@@ -89,4 +89,62 @@ class ConnectionTestMessageResolverTest {
 
         assertEquals("Connected git_sha=abc123", message)
     }
+
+    @Test
+    fun `diagnostics remote timeout on tailnet host indicates tailnet path failure`() {
+        val message = ConnectionTestMessageResolver.forDiagnosticsException(
+            mode = ConnectionMode.REMOTE,
+            baseUrl = "http://100.101.102.103:8000",
+            message = "connect timed out",
+        )
+
+        assertTrue(message.contains("Timeout/no route"))
+        assertTrue(message.contains("tailnet-path failure"))
+    }
+
+    @Test
+    fun `diagnostics remote timeout on lan host indicates wrong mode or base url`() {
+        val message = ConnectionTestMessageResolver.forDiagnosticsException(
+            mode = ConnectionMode.REMOTE,
+            baseUrl = "http://192.168.1.30:8000",
+            message = "failed to connect",
+        )
+
+        assertTrue(message.contains("wrong-mode/base URL issue"))
+    }
+
+    @Test
+    fun `diagnostics exception classifies scheme mismatch`() {
+        val message = ConnectionTestMessageResolver.forDiagnosticsException(
+            mode = ConnectionMode.REMOTE,
+            baseUrl = "https://100.101.102.103:8000",
+            message = "CLEARTEXT communication to host not permitted",
+        )
+
+        assertTrue(message.contains("scheme mismatch"))
+    }
+
+    @Test
+    fun `diagnostics http failure classifies auth failure`() {
+        val message = ConnectionTestMessageResolver.forDiagnosticsHttpFailure(
+            mode = ConnectionMode.REMOTE,
+            baseUrl = "http://100.101.102.103:8000",
+            path = "/health",
+            statusCode = 401,
+        )
+
+        assertTrue(message.contains("Token rejected"))
+    }
+
+    @Test
+    fun `diagnostics debug endpoint 404 indicates probable wrong mode base url issue`() {
+        val message = ConnectionTestMessageResolver.forDiagnosticsHttpFailure(
+            mode = ConnectionMode.REMOTE,
+            baseUrl = "http://100.101.102.103:8000",
+            path = "/debug/version",
+            statusCode = 404,
+        )
+
+        assertTrue(message.contains("wrong-mode/base URL issue"))
+    }
 }

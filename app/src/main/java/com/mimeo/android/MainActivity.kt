@@ -2224,13 +2224,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             var lastError: String? = null
             try {
-                val health = runRawCheck(baseUrl, token, "/health", "health")
+                val health = runRawCheck(
+                    baseUrl = baseUrl,
+                    token = token,
+                    path = "/health",
+                    name = "health",
+                    mode = current.connectionMode,
+                )
                 rows += health
                 if (health.outcome != ConnectivityDiagnosticOutcome.PASS && health.hint != null) {
                     lastError = health.hint
                 }
 
-                val debugVersion = runRawCheck(baseUrl, token, "/debug/version", "debug/version")
+                val debugVersion = runRawCheck(
+                    baseUrl = baseUrl,
+                    token = token,
+                    path = "/debug/version",
+                    name = "debug/version",
+                    mode = current.connectionMode,
+                )
                 rows += if (debugVersion.outcome == ConnectivityDiagnosticOutcome.PASS) {
                     val gitSha = extractJsonField(debugVersion.detail, "git_sha") ?: "unknown"
                     debugVersion.copy(detail = "git_sha=$gitSha")
@@ -2241,7 +2253,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     lastError = debugVersion.hint
                 }
 
-                val debugPython = runRawCheck(baseUrl, token, "/debug/python", "debug/python")
+                val debugPython = runRawCheck(
+                    baseUrl = baseUrl,
+                    token = token,
+                    path = "/debug/python",
+                    name = "debug/python",
+                    mode = current.connectionMode,
+                )
                 rows += if (debugPython.outcome == ConnectivityDiagnosticOutcome.PASS) {
                     val sysPrefix = extractJsonField(debugPython.detail, "sys_prefix") ?: "unknown"
                     debugPython.copy(detail = "sys_prefix=$sysPrefix")
@@ -2258,7 +2276,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     url = baseUrl,
                     outcome = ConnectivityDiagnosticOutcome.FAIL,
                     detail = "error=$message",
-                    hint = classifyNetworkHint(message),
+                    hint = ConnectionTestMessageResolver.forDiagnosticsException(
+                        mode = current.connectionMode,
+                        baseUrl = baseUrl,
+                        message = message,
+                    ),
                 )
                 lastError = message
             } finally {
@@ -2946,7 +2968,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun runRawCheck(baseUrl: String, token: String, path: String, name: String): ConnectivityDiagnosticRow {
+    private suspend fun runRawCheck(
+        baseUrl: String,
+        token: String,
+        path: String,
+        name: String,
+        mode: ConnectionMode = settings.value.connectionMode,
+    ): ConnectivityDiagnosticRow {
         val url = "$baseUrl$path"
         return try {
             val response = apiClient.getRawEndpoint(baseUrl, token, path)
@@ -2963,7 +2991,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     url = url,
                     outcome = ConnectivityDiagnosticOutcome.FAIL,
                     detail = "status=${response.statusCode}",
-                    hint = classifyHttpHint(path, response.statusCode),
+                    hint = ConnectionTestMessageResolver.forDiagnosticsHttpFailure(
+                        mode = mode,
+                        baseUrl = baseUrl,
+                        path = path,
+                        statusCode = response.statusCode,
+                    ),
                 )
             }
         } catch (e: Exception) {
@@ -2973,7 +3006,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 url = url,
                 outcome = ConnectivityDiagnosticOutcome.FAIL,
                 detail = "error=$message",
-                hint = classifyNetworkHint(message),
+                hint = ConnectionTestMessageResolver.forDiagnosticsException(
+                    mode = mode,
+                    baseUrl = baseUrl,
+                    message = message,
+                ),
             )
         }
     }
@@ -2998,24 +3035,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun extractJsonField(body: String, field: String): String? = runCatching {
         Json.parseToJsonElement(body).jsonObject[field]?.jsonPrimitive?.contentOrNull
     }.getOrNull()
-
-    private fun classifyHttpHint(path: String, status: Int): String {
-        if (status == 401 || status == 403) return "check API token/auth"
-        if (status >= 500) return "backend error; check logs"
-        if (status == 404 && (path == "/debug/version" || path == "/debug/python")) {
-            return "backend stale; run verify-mimeo.ps1 then hard refresh"
-        }
-        return "check backend endpoint and settings"
-    }
-
-    private fun classifyNetworkHint(message: String): String {
-        val lower = message.lowercase(Locale.US)
-        return if (lower.contains("timeout") || lower.contains("failed to connect") || lower.contains("connection")) {
-            "start backend (verify-mimeo.ps1) and check firewall rule"
-        } else {
-            "check backend reachability and logs"
-        }
-    }
 
     private fun baseUrlHint(baseUrl: String, isPhysicalDevice: Boolean): String? {
         if (!isPhysicalDevice) return null
