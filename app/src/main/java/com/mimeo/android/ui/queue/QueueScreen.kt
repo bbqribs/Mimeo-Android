@@ -209,6 +209,7 @@ fun QueueScreen(
     var pendingFocusId by remember { mutableIntStateOf(-1) }
     var previousProjectedPendingIds by remember { mutableStateOf<List<Long>>(emptyList()) }
     var previousDisplayedItemIds by remember { mutableStateOf<List<Int>>(emptyList()) }
+    var suppressAutoScrollToTopOnce by remember { mutableStateOf(false) }
     var playlistMenuExpanded by remember { mutableStateOf(false) }
     var rowMenuItemId by remember { mutableIntStateOf(-1) }
     var playlistPickerItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
@@ -435,6 +436,11 @@ fun QueueScreen(
 
     LaunchedEffect(displayedItems, pendingFocusId, searchQuery, selectedFilter, selectedSort) {
         val currentIds = displayedItems.map { it.itemId }
+        if (suppressAutoScrollToTopOnce) {
+            suppressAutoScrollToTopOnce = false
+            previousDisplayedItemIds = currentIds
+            return@LaunchedEffect
+        }
         val shouldScroll = shouldAutoScrollToTopForNewItems(
             previousDisplayedItemIds = previousDisplayedItemIds,
             currentDisplayedItemIds = currentIds,
@@ -814,11 +820,13 @@ fun QueueScreen(
                         },
                         onArchive = {
                             actionScope.launch {
+                                suppressAutoScrollToTopOnce = true
                                 vm.archiveItem(item.itemId)
                                     .onSuccess {
                                         onShowSnackbar("Archived", null, null)
                                     }
                                     .onFailure {
+                                        suppressAutoScrollToTopOnce = false
                                         onShowSnackbar("Couldn't archive item", "Diagnostics", "open_diagnostics")
                                     }
                             }

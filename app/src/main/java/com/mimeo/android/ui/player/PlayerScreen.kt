@@ -50,7 +50,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.animation.animateColorAsState
@@ -1097,7 +1096,17 @@ fun PlayerScreen(
                                     vm.archiveItem(currentItemId)
                                         .onSuccess {
                                             onShowSnackbar("Archived", null, null)
-                                            onRequestBack()
+                                            val nextItemId = vm.nextSessionItemId(currentItemId)
+                                            if (nextItemId != null) {
+                                                vm.playbackOpenItem(
+                                                    itemId = nextItemId,
+                                                    intent = PlaybackOpenIntent.ManualOpen,
+                                                    autoPlayAfterLoad = false,
+                                                )
+                                                onOpenItem(nextItemId)
+                                            } else {
+                                                onRequestBack()
+                                            }
                                         }
                                         .onFailure { error ->
                                             if (error is CancellationException) return@onFailure
@@ -1250,7 +1259,17 @@ fun PlayerScreen(
                                             vm.archiveItem(currentItemId)
                                                 .onSuccess {
                                                     onShowSnackbar("Archived", null, null)
-                                                    onRequestBack()
+                                                    val nextItemId = vm.nextSessionItemId(currentItemId)
+                                                    if (nextItemId != null) {
+                                                        vm.playbackOpenItem(
+                                                            itemId = nextItemId,
+                                                            intent = PlaybackOpenIntent.ManualOpen,
+                                                            autoPlayAfterLoad = false,
+                                                        )
+                                                        onOpenItem(nextItemId)
+                                                    } else {
+                                                        onRequestBack()
+                                                    }
                                                 }
                                                 .onFailure { error ->
                                                     if (error is CancellationException) return@onFailure
@@ -1436,8 +1455,12 @@ private fun ExpandedPlayerTopBar(
                 speed = playbackSpeed,
                 onSpeedChange = onSpeedChange,
             )
-            TextButton(onClick = onArchive) {
-                Text("Archive")
+            IconButton(onClick = onArchive) {
+                Icon(
+                    painter = painterResource(id = R.drawable.msr_list_layers_24),
+                    contentDescription = "Archive item",
+                    modifier = Modifier.size(20.dp),
+                )
             }
             LocusOverflowMenu(
                 expanded = overflowExpanded,
