@@ -2262,7 +2262,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val debugVersion = debugVersionDeferred.await()
                 rows += if (debugVersion.outcome == ConnectivityDiagnosticOutcome.PASS) {
                     val gitSha = extractJsonField(debugVersion.detail, "git_sha") ?: "unknown"
-                    debugVersion.copy(detail = "git_sha=$gitSha")
+                    debugVersion.copy(detail = withProbeMeta("git_sha=$gitSha", debugVersion.detail))
                 } else {
                     debugVersion
                 }
@@ -2273,7 +2273,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val debugPython = debugPythonDeferred.await()
                 rows += if (debugPython.outcome == ConnectivityDiagnosticOutcome.PASS) {
                     val sysPrefix = extractJsonField(debugPython.detail, "sys_prefix") ?: "unknown"
-                    debugPython.copy(detail = "sys_prefix=$sysPrefix")
+                    debugPython.copy(detail = withProbeMeta("sys_prefix=$sysPrefix", debugPython.detail))
                 } else {
                     debugPython
                 }
@@ -3080,6 +3080,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val latencyMs: Long,
         val bodySnippet: String?,
     )
+
+    private fun withProbeMeta(prefix: String, originalDetail: String): String {
+        val marker = " (attempts="
+        val suffix = originalDetail.substringAfter(marker, "")
+        return if (suffix.isBlank()) {
+            prefix
+        } else {
+            "$prefix$marker$suffix"
+        }
+    }
 
     private fun diagnosticRow(
         name: String,
