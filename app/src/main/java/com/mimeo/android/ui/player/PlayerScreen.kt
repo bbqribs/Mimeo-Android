@@ -52,6 +52,10 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.Composable
@@ -84,6 +88,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mimeo.android.AppViewModel
+import com.mimeo.android.ArchiveActionSource
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
@@ -132,6 +137,7 @@ private const val PLAYBACK_SPEED_STEPS = 69
 private val PLAYBACK_SPEED_PILLS = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
 private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 private const val MANUAL_OPEN_DEBUG_TAG = "MimeoManualOpen"
+private const val ACTION_KEY_UNDO_ARCHIVE = "undo_archive"
 
 enum class PlaybackOpenIntent {
     ManualOpen,
@@ -842,6 +848,13 @@ fun PlayerScreen(
         }
     }
     val toggleReaderMode = { readerModeEnabled = !readerModeEnabled }
+    fun nextSessionItemIdForArchive(currentId: Int): Int? {
+        val session = nowPlayingSession ?: return null
+        val currentIndex = session.items.indexOfFirst { it.itemId == currentId }
+        if (currentIndex < 0) return null
+        val nextIndex = currentIndex + 1
+        return session.items.getOrNull(nextIndex)?.itemId
+    }
 
     val renderPlayerControlBar: @Composable () -> Unit = {
         PlayerControlBar(
@@ -1091,6 +1104,33 @@ fun PlayerScreen(
                                 }
                             },
                             onSpeedChange = { speed -> vm.savePlaybackSpeed(speed) },
+                            onArchive = {
+                                actionScope.launch {
+                                    val nextItemId = nextSessionItemIdForArchive(currentItemId)
+                                    vm.archiveItem(
+                                        currentItemId,
+                                        source = ArchiveActionSource.LOCUS,
+                                    )
+                                        .onSuccess {
+                                            onShowSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
+                                            if (nextItemId != null) {
+                                                vm.startNowPlayingSession(startItemId = nextItemId)
+                                                vm.playbackOpenItem(
+                                                    itemId = nextItemId,
+                                                    intent = PlaybackOpenIntent.ManualOpen,
+                                                    autoPlayAfterLoad = false,
+                                                )
+                                                onOpenItem(nextItemId)
+                                            } else {
+                                                onRequestBack()
+                                            }
+                                        }
+                                        .onFailure { error ->
+                                            if (error is CancellationException) return@onFailure
+                                            onShowSnackbar("Couldn't archive item", "Diagnostics", "open_diagnostics")
+                                        }
+                                }
+                            },
                             onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
                             overflowMenuContent = {
                                 LocusOverflowMenuItems(
@@ -1231,6 +1271,33 @@ fun PlayerScreen(
                                         }
                                     },
                                     onSpeedChange = { speed -> vm.savePlaybackSpeed(speed) },
+                                    onArchive = {
+                                        actionScope.launch {
+                                            val nextItemId = nextSessionItemIdForArchive(currentItemId)
+                                            vm.archiveItem(
+                                                currentItemId,
+                                                source = ArchiveActionSource.LOCUS,
+                                            )
+                                                .onSuccess {
+                                                    onShowSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
+                                                    if (nextItemId != null) {
+                                                        vm.startNowPlayingSession(startItemId = nextItemId)
+                                                        vm.playbackOpenItem(
+                                                            itemId = nextItemId,
+                                                            intent = PlaybackOpenIntent.ManualOpen,
+                                                            autoPlayAfterLoad = false,
+                                                        )
+                                                        onOpenItem(nextItemId)
+                                                    } else {
+                                                        onRequestBack()
+                                                    }
+                                                }
+                                                .onFailure { error ->
+                                                    if (error is CancellationException) return@onFailure
+                                                    onShowSnackbar("Couldn't archive item", "Diagnostics", "open_diagnostics")
+                                                }
+                                        }
+                                    },
                                     onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
                                     overflowMenuContent = {
                                         LocusOverflowMenuItems(
@@ -1374,6 +1441,7 @@ private fun ExpandedPlayerTopBar(
     onRefresh: () -> Unit,
     onMarkDone: () -> Unit,
     onSpeedChange: (Float) -> Unit,
+    onArchive: () -> Unit,
     onOverflowExpandedChange: (Boolean) -> Unit,
     overflowMenuContent: @Composable () -> Unit,
 ) {
@@ -1382,39 +1450,71 @@ private fun ExpandedPlayerTopBar(
         windowInsets = WindowInsets(0, 0, 0, 0),
         title = {},
         actions = {
-            IconToggleButton(
-                checked = isDone,
-                enabled = canMarkDone,
-                onCheckedChange = { checked ->
-                    if (checked != isDone) {
-                        onMarkDone()
-                    }
-                },
-            ) {
-                Icon(
-                    painter = painterResource(id = if (isDone) R.drawable.ic_book_closed_24 else R.drawable.ic_book_open_24),
-                    contentDescription = if (isDone) "Mark as not done" else "Mark as done",
-                    tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.size(22.dp),
+            ActionHintTooltip(label = if (isDone) "Mark as not done" else "Mark as done") {
+                IconToggleButton(
+                    checked = isDone,
+                    enabled = canMarkDone,
+                    onCheckedChange = { checked ->
+                        if (checked != isDone) {
+                            onMarkDone()
+                        }
+                    },
+                ) {
+                    Icon(
+                        painter = painterResource(id = if (isDone) R.drawable.ic_book_closed_24 else R.drawable.ic_book_open_24),
+                        contentDescription = if (isDone) "Mark as not done" else "Mark as done",
+                        tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+            }
+            ActionHintTooltip(label = "Refresh") {
+                RefreshActionButton(
+                    state = refreshState,
+                    showConnectivityIssue = showConnectivityIssue,
+                    onClick = onRefresh,
+                    contentDescription = "Refresh item",
                 )
             }
-            RefreshActionButton(
-                state = refreshState,
-                showConnectivityIssue = showConnectivityIssue,
-                onClick = onRefresh,
-                contentDescription = "Refresh item",
-            )
-            SpeedControlButton(
-                speed = playbackSpeed,
-                onSpeedChange = onSpeedChange,
-            )
-            LocusOverflowMenu(
-                expanded = overflowExpanded,
-                onExpandedChange = onOverflowExpandedChange,
-                content = overflowMenuContent,
-            )
+            ActionHintTooltip(label = "Speed") {
+                SpeedControlButton(
+                    speed = playbackSpeed,
+                    onSpeedChange = onSpeedChange,
+                )
+            }
+            ActionHintTooltip(label = "Archive") {
+                IconButton(onClick = onArchive) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_archive_box_24),
+                        contentDescription = "Archive item",
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+            ActionHintTooltip(label = "More actions") {
+                LocusOverflowMenu(
+                    expanded = overflowExpanded,
+                    onExpandedChange = onOverflowExpandedChange,
+                    content = overflowMenuContent,
+                )
+            }
         },
     )
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun ActionHintTooltip(
+    label: String,
+    content: @Composable () -> Unit,
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState(),
+    ) {
+        content()
+    }
 }
 
 @Composable
