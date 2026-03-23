@@ -69,7 +69,8 @@
 2. [ ] Autodownload worker follow-up: tighten no-active-content persistence and queue/list replacement timing so successful retries transition cleanly from pending -> saved -> cached without confusing gaps.
 3. [ ] TTS QoL follow-up: optional completion tone profile tuning + lightweight title-intro controls (per-mode/per-context guardrails, including mid-article resume behavior).
 4. [ ] Queue/player daily-use polish: finish Locus open-transition jitter/flicker edge cases and keep back navigation behavior fully consistent after repeated queue taps.
-5. [ ] Share plain text capture decision ticket: either implement plain-text share ingestion as first-class flow or finalize explicit reject UX with clear reason/hint.
+5. [ ] Queue archive affordance pass: add Archive action to Up Next item overflow and to the Locus action bar for the active item.
+6. [ ] Share plain text capture decision ticket: either implement plain-text share ingestion as first-class flow or finalize explicit reject UX with clear reason/hint.
 
 ## Android Redesign v1.1
 1. [~] Foundation: 4-tab nav shell (Up Next / Locus / Collections / Settings) plus black/purple theme foundations.
