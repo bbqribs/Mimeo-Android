@@ -2,9 +2,11 @@ package com.mimeo.android
 
 import android.Manifest
 import android.app.Application
+import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.ContextWrapper
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
@@ -13,6 +15,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Bundle
 import android.os.Build
+import android.view.WindowManager
 import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
@@ -59,6 +62,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -68,7 +72,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -3151,7 +3154,8 @@ internal fun shouldKeepScreenOnForSession(
 
 @Composable
 private fun MimeoApp(vm: AppViewModel) {
-    val hostView = LocalView.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val hostActivity = remember(context) { context.findActivity() }
     val nav = rememberNavController()
     val navBackStack by nav.currentBackStackEntryAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -3185,12 +3189,17 @@ private fun MimeoApp(vm: AppViewModel) {
         isOnLocusRoute = currentRoute.startsWith(ROUTE_LOCUS),
         requestedPlayerItemId = requestedPlayerItemId,
     )
-    DisposableEffect(hostView, keepScreenOnForSession) {
-        hostView.keepScreenOn = keepScreenOnForSession
+    SideEffect {
+        val window = hostActivity?.window ?: return@SideEffect
+        if (keepScreenOnForSession) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+    DisposableEffect(hostActivity) {
         onDispose {
-            if (keepScreenOnForSession) {
-                hostView.keepScreenOn = false
-            }
+            hostActivity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
     LaunchedEffect(sessionNowPlayingItemId, routeItemId, requestedPlayerItemId, currentRoute, pendingLocusOpen, pendingLocusItemId) {
@@ -3595,6 +3604,12 @@ private fun MimeoApp(vm: AppViewModel) {
             )
         }
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 
