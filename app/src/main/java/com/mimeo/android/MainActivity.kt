@@ -57,6 +57,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -67,6 +68,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -758,6 +760,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         speakTitleBeforeArticle: Boolean,
         skipDuplicateOpeningAfterTitleIntro: Boolean,
         playCompletionCueAtArticleEnd: Boolean,
+        keepScreenOnDuringSession: Boolean,
         persistentPlayerEnabled: Boolean,
         autoScrollWhileListening: Boolean,
         continuousNowPlayingMarquee: Boolean,
@@ -781,6 +784,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 speakTitleBeforeArticle = speakTitleBeforeArticle,
                 skipDuplicateOpeningAfterTitleIntro = skipDuplicateOpeningAfterTitleIntro,
                 playCompletionCueAtArticleEnd = playCompletionCueAtArticleEnd,
+                keepScreenOnDuringSession = keepScreenOnDuringSession,
                 persistentPlayerEnabled = persistentPlayerEnabled,
                 autoScrollWhileListening = autoScrollWhileListening,
                 continuousNowPlayingMarquee = continuousNowPlayingMarquee,
@@ -827,6 +831,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 speakTitleBeforeArticle = settings.value.speakTitleBeforeArticle,
                 skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
                 playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
+                keepScreenOnDuringSession = settings.value.keepScreenOnDuringSession,
                 persistentPlayerEnabled = settings.value.persistentPlayerEnabled,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
@@ -866,6 +871,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 speakTitleBeforeArticle = settings.value.speakTitleBeforeArticle,
                 skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
                 playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
+                keepScreenOnDuringSession = settings.value.keepScreenOnDuringSession,
                 persistentPlayerEnabled = settings.value.persistentPlayerEnabled,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
@@ -929,6 +935,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _settings.value = current.copy(playCompletionCueAtArticleEnd = enabled)
         viewModelScope.launch {
             settingsStore.savePlayCompletionCueAtArticleEnd(enabled)
+        }
+    }
+
+    fun saveKeepScreenOnDuringSession(enabled: Boolean) {
+        val current = settings.value
+        _settings.value = current.copy(keepScreenOnDuringSession = enabled)
+        viewModelScope.launch {
+            settingsStore.saveKeepScreenOnDuringSession(enabled)
         }
     }
 
@@ -3125,8 +3139,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 }
 
+internal fun shouldKeepScreenOnForSession(
+    keepScreenOnEnabled: Boolean,
+    requiresSignIn: Boolean,
+    isOnLocusRoute: Boolean,
+    requestedPlayerItemId: Int?,
+): Boolean {
+    if (!keepScreenOnEnabled || requiresSignIn || !isOnLocusRoute) return false
+    return (requestedPlayerItemId ?: -1) > 0
+}
+
 @Composable
 private fun MimeoApp(vm: AppViewModel) {
+    val hostView = LocalView.current
     val nav = rememberNavController()
     val navBackStack by nav.currentBackStackEntryAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -3154,6 +3179,20 @@ private fun MimeoApp(vm: AppViewModel) {
         routeItemId
             ?: pendingLocusItemId.takeIf { pendingLocusOpen && it > 0 }
             ?: sessionNowPlayingItemId
+    val keepScreenOnForSession = shouldKeepScreenOnForSession(
+        keepScreenOnEnabled = settings.keepScreenOnDuringSession,
+        requiresSignIn = requiresSignIn,
+        isOnLocusRoute = currentRoute.startsWith(ROUTE_LOCUS),
+        requestedPlayerItemId = requestedPlayerItemId,
+    )
+    DisposableEffect(hostView, keepScreenOnForSession) {
+        hostView.keepScreenOn = keepScreenOnForSession
+        onDispose {
+            if (keepScreenOnForSession) {
+                hostView.keepScreenOn = false
+            }
+        }
+    }
     LaunchedEffect(sessionNowPlayingItemId, routeItemId, requestedPlayerItemId, currentRoute, pendingLocusOpen, pendingLocusItemId) {
         Log.d(
             LOCUS_CONTINUATION_DEBUG_TAG,
