@@ -48,6 +48,9 @@ fun ConnectivityDiagnosticsScreen(vm: AppViewModel) {
         } else {
             Text("Emulator: use http://10.0.2.2:8000 for host machine backend.")
         }
+        if (settings.connectionMode == com.mimeo.android.model.ConnectionMode.REMOTE) {
+            Text("Remote diagnostics run multi-attempt probes and classify endpoint path quality (stable/flaky/down).")
+        }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { vm.runConnectivityDiagnostics(isPhysicalDevice) }, enabled = !running) {

@@ -159,6 +159,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -2224,31 +2225,59 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             var lastError: String? = null
             try {
-                val health = runRawCheck(baseUrl, token, "/health", "health")
+                val healthDeferred = async {
+                    runRawCheck(
+                        baseUrl = baseUrl,
+                        token = token,
+                        path = "/health",
+                        name = "health",
+                        mode = current.connectionMode,
+                    )
+                }
+                val debugVersionDeferred = async {
+                    runRawCheck(
+                        baseUrl = baseUrl,
+                        token = token,
+                        path = "/debug/version",
+                        name = "debug/version",
+                        mode = current.connectionMode,
+                    )
+                }
+                val debugPythonDeferred = async {
+                    runRawCheck(
+                        baseUrl = baseUrl,
+                        token = token,
+                        path = "/debug/python",
+                        name = "debug/python",
+                        mode = current.connectionMode,
+                    )
+                }
+
+                val health = healthDeferred.await()
                 rows += health
                 if (health.outcome != ConnectivityDiagnosticOutcome.PASS && health.hint != null) {
                     lastError = health.hint
                 }
 
-                val debugVersion = runRawCheck(baseUrl, token, "/debug/version", "debug/version")
+                val debugVersion = debugVersionDeferred.await()
                 rows += if (debugVersion.outcome == ConnectivityDiagnosticOutcome.PASS) {
                     val gitSha = extractJsonField(debugVersion.detail, "git_sha") ?: "unknown"
-                    debugVersion.copy(detail = "git_sha=$gitSha")
+                    debugVersion.copy(detail = withProbeMeta("git_sha=$gitSha", debugVersion.detail))
                 } else {
                     debugVersion
                 }
-                if (debugVersion.outcome == ConnectivityDiagnosticOutcome.FAIL && debugVersion.hint != null) {
+                if (debugVersion.outcome != ConnectivityDiagnosticOutcome.PASS && debugVersion.hint != null) {
                     lastError = debugVersion.hint
                 }
 
-                val debugPython = runRawCheck(baseUrl, token, "/debug/python", "debug/python")
+                val debugPython = debugPythonDeferred.await()
                 rows += if (debugPython.outcome == ConnectivityDiagnosticOutcome.PASS) {
                     val sysPrefix = extractJsonField(debugPython.detail, "sys_prefix") ?: "unknown"
-                    debugPython.copy(detail = "sys_prefix=$sysPrefix")
+                    debugPython.copy(detail = withProbeMeta("sys_prefix=$sysPrefix", debugPython.detail))
                 } else {
                     debugPython
                 }
-                if (debugPython.outcome == ConnectivityDiagnosticOutcome.FAIL && debugPython.hint != null) {
+                if (debugPython.outcome != ConnectivityDiagnosticOutcome.PASS && debugPython.hint != null) {
                     lastError = debugPython.hint
                 }
             } catch (e: Exception) {
@@ -2258,7 +2287,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     url = baseUrl,
                     outcome = ConnectivityDiagnosticOutcome.FAIL,
                     detail = "error=$message",
-                    hint = classifyNetworkHint(message),
+                    hint = ConnectionTestMessageResolver.forDiagnosticsException(
+                        mode = current.connectionMode,
+                        baseUrl = baseUrl,
+                        message = message,
+                    ),
                 )
                 lastError = message
             } finally {
@@ -2946,35 +2979,115 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun runRawCheck(baseUrl: String, token: String, path: String, name: String): ConnectivityDiagnosticRow {
+    private suspend fun runRawCheck(
+        baseUrl: String,
+        token: String,
+        path: String,
+        name: String,
+        mode: ConnectionMode = settings.value.connectionMode,
+    ): ConnectivityDiagnosticRow {
         val url = "$baseUrl$path"
-        return try {
-            val response = apiClient.getRawEndpoint(baseUrl, token, path)
-            if (response.statusCode in 200..299) {
-                diagnosticRow(
-                    name = name,
-                    url = url,
-                    outcome = ConnectivityDiagnosticOutcome.PASS,
-                    detail = response.body.take(200).ifBlank { "status=${response.statusCode}" },
+        val attemptCount = if (mode == ConnectionMode.REMOTE) 3 else 1
+        val attempts = mutableListOf<ConnectivityProbeAttempt>()
+        repeat(attemptCount) {
+            val startedAt = System.nanoTime()
+            try {
+                val response = apiClient.getRawEndpoint(baseUrl, token, path)
+                val latencyMs = ((System.nanoTime() - startedAt) / 1_000_000L).coerceAtLeast(0L)
+                val pass = response.statusCode in 200..299
+                attempts += ConnectivityProbeAttempt(
+                    pass = pass,
+                    statusCode = response.statusCode,
+                    errorMessage = null,
+                    hint = if (pass) {
+                        null
+                    } else {
+                        ConnectionTestMessageResolver.forDiagnosticsHttpFailure(
+                            mode = mode,
+                            baseUrl = baseUrl,
+                            path = path,
+                            statusCode = response.statusCode,
+                        )
+                    },
+                    latencyMs = latencyMs,
+                    bodySnippet = response.body.take(200).ifBlank { "status=${response.statusCode}" },
                 )
-            } else {
-                diagnosticRow(
-                    name = name,
-                    url = url,
-                    outcome = ConnectivityDiagnosticOutcome.FAIL,
-                    detail = "status=${response.statusCode}",
-                    hint = classifyHttpHint(path, response.statusCode),
+            } catch (error: Exception) {
+                val message = error.message ?: "request failed"
+                val latencyMs = ((System.nanoTime() - startedAt) / 1_000_000L).coerceAtLeast(0L)
+                attempts += ConnectivityProbeAttempt(
+                    pass = false,
+                    statusCode = null,
+                    errorMessage = message,
+                    hint = ConnectionTestMessageResolver.forDiagnosticsException(
+                        mode = mode,
+                        baseUrl = baseUrl,
+                        message = message,
+                    ),
+                    latencyMs = latencyMs,
+                    bodySnippet = null,
                 )
             }
-        } catch (e: Exception) {
-            val message = e.message ?: "request failed"
-            diagnosticRow(
+        }
+
+        val passCount = attempts.count { it.pass }
+        val totalCount = attempts.size
+        val sortedLatency = attempts.map { it.latencyMs }.sorted()
+        val p50Latency = sortedLatency[sortedLatency.lastIndex / 2]
+        val p95Latency = sortedLatency[((sortedLatency.size - 1) * 95) / 100]
+        val attemptsSummary = "attempts=$passCount/$totalCount latency_ms(p50=$p50Latency,p95=$p95Latency)"
+        val dominantHint = attempts
+            .mapNotNull { it.hint }
+            .groupingBy { it }
+            .eachCount()
+            .maxByOrNull { it.value }
+            ?.key
+        val firstPassDetail = attempts.firstOrNull { it.pass }?.bodySnippet
+        val firstFailureDetail = attempts.firstOrNull { !it.pass }?.let { failure ->
+            failure.statusCode?.let { "status=$it" } ?: "error=${failure.errorMessage.orEmpty()}"
+        }
+
+        return when {
+            passCount == totalCount -> diagnosticRow(
+                name = name,
+                url = url,
+                outcome = ConnectivityDiagnosticOutcome.PASS,
+                detail = "${firstPassDetail ?: "status=200"} ($attemptsSummary, class=stable)",
+                hint = null,
+            )
+            passCount > 0 -> diagnosticRow(
+                name = name,
+                url = url,
+                outcome = ConnectivityDiagnosticOutcome.INFO,
+                detail = "${firstFailureDetail ?: "intermittent failure"} ($attemptsSummary, class=flaky)",
+                hint = dominantHint ?: "Intermittent connectivity; rerun diagnostics and verify network path.",
+            )
+            else -> diagnosticRow(
                 name = name,
                 url = url,
                 outcome = ConnectivityDiagnosticOutcome.FAIL,
-                detail = "error=$message",
-                hint = classifyNetworkHint(message),
+                detail = "${firstFailureDetail ?: "request failed"} ($attemptsSummary, class=down)",
+                hint = dominantHint ?: "Connection failed. Verify backend reachability.",
             )
+        }
+    }
+
+    private data class ConnectivityProbeAttempt(
+        val pass: Boolean,
+        val statusCode: Int?,
+        val errorMessage: String?,
+        val hint: String?,
+        val latencyMs: Long,
+        val bodySnippet: String?,
+    )
+
+    private fun withProbeMeta(prefix: String, originalDetail: String): String {
+        val marker = " (attempts="
+        val suffix = originalDetail.substringAfter(marker, "")
+        return if (suffix.isBlank()) {
+            prefix
+        } else {
+            "$prefix$marker$suffix"
         }
     }
 
@@ -2998,24 +3111,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun extractJsonField(body: String, field: String): String? = runCatching {
         Json.parseToJsonElement(body).jsonObject[field]?.jsonPrimitive?.contentOrNull
     }.getOrNull()
-
-    private fun classifyHttpHint(path: String, status: Int): String {
-        if (status == 401 || status == 403) return "check API token/auth"
-        if (status >= 500) return "backend error; check logs"
-        if (status == 404 && (path == "/debug/version" || path == "/debug/python")) {
-            return "backend stale; run verify-mimeo.ps1 then hard refresh"
-        }
-        return "check backend endpoint and settings"
-    }
-
-    private fun classifyNetworkHint(message: String): String {
-        val lower = message.lowercase(Locale.US)
-        return if (lower.contains("timeout") || lower.contains("failed to connect") || lower.contains("connection")) {
-            "start backend (verify-mimeo.ps1) and check firewall rule"
-        } else {
-            "check backend reachability and logs"
-        }
-    }
 
     private fun baseUrlHint(baseUrl: String, isPhysicalDevice: Boolean): String? {
         if (!isPhysicalDevice) return null
