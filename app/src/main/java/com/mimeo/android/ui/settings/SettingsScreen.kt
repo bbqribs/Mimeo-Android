@@ -97,6 +97,9 @@ fun SettingsScreen(
     var playCompletionCueAtArticleEnd by remember(settings.playCompletionCueAtArticleEnd) {
         mutableStateOf(settings.playCompletionCueAtArticleEnd)
     }
+    var keepScreenOnDuringSession by remember(settings.keepScreenOnDuringSession) {
+        mutableStateOf(settings.keepScreenOnDuringSession)
+    }
     var persistentPlayerEnabled by remember(settings.persistentPlayerEnabled) {
         mutableStateOf(settings.persistentPlayerEnabled)
     }
@@ -190,6 +193,7 @@ fun SettingsScreen(
             speakTitleBeforeArticle = speakTitleBeforeArticle,
             skipDuplicateOpeningAfterTitleIntro = skipDuplicateOpeningAfterTitleIntro,
             playCompletionCueAtArticleEnd = playCompletionCueAtArticleEnd,
+            keepScreenOnDuringSession = keepScreenOnDuringSession,
             persistentPlayerEnabled = persistentPlayerEnabled,
             autoScrollWhileListening = autoScrollWhileListening,
             continuousNowPlayingMarquee = continuousNowPlayingMarquee,
@@ -724,6 +728,30 @@ fun SettingsScreen(
                         onCheckedChange = {
                             skipDuplicateOpeningAfterTitleIntro = it
                             vm.saveSkipDuplicateOpeningAfterTitleIntro(it)
+                        },
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text("Keep screen on during active session")
+                        Text(
+                            text = "Keeps screen awake while Locus is open with an active reading/listening item.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = keepScreenOnDuringSession,
+                        onCheckedChange = {
+                            keepScreenOnDuringSession = it
+                            vm.saveKeepScreenOnDuringSession(it)
                         },
                     )
                 }

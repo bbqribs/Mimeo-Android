@@ -2,9 +2,11 @@ package com.mimeo.android
 
 import android.Manifest
 import android.app.Application
+import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.ContextWrapper
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
@@ -13,6 +15,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Bundle
 import android.os.Build
+import android.view.WindowManager
 import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
@@ -57,7 +60,9 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -758,6 +763,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         speakTitleBeforeArticle: Boolean,
         skipDuplicateOpeningAfterTitleIntro: Boolean,
         playCompletionCueAtArticleEnd: Boolean,
+        keepScreenOnDuringSession: Boolean,
         persistentPlayerEnabled: Boolean,
         autoScrollWhileListening: Boolean,
         continuousNowPlayingMarquee: Boolean,
@@ -781,6 +787,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 speakTitleBeforeArticle = speakTitleBeforeArticle,
                 skipDuplicateOpeningAfterTitleIntro = skipDuplicateOpeningAfterTitleIntro,
                 playCompletionCueAtArticleEnd = playCompletionCueAtArticleEnd,
+                keepScreenOnDuringSession = keepScreenOnDuringSession,
                 persistentPlayerEnabled = persistentPlayerEnabled,
                 autoScrollWhileListening = autoScrollWhileListening,
                 continuousNowPlayingMarquee = continuousNowPlayingMarquee,
@@ -827,6 +834,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 speakTitleBeforeArticle = settings.value.speakTitleBeforeArticle,
                 skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
                 playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
+                keepScreenOnDuringSession = settings.value.keepScreenOnDuringSession,
                 persistentPlayerEnabled = settings.value.persistentPlayerEnabled,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
@@ -866,6 +874,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 speakTitleBeforeArticle = settings.value.speakTitleBeforeArticle,
                 skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
                 playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
+                keepScreenOnDuringSession = settings.value.keepScreenOnDuringSession,
                 persistentPlayerEnabled = settings.value.persistentPlayerEnabled,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
@@ -929,6 +938,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _settings.value = current.copy(playCompletionCueAtArticleEnd = enabled)
         viewModelScope.launch {
             settingsStore.savePlayCompletionCueAtArticleEnd(enabled)
+        }
+    }
+
+    fun saveKeepScreenOnDuringSession(enabled: Boolean) {
+        val current = settings.value
+        _settings.value = current.copy(keepScreenOnDuringSession = enabled)
+        viewModelScope.launch {
+            settingsStore.saveKeepScreenOnDuringSession(enabled)
         }
     }
 
@@ -3125,8 +3142,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 }
 
+internal fun shouldKeepScreenOnForSession(
+    keepScreenOnEnabled: Boolean,
+    requiresSignIn: Boolean,
+    isOnLocusRoute: Boolean,
+    requestedPlayerItemId: Int?,
+): Boolean {
+    if (!keepScreenOnEnabled || requiresSignIn || !isOnLocusRoute) return false
+    return (requestedPlayerItemId ?: -1) > 0
+}
+
 @Composable
 private fun MimeoApp(vm: AppViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val hostActivity = remember(context) { context.findActivity() }
     val nav = rememberNavController()
     val navBackStack by nav.currentBackStackEntryAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -3154,6 +3183,25 @@ private fun MimeoApp(vm: AppViewModel) {
         routeItemId
             ?: pendingLocusItemId.takeIf { pendingLocusOpen && it > 0 }
             ?: sessionNowPlayingItemId
+    val keepScreenOnForSession = shouldKeepScreenOnForSession(
+        keepScreenOnEnabled = settings.keepScreenOnDuringSession,
+        requiresSignIn = requiresSignIn,
+        isOnLocusRoute = currentRoute.startsWith(ROUTE_LOCUS),
+        requestedPlayerItemId = requestedPlayerItemId,
+    )
+    SideEffect {
+        val window = hostActivity?.window ?: return@SideEffect
+        if (keepScreenOnForSession) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+    DisposableEffect(hostActivity) {
+        onDispose {
+            hostActivity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
     LaunchedEffect(sessionNowPlayingItemId, routeItemId, requestedPlayerItemId, currentRoute, pendingLocusOpen, pendingLocusItemId) {
         Log.d(
             LOCUS_CONTINUATION_DEBUG_TAG,
@@ -3556,6 +3604,12 @@ private fun MimeoApp(vm: AppViewModel) {
             )
         }
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 

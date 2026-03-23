@@ -48,6 +48,8 @@ class SettingsStore(private val context: Context) {
         booleanPreferencesKey("skip_duplicate_opening_after_title_intro")
     private val playCompletionCueAtArticleEndKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("play_completion_cue_at_article_end")
+    private val keepScreenOnDuringSessionKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("keep_screen_on_during_session")
     private val persistentPlayerEnabledKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("persistent_player_enabled")
     private val autoScrollWhileListeningKey: Preferences.Key<Boolean> =
@@ -126,6 +128,7 @@ class SettingsStore(private val context: Context) {
             speakTitleBeforeArticle = prefs[speakTitleBeforeArticleKey] ?: false,
             skipDuplicateOpeningAfterTitleIntro = prefs[skipDuplicateOpeningAfterTitleIntroKey] ?: true,
             playCompletionCueAtArticleEnd = prefs[playCompletionCueAtArticleEndKey] ?: false,
+            keepScreenOnDuringSession = prefs[keepScreenOnDuringSessionKey] ?: false,
             persistentPlayerEnabled = prefs[persistentPlayerEnabledKey] ?: true,
             autoScrollWhileListening = prefs[autoScrollWhileListeningKey] ?: true,
             continuousNowPlayingMarquee = prefs[continuousNowPlayingMarqueeKey] ?: true,
@@ -182,6 +185,7 @@ class SettingsStore(private val context: Context) {
         speakTitleBeforeArticle: Boolean,
         skipDuplicateOpeningAfterTitleIntro: Boolean,
         playCompletionCueAtArticleEnd: Boolean,
+        keepScreenOnDuringSession: Boolean,
         persistentPlayerEnabled: Boolean,
         autoScrollWhileListening: Boolean,
         continuousNowPlayingMarquee: Boolean,
@@ -218,6 +222,7 @@ class SettingsStore(private val context: Context) {
             prefs[speakTitleBeforeArticleKey] = speakTitleBeforeArticle
             prefs[skipDuplicateOpeningAfterTitleIntroKey] = skipDuplicateOpeningAfterTitleIntro
             prefs[playCompletionCueAtArticleEndKey] = playCompletionCueAtArticleEnd
+            prefs[keepScreenOnDuringSessionKey] = keepScreenOnDuringSession
             prefs[persistentPlayerEnabledKey] = persistentPlayerEnabled
             prefs[autoScrollWhileListeningKey] = autoScrollWhileListening
             prefs[continuousNowPlayingMarqueeKey] = continuousNowPlayingMarquee
@@ -337,6 +342,12 @@ class SettingsStore(private val context: Context) {
     suspend fun savePlayCompletionCueAtArticleEnd(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[playCompletionCueAtArticleEndKey] = enabled
+        }
+    }
+
+    suspend fun saveKeepScreenOnDuringSession(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[keepScreenOnDuringSessionKey] = enabled
         }
     }
 
