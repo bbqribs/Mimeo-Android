@@ -50,6 +50,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.animation.animateColorAsState
@@ -1091,6 +1092,19 @@ fun PlayerScreen(
                                 }
                             },
                             onSpeedChange = { speed -> vm.savePlaybackSpeed(speed) },
+                            onArchive = {
+                                actionScope.launch {
+                                    vm.archiveItem(currentItemId)
+                                        .onSuccess {
+                                            onShowSnackbar("Archived", null, null)
+                                            onRequestBack()
+                                        }
+                                        .onFailure { error ->
+                                            if (error is CancellationException) return@onFailure
+                                            onShowSnackbar("Couldn't archive item", "Diagnostics", "open_diagnostics")
+                                        }
+                                }
+                            },
                             onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
                             overflowMenuContent = {
                                 LocusOverflowMenuItems(
@@ -1231,6 +1245,19 @@ fun PlayerScreen(
                                         }
                                     },
                                     onSpeedChange = { speed -> vm.savePlaybackSpeed(speed) },
+                                    onArchive = {
+                                        actionScope.launch {
+                                            vm.archiveItem(currentItemId)
+                                                .onSuccess {
+                                                    onShowSnackbar("Archived", null, null)
+                                                    onRequestBack()
+                                                }
+                                                .onFailure { error ->
+                                                    if (error is CancellationException) return@onFailure
+                                                    onShowSnackbar("Couldn't archive item", "Diagnostics", "open_diagnostics")
+                                                }
+                                        }
+                                    },
                                     onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
                                     overflowMenuContent = {
                                         LocusOverflowMenuItems(
@@ -1374,6 +1401,7 @@ private fun ExpandedPlayerTopBar(
     onRefresh: () -> Unit,
     onMarkDone: () -> Unit,
     onSpeedChange: (Float) -> Unit,
+    onArchive: () -> Unit,
     onOverflowExpandedChange: (Boolean) -> Unit,
     overflowMenuContent: @Composable () -> Unit,
 ) {
@@ -1408,6 +1436,9 @@ private fun ExpandedPlayerTopBar(
                 speed = playbackSpeed,
                 onSpeedChange = onSpeedChange,
             )
+            TextButton(onClick = onArchive) {
+                Text("Archive")
+            }
             LocusOverflowMenu(
                 expanded = overflowExpanded,
                 onExpandedChange = onOverflowExpandedChange,

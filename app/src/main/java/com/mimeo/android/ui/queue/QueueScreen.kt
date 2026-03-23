@@ -812,6 +812,17 @@ fun QueueScreen(
                             vm.refreshPlaylists()
                             playlistPickerItem = item
                         },
+                        onArchive = {
+                            actionScope.launch {
+                                vm.archiveItem(item.itemId)
+                                    .onSuccess {
+                                        onShowSnackbar("Archived", null, null)
+                                    }
+                                    .onFailure {
+                                        onShowSnackbar("Couldn't archive item", "Diagnostics", "open_diagnostics")
+                                    }
+                            }
+                        },
                         isMenuExpanded = rowMenuItemId == item.itemId,
                         onDismissMenu = { rowMenuItemId = -1 },
                         onExpandMenu = { rowMenuItemId = item.itemId },
@@ -1777,6 +1788,7 @@ private fun QueueItemCard(
     onOpenPlayer: () -> Unit,
     onDownload: () -> Unit,
     onOpenPlaylistPicker: () -> Unit,
+    onArchive: () -> Unit,
     isMenuExpanded: Boolean,
     onDismissMenu: () -> Unit,
     onExpandMenu: () -> Unit,
@@ -1878,6 +1890,13 @@ private fun QueueItemCard(
                             onClick = {
                                 onDismissMenu()
                                 onOpenPlaylistPicker()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Archive") },
+                            onClick = {
+                                onDismissMenu()
+                                onArchive()
                             },
                         )
                     }

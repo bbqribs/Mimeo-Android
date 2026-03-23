@@ -241,6 +241,11 @@ class PlaybackRepository(
         }
     }
 
+    suspend fun archiveItem(baseUrl: String, token: String, itemId: Int): ProgressPostResult {
+        apiClient.markItemDone(baseUrl, token, itemId, autoArchive = true)
+        return ProgressPostResult(queued = false)
+    }
+
     suspend fun flushPendingProgress(baseUrl: String, token: String): FlushProgressResult {
         val dao = database.pendingProgressDao()
         val pending = dao.listPending()

@@ -2504,6 +2504,54 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    suspend fun archiveItem(itemId: Int): Result<Unit> {
+        val current = settings.value
+        return try {
+            repository.archiveItem(current.baseUrl, current.apiToken, itemId)
+            val archivedCurrentSessionItem = currentNowPlayingItemId() == itemId
+            if (archivedCurrentSessionItem) {
+                playbackPause(forceSync = true)
+                clearNowPlayingSessionNow()
+            }
+            val refreshResult = loadQueueOnce(autoRetryPendingSaves = false)
+            if (refreshResult.isFailure) {
+                removeArchivedItemLocally(itemId)
+                _statusMessage.value = "Archived; queue refresh failed"
+            } else {
+                _statusMessage.value = "Archived"
+            }
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+            }
+            Result.failure(error)
+        }
+    }
+
+    private suspend fun removeArchivedItemLocally(itemId: Int) {
+        _queueItems.update { previous -> previous.filterNot { it.itemId == itemId } }
+        _cachedItemIds.update { previous -> previous - itemId }
+        _noActiveContentItemIds.update { previous -> previous - itemId }
+        updateAutoDownloadQueueSnapshotDiagnostics(
+            current = settings.value,
+            queueItems = _queueItems.value,
+            offlineReadyIds = _cachedItemIds.value,
+            knownNoActiveIds = _noActiveContentItemIds.value,
+        )
+        if (currentNowPlayingItemId() == itemId) {
+            clearNowPlayingSessionNow()
+        }
+    }
+
     suspend fun resolveInitialPlayerItemId(fallbackItemId: Int): Int {
         val existing = nowPlayingSession.value
         val existingItem = existing?.currentItem
