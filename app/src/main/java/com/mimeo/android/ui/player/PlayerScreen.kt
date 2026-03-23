@@ -88,6 +88,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mimeo.android.AppViewModel
+import com.mimeo.android.ArchiveActionSource
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
@@ -136,6 +137,7 @@ private const val PLAYBACK_SPEED_STEPS = 69
 private val PLAYBACK_SPEED_PILLS = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
 private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 private const val MANUAL_OPEN_DEBUG_TAG = "MimeoManualOpen"
+private const val ACTION_KEY_UNDO_ARCHIVE = "undo_archive"
 
 enum class PlaybackOpenIntent {
     ManualOpen,
@@ -1105,9 +1107,12 @@ fun PlayerScreen(
                             onArchive = {
                                 actionScope.launch {
                                     val nextItemId = nextSessionItemIdForArchive(currentItemId)
-                                    vm.archiveItem(currentItemId)
+                                    vm.archiveItem(
+                                        currentItemId,
+                                        source = ArchiveActionSource.LOCUS,
+                                    )
                                         .onSuccess {
-                                            onShowSnackbar("Archived", null, null)
+                                            onShowSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
                                             if (nextItemId != null) {
                                                 vm.startNowPlayingSession(startItemId = nextItemId)
                                                 vm.playbackOpenItem(
@@ -1269,9 +1274,12 @@ fun PlayerScreen(
                                     onArchive = {
                                         actionScope.launch {
                                             val nextItemId = nextSessionItemIdForArchive(currentItemId)
-                                            vm.archiveItem(currentItemId)
+                                            vm.archiveItem(
+                                                currentItemId,
+                                                source = ArchiveActionSource.LOCUS,
+                                            )
                                                 .onSuccess {
-                                                    onShowSnackbar("Archived", null, null)
+                                                    onShowSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
                                                     if (nextItemId != null) {
                                                         vm.startNowPlayingSession(startItemId = nextItemId)
                                                         vm.playbackOpenItem(

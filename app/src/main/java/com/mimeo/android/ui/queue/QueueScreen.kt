@@ -23,6 +23,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenu
@@ -68,6 +72,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.mimeo.android.AppViewModel
+import com.mimeo.android.ArchiveActionSource
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
 import com.mimeo.android.isPendingProcessingFailureMessage
@@ -102,6 +107,7 @@ import java.util.UUID
 
 private const val DONE_PERCENT_THRESHOLD = 98
 private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
+private const val ACTION_KEY_UNDO_ARCHIVE = "undo_archive"
 private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 
 internal fun autoDownloadWorkerStateLabel(state: AutoDownloadWorkerState): String {
@@ -215,6 +221,7 @@ fun QueueScreen(
     var previousProjectedPendingIds by remember { mutableStateOf<List<Long>>(emptyList()) }
     var previousDisplayedItemIds by remember { mutableStateOf<List<Int>>(emptyList()) }
     var suppressAutoScrollToTopOnce by remember { mutableStateOf(false) }
+    var collapsingArchivedItemIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var playlistMenuExpanded by remember { mutableStateOf(false) }
     var rowMenuItemId by remember { mutableIntStateOf(-1) }
     var playlistPickerItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
@@ -514,53 +521,57 @@ fun QueueScreen(
                                 pullProgress = pullRefreshProgress,
                             )
                         }
-                        IconButton(
-                            enabled = !manualSaveInProgress,
-                            onClick = {
-                                val prefill = buildManualSavePrefill(readClipboardText(context))
-                                manualSaveMode = ManualSaveMode.URL
-                                manualUrlInput = prefill.urlInput
-                                manualTitleInput = ""
-                                manualBodyInput = prefill.bodyInput
-                                manualUrlError = null
-                                manualBodyError = null
-                                manualSubmitError = null
-                                showSaveEntryDialog = true
-                            },
-                        ) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.msr_add_24),
-                                contentDescription = "Save URL",
-                                modifier = Modifier.size(24.dp),
-                            )
-                        }
-                        Box {
-                            IconButton(onClick = { playlistMenuExpanded = true }) {
+                        ActionHintTooltip(label = "Save") {
+                            IconButton(
+                                enabled = !manualSaveInProgress,
+                                onClick = {
+                                    val prefill = buildManualSavePrefill(readClipboardText(context))
+                                    manualSaveMode = ManualSaveMode.URL
+                                    manualUrlInput = prefill.urlInput
+                                    manualTitleInput = ""
+                                    manualBodyInput = prefill.bodyInput
+                                    manualUrlError = null
+                                    manualBodyError = null
+                                    manualSubmitError = null
+                                    showSaveEntryDialog = true
+                                },
+                            ) {
                                 Icon(
-                                    painter = painterResource(id = R.drawable.msr_list_layers_24),
-                                    contentDescription = "Switch queue",
+                                    painter = painterResource(id = R.drawable.msr_add_24),
+                                    contentDescription = "Save URL",
                                     modifier = Modifier.size(24.dp),
                                 )
                             }
-                            DropdownMenu(
-                                expanded = playlistMenuExpanded,
-                                onDismissRequest = { playlistMenuExpanded = false },
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Smart queue") },
-                                    onClick = {
-                                        playlistMenuExpanded = false
-                                        vm.selectPlaylist(null)
-                                    },
-                                )
-                                playlists.forEach { playlist ->
+                        }
+                        ActionHintTooltip(label = "Switch queue") {
+                            Box {
+                                IconButton(onClick = { playlistMenuExpanded = true }) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.msr_list_layers_24),
+                                        contentDescription = "Switch queue",
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = playlistMenuExpanded,
+                                    onDismissRequest = { playlistMenuExpanded = false },
+                                ) {
                                     DropdownMenuItem(
-                                        text = { Text(playlist.name) },
+                                        text = { Text("Smart queue") },
                                         onClick = {
                                             playlistMenuExpanded = false
-                                            vm.selectPlaylist(playlist.id)
+                                            vm.selectPlaylist(null)
                                         },
                                     )
+                                    playlists.forEach { playlist ->
+                                        DropdownMenuItem(
+                                            text = { Text(playlist.name) },
+                                            onClick = {
+                                                playlistMenuExpanded = false
+                                                vm.selectPlaylist(playlist.id)
+                                            },
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -589,18 +600,19 @@ fun QueueScreen(
                                 }
                             }
                         }
-                        Box {
-                            IconButton(onClick = { topActionsMenuExpanded = true }) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.msr_more_vert_24),
-                                    contentDescription = "Queue actions",
-                                    modifier = Modifier.size(24.dp),
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = topActionsMenuExpanded,
-                                onDismissRequest = { topActionsMenuExpanded = false },
-                            ) {
+                        ActionHintTooltip(label = "Queue actions") {
+                            Box {
+                                IconButton(onClick = { topActionsMenuExpanded = true }) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.msr_more_vert_24),
+                                        contentDescription = "Queue actions",
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = topActionsMenuExpanded,
+                                    onDismissRequest = { topActionsMenuExpanded = false },
+                                ) {
                                 DropdownMenuItem(
                                     text = {
                                         Text(
@@ -632,6 +644,7 @@ fun QueueScreen(
                                             topActionsMenuExpanded = false
                                         },
                                     )
+                                }
                                 }
                             }
                         }
@@ -791,64 +804,79 @@ fun QueueScreen(
                     key = { _, item -> item.itemId },
                 ) { index, item ->
                     Column(modifier = Modifier) {
-                        QueueItemCard(
-                            item = item,
-                            cached = cachedItemIds.contains(item.itemId),
-                            noActiveContent = noActiveContentItemIds.contains(item.itemId),
-                            failedProcessing = hasFailedPendingProjectionStatus(item),
-                            showQueueCaptureMetadata = settings.showQueueCaptureMetadata,
-                            onOpenPlayer = {
-                                Log.d(
-                                    LOCUS_CONTINUATION_DEBUG_TAG,
-                                    "queue.openPlayer tapped=${item.itemId} sort=${selectedSort.name} " +
-                                        "playlist=${settings.selectedPlaylistId ?: "smart"} " +
-                                        "displayedHead=${displayedItems.take(8).joinToString { it.itemId.toString() }} " +
-                                        "sessionBefore=${vm.currentNowPlayingItemId()}",
-                                )
-                                vm.warmItemTextForPlayer(item.itemId)
-                                vm.startNowPlayingSession(
-                                    startItemId = item.itemId,
-                                    orderedQueueItems = displayedItems,
-                                )
-                                onOpenPlayer(item.itemId)
-                            },
-                            onDownload = {
-                                actionScope.launch {
-                                    if (cachedItemIds.contains(item.itemId)) {
-                                        onShowSnackbar("Already available offline", null, null)
-                                        return@launch
-                                    }
-                                    val result = vm.downloadItemForOffline(item.itemId)
-                                    if (result.isSuccess) {
-                                        onShowSnackbar("Downloaded for offline reading", null, null)
-                                    } else if (result.exceptionOrNull()?.let(::isNoActiveContentError) == true) {
-                                        onShowSnackbar(noActiveContentOfflineMessage(), null, null)
-                                    } else {
-                                        onShowSnackbar("Couldn't download article", null, null)
-                                    }
-                                }
-                            },
-                            onOpenPlaylistPicker = {
-                                vm.refreshPlaylists()
-                                playlistPickerItem = item
-                            },
-                            onArchive = {
-                                actionScope.launch {
-                                    suppressAutoScrollToTopOnce = true
-                                    vm.archiveItem(item.itemId, refreshQueue = false)
-                                        .onSuccess {
-                                            onShowSnackbar("Archived", null, null)
+                        AnimatedVisibility(
+                            visible = item.itemId !in collapsingArchivedItemIds,
+                            exit = shrinkVertically(animationSpec = tween(durationMillis = 220)) +
+                                fadeOut(animationSpec = tween(durationMillis = 180)),
+                        ) {
+                            QueueItemCard(
+                                item = item,
+                                cached = cachedItemIds.contains(item.itemId),
+                                noActiveContent = noActiveContentItemIds.contains(item.itemId),
+                                failedProcessing = hasFailedPendingProjectionStatus(item),
+                                showQueueCaptureMetadata = settings.showQueueCaptureMetadata,
+                                onOpenPlayer = {
+                                    Log.d(
+                                        LOCUS_CONTINUATION_DEBUG_TAG,
+                                        "queue.openPlayer tapped=${item.itemId} sort=${selectedSort.name} " +
+                                            "playlist=${settings.selectedPlaylistId ?: "smart"} " +
+                                            "displayedHead=${displayedItems.take(8).joinToString { it.itemId.toString() }} " +
+                                            "sessionBefore=${vm.currentNowPlayingItemId()}",
+                                    )
+                                    vm.warmItemTextForPlayer(item.itemId)
+                                    vm.startNowPlayingSession(
+                                        startItemId = item.itemId,
+                                        orderedQueueItems = displayedItems,
+                                    )
+                                    onOpenPlayer(item.itemId)
+                                },
+                                onDownload = {
+                                    actionScope.launch {
+                                        if (cachedItemIds.contains(item.itemId)) {
+                                            onShowSnackbar("Already available offline", null, null)
+                                            return@launch
                                         }
-                                        .onFailure {
-                                            suppressAutoScrollToTopOnce = false
-                                            onShowSnackbar("Couldn't archive item", "Diagnostics", "open_diagnostics")
+                                        val result = vm.downloadItemForOffline(item.itemId)
+                                        if (result.isSuccess) {
+                                            onShowSnackbar("Downloaded for offline reading", null, null)
+                                        } else if (result.exceptionOrNull()?.let(::isNoActiveContentError) == true) {
+                                            onShowSnackbar(noActiveContentOfflineMessage(), null, null)
+                                        } else {
+                                            onShowSnackbar("Couldn't download article", null, null)
                                         }
-                                }
-                            },
-                            isMenuExpanded = rowMenuItemId == item.itemId,
-                            onDismissMenu = { rowMenuItemId = -1 },
-                            onExpandMenu = { rowMenuItemId = item.itemId },
-                        )
+                                    }
+                                },
+                                onOpenPlaylistPicker = {
+                                    vm.refreshPlaylists()
+                                    playlistPickerItem = item
+                                },
+                                onArchive = {
+                                    actionScope.launch {
+                                        if (item.itemId in collapsingArchivedItemIds) return@launch
+                                        collapsingArchivedItemIds = collapsingArchivedItemIds + item.itemId
+                                        delay(220)
+                                        suppressAutoScrollToTopOnce = true
+                                        vm.archiveItem(
+                                            item.itemId,
+                                            refreshQueue = false,
+                                            source = ArchiveActionSource.UP_NEXT,
+                                        )
+                                            .onSuccess {
+                                                collapsingArchivedItemIds = collapsingArchivedItemIds - item.itemId
+                                                onShowSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
+                                            }
+                                            .onFailure {
+                                                collapsingArchivedItemIds = collapsingArchivedItemIds - item.itemId
+                                                suppressAutoScrollToTopOnce = false
+                                                onShowSnackbar("Couldn't archive item", "Diagnostics", "open_diagnostics")
+                                            }
+                                        }
+                                },
+                                isMenuExpanded = rowMenuItemId == item.itemId,
+                                onDismissMenu = { rowMenuItemId = -1 },
+                                onExpandMenu = { rowMenuItemId = item.itemId },
+                            )
+                        }
                         if (index < displayedItems.lastIndex) {
                             ThinQueueDivider()
                         }

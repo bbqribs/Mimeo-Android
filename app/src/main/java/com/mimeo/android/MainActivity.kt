@@ -199,6 +199,7 @@ private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_DIAGNOSTICS = "settings/diagnostics"
 private const val ACTION_KEY_OPEN_DIAGNOSTICS = "open_diagnostics"
 private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
+private const val ACTION_KEY_UNDO_ARCHIVE = "undo_archive"
 private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
 private const val DEBUG_TARGET_ITEM_ID = 409
 private const val INITIAL_SIGN_IN_HYDRATION_DEBUG_TAG = "MimeoSignInHydration"
@@ -263,6 +264,23 @@ internal fun resolveSessionSourcePlaylistId(selectedPlaylistId: Int?): Int {
 data class PendingRetryBatchResult(
     val successCount: Int,
     val firstFailureResult: ShareSaveResult? = null,
+)
+
+enum class ArchiveActionSource {
+    UP_NEXT,
+    LOCUS,
+}
+
+private data class ArchiveUndoSnapshot(
+    val item: PlaybackQueueItem,
+    val originalIndex: Int,
+    val wasCached: Boolean,
+    val wasNoActiveContent: Boolean,
+    val source: ArchiveActionSource,
+)
+
+data class ArchiveUndoOutcome(
+    val reopenItemId: Int? = null,
 )
 
 internal fun selectInitialQueueHydrationTargets(
@@ -504,6 +522,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val settingsScrollOffset: StateFlow<Int> = _settingsScrollOffset.asStateFlow()
     private val authFailureMutex = Mutex()
     private var authFailureHandledThisSession = false
+    private var lastArchiveUndoSnapshot: ArchiveUndoSnapshot? = null
     private var lastPendingAutoRetryAtMs: Long = 0L
     private var pendingInitialPostSignInHydration = false
     private var initialPostSignInHydrationJob: Job? = null
@@ -2504,10 +2523,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    suspend fun archiveItem(itemId: Int, refreshQueue: Boolean = true): Result<Unit> {
+    suspend fun archiveItem(
+        itemId: Int,
+        refreshQueue: Boolean = true,
+        source: ArchiveActionSource = ArchiveActionSource.UP_NEXT,
+    ): Result<Unit> {
         val current = settings.value
+        val queueBeforeArchive = _queueItems.value
+        val queueIndex = queueBeforeArchive.indexOfFirst { it.itemId == itemId }
+        val queueItemSnapshot = queueBeforeArchive.getOrNull(queueIndex)
+        val wasCached = _cachedItemIds.value.contains(itemId)
+        val wasNoActiveContent = _noActiveContentItemIds.value.contains(itemId)
         return try {
             repository.archiveItem(current.baseUrl, current.apiToken, itemId)
+            if (queueItemSnapshot != null && queueIndex >= 0) {
+                lastArchiveUndoSnapshot = ArchiveUndoSnapshot(
+                    item = queueItemSnapshot,
+                    originalIndex = queueIndex,
+                    wasCached = wasCached,
+                    wasNoActiveContent = wasNoActiveContent,
+                    source = source,
+                )
+            } else {
+                lastArchiveUndoSnapshot = null
+            }
             val archivedCurrentSessionItem = currentNowPlayingItemId() == itemId
             if (archivedCurrentSessionItem) {
                 playbackPause(forceSync = true)
@@ -2528,6 +2567,61 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _queueOffline.value = false
             updateSyncBadgeState()
             Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun undoLastArchive(): Result<ArchiveUndoOutcome> {
+        val current = settings.value
+        val snapshot = lastArchiveUndoSnapshot ?: return Result.failure(IllegalStateException("Nothing to undo"))
+        return try {
+            repository.toggleCompletion(current.baseUrl, current.apiToken, snapshot.item.itemId, markDone = false)
+            _queueItems.update { previous ->
+                val withoutItem = previous.filterNot { it.itemId == snapshot.item.itemId }
+                val insertAt = snapshot.originalIndex.coerceIn(0, withoutItem.size)
+                withoutItem.toMutableList().apply {
+                    add(insertAt, snapshot.item)
+                }
+            }
+            if (snapshot.wasCached) {
+                _cachedItemIds.update { previous -> previous + snapshot.item.itemId }
+            }
+            if (snapshot.wasNoActiveContent) {
+                _noActiveContentItemIds.update { previous -> previous + snapshot.item.itemId }
+            }
+            updateAutoDownloadQueueSnapshotDiagnostics(
+                current = settings.value,
+                queueItems = _queueItems.value,
+                offlineReadyIds = _cachedItemIds.value,
+                knownNoActiveIds = _noActiveContentItemIds.value,
+            )
+            val reopenItemId = when (snapshot.source) {
+                ArchiveActionSource.LOCUS -> snapshot.item.itemId
+                ArchiveActionSource.UP_NEXT -> null
+            }
+            if (reopenItemId != null) {
+                startNowPlayingSession(startItemId = reopenItemId)
+                playbackOpenItem(
+                    itemId = reopenItemId,
+                    intent = PlaybackOpenIntent.ManualOpen,
+                    autoPlayAfterLoad = false,
+                )
+            }
+            _statusMessage.value = "Archive undone"
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            lastArchiveUndoSnapshot = null
+            Result.success(ArchiveUndoOutcome(reopenItemId = reopenItemId))
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -3349,6 +3443,18 @@ private fun MimeoApp(vm: AppViewModel) {
                 when (message.actionKey) {
                     ACTION_KEY_OPEN_DIAGNOSTICS -> nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) { launchSingleTop = true }
                     ACTION_KEY_OPEN_SETTINGS -> nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true }
+                    ACTION_KEY_UNDO_ARCHIVE -> {
+                        vm.undoLastArchive()
+                            .onSuccess { outcome ->
+                                vm.showSnackbar("Archive undone", null, null)
+                                outcome.reopenItemId?.let { itemId ->
+                                    nav.navigate("$ROUTE_LOCUS/$itemId") { launchSingleTop = true }
+                                }
+                            }
+                            .onFailure {
+                                vm.showSnackbar("Couldn't undo archive", "Diagnostics", ACTION_KEY_OPEN_DIAGNOSTICS)
+                            }
+                    }
                 }
             }
         }
