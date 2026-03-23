@@ -27,6 +27,8 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 - Now Playing resume restores chunk index + in-chunk char offset for each item.
 
 ## Playback UX (v0.3 polish)
+- Detailed MC runtime interaction rules (playback ownership, media controls, focus/interruption behavior):
+  - `docs/ANDROID_MC_PLAYBACK_INTERRUPTION_RULES.md`
 - Player header now shows:
   - sync badge (`Synced`, `Queued`, `Offline`)
   - offline availability (`Available offline` vs `Needs network`)
