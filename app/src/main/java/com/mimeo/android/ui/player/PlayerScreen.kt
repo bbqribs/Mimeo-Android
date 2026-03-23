@@ -658,8 +658,14 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(currentItemId, resolvedInitial, reloadNonce) {
+    LaunchedEffect(currentItemId, resolvedInitial, reloadNonce, waitingForRequestedItem) {
         if (!resolvedInitial) return@LaunchedEffect
+        if (waitingForRequestedItem) {
+            continuationLog(
+                "loadItem skip waitingForRequestedItem currentItemId=$currentItemId requestedItemId=$requestedItemId reloadNonce=$reloadNonce",
+            )
+            return@LaunchedEffect
+        }
         continuationLog(
             "loadItem start currentItemId=$currentItemId reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
         )
