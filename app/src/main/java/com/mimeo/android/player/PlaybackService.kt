@@ -16,6 +16,7 @@ import android.media.AudioTrack
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
 import androidx.core.app.NotificationCompat
@@ -31,6 +32,7 @@ import com.mimeo.android.MainActivity
 class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     private val mediaButtonLogTag = "MimeoMediaButton"
     private val interruptionPolicy = AudioInterruptionPolicy()
+    private val auditTrail = PlaybackServiceAuditTrail()
 
     inner class LocalBinder : Binder() {
         fun updateSnapshot(snapshot: PlaybackServiceSnapshot) {
@@ -94,6 +96,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                     .build(),
             )
         }
+        emitAudit("serviceCreate")
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -114,6 +117,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                 PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
             }
         }
+        emitAudit("serviceStart:${intent?.action ?: "none"}")
         return START_STICKY
     }
 
@@ -140,6 +144,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             }
         }
         handleInterruptionAction(action)
+        emitAudit("audioFocus:$focusChange")
     }
 
     override fun onDestroy() {
@@ -148,6 +153,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         abandonAudioFocusNow()
         releaseMediaButtonAnchor()
         mediaSession.release()
+        emitAudit("serviceDestroy")
         super.onDestroy()
     }
 
@@ -157,6 +163,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         requestAudioFocus()
         PlaybackServiceBridge.onPlay?.invoke()
         PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
+        emitAudit("dispatchPlay")
     }
 
     private fun dispatchPause(
@@ -172,6 +179,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         if (releaseAudioFocusImmediately) {
             abandonAudioFocusNow()
         }
+        emitAudit("dispatchPause")
     }
 
     private fun dispatchToggle() {
@@ -183,6 +191,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         } else {
             if (snapshot.isPlaying) dispatchPause() else dispatchPlay()
         }
+        emitAudit("dispatchToggle")
     }
 
     private fun updateSnapshot(next: PlaybackServiceSnapshot) {
@@ -229,6 +238,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             abandonAudioFocusNow()
             stopSelf()
         }
+        emitAudit("snapshot")
     }
 
     private fun buildNotification(current: PlaybackServiceSnapshot): android.app.Notification {
@@ -415,7 +425,25 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             else -> return false
         }
         Log.d(mediaButtonLogTag, "handleMediaButtonIntent dispatched")
+        emitAudit("mediaButton:${keyEvent.keyCode}")
         return true
+    }
+
+    private fun emitAudit(event: String) {
+        val current = PlaybackAuditState(
+            itemId = snapshot.itemId,
+            isPlaying = snapshot.isPlaying,
+            hasAudioFocus = hasAudioFocus,
+            mediaSessionActive = if (::mediaSession.isInitialized) mediaSession.isActive else false,
+            isForeground = isForeground,
+            anchorPlaying = mediaButtonAnchorTrack?.playState == AudioTrack.PLAYSTATE_PLAYING,
+        )
+        val entry = auditTrail.capture(
+            event = event,
+            state = current,
+            nowMs = SystemClock.elapsedRealtime(),
+        ) ?: return
+        Log.d(mediaButtonLogTag, formatPlaybackAuditEntry(entry))
     }
 
     private fun ensureNotificationChannel() {
