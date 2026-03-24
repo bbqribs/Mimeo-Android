@@ -4,6 +4,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.app.ActivityManager
+import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -16,6 +18,7 @@ import android.media.AudioTrack
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
@@ -157,6 +160,11 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         super.onDestroy()
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        emitAudit("taskRemoved")
+        super.onTaskRemoved(rootIntent)
+    }
+
     private fun dispatchPlay() {
         Log.d(mediaButtonLogTag, "dispatchPlay")
         interruptionPolicy.clearResumeExpectation()
@@ -229,12 +237,14 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             if (!isForeground) {
                 startForeground(notificationId, notification)
                 isForeground = true
+                emitAudit("foregroundStart")
             } else {
                 NotificationManagerCompat.from(this).notify(notificationId, notification)
             }
         } else if (isForeground) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             isForeground = false
+            emitAudit("foregroundStop")
             abandonAudioFocusNow()
             stopSelf()
         }
@@ -428,6 +438,9 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     }
 
     private fun emitAudit(event: String) {
+        val deviceInteractive = isDeviceInteractive()
+        val deviceLocked = isDeviceLocked()
+        val appInBackground = isAppInBackground()
         val current = PlaybackAuditState(
             itemId = snapshot.itemId,
             isPlaying = snapshot.isPlaying,
@@ -435,6 +448,9 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             mediaSessionActive = if (::mediaSession.isInitialized) mediaSession.isActive else false,
             isForeground = isForeground,
             anchorPlaying = mediaButtonAnchorTrack?.playState == AudioTrack.PLAYSTATE_PLAYING,
+            isDeviceInteractive = deviceInteractive,
+            isDeviceLocked = deviceLocked,
+            appInBackground = appInBackground,
         )
         val entry = auditTrail.capture(
             event = event,
@@ -442,6 +458,27 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             nowMs = SystemClock.elapsedRealtime(),
         ) ?: return
         Log.d(mediaButtonLogTag, formatPlaybackAuditEntry(entry))
+    }
+
+    private fun isDeviceInteractive(): Boolean {
+        val manager = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return true
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+            manager.isInteractive
+        } else {
+            @Suppress("DEPRECATION")
+            manager.isScreenOn
+        }
+    }
+
+    private fun isDeviceLocked(): Boolean {
+        val manager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager ?: return false
+        return manager.isKeyguardLocked
+    }
+
+    private fun isAppInBackground(): Boolean {
+        val processState = ActivityManager.RunningAppProcessInfo()
+        ActivityManager.getMyMemoryState(processState)
+        return processState.importance > ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
     }
 
     private fun ensureNotificationChannel() {

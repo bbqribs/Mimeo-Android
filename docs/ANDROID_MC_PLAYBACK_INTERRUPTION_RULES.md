@@ -111,6 +111,7 @@ Rule: media-button ownership should remain with Mimeo during active playback ses
 - Interruption-driven pause uses same pause path as user pause through bridge callbacks.
 - End-of-item continuation policy remains engine-owned and unchanged by focus handling.
 - Manual-open vs auto-continue semantics are unchanged by this policy.
+- Refocusing/returning to Locus while an item is already actively playing should attach to the existing session state and must not force a same-item reopen/reseed.
 
 Rule: interruption handling changes transport behavior only, not queue/progress model decisions.
 
@@ -123,6 +124,7 @@ Rule: interruption handling changes transport behavior only, not queue/progress 
 
 Primary log tag:
 - `MimeoMediaButton`
+- `MimeoLocusContinue`
 
 Key expected lines:
 - `onAudioFocusChange focusChange=<code>`
@@ -130,5 +132,9 @@ Key expected lines:
 - `autoResumeAfterTransientGain` (only when safe resume rule is satisfied)
 - `handleMediaButtonIntent key=<...>`
 - `mediaButtonAnchor play/stop`
+- `continueTrigger item=<id> ...` (end-of-item continuation decision point)
+- `continueOpenNext from=<id> to=<id>` (next-item continuation handoff)
+- `bgAutoContinue load start/success/fail ... interactive=<...> locked=<...> background=<...>`
+- `audit=... interactive=<...> locked=<...> background=<...>` (service-side state snapshots)
 
 If media buttons route incorrectly, confirm platform routing targets `com.mimeo.android/MimeoPlayback/...` in system media logs.

@@ -249,6 +249,25 @@ internal fun shouldSpeakTitleBeforeBody(
     return chunks.firstOrNull()?.text.orEmpty().isNotBlank()
 }
 
+internal fun shouldSkipInitialReopen(
+    resolvedItemId: Int,
+    currentItemId: Int,
+    autoPlayAfterLoad: Boolean,
+    isSpeaking: Boolean,
+    isAutoPlaying: Boolean,
+): Boolean {
+    if (resolvedItemId != currentItemId) return false
+    return autoPlayAfterLoad || isSpeaking || isAutoPlaying
+}
+
+internal fun shouldPreserveActivePlaybackDuringLoad(
+    autoPlayAfterLoad: Boolean,
+    isSpeaking: Boolean,
+    isAutoPlaying: Boolean,
+): Boolean {
+    return autoPlayAfterLoad || isSpeaking || isAutoPlaying
+}
+
 internal fun shouldUseTitleIntroOnPlaybackStart(
     allowTitleIntro: Boolean,
     hasStartedPlaybackForItem: Boolean,
@@ -560,9 +579,17 @@ fun PlayerScreen(
     LaunchedEffect(initialItemId, requestedItemId) {
         if (resolvedInitial) return@LaunchedEffect
         val resolvedId = requestedItemId ?: vm.resolveInitialPlayerItemId(initialItemId)
-        if (resolvedId == currentItemId && autoPlayAfterLoad) {
+        val attachToActiveSession = shouldSkipInitialReopen(
+            resolvedItemId = resolvedId,
+            currentItemId = currentItemId,
+            autoPlayAfterLoad = autoPlayAfterLoad,
+            isSpeaking = isSpeaking,
+            isAutoPlaying = isAutoPlaying,
+        )
+        if (attachToActiveSession) {
             continuationLog(
-                "initialResolve skipReopen resolved=$resolvedId current=$currentItemId autoPlayAfterLoad=$autoPlayAfterLoad",
+                "initialResolve skipReopen resolved=$resolvedId current=$currentItemId " +
+                    "autoPlayAfterLoad=$autoPlayAfterLoad speaking=$isSpeaking auto=$isAutoPlaying",
             )
             resolvedInitial = true
             return@LaunchedEffect
@@ -677,7 +704,19 @@ fun PlayerScreen(
             "loadItem start currentItemId=$currentItemId reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
         )
         val preservingVisibleContent = preserveVisibleContentOnReload
-        stopSpeaking(forceSync = false)
+        val preserveActivePlayback = shouldPreserveActivePlaybackDuringLoad(
+            autoPlayAfterLoad = autoPlayAfterLoad,
+            isSpeaking = isSpeaking,
+            isAutoPlaying = isAutoPlaying,
+        )
+        if (!preserveActivePlayback) {
+            stopSpeaking(forceSync = false)
+        } else {
+            continuationLog(
+                "loadItem keepSpeaking currentItemId=$currentItemId reloadNonce=$reloadNonce " +
+                    "autoPlayAfterLoad=$autoPlayAfterLoad speaking=$isSpeaking auto=$isAutoPlaying",
+            )
+        }
         vm.setNowPlayingCurrentItem(currentItemId)
         isLoading = !preservingVisibleContent
         bodyRevealReady = preservingVisibleContent
@@ -701,11 +740,17 @@ fun PlayerScreen(
                 )
                 preserveVisibleContentOnReload = false
 
-                vm.playbackApplyLoadedItem(
-                    payload = payload,
-                    chunks = chunks,
-                    requestedItemId = requestedItemId,
-                )
+                if (!preserveActivePlayback) {
+                    vm.playbackApplyLoadedItem(
+                        payload = payload,
+                        chunks = chunks,
+                        requestedItemId = requestedItemId,
+                    )
+                } else {
+                    continuationLog(
+                        "loadItem skipApplyLoadedItem currentItemId=$currentItemId reloadNonce=$reloadNonce activePlayback=true",
+                    )
+                }
                 readerViewportSessionNonce += 1
                 if (!preservingVisibleContent) {
                     readerScrollTriggerSignal += 1

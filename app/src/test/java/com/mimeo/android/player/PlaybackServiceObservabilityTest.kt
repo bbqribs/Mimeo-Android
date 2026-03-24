@@ -49,6 +49,9 @@ class PlaybackServiceObservabilityTest {
                 mediaSessionActive = true,
                 isForeground = false,
                 anchorPlaying = false,
+                isDeviceInteractive = true,
+                isDeviceLocked = false,
+                appInBackground = false,
             ),
         )
 
@@ -73,6 +76,9 @@ class PlaybackServiceObservabilityTest {
             mediaSessionActive = true,
             isForeground = true,
             anchorPlaying = false,
+            isDeviceInteractive = true,
+            isDeviceLocked = false,
+            appInBackground = false,
         )
         val changed = initial.copy(isPlaying = true, hasAudioFocus = true)
 
@@ -95,6 +101,9 @@ class PlaybackServiceObservabilityTest {
             mediaSessionActive = true,
             isForeground = true,
             anchorPlaying = true,
+            isDeviceInteractive = false,
+            isDeviceLocked = true,
+            appInBackground = true,
         )
 
         val first = trail.capture("snapshot", state, nowMs = 1_000)
@@ -105,6 +114,35 @@ class PlaybackServiceObservabilityTest {
         assertNull(second)
         assertNotNull(third)
         assertEquals("snapshot:heartbeat", third!!.reason)
+    }
+
+    @Test
+    fun `capture emits transition when device state changes`() {
+        val trail = PlaybackServiceAuditTrail(heartbeatIntervalMs = 60_000)
+        val start = PlaybackAuditState(
+            itemId = 33,
+            isPlaying = true,
+            hasAudioFocus = true,
+            mediaSessionActive = true,
+            isForeground = true,
+            anchorPlaying = true,
+            isDeviceInteractive = true,
+            isDeviceLocked = false,
+            appInBackground = false,
+        )
+        val screenOff = start.copy(
+            isDeviceInteractive = false,
+            isDeviceLocked = true,
+            appInBackground = true,
+        )
+
+        trail.capture("snapshot", start, nowMs = 5_000)
+        val entry = trail.capture("snapshot", screenOff, nowMs = 5_500)
+
+        assertNotNull(entry)
+        assertTrue(entry!!.reason.contains("interactive:true->false"))
+        assertTrue(entry.reason.contains("locked:false->true"))
+        assertTrue(entry.reason.contains("background:false->true"))
     }
 }
 

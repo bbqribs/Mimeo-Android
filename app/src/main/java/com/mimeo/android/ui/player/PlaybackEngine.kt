@@ -1,6 +1,7 @@
 package com.mimeo.android.ui.player
 
 import android.content.Context
+import android.util.Log
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.ItemTextResponse
@@ -290,6 +291,12 @@ class PlaybackEngine(
                 val settings = host.currentPlaybackSettings()
                 val playlistScoped = host.isCurrentSessionPlaylistScoped()
                 val shouldAutoAdvance = settings.autoAdvanceOnCompletion
+                if (BuildConfig.DEBUG) {
+                    Log.d(
+                        LOCUS_CONTINUATION_DEBUG_TAG,
+                        "continueTrigger item=${current.currentItemId} playlistScoped=$playlistScoped autoAdvance=$shouldAutoAdvance",
+                    )
+                }
                 if (settings.playCompletionCueAtArticleEnd) {
                     ttsController.playCompletionCue()
                 }
@@ -312,13 +319,31 @@ class PlaybackEngine(
                         host.nextSessionItemId(current.currentItemId)
                     }
                     if (nextId == null) {
+                        if (BuildConfig.DEBUG) {
+                            Log.d(
+                                LOCUS_CONTINUATION_DEBUG_TAG,
+                                "continueNoNext item=${current.currentItemId} playlistScoped=$playlistScoped autoAdvance=$shouldAutoAdvance",
+                            )
+                        }
                         _events.tryEmit(PlaybackEngineEvent.UiMessage("Completed"))
                     } else {
                         host.setPlaybackPosition(nextId, 0, 0)
+                        if (BuildConfig.DEBUG) {
+                            Log.d(
+                                LOCUS_CONTINUATION_DEBUG_TAG,
+                                "continueOpenNext from=${current.currentItemId} to=$nextId",
+                            )
+                        }
                         openItem(nextId, PlaybackOpenIntent.AutoContinue, autoPlayAfterLoad = true)
                         _events.tryEmit(PlaybackEngineEvent.NavigateToItem(nextId))
                     }
                 } else {
+                    if (BuildConfig.DEBUG) {
+                        Log.d(
+                            LOCUS_CONTINUATION_DEBUG_TAG,
+                            "continueDisabled item=${current.currentItemId} playlistScoped=$playlistScoped autoAdvance=$shouldAutoAdvance",
+                        )
+                    }
                     _events.tryEmit(PlaybackEngineEvent.UiMessage("Completed"))
                 }
             }

@@ -3,6 +3,8 @@ package com.mimeo.android
 import android.Manifest
 import android.app.Application
 import android.app.Activity
+import android.app.ActivityManager
+import android.app.KeyguardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -15,6 +17,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Bundle
 import android.os.Build
+import android.os.PowerManager
 import android.view.WindowManager
 import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
@@ -575,6 +578,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         viewModelScope.launch {
+            playbackEngineEvents.collect { event ->
+                when (event) {
+                    is PlaybackEngineEvent.NavigateToItem -> {
+                        Log.d(
+                            LOCUS_CONTINUATION_DEBUG_TAG,
+                            "engineContinue navigate nextId=${event.itemId} ${continuationAuditContext()}",
+                        )
+                    }
+                    is PlaybackEngineEvent.UiMessage -> {
+                        if (event.message.contains("Completed", ignoreCase = true)) {
+                            Log.d(
+                                LOCUS_CONTINUATION_DEBUG_TAG,
+                                "engineContinue completion uiMessage=${event.message} ${continuationAuditContext()}",
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        viewModelScope.launch {
             nowPlayingSession.collect {
                 pushPlaybackServiceSnapshot()
             }
@@ -712,7 +735,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             Log.d(
                 LOCUS_CONTINUATION_DEBUG_TAG,
-                "bgAutoContinue load start item=$itemId reloadNonce=$reloadNonce",
+                "bgAutoContinue load start item=$itemId reloadNonce=$reloadNonce ${continuationAuditContext()}",
             )
             fetchItemText(itemId)
                 .onSuccess { loaded ->
@@ -732,7 +755,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     playbackMaybeAutoPlayAfterLoad()
                     Log.d(
                         LOCUS_CONTINUATION_DEBUG_TAG,
-                        "bgAutoContinue load success item=$itemId reloadNonce=$reloadNonce",
+                        "bgAutoContinue load success item=$itemId reloadNonce=$reloadNonce ${continuationAuditContext()}",
                     )
                     if (!playbackEngineState.value.autoPlayAfterLoad) {
                         lastAutoContinueLoadKey = key
@@ -740,12 +763,37 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 .onFailure { error ->
                     if (error is CancellationException) return@onFailure
+                    val reason = when {
+                        error is ApiException && error.statusCode == 401 -> "auth"
+                        isNetworkError(error) -> "network"
+                        else -> "other"
+                    }
                     Log.d(
                         LOCUS_CONTINUATION_DEBUG_TAG,
-                        "bgAutoContinue load fail item=$itemId reloadNonce=$reloadNonce err=${error.message}",
+                        "bgAutoContinue load fail item=$itemId reloadNonce=$reloadNonce reason=$reason " +
+                            "err=${error.message} ${continuationAuditContext()}",
                     )
                 }
         }
+    }
+
+    private fun continuationAuditContext(): String {
+        val appContext = getApplication<Application>().applicationContext
+        val power = appContext.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val keyguard = appContext.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        val processState = ActivityManager.RunningAppProcessInfo()
+        ActivityManager.getMyMemoryState(processState)
+        val interactive = when {
+            power == null -> true
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH -> power.isInteractive
+            else -> {
+                @Suppress("DEPRECATION")
+                power.isScreenOn
+            }
+        }
+        val locked = keyguard?.isKeyguardLocked ?: false
+        val background = processState.importance > ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
+        return "interactive=$interactive locked=$locked background=$background"
     }
 
     fun playbackPlay() {
@@ -3180,7 +3228,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun isNetworkError(error: Exception): Boolean = error is IOException
+    private fun isNetworkError(error: Throwable): Boolean = error is IOException
 
     private fun userFacingRequestErrorMessage(error: Throwable, fallback: String): String {
         if (error is ApiException) {
