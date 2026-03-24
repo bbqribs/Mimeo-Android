@@ -55,6 +55,16 @@ private data class ManualTextPayload(
     val text: String,
     val title: String? = null,
     @kotlinx.serialization.SerialName("site_name") val siteName: String? = null,
+    val source: ManualTextSourcePayload? = null,
+)
+
+@Serializable
+data class ManualTextSourcePayload(
+    @kotlinx.serialization.SerialName("source_type") val sourceType: String,
+    @kotlinx.serialization.SerialName("source_label") val sourceLabel: String? = null,
+    @kotlinx.serialization.SerialName("source_url") val sourceUrl: String? = null,
+    @kotlinx.serialization.SerialName("capture_kind") val captureKind: String,
+    @kotlinx.serialization.SerialName("source_app_package") val sourceAppPackage: String? = null,
 )
 
 @Serializable
@@ -280,21 +290,42 @@ class ApiClient(
         text: String,
         title: String? = null,
         siteName: String? = null,
+        source: ManualTextSourcePayload? = null,
     ): ArticleSummary = withContext(Dispatchers.IO) {
-        val body = json.encodeToString(
-            ManualTextPayload(
-                url = url,
-                text = text,
-                title = title,
-                siteName = siteName,
-            )
-        ).toRequestBody("application/json".toMediaType())
+        val payload = ManualTextPayload(
+            url = url,
+            text = text,
+            title = title,
+            siteName = siteName,
+            source = source,
+        )
+        val body = json.encodeToString(payload).toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
             .url(resolveUrl(baseUrl, "/items/manual-text"))
             .header("Authorization", "Bearer $token")
             .post(body)
             .build()
-        executeJson(request) { payload -> json.decodeFromString<ArticleSummary>(payload) }
+        try {
+            executeJson(request) { responsePayload -> json.decodeFromString<ArticleSummary>(responsePayload) }
+        } catch (error: ApiException) {
+            val shouldFallbackWithoutSource = source != null && (error.statusCode == 400 || error.statusCode == 422)
+            if (!shouldFallbackWithoutSource) throw error
+            val fallbackBody = json.encodeToString(
+                ManualTextPayload(
+                    url = url,
+                    text = text,
+                    title = title,
+                    siteName = siteName,
+                    source = null,
+                ),
+            ).toRequestBody("application/json".toMediaType())
+            val fallbackRequest = Request.Builder()
+                .url(resolveUrl(baseUrl, "/items/manual-text"))
+                .header("Authorization", "Bearer $token")
+                .post(fallbackBody)
+                .build()
+            executeJson(fallbackRequest) { responsePayload -> json.decodeFromString<ArticleSummary>(responsePayload) }
+        }
     }
 
     suspend fun renamePlaylist(baseUrl: String, token: String, playlistId: Int, name: String): PlaylistSummary = withContext(Dispatchers.IO) {

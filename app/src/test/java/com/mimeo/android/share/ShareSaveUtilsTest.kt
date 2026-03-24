@@ -131,4 +131,35 @@ class ShareSaveUtilsTest {
         assertTrue(withFooter.contains("Quoted paragraph."))
         assertTrue(withFooter.contains("To see the original article, open: https://example.com/story"))
     }
+
+    @Test
+    fun `buildManualTextSourcePayload uses web source when url present`() {
+        val payload = buildManualTextSourcePayload(
+            urlInput = "https://www.theguardian.com/business/story",
+            captureKind = "shared_excerpt",
+            sourceAppPackage = "com.android.chrome",
+        )
+
+        assertEquals("web", payload.sourceType)
+        assertEquals("theguardian.com", payload.sourceLabel)
+        assertEquals("https://www.theguardian.com/business/story", payload.sourceUrl)
+        assertEquals("shared_excerpt", payload.captureKind)
+        assertEquals("com.android.chrome", payload.sourceAppPackage)
+    }
+
+    @Test
+    fun `buildManualTextSourcePayload falls back to app metadata when no web url`() {
+        val payload = buildManualTextSourcePayload(
+            urlInput = "https://shared-text.mimeo.local/abc123",
+            captureKind = "manual_text",
+            explicitSourceUrl = null,
+            sourceAppPackage = "com.google.android.gm",
+        )
+
+        assertEquals("app", payload.sourceType)
+        assertEquals("com.google.android.gm", payload.sourceLabel)
+        assertNull(payload.sourceUrl)
+        assertEquals("manual_text", payload.captureKind)
+        assertEquals("com.google.android.gm", payload.sourceAppPackage)
+    }
 }
