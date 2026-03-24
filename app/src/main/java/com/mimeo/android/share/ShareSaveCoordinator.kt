@@ -8,6 +8,7 @@ import com.mimeo.android.BuildConfig
 import com.mimeo.android.data.AppDatabase
 import com.mimeo.android.data.ApiClient
 import com.mimeo.android.data.ApiException
+import com.mimeo.android.data.ManualTextSourcePayload
 import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.repository.PlaybackRepository
@@ -279,6 +280,7 @@ class ShareSaveCoordinator(
         urlInput: String,
         titleInput: String?,
         bodyInput: String,
+        sourceMetadata: ManualTextSourcePayload? = null,
         destinationPlaylistIdOverride: Int? = null,
     ): ShareSaveResult {
         val attemptId = ShareSaveDebugState.nextAttemptId()
@@ -340,6 +342,10 @@ class ShareSaveCoordinator(
         }
 
         return try {
+            val effectiveSourceMetadata = sourceMetadata ?: buildManualTextSourcePayload(
+                urlInput = normalizedUrl,
+                captureKind = "manual_text",
+            )
             val article = withTimeoutOrNull(MANUAL_SAVE_ONLINE_DEADLINE_MS) {
                 apiClient.createManualTextItem(
                     baseUrl = current.baseUrl,
@@ -347,6 +353,7 @@ class ShareSaveCoordinator(
                     url = normalizedUrl,
                     text = normalizedBody,
                     title = titleInput?.trim()?.takeIf { it.isNotEmpty() },
+                    source = effectiveSourceMetadata,
                 )
             }
             if (article == null) {

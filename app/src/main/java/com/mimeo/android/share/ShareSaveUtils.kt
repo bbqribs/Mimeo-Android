@@ -1,5 +1,6 @@
 package com.mimeo.android.share
 
+import com.mimeo.android.data.ManualTextSourcePayload
 import java.net.URI
 import java.security.MessageDigest
 import java.util.Locale
@@ -79,6 +80,46 @@ fun appendOriginalArticleFooter(
         return "To see the original article, open: $normalizedSource"
     }
     return "$normalizedBody\n\nTo see the original article, open: $normalizedSource"
+}
+
+fun buildManualTextSourcePayload(
+    urlInput: String,
+    captureKind: String,
+    explicitSourceUrl: String? = null,
+    sourceAppPackage: String? = null,
+): ManualTextSourcePayload {
+    val appPackage = sourceAppPackage
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() && !it.equals("com.mimeo.android", ignoreCase = true) }
+    val normalizedSourceUrl = explicitSourceUrl
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let(::normalizeSharedSourceUrl)
+        ?: extractFirstHttpUrl(urlInput)
+            ?.let(::normalizeSharedSourceUrl)
+            ?.takeUnless(::isSyntheticSharedTextUrl)
+    val isWebSource = normalizedSourceUrl != null
+    val sourceLabel = if (isWebSource) {
+        runCatching { URI(normalizedSourceUrl).host }
+            .getOrNull()
+            ?.removePrefix("www.")
+            ?.takeIf { it.isNotBlank() }
+            ?: normalizedSourceUrl
+    } else {
+        appPackage ?: "manual"
+    }
+    return ManualTextSourcePayload(
+        sourceType = if (isWebSource) "web" else "app",
+        sourceLabel = sourceLabel,
+        sourceUrl = normalizedSourceUrl,
+        captureKind = captureKind,
+        sourceAppPackage = appPackage,
+    )
+}
+
+private fun isSyntheticSharedTextUrl(url: String): Boolean {
+    val host = runCatching { URI(url).host }.getOrNull()?.lowercase(Locale.US) ?: return false
+    return host == "shared-text.mimeo.local"
 }
 
 fun buildShareIdempotencyKey(url: String): String {

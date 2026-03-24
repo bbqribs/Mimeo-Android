@@ -8,6 +8,7 @@ import android.graphics.Canvas
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -20,6 +21,7 @@ import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.share.ShareSaveCoordinator
 import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.appendOriginalArticleFooter
+import com.mimeo.android.share.buildManualTextSourcePayload
 import com.mimeo.android.share.buildPlainTextShareSyntheticUrl
 import com.mimeo.android.share.derivePlainTextShareTitle
 import com.mimeo.android.share.derivePlainTextSourceUrl
@@ -91,6 +93,17 @@ class ShareReceiverActivity : ComponentActivity() {
             } else {
                 null
             }
+            val sourceAppPackage = deriveSourceAppPackage(incomingIntent)
+            val plainTextSourceMetadata = if (plainTextBody != null && plainTextUrlInput != null) {
+                buildManualTextSourcePayload(
+                    urlInput = plainTextUrlInput,
+                    explicitSourceUrl = plainTextSourceUrl,
+                    sourceAppPackage = sourceAppPackage,
+                    captureKind = "shared_excerpt",
+                )
+            } else {
+                null
+            }
             if (useUrlCapture && normalizedUrl != null) {
                 settingsStore.enqueuePendingManualSave(
                     source = PendingSaveSource.SHARE,
@@ -125,6 +138,7 @@ class ShareReceiverActivity : ComponentActivity() {
                     urlInput = plainTextUrlInput,
                     titleInput = plainTextTitle,
                     bodyInput = plainTextBody,
+                    sourceMetadata = plainTextSourceMetadata,
                 )
                 else -> ShareSaveResult.SaveFailed
             }
@@ -320,4 +334,38 @@ private class ShareResultNotifications(
         private const val CHANNEL_ID = "share_saving_heads_up"
         private val notificationIds = AtomicInteger(2400)
     }
+}
+
+private fun deriveSourceAppPackage(intent: Intent): String? {
+    val referrerUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+        intent.getParcelableExtra(Intent.EXTRA_REFERRER, Uri::class.java)
+            ?: runCatching {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(Intent.EXTRA_REFERRER) as? Uri
+            }.getOrNull()
+    } else {
+        runCatching {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(Intent.EXTRA_REFERRER) as? Uri
+        }.getOrNull()
+    }
+    val fromReferrerUri = referrerUri
+        ?.takeIf { it.scheme.equals("android-app", ignoreCase = true) }
+        ?.host
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+    if (fromReferrerUri != null) return fromReferrerUri
+    val fromReferrerName = intent.getStringExtra(Intent.EXTRA_REFERRER_NAME)
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let { name ->
+            if (name.startsWith("android-app://", ignoreCase = true)) {
+                runCatching { Uri.parse(name).host }.getOrNull()
+            } else {
+                name
+            }
+        }
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+    return fromReferrerName
 }
