@@ -212,19 +212,6 @@ internal fun shouldShowReaderLoadingPlaceholder(
         !transitionSettled
 }
 
-internal fun playerOfflineAvailabilityLabel(
-    cachedItemIds: Set<Int>,
-    currentItemId: Int,
-    usingCachedText: Boolean,
-    isItemCached: Boolean,
-): String {
-    return if (cachedItemIds.contains(currentItemId) || usingCachedText || isItemCached) {
-        "Available offline"
-    } else {
-        "Not cached"
-    }
-}
-
 internal fun resolveSeededPlaybackPosition(
     knownProgress: Int,
     hasChunks: Boolean,
@@ -434,7 +421,6 @@ fun PlayerScreen(
     val isAutoPlaying = engineState.isAutoPlaying
     val autoPlayAfterLoad = engineState.autoPlayAfterLoad
     var showPlaylistPicker by remember { mutableStateOf(false) }
-    var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
     var hasRefreshProblem by rememberSaveable { mutableStateOf(false) }
     var preserveVisibleContentOnReload by remember { mutableStateOf(false) }
@@ -457,7 +443,6 @@ fun PlayerScreen(
     var readerModeEnabled by rememberSaveable { mutableStateOf(false) }
     val queueOffline by vm.queueOffline.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
-    val cachedItemIds by vm.cachedItemIds.collectAsState()
     val settings by vm.settings.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
@@ -787,12 +772,6 @@ fun PlayerScreen(
         ProgressSyncBadgeState.QUEUED -> "Queued"
         ProgressSyncBadgeState.OFFLINE -> "Offline"
     }
-    val offlineAvailability = playerOfflineAvailabilityLabel(
-        cachedItemIds = cachedItemIds,
-        currentItemId = currentItemId,
-        usingCachedText = usingCachedText,
-        isItemCached = vm.isItemCached(currentItemId),
-    )
     val effectivePercent = if (localDonePercentOverride >= 0) localDonePercentOverride else currentPercent
     val showCompleted = effectivePercent >= DONE_PERCENT_THRESHOLD || nearEndForcedForItemId == currentItemId
     val undoDonePercent = effectivePercent.coerceIn(0, DONE_PERCENT_THRESHOLD - 1)
@@ -1180,7 +1159,7 @@ fun PlayerScreen(
                     }
                     LocusPeekCard(
                         title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
-                        statusLine = "Sync $syncBadgeText  -  $chunkLabel  -  $offlineAvailability",
+                        statusLine = "Sync $syncBadgeText  -  $chunkLabel",
                         overflowExpanded = overflowExpanded,
                         overflowMenuContent = {
                             Spacer(modifier = Modifier)
@@ -1396,11 +1375,9 @@ fun PlayerScreen(
                             val verb = if (result.added) "Added to" else "Removed from"
                             showPlaylistPicker = false
                             onShowSnackbar("$verb ${choice.playlistName}", null, null)
-                            playlistMutationMessage = null
                         }
                         .onFailure { error ->
                             showPlaylistPicker = false
-                            playlistMutationMessage = friendlyPlaylistError(error)
                             onShowSnackbar(
                                 friendlyPlaylistError(error),
                                 "Diagnostics",
