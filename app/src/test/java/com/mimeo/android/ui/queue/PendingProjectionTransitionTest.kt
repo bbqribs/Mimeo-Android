@@ -5,6 +5,7 @@ import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.model.PlaybackQueueItem
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class PendingProjectionTransitionTest {
@@ -70,6 +71,56 @@ class PendingProjectionTransitionTest {
         )
 
         assertEquals(listOf(pending), projected)
+    }
+
+    @Test
+    fun summarizesResolvedPendingAsCached() {
+        val previous = listOf(pendingItem(resolvedItemId = 42))
+        val current = emptyList<PendingManualSaveItem>()
+        val queue = listOf(queueItem(itemId = 42, status = "saved"))
+
+        val summary = summarizePendingProjectionResolutions(
+            previousProjectedItems = previous,
+            currentProjectedItems = current,
+            queueItems = queue,
+            cachedItemIds = setOf(42),
+            noActiveContentItemIds = emptySet(),
+        )
+
+        assertEquals(PendingProjectionResolutionSummary(cachedCount = 1), summary)
+        assertEquals("Saved and downloaded for offline reading.", pendingProjectionResolutionMessage(summary))
+    }
+
+    @Test
+    fun summarizesResolvedPendingAsNoActiveContent() {
+        val previous = listOf(pendingItem(resolvedItemId = 42))
+        val current = emptyList<PendingManualSaveItem>()
+        val queue = listOf(queueItem(itemId = 42, status = "saved"))
+
+        val summary = summarizePendingProjectionResolutions(
+            previousProjectedItems = previous,
+            currentProjectedItems = current,
+            queueItems = queue,
+            cachedItemIds = emptySet(),
+            noActiveContentItemIds = setOf(42),
+        )
+
+        assertEquals(PendingProjectionResolutionSummary(noActiveContentCount = 1), summary)
+        assertEquals("Saved, but not available offline for this item.", pendingProjectionResolutionMessage(summary))
+    }
+
+    @Test
+    fun returnsNullMessageWhenNoResolutionDetected() {
+        val summary = summarizePendingProjectionResolutions(
+            previousProjectedItems = listOf(pendingItem(resolvedItemId = 42)),
+            currentProjectedItems = emptyList(),
+            queueItems = emptyList(),
+            cachedItemIds = emptySet(),
+            noActiveContentItemIds = emptySet(),
+        )
+
+        assertEquals(PendingProjectionResolutionSummary(), summary)
+        assertNull(pendingProjectionResolutionMessage(summary))
     }
 
     private fun pendingItem(resolvedItemId: Int?): PendingManualSaveItem {

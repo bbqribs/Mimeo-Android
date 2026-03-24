@@ -189,6 +189,15 @@ private enum class QueueSortOption(val label: String) {
     TITLE_AZ("Title A-Z"),
 }
 
+internal data class PendingProjectionResolutionSummary(
+    val cachedCount: Int = 0,
+    val noActiveContentCount: Int = 0,
+    val failedProcessingCount: Int = 0,
+) {
+    val hasUpdates: Boolean
+        get() = cachedCount > 0 || noActiveContentCount > 0 || failedProcessingCount > 0
+}
+
 @Composable
 fun QueueScreen(
     vm: AppViewModel,
@@ -219,6 +228,7 @@ fun QueueScreen(
     var pullRefreshDistancePx by remember { mutableFloatStateOf(0f) }
     var pendingFocusId by remember { mutableIntStateOf(-1) }
     var previousProjectedPendingIds by remember { mutableStateOf<List<Long>>(emptyList()) }
+    var previousProjectedPendingItems by remember { mutableStateOf<List<PendingManualSaveItem>>(emptyList()) }
     var previousDisplayedItemIds by remember { mutableStateOf<List<Int>>(emptyList()) }
     var suppressAutoScrollToTopOnce by remember { mutableStateOf(false) }
     var collapsingArchivedItemIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
@@ -440,10 +450,23 @@ fun QueueScreen(
         val currentIds = projectedPendingItems.map { it.id }
         val previousIds = previousProjectedPendingIds.toHashSet()
         val hasNewProjectedPending = currentIds.any { it !in previousIds }
+        if (previousProjectedPendingItems.isNotEmpty()) {
+            val resolutionSummary = summarizePendingProjectionResolutions(
+                previousProjectedItems = previousProjectedPendingItems,
+                currentProjectedItems = projectedPendingItems,
+                queueItems = items,
+                cachedItemIds = cachedItemIds,
+                noActiveContentItemIds = noActiveContentItemIds,
+            )
+            pendingProjectionResolutionMessage(resolutionSummary)?.let { message ->
+                onShowSnackbar(message, null, null)
+            }
+        }
         if (hasNewProjectedPending && currentIds.isNotEmpty()) {
             listState.animateScrollToItem(0)
         }
         previousProjectedPendingIds = currentIds
+        previousProjectedPendingItems = projectedPendingItems
     }
 
     LaunchedEffect(displayedItems, pendingFocusId, searchQuery, selectedFilter, selectedSort) {
@@ -1337,6 +1360,67 @@ internal fun projectPendingItemsForDestination(
         if (noActiveContentItemIds.contains(matchedItemId)) return@filter false
         !cachedItemIds.contains(matchedItemId)
     }
+}
+
+internal fun summarizePendingProjectionResolutions(
+    previousProjectedItems: List<PendingManualSaveItem>,
+    currentProjectedItems: List<PendingManualSaveItem>,
+    queueItems: List<PlaybackQueueItem>,
+    cachedItemIds: Set<Int>,
+    noActiveContentItemIds: Set<Int>,
+): PendingProjectionResolutionSummary {
+    if (previousProjectedItems.isEmpty()) return PendingProjectionResolutionSummary()
+    val currentIds = currentProjectedItems.mapTo(mutableSetOf()) { it.id }
+    var cached = 0
+    var noActiveContent = 0
+    var failed = 0
+    previousProjectedItems
+        .asSequence()
+        .filter { it.id !in currentIds }
+        .forEach { pending ->
+            val matchedQueueItem = queueItems.firstOrNull { item ->
+                pending.resolvedItemId?.let { resolvedItemId ->
+                    item.itemId == resolvedItemId
+                } ?: (normalizePendingComparisonUrl(pending.urlInput) == normalizePendingComparisonUrl(item.url))
+            } ?: return@forEach
+            val matchedItemId = matchedQueueItem.itemId
+            when {
+                hasFailedPendingProjectionStatus(matchedQueueItem) -> failed += 1
+                noActiveContentItemIds.contains(matchedItemId) -> noActiveContent += 1
+                cachedItemIds.contains(matchedItemId) -> cached += 1
+            }
+        }
+    return PendingProjectionResolutionSummary(
+        cachedCount = cached,
+        noActiveContentCount = noActiveContent,
+        failedProcessingCount = failed,
+    )
+}
+
+internal fun pendingProjectionResolutionMessage(summary: PendingProjectionResolutionSummary): String? {
+    if (!summary.hasUpdates) return null
+    if (summary.noActiveContentCount == 0 && summary.failedProcessingCount == 0 && summary.cachedCount > 0) {
+        return if (summary.cachedCount == 1) {
+            "Saved and downloaded for offline reading."
+        } else {
+            "Saved items downloaded for offline reading."
+        }
+    }
+    if (summary.noActiveContentCount > 0 && summary.failedProcessingCount == 0 && summary.cachedCount == 0) {
+        return if (summary.noActiveContentCount == 1) {
+            "Saved, but not available offline for this item."
+        } else {
+            "Saved, but not available offline for ${summary.noActiveContentCount} items."
+        }
+    }
+    if (summary.failedProcessingCount > 0 && summary.noActiveContentCount == 0 && summary.cachedCount == 0) {
+        return if (summary.failedProcessingCount == 1) {
+            "Saved, but processing failed for offline cache."
+        } else {
+            "Saved, but processing failed for offline cache on ${summary.failedProcessingCount} items."
+        }
+    }
+    return "Offline cache updates: downloaded=${summary.cachedCount}, unavailable=${summary.noActiveContentCount}, failed=${summary.failedProcessingCount}."
 }
 
 private fun normalizePendingComparisonUrl(raw: String?): String? {
