@@ -113,7 +113,7 @@ class QueueItemPresentationCopyTest {
     @Test
     fun offlineStateLabelPrioritizesOfflineStatuses() {
         assertEquals(
-            "Offline ready",
+            "42%",
             queueOfflineStateLabel(progress = 42, cached = true, noActiveContent = false, failedProcessing = false),
         )
         assertEquals(
@@ -133,7 +133,7 @@ class QueueItemPresentationCopyTest {
     @Test
     fun downloadMenuLabelClarifiesRetryState() {
         assertEquals(
-            "Downloaded",
+            "Download for offline",
             queueDownloadMenuLabel(cached = true, noActiveContent = false, failedProcessing = false),
         )
         assertEquals(

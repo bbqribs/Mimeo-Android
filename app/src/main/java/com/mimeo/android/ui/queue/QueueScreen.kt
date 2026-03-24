@@ -1992,7 +1992,6 @@ internal fun queueOfflineStateLabel(
     failedProcessing: Boolean,
 ): String {
     return when {
-        cached -> "Offline ready"
         failedProcessing -> "Processing failed"
         noActiveContent -> "Unavailable offline"
         else -> "$progress%"
@@ -2005,7 +2004,6 @@ internal fun queueDownloadMenuLabel(
     failedProcessing: Boolean,
 ): String {
     return when {
-        cached -> "Downloaded"
         noActiveContent || failedProcessing -> "Retry offline cache"
         else -> "Download for offline"
     }
