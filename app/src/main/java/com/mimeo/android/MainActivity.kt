@@ -150,6 +150,7 @@ import com.mimeo.android.ui.player.PlaybackEngineHost
 import com.mimeo.android.ui.player.PlaybackEngineSettings
 import com.mimeo.android.ui.player.PlaybackEngineState
 import com.mimeo.android.ui.player.PlaybackOpenIntent
+import com.mimeo.android.ui.player.buildPlaybackChunks
 import com.mimeo.android.ui.playlists.PlaylistsScreen
 import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.ui.signin.SignInScreen
@@ -498,17 +499,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val playbackEngineEvents: SharedFlow<PlaybackEngineEvent> = playbackEngine.events
     private var playbackServiceBinder: PlaybackService.LocalBinder? = null
     private var playbackServiceBound: Boolean = false
+    private var playbackServiceBindingRequested: Boolean = false
     private var lastPushedPlaybackServiceSnapshot: PlaybackServiceSnapshot? = null
+    private val autoContinueLoadMutex = Mutex()
+    private var lastAutoContinueLoadKey: Pair<Int, Int>? = null
     private val playbackServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: android.os.IBinder?) {
             playbackServiceBinder = service as? PlaybackService.LocalBinder
             playbackServiceBound = playbackServiceBinder != null
+            playbackServiceBindingRequested = false
             pushPlaybackServiceSnapshot()
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
             playbackServiceBinder = null
             playbackServiceBound = false
+            playbackServiceBindingRequested = false
+            if (buildPlaybackServiceSnapshot().itemId != null) {
+                bindPlaybackService()
+                pushPlaybackServiceSnapshot()
+            }
         }
     }
 
@@ -553,6 +563,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             playbackEngineState.collect {
                 pushPlaybackServiceSnapshot()
+            }
+        }
+        viewModelScope.launch {
+            playbackEngineState.collect { state ->
+                if (!state.autoPlayAfterLoad || state.currentItemId <= 0) return@collect
+                resolveAutoContinueLoadAndPlay(
+                    itemId = state.currentItemId,
+                    reloadNonce = state.reloadNonce,
+                )
             }
         }
         viewModelScope.launch {
@@ -682,6 +701,53 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    private suspend fun resolveAutoContinueLoadAndPlay(itemId: Int, reloadNonce: Int) {
+        val key = itemId to reloadNonce
+        if (lastAutoContinueLoadKey == key) return
+        autoContinueLoadMutex.withLock {
+            if (lastAutoContinueLoadKey == key) return
+            val before = playbackEngineState.value
+            if (!before.autoPlayAfterLoad || before.currentItemId != itemId || before.reloadNonce != reloadNonce) {
+                return
+            }
+            Log.d(
+                LOCUS_CONTINUATION_DEBUG_TAG,
+                "bgAutoContinue load start item=$itemId reloadNonce=$reloadNonce",
+            )
+            fetchItemText(itemId)
+                .onSuccess { loaded ->
+                    val current = playbackEngineState.value
+                    if (
+                        !current.autoPlayAfterLoad ||
+                        current.currentItemId != itemId ||
+                        current.reloadNonce != reloadNonce
+                    ) {
+                        return@onSuccess
+                    }
+                    playbackApplyLoadedItem(
+                        payload = loaded.payload,
+                        chunks = buildPlaybackChunks(loaded.payload),
+                        requestedItemId = itemId,
+                    )
+                    playbackMaybeAutoPlayAfterLoad()
+                    Log.d(
+                        LOCUS_CONTINUATION_DEBUG_TAG,
+                        "bgAutoContinue load success item=$itemId reloadNonce=$reloadNonce",
+                    )
+                    if (!playbackEngineState.value.autoPlayAfterLoad) {
+                        lastAutoContinueLoadKey = key
+                    }
+                }
+                .onFailure { error ->
+                    if (error is CancellationException) return@onFailure
+                    Log.d(
+                        LOCUS_CONTINUATION_DEBUG_TAG,
+                        "bgAutoContinue load fail item=$itemId reloadNonce=$reloadNonce err=${error.message}",
+                    )
+                }
+        }
+    }
+
     fun playbackPlay() {
         playbackEngine.play(
             settings = PlaybackEngineSettings(
@@ -723,12 +789,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun bindPlaybackService() {
+        if (playbackServiceBound || playbackServiceBindingRequested) return
         val appContext = getApplication<Application>().applicationContext
-        appContext.bindService(
+        playbackServiceBindingRequested = true
+        val bound = appContext.bindService(
             Intent(appContext, PlaybackService::class.java),
             playbackServiceConnection,
             Context.BIND_AUTO_CREATE,
         )
+        if (!bound) {
+            playbackServiceBindingRequested = false
+        }
     }
 
     private fun unbindPlaybackService() {
@@ -737,6 +808,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         appContext.unbindService(playbackServiceConnection)
         playbackServiceBinder = null
         playbackServiceBound = false
+        playbackServiceBindingRequested = false
         lastPushedPlaybackServiceSnapshot = null
     }
 
@@ -756,11 +828,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun pushPlaybackServiceSnapshot() {
         val snapshot = buildPlaybackServiceSnapshot()
-        if (snapshot == lastPushedPlaybackServiceSnapshot) return
         val previous = lastPushedPlaybackServiceSnapshot
+        val shouldSkipBecauseNoChange = snapshot == previous &&
+            (snapshot.itemId == null || playbackServiceBinder != null)
+        if (shouldSkipBecauseNoChange) return
         lastPushedPlaybackServiceSnapshot = snapshot
         val appContext = getApplication<Application>().applicationContext
-        if (snapshot.itemId != null && previous?.itemId == null) {
+        if (snapshot.itemId != null) {
+            if (!playbackServiceBound) {
+                bindPlaybackService()
+            }
+        }
+        if (snapshot.itemId != null && (previous?.itemId == null || playbackServiceBinder == null)) {
             val startIntent = Intent(appContext, PlaybackService::class.java).apply {
                 action = PlaybackService.ACTION_SYNC_FROM_BRIDGE
             }
@@ -3130,9 +3209,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         connectivityCallback = null
-        PlaybackServiceBridge.clear()
-        unbindPlaybackService()
-        playbackEngine.shutdown()
+        val engine = playbackEngineState.value
+        val preservePlaybackSession =
+            engine.currentItemId > 0 && (engine.isSpeaking || engine.isAutoPlaying || engine.autoPlayAfterLoad)
+        if (preservePlaybackSession) {
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    LOCUS_CONTINUATION_DEBUG_TAG,
+                    "onCleared preservePlaybackSession item=${engine.currentItemId} " +
+                        "speaking=${engine.isSpeaking} auto=${engine.isAutoPlaying} autoAfterLoad=${engine.autoPlayAfterLoad}",
+                )
+            }
+        } else {
+            PlaybackServiceBridge.clear()
+            unbindPlaybackService()
+            playbackEngine.shutdown()
+        }
         super.onCleared()
     }
 
