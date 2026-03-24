@@ -6,6 +6,7 @@ import java.util.Locale
 
 private val HTTP_URL_REGEX = """https?://[^\s<>()]+""".toRegex(RegexOption.IGNORE_CASE)
 private val TRAILING_URL_PUNCTUATION = charArrayOf('.', ',', ';', ':', '!', '?', ')', ']', '}', '"', '\'')
+private const val PLAIN_TEXT_SHARE_TITLE_MAX_CHARS = 96
 
 fun extractFirstHttpUrl(sharedText: String?): String? {
     if (sharedText.isNullOrBlank()) return null
@@ -20,6 +21,30 @@ fun buildShareIdempotencyKey(url: String): String {
         .digest(normalized.toByteArray(Charsets.UTF_8))
         .joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
     return "android-share-${digest.take(24)}"
+}
+
+fun extractPlainTextShareBody(sharedText: String?): String? {
+    val normalized = sharedText?.trim().orEmpty()
+    if (normalized.isBlank()) return null
+    return normalized
+}
+
+fun derivePlainTextShareTitle(sharedTitle: String?, plainTextBody: String): String {
+    val subject = sharedTitle?.trim().orEmpty()
+    if (subject.isNotEmpty()) return subject.truncateWithEllipsis(PLAIN_TEXT_SHARE_TITLE_MAX_CHARS)
+    val firstMeaningfulLine = plainTextBody
+        .lineSequence()
+        .map { it.trim() }
+        .firstOrNull { it.isNotEmpty() }
+        ?: "Shared text"
+    return firstMeaningfulLine.truncateWithEllipsis(PLAIN_TEXT_SHARE_TITLE_MAX_CHARS)
+}
+
+fun buildPlainTextShareSyntheticUrl(title: String, plainTextBody: String): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+        .digest("$title\n$plainTextBody".toByteArray(Charsets.UTF_8))
+        .joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
+    return "https://shared-text.mimeo.local/${digest.take(20)}"
 }
 
 private fun normalizeUrlForIdempotency(url: String): String {
@@ -52,4 +77,9 @@ private fun String.trimTrailingUrlPunctuation(): String {
         endIndex -= 1
     }
     return substring(0, endIndex)
+}
+
+private fun String.truncateWithEllipsis(maxChars: Int): String {
+    if (length <= maxChars) return this
+    return take((maxChars - 1).coerceAtLeast(1)) + "…"
 }

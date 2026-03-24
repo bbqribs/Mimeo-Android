@@ -19,7 +19,10 @@ import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.share.ShareSaveCoordinator
 import com.mimeo.android.share.ShareSaveResult
+import com.mimeo.android.share.buildPlainTextShareSyntheticUrl
+import com.mimeo.android.share.derivePlainTextShareTitle
 import com.mimeo.android.share.extractFirstHttpUrl
+import com.mimeo.android.share.extractPlainTextShareBody
 import com.mimeo.android.share.isAutoRetryEligiblePendingSaveResult
 import com.mimeo.android.share.isRetryablePendingSaveResult
 import kotlinx.coroutines.CoroutineScope
@@ -60,6 +63,16 @@ class ShareReceiverActivity : ComponentActivity() {
             val settingsStore = SettingsStore(applicationContext)
             val settings = settingsStore.settingsFlow.first()
             val normalizedUrl = extractFirstHttpUrl(sharedText)
+            val plainTextBody = if (normalizedUrl == null) extractPlainTextShareBody(sharedText) else null
+            val plainTextTitle = plainTextBody?.let { derivePlainTextShareTitle(sharedTitle = sharedTitle, plainTextBody = it) }
+            val plainTextSyntheticUrl = if (plainTextBody != null && plainTextTitle != null) {
+                buildPlainTextShareSyntheticUrl(
+                    title = plainTextTitle,
+                    plainTextBody = plainTextBody,
+                )
+            } else {
+                null
+            }
             if (normalizedUrl != null) {
                 settingsStore.enqueuePendingManualSave(
                     source = PendingSaveSource.SHARE,
@@ -72,11 +85,31 @@ class ShareReceiverActivity : ComponentActivity() {
                     autoRetryEligible = false,
                     incrementRetryCount = false,
                 )
+            } else if (plainTextBody != null && plainTextSyntheticUrl != null) {
+                settingsStore.enqueuePendingManualSave(
+                    source = PendingSaveSource.SHARE,
+                    type = PendingManualSaveType.TEXT,
+                    urlInput = plainTextSyntheticUrl,
+                    titleInput = plainTextTitle,
+                    bodyInput = plainTextBody,
+                    destinationPlaylistId = settings.defaultSavePlaylistId,
+                    lastFailureMessage = "Saving...",
+                    autoRetryEligible = false,
+                    incrementRetryCount = false,
+                )
             }
-            val result = ShareSaveCoordinator(applicationContext).saveSharedText(
-                sharedText = sharedText,
-                sharedTitle = sharedTitle,
-            )
+            val result = when {
+                normalizedUrl != null -> ShareSaveCoordinator(applicationContext).saveSharedText(
+                    sharedText = sharedText,
+                    sharedTitle = sharedTitle,
+                )
+                plainTextBody != null && plainTextSyntheticUrl != null -> ShareSaveCoordinator(applicationContext).saveManualText(
+                    urlInput = plainTextSyntheticUrl,
+                    titleInput = plainTextTitle,
+                    bodyInput = plainTextBody,
+                )
+                else -> ShareSaveResult.SaveFailed
+            }
             var surfacedResult: ShareSaveResult? = result
             if (result is ShareSaveResult.Saved && result.itemId != null && normalizedUrl != null) {
                 settingsStore.markMatchingPendingManualSaveResolved(
@@ -85,6 +118,17 @@ class ShareReceiverActivity : ComponentActivity() {
                     urlInput = normalizedUrl,
                     titleInput = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
                     bodyInput = null,
+                    destinationPlaylistId = settings.defaultSavePlaylistId,
+                    resolvedItemId = result.itemId,
+                    statusMessage = "Processing...",
+                )
+            } else if (result is ShareSaveResult.Saved && result.itemId != null && plainTextBody != null && plainTextSyntheticUrl != null) {
+                settingsStore.markMatchingPendingManualSaveResolved(
+                    source = PendingSaveSource.SHARE,
+                    type = PendingManualSaveType.TEXT,
+                    urlInput = plainTextSyntheticUrl,
+                    titleInput = plainTextTitle,
+                    bodyInput = plainTextBody,
                     destinationPlaylistId = settings.defaultSavePlaylistId,
                     resolvedItemId = result.itemId,
                     statusMessage = "Processing...",
@@ -98,6 +142,19 @@ class ShareReceiverActivity : ComponentActivity() {
                         urlInput = normalizedUrl,
                         titleInput = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
                         bodyInput = null,
+                        destinationPlaylistId = settings.defaultSavePlaylistId,
+                        lastFailureMessage = result.notificationText,
+                        autoRetryEligible = isAutoRetryEligiblePendingSaveResult(result),
+                        incrementRetryCount = false,
+                    )
+                    surfacedResult = null
+                } else if (plainTextBody != null && plainTextSyntheticUrl != null) {
+                    settingsStore.enqueuePendingManualSave(
+                        source = PendingSaveSource.SHARE,
+                        type = PendingManualSaveType.TEXT,
+                        urlInput = plainTextSyntheticUrl,
+                        titleInput = plainTextTitle,
+                        bodyInput = plainTextBody,
                         destinationPlaylistId = settings.defaultSavePlaylistId,
                         lastFailureMessage = result.notificationText,
                         autoRetryEligible = isAutoRetryEligiblePendingSaveResult(result),

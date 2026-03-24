@@ -2,6 +2,7 @@ package com.mimeo.android.share
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ShareSaveUtilsTest {
@@ -35,5 +36,41 @@ class ShareSaveUtilsTest {
 
         assertEquals(first, second)
         assertEquals("android-share-", first.take("android-share-".length))
+    }
+
+    @Test
+    fun `extractPlainTextShareBody trims and rejects blank`() {
+        assertNull(extractPlainTextShareBody("   \n  "))
+        assertEquals("Some copied paragraph", extractPlainTextShareBody("  Some copied paragraph  "))
+    }
+
+    @Test
+    fun `derivePlainTextShareTitle prefers subject then first line`() {
+        val withSubject = derivePlainTextShareTitle(
+            sharedTitle = "Quoted passage",
+            plainTextBody = "First line\nSecond line",
+        )
+        val withoutSubject = derivePlainTextShareTitle(
+            sharedTitle = null,
+            plainTextBody = "First line\nSecond line",
+        )
+
+        assertEquals("Quoted passage", withSubject)
+        assertEquals("First line", withoutSubject)
+    }
+
+    @Test
+    fun `buildPlainTextShareSyntheticUrl is stable and https`() {
+        val first = buildPlainTextShareSyntheticUrl(
+            title = "Shared text",
+            plainTextBody = "Body paragraph one.\nBody paragraph two.",
+        )
+        val second = buildPlainTextShareSyntheticUrl(
+            title = "Shared text",
+            plainTextBody = "Body paragraph one.\nBody paragraph two.",
+        )
+
+        assertEquals(first, second)
+        assertTrue(first.startsWith("https://shared-text.mimeo.local/"))
     }
 }
