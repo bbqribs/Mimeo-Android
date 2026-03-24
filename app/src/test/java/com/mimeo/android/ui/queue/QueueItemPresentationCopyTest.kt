@@ -109,4 +109,44 @@ class QueueItemPresentationCopyTest {
             ),
         )
     }
+
+    @Test
+    fun offlineStateLabelPrioritizesOfflineStatuses() {
+        assertEquals(
+            "Offline ready",
+            queueOfflineStateLabel(progress = 42, cached = true, noActiveContent = false, failedProcessing = false),
+        )
+        assertEquals(
+            "Unavailable offline",
+            queueOfflineStateLabel(progress = 42, cached = false, noActiveContent = true, failedProcessing = false),
+        )
+        assertEquals(
+            "Processing failed",
+            queueOfflineStateLabel(progress = 42, cached = false, noActiveContent = false, failedProcessing = true),
+        )
+        assertEquals(
+            "42%",
+            queueOfflineStateLabel(progress = 42, cached = false, noActiveContent = false, failedProcessing = false),
+        )
+    }
+
+    @Test
+    fun downloadMenuLabelClarifiesRetryState() {
+        assertEquals(
+            "Downloaded",
+            queueDownloadMenuLabel(cached = true, noActiveContent = false, failedProcessing = false),
+        )
+        assertEquals(
+            "Retry offline cache",
+            queueDownloadMenuLabel(cached = false, noActiveContent = true, failedProcessing = false),
+        )
+        assertEquals(
+            "Retry offline cache",
+            queueDownloadMenuLabel(cached = false, noActiveContent = false, failedProcessing = true),
+        )
+        assertEquals(
+            "Download for offline",
+            queueDownloadMenuLabel(cached = false, noActiveContent = false, failedProcessing = false),
+        )
+    }
 }
