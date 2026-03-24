@@ -560,9 +560,12 @@ fun PlayerScreen(
     LaunchedEffect(initialItemId, requestedItemId) {
         if (resolvedInitial) return@LaunchedEffect
         val resolvedId = requestedItemId ?: vm.resolveInitialPlayerItemId(initialItemId)
-        if (resolvedId == currentItemId && autoPlayAfterLoad) {
+        val sameCurrentItem = resolvedId == currentItemId
+        val attachToActiveSession = sameCurrentItem && (autoPlayAfterLoad || isSpeaking || isAutoPlaying)
+        if (attachToActiveSession) {
             continuationLog(
-                "initialResolve skipReopen resolved=$resolvedId current=$currentItemId autoPlayAfterLoad=$autoPlayAfterLoad",
+                "initialResolve skipReopen resolved=$resolvedId current=$currentItemId " +
+                    "autoPlayAfterLoad=$autoPlayAfterLoad speaking=$isSpeaking auto=$isAutoPlaying",
             )
             resolvedInitial = true
             return@LaunchedEffect
@@ -677,11 +680,13 @@ fun PlayerScreen(
             "loadItem start currentItemId=$currentItemId reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
         )
         val preservingVisibleContent = preserveVisibleContentOnReload
-        if (!autoPlayAfterLoad) {
+        val preserveActivePlayback = autoPlayAfterLoad || isSpeaking || isAutoPlaying
+        if (!preserveActivePlayback) {
             stopSpeaking(forceSync = false)
         } else {
             continuationLog(
-                "loadItem keepSpeaking currentItemId=$currentItemId reloadNonce=$reloadNonce autoPlayAfterLoad=true",
+                "loadItem keepSpeaking currentItemId=$currentItemId reloadNonce=$reloadNonce " +
+                    "autoPlayAfterLoad=$autoPlayAfterLoad speaking=$isSpeaking auto=$isAutoPlaying",
             )
         }
         vm.setNowPlayingCurrentItem(currentItemId)
@@ -707,11 +712,17 @@ fun PlayerScreen(
                 )
                 preserveVisibleContentOnReload = false
 
-                vm.playbackApplyLoadedItem(
-                    payload = payload,
-                    chunks = chunks,
-                    requestedItemId = requestedItemId,
-                )
+                if (!preserveActivePlayback) {
+                    vm.playbackApplyLoadedItem(
+                        payload = payload,
+                        chunks = chunks,
+                        requestedItemId = requestedItemId,
+                    )
+                } else {
+                    continuationLog(
+                        "loadItem skipApplyLoadedItem currentItemId=$currentItemId reloadNonce=$reloadNonce activePlayback=true",
+                    )
+                }
                 readerViewportSessionNonce += 1
                 if (!preservingVisibleContent) {
                     readerScrollTriggerSignal += 1
