@@ -189,6 +189,20 @@ private enum class QueueSortOption(val label: String) {
     TITLE_AZ("Title A-Z"),
 }
 
+internal enum class PendingOutcomeSimulation {
+    CACHED,
+    NO_ACTIVE_CONTENT,
+    FAILED_PROCESSING,
+}
+
+internal fun pendingOutcomeSimulationMessage(outcome: PendingOutcomeSimulation): String {
+    return when (outcome) {
+        PendingOutcomeSimulation.CACHED -> "Saved and downloaded for offline reading."
+        PendingOutcomeSimulation.NO_ACTIVE_CONTENT -> "Saved, but not available offline for this item."
+        PendingOutcomeSimulation.FAILED_PROCESSING -> "Saved, but processing failed for offline cache."
+    }
+}
+
 @Composable
 fun QueueScreen(
     vm: AppViewModel,
@@ -669,6 +683,55 @@ fun QueueScreen(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
+                    }
+                }
+            }
+        }
+        if (BuildConfig.DEBUG && settings.showPendingOutcomeSimulator) {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text("Pending outcome simulator", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        text = "Developer-only: simulate pending resolution outcomes without backend state changes.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        TextButton(
+                            onClick = {
+                                val message = pendingOutcomeSimulationMessage(PendingOutcomeSimulation.CACHED)
+                                pendingHubStatusMessage = message
+                                onShowSnackbar(message, null, null)
+                            },
+                        ) {
+                            Text("Simulate cached")
+                        }
+                        TextButton(
+                            onClick = {
+                                val message = pendingOutcomeSimulationMessage(PendingOutcomeSimulation.NO_ACTIVE_CONTENT)
+                                pendingHubStatusMessage = message
+                                onShowSnackbar(message, null, null)
+                            },
+                        ) {
+                            Text("Simulate unavailable")
+                        }
+                        TextButton(
+                            onClick = {
+                                val message = pendingOutcomeSimulationMessage(PendingOutcomeSimulation.FAILED_PROCESSING)
+                                pendingHubStatusMessage = message
+                                onShowSnackbar(message, null, null)
+                            },
+                        ) {
+                            Text("Simulate failed")
+                        }
                     }
                 }
             }

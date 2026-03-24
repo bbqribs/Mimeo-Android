@@ -790,6 +790,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         showPlaybackDiagnostics: Boolean,
         showAutoDownloadDiagnostics: Boolean,
         showQueueCaptureMetadata: Boolean,
+        showPendingOutcomeSimulator: Boolean,
         ttsVoiceName: String,
         keepShareResultNotifications: Boolean,
         autoDownloadSavedArticles: Boolean,
@@ -814,6 +815,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 showPlaybackDiagnostics = showPlaybackDiagnostics,
                 showAutoDownloadDiagnostics = showAutoDownloadDiagnostics,
                 showQueueCaptureMetadata = showQueueCaptureMetadata,
+                showPendingOutcomeSimulator = showPendingOutcomeSimulator,
                 ttsVoiceName = ttsVoiceName,
                 keepShareResultNotifications = keepShareResultNotifications,
                 autoDownloadSavedArticles = autoDownloadSavedArticles,
@@ -861,6 +863,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 showPlaybackDiagnostics = settings.value.showPlaybackDiagnostics,
                 showAutoDownloadDiagnostics = settings.value.showAutoDownloadDiagnostics,
                 showQueueCaptureMetadata = settings.value.showQueueCaptureMetadata,
+                showPendingOutcomeSimulator = settings.value.showPendingOutcomeSimulator,
                 ttsVoiceName = settings.value.ttsVoiceName,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 autoDownloadSavedArticles = settings.value.autoDownloadSavedArticles,
@@ -901,6 +904,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 showPlaybackDiagnostics = settings.value.showPlaybackDiagnostics,
                 showAutoDownloadDiagnostics = settings.value.showAutoDownloadDiagnostics,
                 showQueueCaptureMetadata = settings.value.showQueueCaptureMetadata,
+                showPendingOutcomeSimulator = settings.value.showPendingOutcomeSimulator,
                 ttsVoiceName = settings.value.ttsVoiceName,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 autoDownloadSavedArticles = settings.value.autoDownloadSavedArticles,
@@ -2066,6 +2070,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _settings.update { current -> current.copy(showQueueCaptureMetadata = enabled) }
             settingsStore.saveShowQueueCaptureMetadata(enabled)
+        }
+    }
+
+    fun saveShowPendingOutcomeSimulator(enabled: Boolean) {
+        viewModelScope.launch {
+            _settings.update { current -> current.copy(showPendingOutcomeSimulator = enabled) }
+            settingsStore.saveShowPendingOutcomeSimulator(enabled)
         }
     }
 

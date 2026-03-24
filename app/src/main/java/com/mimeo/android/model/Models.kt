@@ -250,6 +250,7 @@ data class AppSettings(
     val showPlaybackDiagnostics: Boolean = false,
     val showAutoDownloadDiagnostics: Boolean = false,
     val showQueueCaptureMetadata: Boolean = false,
+    val showPendingOutcomeSimulator: Boolean = false,
     val ttsVoiceName: String = "",
     val keepShareResultNotifications: Boolean = false,
     val autoDownloadSavedArticles: Boolean = true,
