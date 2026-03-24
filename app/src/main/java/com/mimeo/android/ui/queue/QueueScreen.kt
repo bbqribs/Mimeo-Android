@@ -10,6 +10,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -235,6 +237,7 @@ internal fun pendingOutcomeSimulationPresentation(outcome: PendingOutcomeSimulat
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun QueueScreen(
     vm: AppViewModel,
@@ -778,9 +781,11 @@ fun QueueScreen(
                             }
                         }
                     }
-                    Row(
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        maxItemsInEachRow = 2,
                     ) {
                         TextButton(
                             onClick = {
@@ -789,7 +794,11 @@ fun QueueScreen(
                                 onShowSnackbar(message, null, null)
                             },
                         ) {
-                            Text("Simulate cached")
+                            Text(
+                                text = "Simulate cached",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                         TextButton(
                             onClick = {
@@ -798,7 +807,11 @@ fun QueueScreen(
                                 onShowSnackbar(message, null, null)
                             },
                         ) {
-                            Text("Simulate unavailable")
+                            Text(
+                                text = "Simulate unavailable",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                         TextButton(
                             onClick = {
@@ -807,7 +820,11 @@ fun QueueScreen(
                                 onShowSnackbar(message, null, null)
                             },
                         ) {
-                            Text("Simulate failed")
+                            Text(
+                                text = "Simulate failed",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
                 }
