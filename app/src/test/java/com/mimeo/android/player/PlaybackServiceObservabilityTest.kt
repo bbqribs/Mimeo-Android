@@ -6,8 +6,39 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import android.view.KeyEvent
 
 class PlaybackServiceObservabilityTest {
+    @Test
+    fun `media pause key falls back to play when currently paused`() {
+        val action = resolveMediaButtonDispatchAction(
+            keyCode = KeyEvent.KEYCODE_MEDIA_PAUSE,
+            isCurrentlyPlaying = false,
+        )
+
+        assertEquals(MediaButtonDispatchAction.Play, action)
+    }
+
+    @Test
+    fun `media play key falls back to pause when currently playing`() {
+        val action = resolveMediaButtonDispatchAction(
+            keyCode = KeyEvent.KEYCODE_MEDIA_PLAY,
+            isCurrentlyPlaying = true,
+        )
+
+        assertEquals(MediaButtonDispatchAction.Pause, action)
+    }
+
+    @Test
+    fun `media play pause key resolves to toggle`() {
+        val action = resolveMediaButtonDispatchAction(
+            keyCode = KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+            isCurrentlyPlaying = true,
+        )
+
+        assertEquals(MediaButtonDispatchAction.Toggle, action)
+    }
+
     @Test
     fun `drift clues include focus without item`() {
         val clues = detectPlaybackDriftClues(

@@ -416,13 +416,11 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         val keyEvent = intent?.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT) ?: return false
         if (keyEvent.action != KeyEvent.ACTION_DOWN) return true
         Log.d(mediaButtonLogTag, "handleMediaButtonIntent key=${keyEvent.keyCode}")
-        when (keyEvent.keyCode) {
-            KeyEvent.KEYCODE_MEDIA_PAUSE -> dispatchPause()
-            KeyEvent.KEYCODE_MEDIA_PLAY -> dispatchPlay()
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
-            KeyEvent.KEYCODE_HEADSETHOOK,
-            -> dispatchToggle()
-            else -> return false
+        when (resolveMediaButtonDispatchAction(keyCode = keyEvent.keyCode, isCurrentlyPlaying = snapshot.isPlaying)) {
+            MediaButtonDispatchAction.Play -> dispatchPlay()
+            MediaButtonDispatchAction.Pause -> dispatchPause()
+            MediaButtonDispatchAction.Toggle -> dispatchToggle()
+            MediaButtonDispatchAction.None -> return false
         }
         Log.d(mediaButtonLogTag, "handleMediaButtonIntent dispatched")
         emitAudit("mediaButton:${keyEvent.keyCode}")
