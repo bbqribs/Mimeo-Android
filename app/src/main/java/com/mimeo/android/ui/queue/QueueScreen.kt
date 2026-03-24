@@ -24,6 +24,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
@@ -195,11 +197,41 @@ internal enum class PendingOutcomeSimulation {
     FAILED_PROCESSING,
 }
 
+internal data class PendingOutcomeSimulationPresentation(
+    val title: String,
+    val detail: String,
+    val iconRes: Int,
+    val isError: Boolean,
+)
+
 internal fun pendingOutcomeSimulationMessage(outcome: PendingOutcomeSimulation): String {
     return when (outcome) {
-        PendingOutcomeSimulation.CACHED -> "Saved and downloaded for offline reading."
-        PendingOutcomeSimulation.NO_ACTIVE_CONTENT -> "Saved, but not available offline for this item."
-        PendingOutcomeSimulation.FAILED_PROCESSING -> "Saved, but processing failed for offline cache."
+        PendingOutcomeSimulation.CACHED -> "Saved. Available offline."
+        PendingOutcomeSimulation.NO_ACTIVE_CONTENT -> "Saved, but unavailable offline for this item."
+        PendingOutcomeSimulation.FAILED_PROCESSING -> "Saved, but offline processing failed."
+    }
+}
+
+internal fun pendingOutcomeSimulationPresentation(outcome: PendingOutcomeSimulation): PendingOutcomeSimulationPresentation {
+    return when (outcome) {
+        PendingOutcomeSimulation.CACHED -> PendingOutcomeSimulationPresentation(
+            title = "Offline ready",
+            detail = "Item is saved and ready for offline reading.",
+            iconRes = R.drawable.ic_book_closed_24,
+            isError = false,
+        )
+        PendingOutcomeSimulation.NO_ACTIVE_CONTENT -> PendingOutcomeSimulationPresentation(
+            title = "Unavailable offline",
+            detail = "No active readable content was found for this item.",
+            iconRes = R.drawable.msr_error_circle_24,
+            isError = true,
+        )
+        PendingOutcomeSimulation.FAILED_PROCESSING -> PendingOutcomeSimulationPresentation(
+            title = "Offline processing failed",
+            detail = "Offline caching failed. Retry from the item menu.",
+            iconRes = R.drawable.msr_error_circle_24,
+            isError = true,
+        )
     }
 }
 
@@ -251,6 +283,7 @@ fun QueueScreen(
     var showQueueFetchDebug by rememberSaveable { mutableStateOf(false) }
     var hasRefreshProblem by rememberSaveable { mutableStateOf(false) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
+    var simulatedPendingOutcome by remember { mutableStateOf<PendingOutcomeSimulation?>(null) }
     var showSaveEntryDialog by remember { mutableStateOf(false) }
     var manualSaveMode by rememberSaveable { mutableStateOf(ManualSaveMode.URL) }
     var manualUrlInput by rememberSaveable { mutableStateOf("") }
@@ -701,14 +734,58 @@ fun QueueScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    AnimatedVisibility(
+                        visible = simulatedPendingOutcome != null,
+                        enter = expandVertically(animationSpec = tween(durationMillis = 140)) +
+                            fadeIn(animationSpec = tween(durationMillis = 140)),
+                        exit = shrinkVertically(animationSpec = tween(durationMillis = 160)) +
+                            fadeOut(animationSpec = tween(durationMillis = 140)),
+                    ) {
+                        simulatedPendingOutcome?.let { outcome ->
+                            val presentation = pendingOutcomeSimulationPresentation(outcome)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = presentation.iconRes),
+                                    contentDescription = presentation.title,
+                                    tint = if (presentation.isError) {
+                                        MaterialTheme.colorScheme.error
+                                    } else {
+                                        MaterialTheme.colorScheme.primary
+                                    },
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                ) {
+                                    Text(
+                                        text = presentation.title,
+                                        style = MaterialTheme.typography.labelMedium,
+                                    )
+                                    Text(
+                                        text = presentation.detail,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                TextButton(onClick = { simulatedPendingOutcome = null }) {
+                                    Text("Clear")
+                                }
+                            }
+                        }
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         TextButton(
                             onClick = {
+                                simulatedPendingOutcome = PendingOutcomeSimulation.CACHED
                                 val message = pendingOutcomeSimulationMessage(PendingOutcomeSimulation.CACHED)
-                                pendingHubStatusMessage = message
                                 onShowSnackbar(message, null, null)
                             },
                         ) {
@@ -716,8 +793,8 @@ fun QueueScreen(
                         }
                         TextButton(
                             onClick = {
+                                simulatedPendingOutcome = PendingOutcomeSimulation.NO_ACTIVE_CONTENT
                                 val message = pendingOutcomeSimulationMessage(PendingOutcomeSimulation.NO_ACTIVE_CONTENT)
-                                pendingHubStatusMessage = message
                                 onShowSnackbar(message, null, null)
                             },
                         ) {
@@ -725,8 +802,8 @@ fun QueueScreen(
                         }
                         TextButton(
                             onClick = {
+                                simulatedPendingOutcome = PendingOutcomeSimulation.FAILED_PROCESSING
                                 val message = pendingOutcomeSimulationMessage(PendingOutcomeSimulation.FAILED_PROCESSING)
-                                pendingHubStatusMessage = message
                                 onShowSnackbar(message, null, null)
                             },
                         ) {
@@ -2044,7 +2121,7 @@ private fun QueueItemCard(
                         )
                     } else if (noActiveContent && !cached) {
                         Text(
-                            text = "No active content",
+                            text = "Unavailable offline",
                             style = MaterialTheme.typography.labelSmall,
                             color = secondaryTextColor,
                         )
