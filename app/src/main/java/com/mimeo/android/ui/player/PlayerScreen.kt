@@ -677,7 +677,13 @@ fun PlayerScreen(
             "loadItem start currentItemId=$currentItemId reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
         )
         val preservingVisibleContent = preserveVisibleContentOnReload
-        stopSpeaking(forceSync = false)
+        if (!autoPlayAfterLoad) {
+            stopSpeaking(forceSync = false)
+        } else {
+            continuationLog(
+                "loadItem keepSpeaking currentItemId=$currentItemId reloadNonce=$reloadNonce autoPlayAfterLoad=true",
+            )
+        }
         vm.setNowPlayingCurrentItem(currentItemId)
         isLoading = !preservingVisibleContent
         bodyRevealReady = preservingVisibleContent
