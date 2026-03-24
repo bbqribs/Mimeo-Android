@@ -86,4 +86,41 @@ class PlaybackObservabilityTest {
 
         assertEquals(false, show)
     }
+
+    @Test
+    fun skipInitialReopenWhenSameItemAlreadyActive() {
+        val shouldSkip = shouldSkipInitialReopen(
+            resolvedItemId = 42,
+            currentItemId = 42,
+            autoPlayAfterLoad = false,
+            isSpeaking = true,
+            isAutoPlaying = false,
+        )
+
+        assertTrue(shouldSkip)
+    }
+
+    @Test
+    fun doNotSkipInitialReopenWhenDifferentItemRequested() {
+        val shouldSkip = shouldSkipInitialReopen(
+            resolvedItemId = 42,
+            currentItemId = 41,
+            autoPlayAfterLoad = true,
+            isSpeaking = true,
+            isAutoPlaying = true,
+        )
+
+        assertEquals(false, shouldSkip)
+    }
+
+    @Test
+    fun preserveActivePlaybackDuringLoadWhenAlreadySpeaking() {
+        val preserve = shouldPreserveActivePlaybackDuringLoad(
+            autoPlayAfterLoad = false,
+            isSpeaking = true,
+            isAutoPlaying = false,
+        )
+
+        assertTrue(preserve)
+    }
 }

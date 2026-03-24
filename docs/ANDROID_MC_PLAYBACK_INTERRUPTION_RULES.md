@@ -111,6 +111,7 @@ Rule: media-button ownership should remain with Mimeo during active playback ses
 - Interruption-driven pause uses same pause path as user pause through bridge callbacks.
 - End-of-item continuation policy remains engine-owned and unchanged by focus handling.
 - Manual-open vs auto-continue semantics are unchanged by this policy.
+- Refocusing/returning to Locus while an item is already actively playing should attach to the existing session state and must not force a same-item reopen/reseed.
 
 Rule: interruption handling changes transport behavior only, not queue/progress model decisions.
 

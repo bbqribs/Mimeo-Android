@@ -249,6 +249,25 @@ internal fun shouldSpeakTitleBeforeBody(
     return chunks.firstOrNull()?.text.orEmpty().isNotBlank()
 }
 
+internal fun shouldSkipInitialReopen(
+    resolvedItemId: Int,
+    currentItemId: Int,
+    autoPlayAfterLoad: Boolean,
+    isSpeaking: Boolean,
+    isAutoPlaying: Boolean,
+): Boolean {
+    if (resolvedItemId != currentItemId) return false
+    return autoPlayAfterLoad || isSpeaking || isAutoPlaying
+}
+
+internal fun shouldPreserveActivePlaybackDuringLoad(
+    autoPlayAfterLoad: Boolean,
+    isSpeaking: Boolean,
+    isAutoPlaying: Boolean,
+): Boolean {
+    return autoPlayAfterLoad || isSpeaking || isAutoPlaying
+}
+
 internal fun shouldUseTitleIntroOnPlaybackStart(
     allowTitleIntro: Boolean,
     hasStartedPlaybackForItem: Boolean,
@@ -560,8 +579,13 @@ fun PlayerScreen(
     LaunchedEffect(initialItemId, requestedItemId) {
         if (resolvedInitial) return@LaunchedEffect
         val resolvedId = requestedItemId ?: vm.resolveInitialPlayerItemId(initialItemId)
-        val sameCurrentItem = resolvedId == currentItemId
-        val attachToActiveSession = sameCurrentItem && (autoPlayAfterLoad || isSpeaking || isAutoPlaying)
+        val attachToActiveSession = shouldSkipInitialReopen(
+            resolvedItemId = resolvedId,
+            currentItemId = currentItemId,
+            autoPlayAfterLoad = autoPlayAfterLoad,
+            isSpeaking = isSpeaking,
+            isAutoPlaying = isAutoPlaying,
+        )
         if (attachToActiveSession) {
             continuationLog(
                 "initialResolve skipReopen resolved=$resolvedId current=$currentItemId " +
@@ -680,7 +704,11 @@ fun PlayerScreen(
             "loadItem start currentItemId=$currentItemId reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
         )
         val preservingVisibleContent = preserveVisibleContentOnReload
-        val preserveActivePlayback = autoPlayAfterLoad || isSpeaking || isAutoPlaying
+        val preserveActivePlayback = shouldPreserveActivePlaybackDuringLoad(
+            autoPlayAfterLoad = autoPlayAfterLoad,
+            isSpeaking = isSpeaking,
+            isAutoPlaying = isAutoPlaying,
+        )
         if (!preserveActivePlayback) {
             stopSpeaking(forceSync = false)
         } else {
