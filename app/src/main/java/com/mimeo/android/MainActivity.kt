@@ -3209,9 +3209,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         connectivityCallback = null
-        PlaybackServiceBridge.clear()
-        unbindPlaybackService()
-        playbackEngine.shutdown()
+        val engine = playbackEngineState.value
+        val preservePlaybackSession =
+            engine.currentItemId > 0 && (engine.isSpeaking || engine.isAutoPlaying || engine.autoPlayAfterLoad)
+        if (preservePlaybackSession) {
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    LOCUS_CONTINUATION_DEBUG_TAG,
+                    "onCleared preservePlaybackSession item=${engine.currentItemId} " +
+                        "speaking=${engine.isSpeaking} auto=${engine.isAutoPlaying} autoAfterLoad=${engine.autoPlayAfterLoad}",
+                )
+            }
+        } else {
+            PlaybackServiceBridge.clear()
+            unbindPlaybackService()
+            playbackEngine.shutdown()
+        }
         super.onCleared()
     }
 
