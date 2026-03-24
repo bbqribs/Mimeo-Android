@@ -82,7 +82,6 @@ import com.mimeo.android.R
 import com.mimeo.android.isPendingProcessingFailureMessage
 import com.mimeo.android.isTerminalPendingProcessingStatus
 import com.mimeo.android.isNoActiveContentError
-import com.mimeo.android.noActiveContentOfflineMessage
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.AutoDownloadDiagnostics
 import com.mimeo.android.model.AutoDownloadWorkerState
@@ -995,11 +994,11 @@ fun QueueScreen(
                                         }
                                         val result = vm.downloadItemForOffline(item.itemId)
                                         if (result.isSuccess) {
-                                            onShowSnackbar("Downloaded for offline reading", null, null)
+                                            onShowSnackbar("Offline cache ready", null, null)
                                         } else if (result.exceptionOrNull()?.let(::isNoActiveContentError) == true) {
-                                            onShowSnackbar(noActiveContentOfflineMessage(), null, null)
+                                            onShowSnackbar("Unavailable offline for this item", null, null)
                                         } else {
-                                            onShowSnackbar("Couldn't download article", null, null)
+                                            onShowSnackbar("Couldn't cache offline right now", null, null)
                                         }
                                     }
                                 },
@@ -1809,6 +1808,16 @@ private fun PendingProjectedQueueItemCard(
     val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
     val failedProcessing = isPendingFailureState(item.lastFailureMessage)
     val resolvedAwaitingCache = item.resolvedItemId != null && !failedProcessing
+    val statusText = when {
+        failedProcessing -> "Processing failed"
+        resolvedAwaitingCache -> "Caching offline..."
+        else -> "Pending save..."
+    }
+    val statusTint = if (failedProcessing) {
+        MaterialTheme.colorScheme.error
+    } else {
+        secondaryTextColor
+    }
     val titleLine = when {
         !item.titleInput.isNullOrBlank() -> item.titleInput
         item.urlInput.isNotBlank() -> item.urlInput
@@ -1885,7 +1894,14 @@ private fun PendingProjectedQueueItemCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Box(modifier = Modifier.size(8.dp))
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = statusTint,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Box(modifier = Modifier.size(6.dp))
                 Icon(
                     painter = painterResource(
                         id = if (failedProcessing) R.drawable.msr_error_circle_24 else R.drawable.msr_sync_problem_24,
@@ -1895,23 +1911,11 @@ private fun PendingProjectedQueueItemCard(
                     } else {
                         "Saved and waiting for offline cache"
                     },
-                    tint = MaterialTheme.colorScheme.error,
+                    tint = statusTint,
                     modifier = Modifier
-                        .padding(start = 6.dp)
                         .size(16.dp),
                 )
             }
-            Text(
-                text = if (resolvedAwaitingCache) {
-                    "Saved. Caching for offline..."
-                } else {
-                    "Pending save..."
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = secondaryTextColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
     }
 }
@@ -1983,6 +1987,30 @@ internal fun queueProgressIconDescription(
         isDone -> "Done"
         progress <= 0 -> "Unread"
         else -> "In progress"
+    }
+}
+
+internal fun queueOfflineStateLabel(
+    progress: Int,
+    cached: Boolean,
+    noActiveContent: Boolean,
+    failedProcessing: Boolean,
+): String {
+    return when {
+        failedProcessing -> "Processing failed"
+        noActiveContent -> "Unavailable offline"
+        else -> "$progress%"
+    }
+}
+
+internal fun queueDownloadMenuLabel(
+    cached: Boolean,
+    noActiveContent: Boolean,
+    failedProcessing: Boolean,
+): String {
+    return when {
+        noActiveContent || failedProcessing -> "Retry offline cache"
+        else -> "Download for offline"
     }
 }
 
@@ -2079,14 +2107,7 @@ private fun QueueItemCard(
                     ) {
                         DropdownMenuItem(
                             text = {
-                                Text(
-                                    when {
-                                        cached -> "Downloaded"
-                                        noActiveContent -> "Unavailable offline"
-                                        failedProcessing -> "Processing failed"
-                                        else -> "Download"
-                                    },
-                                )
+                                Text(queueDownloadMenuLabel(cached, noActiveContent, failedProcessing))
                             },
                             onClick = {
                                 onDismissMenu()
@@ -2130,25 +2151,11 @@ private fun QueueItemCard(
                     modifier = Modifier.padding(start = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    if (failedProcessing && !cached) {
-                        Text(
-                            text = "Processing failed",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = secondaryTextColor,
-                        )
-                    } else if (noActiveContent && !cached) {
-                        Text(
-                            text = "Unavailable offline",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = secondaryTextColor,
-                        )
-                    } else {
-                        Text(
-                            text = "$progress%",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = secondaryTextColor,
-                        )
-                    }
+                    Text(
+                        text = queueOfflineStateLabel(progress, cached, noActiveContent, failedProcessing),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = secondaryTextColor,
+                    )
                     Icon(
                         painter = painterResource(id = progressIconRes),
                         contentDescription = progressIconDescription,
