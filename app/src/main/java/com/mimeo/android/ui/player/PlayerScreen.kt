@@ -212,6 +212,19 @@ internal fun shouldShowReaderLoadingPlaceholder(
         !transitionSettled
 }
 
+internal fun playerOfflineAvailabilityLabel(
+    cachedItemIds: Set<Int>,
+    currentItemId: Int,
+    usingCachedText: Boolean,
+    isItemCached: Boolean,
+): String {
+    return if (cachedItemIds.contains(currentItemId) || usingCachedText || isItemCached) {
+        "Available offline"
+    } else {
+        "Not cached"
+    }
+}
+
 internal fun resolveSeededPlaybackPosition(
     knownProgress: Int,
     hasChunks: Boolean,
@@ -774,11 +787,12 @@ fun PlayerScreen(
         ProgressSyncBadgeState.QUEUED -> "Queued"
         ProgressSyncBadgeState.OFFLINE -> "Offline"
     }
-    val offlineAvailability = if (cachedItemIds.contains(currentItemId) || usingCachedText || vm.isItemCached(currentItemId)) {
-        "Available offline"
-    } else {
-        "Needs network"
-    }
+    val offlineAvailability = playerOfflineAvailabilityLabel(
+        cachedItemIds = cachedItemIds,
+        currentItemId = currentItemId,
+        usingCachedText = usingCachedText,
+        isItemCached = vm.isItemCached(currentItemId),
+    )
     val effectivePercent = if (localDonePercentOverride >= 0) localDonePercentOverride else currentPercent
     val showCompleted = effectivePercent >= DONE_PERCENT_THRESHOLD || nearEndForcedForItemId == currentItemId
     val undoDonePercent = effectivePercent.coerceIn(0, DONE_PERCENT_THRESHOLD - 1)

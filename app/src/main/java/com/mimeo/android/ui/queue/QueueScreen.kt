@@ -474,6 +474,14 @@ fun QueueScreen(
         }
     }
 
+    LaunchedEffect(playlistMutationMessage) {
+        val currentMessage = playlistMutationMessage ?: return@LaunchedEffect
+        delay(3500)
+        if (playlistMutationMessage == currentMessage) {
+            playlistMutationMessage = null
+        }
+    }
+
     LaunchedEffect(displayedItems, pendingFocusId) {
         if (pendingFocusId <= 0) return@LaunchedEffect
         val index = displayedItems.indexOfFirst { it.itemId == pendingFocusId }
@@ -2009,10 +2017,13 @@ internal fun queueDownloadMenuLabel(
     failedProcessing: Boolean,
 ): String {
     return when {
+        cached -> "Cached offline"
         noActiveContent || failedProcessing -> "Retry offline cache"
         else -> "Download for offline"
     }
 }
+
+internal fun queueDownloadMenuEnabled(cached: Boolean): Boolean = !cached
 
 @Composable
 private fun QueueItemCard(
@@ -2039,6 +2050,7 @@ private fun QueueItemCard(
         captureStrategyLabel = captureStrategyLabel,
         showQueueCaptureMetadata = showQueueCaptureMetadata,
     )
+    val downloadMenuEnabled = queueDownloadMenuEnabled(cached)
     val progressIconRes = queueProgressIconRes(
         progress = progress,
         isDone = isDone,
@@ -2109,9 +2121,12 @@ private fun QueueItemCard(
                             text = {
                                 Text(queueDownloadMenuLabel(cached, noActiveContent, failedProcessing))
                             },
+                            enabled = downloadMenuEnabled,
                             onClick = {
                                 onDismissMenu()
-                                onDownload()
+                                if (downloadMenuEnabled) {
+                                    onDownload()
+                                }
                             },
                         )
                         DropdownMenuItem(
