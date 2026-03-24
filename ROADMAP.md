@@ -40,6 +40,14 @@
 - [x] Autodownload consistency + durability: newly surfaced item targeting, explicit-refresh re-attempt behavior, workerization with backoff, and diagnostics surface.
 - [x] Up Next transition clarity follow-up: explicit failed-processing/no-active-content row states and clearer pending -> saved -> cached visibility after retry/autodownload.
 - [x] Mimeo Control Phase 2 Slice 1: app-scoped `PlaybackEngine` extraction shipped; live playback ownership (TTS lifecycle, chunk callbacks, continuation decisions, progress sync triggers) no longer depends on `PlayerScreen` lifecycle.
+- [x] Mimeo Control Phase 3 Slice 1 shipped: foreground playback service + media session + media notification foundation, including headset/media-button stabilization follow-up.
+- [x] Mimeo Control Phase 3 Slice 2 shipped: bounded audio-focus/interruption policy pass (pause on interruption, no ducking, transient-gain auto-resume where safe) plus headset disconnect pause alignment.
+- [x] Continuous play reliability fix shipped: service-owned continuation now remains reliable across screen-off, lock, and background scenarios.
+- [x] Background playback observability shipped: continuation/focus/media-button audit logs for screen-off/lock/background troubleshooting.
+- [x] Pending outcome simulator (dev-only) shipped: reproducible cached / unavailable-offline / processing-failed outcomes for UI verification.
+- [x] Pending/offline outcome polish shipped: clearer non-cached failure presentation, reduced stale-row confusion, and tighter pending/offline state copy.
+- [x] Offline/no-active-content copy + behavior cleanup shipped: unavailable-offline/no-active-content messaging and row-state behavior tightened for daily use.
+- [x] Plain-text share behavior shipped: dedicated text-share save path, mixed text+URL handling, and original-source footer flow.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
@@ -58,21 +66,17 @@
 - [x] Share-save success-message semantics: destination-aware `Saved to Smart Queue ✅` / `Saved to <Playlist> ✅` without duplicate-specific success wording.
 - [x] Up Next top action bar supports manual URL save entry via lightweight `+` dialog, routed through existing save semantics.
 - [x] Up Next `+` flow now supports manual text submission v1 (`Save URL` / `Paste Text`) via existing `/items/manual-text` backend path.
-- [ ] Backlog: allow sharing plain text and saving it as a readable item, not just URLs.
+- [x] Share-sheet plain-text capture shipped: plain text is saved as readable content, URL-only shares remain URL capture, and mixed text+link shares use text capture behavior.
 
 ### User sign-in (Phase 3)
 - [x] Username/password sign-in flow — shipped per `docs/ANDROID_AUTH_PHASE3_SPEC.md` slice plan (gate, recovery, sign-out, settings coexistence).
 
 ### Next tickets
-0. [ ] Mimeo Control Phase 3 foundation (active): Android media-session/background playback integration slice (MediaSession + notification + transport controls + audio focus), built on shipped app-scoped `PlaybackEngine`.
-1. [ ] Offline/download/no-active-content follow-up: make failed-processing/no-active-content rows explicit in Up Next (distinct icon/state), keep retry outcomes visible, and avoid pending-row disappearance gaps.
-2. [ ] Autodownload worker follow-up: tighten no-active-content persistence and queue/list replacement timing so successful retries transition cleanly from pending -> saved -> cached without confusing gaps.
-3. [ ] TTS QoL follow-up: optional completion tone profile tuning + lightweight title-intro controls (per-mode/per-context guardrails, including mid-article resume behavior).
-4. [ ] Queue/player daily-use polish: finish Locus open-transition jitter/flicker edge cases and keep back navigation behavior fully consistent after repeated queue taps.
-5. [ ] Queue archive affordance pass: add Archive action to Up Next item overflow and to the Locus action bar for the active item.
-6. [ ] Share plain text capture decision ticket: either implement plain-text share ingestion as first-class flow or finalize explicit reject UX with clear reason/hint.
-7. [ ] UI affordance hint pass: standardize long-press tooltip labels across action icons (queue + locus + settings/dev controls) for discoverability without adding visual clutter.
-8. [ ] Completion-indicator consistency pass: align Up Next done/unread/in-progress icon states with Locus completion icon semantics so the same progress state reads identically in both surfaces.
+1. [ ] Source metadata unification for excerpts: add first-class source label/type/url across Android + backend + extension/web so excerpt saves render consistent source context (not host-only inference).
+2. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
+3. [ ] Keep-screen-on/session UX follow-up: refine “active session” heuristics and user copy for reader-only vs speaking states without changing playback ownership.
+4. [ ] Offline/no-active-content follow-up from lived use: tighten retry affordances and recovery messaging for the remaining edge cases that are hard to reproduce on demand.
+5. [ ] Queue/player daily-use polish: small interaction consistency pass (status icon parity, action discoverability, transition smoothing) with no semantics changes.
 
 ## Android Redesign v1.1
 1. [~] Foundation: 4-tab nav shell (Up Next / Locus / Collections / Settings) plus black/purple theme foundations.
