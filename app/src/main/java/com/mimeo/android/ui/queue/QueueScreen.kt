@@ -1808,6 +1808,16 @@ private fun PendingProjectedQueueItemCard(
     val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
     val failedProcessing = isPendingFailureState(item.lastFailureMessage)
     val resolvedAwaitingCache = item.resolvedItemId != null && !failedProcessing
+    val statusText = when {
+        failedProcessing -> "Processing failed"
+        resolvedAwaitingCache -> "Caching offline..."
+        else -> "Pending save..."
+    }
+    val statusTint = if (failedProcessing) {
+        MaterialTheme.colorScheme.error
+    } else {
+        secondaryTextColor
+    }
     val titleLine = when {
         !item.titleInput.isNullOrBlank() -> item.titleInput
         item.urlInput.isNotBlank() -> item.urlInput
@@ -1884,7 +1894,14 @@ private fun PendingProjectedQueueItemCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Box(modifier = Modifier.size(8.dp))
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = statusTint,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Box(modifier = Modifier.size(6.dp))
                 Icon(
                     painter = painterResource(
                         id = if (failedProcessing) R.drawable.msr_error_circle_24 else R.drawable.msr_sync_problem_24,
@@ -1894,23 +1911,11 @@ private fun PendingProjectedQueueItemCard(
                     } else {
                         "Saved and waiting for offline cache"
                     },
-                    tint = MaterialTheme.colorScheme.error,
+                    tint = statusTint,
                     modifier = Modifier
-                        .padding(start = 6.dp)
                         .size(16.dp),
                 )
             }
-            Text(
-                text = if (resolvedAwaitingCache) {
-                    "Saved. Caching for offline..."
-                } else {
-                    "Pending save..."
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = secondaryTextColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
     }
 }
