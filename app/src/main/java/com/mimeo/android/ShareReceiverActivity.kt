@@ -94,11 +94,15 @@ class ShareReceiverActivity : ComponentActivity() {
                 null
             }
             val sourceAppPackage = deriveSourceAppPackage(incomingIntent)
+            val sourceAppLabel = deriveSourceAppLabel(sourceAppPackage)
+            val forceAppSource = sourceAppPackage != null && !isLikelyBrowserPackage(sourceAppPackage)
             val plainTextSourceMetadata = if (plainTextBody != null && plainTextUrlInput != null) {
                 buildManualTextSourcePayload(
                     urlInput = plainTextUrlInput,
                     explicitSourceUrl = plainTextSourceUrl,
                     sourceAppPackage = sourceAppPackage,
+                    sourceAppLabel = sourceAppLabel,
+                    forceAppSource = forceAppSource,
                     captureKind = "shared_excerpt",
                 )
             } else {
@@ -368,4 +372,24 @@ private fun deriveSourceAppPackage(intent: Intent): String? {
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
     return fromReferrerName
+}
+
+private fun ShareReceiverActivity.deriveSourceAppLabel(sourceAppPackage: String?): String? {
+    val packageName = sourceAppPackage?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return runCatching {
+        val appInfo = packageManager.getApplicationInfo(packageName, 0)
+        packageManager.getApplicationLabel(appInfo)?.toString()?.trim()
+    }.getOrNull()?.takeIf { it.isNotEmpty() }
+}
+
+private fun isLikelyBrowserPackage(packageName: String): Boolean {
+    val normalized = packageName.lowercase()
+    if (normalized.contains("chrome")) return true
+    if (normalized.contains("firefox")) return true
+    if (normalized.contains("brave")) return true
+    if (normalized.contains("opera")) return true
+    if (normalized.contains("edge")) return true
+    if (normalized.contains("browser")) return true
+    if (normalized.contains("samsung.android.app.sbrowser")) return true
+    return false
 }

@@ -87,10 +87,13 @@ fun buildManualTextSourcePayload(
     captureKind: String,
     explicitSourceUrl: String? = null,
     sourceAppPackage: String? = null,
+    sourceAppLabel: String? = null,
+    forceAppSource: Boolean = false,
 ): ManualTextSourcePayload {
     val appPackage = sourceAppPackage
         ?.trim()
         ?.takeIf { it.isNotEmpty() && !it.equals("com.mimeo.android", ignoreCase = true) }
+    val appLabel = sourceAppLabel?.trim()?.takeIf { it.isNotEmpty() }
     val normalizedSourceUrl = explicitSourceUrl
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
@@ -98,7 +101,7 @@ fun buildManualTextSourcePayload(
         ?: extractFirstHttpUrl(urlInput)
             ?.let(::normalizeSharedSourceUrl)
             ?.takeUnless(::isSyntheticSharedTextUrl)
-    val isWebSource = normalizedSourceUrl != null
+    val isWebSource = !forceAppSource && normalizedSourceUrl != null
     val sourceLabel = if (isWebSource) {
         runCatching { URI(normalizedSourceUrl).host }
             .getOrNull()
@@ -106,12 +109,12 @@ fun buildManualTextSourcePayload(
             ?.takeIf { it.isNotBlank() }
             ?: normalizedSourceUrl
     } else {
-        appPackage ?: "manual"
+        appLabel ?: appPackage ?: "manual"
     }
     return ManualTextSourcePayload(
         sourceType = if (isWebSource) "web" else "app",
         sourceLabel = sourceLabel,
-        sourceUrl = normalizedSourceUrl,
+        sourceUrl = if (isWebSource) normalizedSourceUrl else null,
         captureKind = captureKind,
         sourceAppPackage = appPackage,
     )
@@ -137,14 +140,20 @@ fun extractPlainTextShareBody(sharedText: String?): String? {
 }
 
 fun derivePlainTextShareTitle(sharedTitle: String?, plainTextBody: String): String {
-    val subject = sharedTitle?.trim().orEmpty()
-    if (subject.isNotEmpty()) return subject.truncateWithEllipsis(PLAIN_TEXT_SHARE_TITLE_MAX_CHARS)
+    val subject = sharedTitle?.trim().orEmpty().takeIf { it.isNotEmpty() }
     val firstMeaningfulLine = plainTextBody
         .lineSequence()
         .map { it.trim() }
         .firstOrNull { it.isNotEmpty() }
         ?: "Shared text"
-    return firstMeaningfulLine.truncateWithEllipsis(PLAIN_TEXT_SHARE_TITLE_MAX_CHARS)
+    val seed = (subject ?: firstMeaningfulLine)
+        .removePrefix("Excerpt:")
+        .trim()
+        .trim('"')
+        .trim()
+        .ifBlank { "Shared text" }
+    val snippet = seed.truncateWithEllipsis(PLAIN_TEXT_SHARE_TITLE_MAX_CHARS)
+    return "Excerpt: \"$snippet\""
 }
 
 fun buildPlainTextShareSyntheticUrl(title: String, plainTextBody: String): String {

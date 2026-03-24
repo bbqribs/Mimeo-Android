@@ -55,8 +55,8 @@ class ShareSaveUtilsTest {
             plainTextBody = "First line\nSecond line",
         )
 
-        assertEquals("Quoted passage", withSubject)
-        assertEquals("First line", withoutSubject)
+        assertEquals("Excerpt: \"Quoted passage\"", withSubject)
+        assertEquals("Excerpt: \"First line\"", withoutSubject)
     }
 
     @Test
@@ -161,5 +161,23 @@ class ShareSaveUtilsTest {
         assertNull(payload.sourceUrl)
         assertEquals("manual_text", payload.captureKind)
         assertEquals("com.google.android.gm", payload.sourceAppPackage)
+    }
+
+    @Test
+    fun `buildManualTextSourcePayload prefers app source for non-browser shares`() {
+        val payload = buildManualTextSourcePayload(
+            urlInput = "https://www.theguardian.com/us-news/2026/mar/24/example",
+            captureKind = "shared_excerpt",
+            explicitSourceUrl = "https://www.theguardian.com/us-news/2026/mar/24/example",
+            sourceAppPackage = "com.google.android.keep",
+            sourceAppLabel = "Google Keep",
+            forceAppSource = true,
+        )
+
+        assertEquals("app", payload.sourceType)
+        assertEquals("Google Keep", payload.sourceLabel)
+        assertNull(payload.sourceUrl)
+        assertEquals("shared_excerpt", payload.captureKind)
+        assertEquals("com.google.android.keep", payload.sourceAppPackage)
     }
 }
