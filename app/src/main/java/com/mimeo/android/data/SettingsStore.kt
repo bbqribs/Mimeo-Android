@@ -64,6 +64,8 @@ class SettingsStore(private val context: Context) {
         booleanPreferencesKey("show_autodownload_diagnostics")
     private val showQueueCaptureMetadataKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("show_queue_capture_metadata")
+    private val showPendingOutcomeSimulatorKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("show_pending_outcome_simulator")
     private val ttsVoiceNameKey: Preferences.Key<String> =
         stringPreferencesKey("tts_voice_name")
     private val keepShareResultNotificationsKey: Preferences.Key<Boolean> =
@@ -136,6 +138,7 @@ class SettingsStore(private val context: Context) {
             showPlaybackDiagnostics = prefs[showPlaybackDiagnosticsKey] ?: false,
             showAutoDownloadDiagnostics = prefs[showAutoDownloadDiagnosticsKey] ?: false,
             showQueueCaptureMetadata = prefs[showQueueCaptureMetadataKey] ?: false,
+            showPendingOutcomeSimulator = prefs[showPendingOutcomeSimulatorKey] ?: false,
             ttsVoiceName = prefs[ttsVoiceNameKey] ?: "",
             keepShareResultNotifications = prefs[keepShareResultNotificationsKey] ?: false,
             autoDownloadSavedArticles = prefs[autoDownloadSavedArticlesKey] ?: true,
@@ -193,6 +196,7 @@ class SettingsStore(private val context: Context) {
         showPlaybackDiagnostics: Boolean,
         showAutoDownloadDiagnostics: Boolean,
         showQueueCaptureMetadata: Boolean,
+        showPendingOutcomeSimulator: Boolean,
         ttsVoiceName: String,
         keepShareResultNotifications: Boolean,
         autoDownloadSavedArticles: Boolean,
@@ -230,6 +234,7 @@ class SettingsStore(private val context: Context) {
             prefs[showPlaybackDiagnosticsKey] = showPlaybackDiagnostics
             prefs[showAutoDownloadDiagnosticsKey] = showAutoDownloadDiagnostics
             prefs[showQueueCaptureMetadataKey] = showQueueCaptureMetadata
+            prefs[showPendingOutcomeSimulatorKey] = showPendingOutcomeSimulator
             prefs[ttsVoiceNameKey] = ttsVoiceName.trim()
             prefs[keepShareResultNotificationsKey] = keepShareResultNotifications
             prefs[autoDownloadSavedArticlesKey] = autoDownloadSavedArticles
@@ -306,6 +311,12 @@ class SettingsStore(private val context: Context) {
     suspend fun saveShowQueueCaptureMetadata(showQueueCaptureMetadata: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[showQueueCaptureMetadataKey] = showQueueCaptureMetadata
+        }
+    }
+
+    suspend fun saveShowPendingOutcomeSimulator(showPendingOutcomeSimulator: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[showPendingOutcomeSimulatorKey] = showPendingOutcomeSimulator
         }
     }
 

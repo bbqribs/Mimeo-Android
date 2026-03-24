@@ -121,6 +121,9 @@ fun SettingsScreen(
     var showQueueCaptureMetadata by remember(settings.showQueueCaptureMetadata) {
         mutableStateOf(settings.showQueueCaptureMetadata)
     }
+    var showPendingOutcomeSimulator by remember(settings.showPendingOutcomeSimulator) {
+        mutableStateOf(settings.showPendingOutcomeSimulator)
+    }
     var ttsVoiceName by remember(settings.ttsVoiceName) {
         mutableStateOf(settings.ttsVoiceName)
     }
@@ -201,6 +204,7 @@ fun SettingsScreen(
             showPlaybackDiagnostics = showPlaybackDiagnostics,
             showAutoDownloadDiagnostics = showAutoDownloadDiagnostics,
             showQueueCaptureMetadata = showQueueCaptureMetadata,
+            showPendingOutcomeSimulator = showPendingOutcomeSimulator,
             ttsVoiceName = ttsVoiceName,
             keepShareResultNotifications = keepShareResultNotifications,
             autoDownloadSavedArticles = autoDownloadSavedArticles,
@@ -1159,6 +1163,30 @@ fun SettingsScreen(
                             onCheckedChange = {
                                 showPlaybackDiagnostics = it
                                 vm.saveShowPlaybackDiagnostics(it)
+                            },
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text("Pending outcome simulator")
+                            Text(
+                                text = "Show Up Next debug controls to simulate pending resolution outcomes.",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = showPendingOutcomeSimulator,
+                            onCheckedChange = {
+                                showPendingOutcomeSimulator = it
+                                vm.saveShowPendingOutcomeSimulator(it)
                             },
                         )
                     }
