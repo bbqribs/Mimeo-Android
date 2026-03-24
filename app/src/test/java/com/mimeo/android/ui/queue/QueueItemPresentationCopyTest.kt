@@ -134,19 +134,19 @@ class QueueItemPresentationCopyTest {
     fun downloadMenuLabelClarifiesRetryState() {
         assertEquals(
             "Download for offline",
-            queueDownloadMenuLabel(cached = true, noActiveContent = false, failedProcessing = false),
+            queueDownloadMenuLabel(noActiveContent = false, failedProcessing = false),
         )
         assertEquals(
             "Retry offline cache",
-            queueDownloadMenuLabel(cached = false, noActiveContent = true, failedProcessing = false),
+            queueDownloadMenuLabel(noActiveContent = true, failedProcessing = false),
         )
         assertEquals(
             "Retry offline cache",
-            queueDownloadMenuLabel(cached = false, noActiveContent = false, failedProcessing = true),
+            queueDownloadMenuLabel(noActiveContent = false, failedProcessing = true),
         )
         assertEquals(
             "Download for offline",
-            queueDownloadMenuLabel(cached = false, noActiveContent = false, failedProcessing = false),
+            queueDownloadMenuLabel(noActiveContent = false, failedProcessing = false),
         )
     }
 }

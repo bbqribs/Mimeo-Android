@@ -94,7 +94,6 @@ import com.mimeo.android.share.extractFirstHttpUrl
 import com.mimeo.android.share.isRetryablePendingSaveResult
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
-import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import androidx.compose.foundation.text.KeyboardActions
@@ -273,7 +272,6 @@ fun QueueScreen(
     var playlistMenuExpanded by remember { mutableStateOf(false) }
     var rowMenuItemId by remember { mutableIntStateOf(-1) }
     var playlistPickerItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
-    var playlistMutationMessage by remember { mutableStateOf<String?>(null) }
     var topActionsMenuExpanded by remember { mutableStateOf(false) }
     var showPendingSavesHub by remember { mutableStateOf(false) }
     var pendingHubStatusMessage by remember { mutableStateOf<String?>(null) }
@@ -519,15 +517,6 @@ fun QueueScreen(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        playlistMutationMessage?.let { message ->
-            StatusBanner(
-                stateLabel = if (message.contains("Unauthorized", ignoreCase = true)) "Auth" else "Offline",
-                summary = message,
-                detail = null,
-                onRetry = { playlistMutationMessage = null },
-                onDiagnostics = onOpenDiagnostics,
-            )
-        }
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier
@@ -1055,11 +1044,9 @@ fun QueueScreen(
                             val verb = if (result.added) "Added to" else "Removed from"
                             playlistPickerItem = null
                             onShowSnackbar("$verb ${choice.playlistName}", null, null)
-                            playlistMutationMessage = null
                         }
                         .onFailure { error ->
                             playlistPickerItem = null
-                            playlistMutationMessage = friendlyPlaylistError(error)
                             onShowSnackbar(
                                 friendlyPlaylistError(error),
                                 "Diagnostics",
@@ -2004,7 +1991,6 @@ internal fun queueOfflineStateLabel(
 }
 
 internal fun queueDownloadMenuLabel(
-    cached: Boolean,
     noActiveContent: Boolean,
     failedProcessing: Boolean,
 ): String {
@@ -2105,15 +2091,17 @@ private fun QueueItemCard(
                         expanded = isMenuExpanded,
                         onDismissRequest = onDismissMenu,
                     ) {
-                        DropdownMenuItem(
-                            text = {
-                                Text(queueDownloadMenuLabel(cached, noActiveContent, failedProcessing))
-                            },
-                            onClick = {
-                                onDismissMenu()
-                                onDownload()
-                            },
-                        )
+                        if (!cached) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(queueDownloadMenuLabel(noActiveContent, failedProcessing))
+                                },
+                                onClick = {
+                                    onDismissMenu()
+                                    onDownload()
+                                },
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text("Playlists...") },
                             onClick = {
