@@ -105,6 +105,7 @@ import com.mimeo.android.player.TtsChunkDoneEvent
 import com.mimeo.android.player.TtsChunkProgressEvent
 import com.mimeo.android.player.TITLE_INTRO_CHUNK_INDEX
 import com.mimeo.android.player.TtsController
+import com.mimeo.android.ui.common.locusCapturePresentation
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
@@ -805,7 +806,9 @@ fun PlayerScreen(
     val safePosition = normalizedPosition(currentPosition)
     val totalChars = totalCharsForPercent()
     val currentPercent = calculateCanonicalPercent(totalChars, chunks, safePosition)
-    val currentTitle = textPayload?.title?.ifBlank { null } ?: textPayload?.url.orEmpty()
+    val capturePresentation = locusCapturePresentation(textPayload)
+    val currentTitle = capturePresentation.title.ifBlank { textPayload?.url.orEmpty() }
+    val currentSourceLabel = capturePresentation.sourceLabel
     val chunkLabel = if (chunks.isEmpty()) {
         "Chunk 0 / 0"
     } else {
@@ -1201,9 +1204,14 @@ fun PlayerScreen(
                             },
                         )
                     }
+                    val locusStatusLine = listOfNotNull(
+                        currentSourceLabel?.takeIf { it.isNotBlank() },
+                        "Sync $syncBadgeText",
+                        chunkLabel,
+                    ).joinToString("  -  ")
                     LocusPeekCard(
                         title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
-                        statusLine = "Sync $syncBadgeText  -  $chunkLabel",
+                        statusLine = locusStatusLine,
                         overflowExpanded = overflowExpanded,
                         overflowMenuContent = {
                             Spacer(modifier = Modifier)

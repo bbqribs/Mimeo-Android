@@ -1,0 +1,132 @@
+package com.mimeo.android.ui.common
+
+import com.mimeo.android.model.ItemTextResponse
+import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.repository.NowPlayingSessionItem
+import java.net.URI
+
+data class CapturePresentation(
+    val title: String,
+    val sourceLabel: String?,
+    val sourceUrl: String?,
+)
+
+fun queueCapturePresentation(item: PlaybackQueueItem): CapturePresentation {
+    return capturePresentation(
+        rawTitle = item.title,
+        rawUrl = item.url,
+        rawHost = item.host,
+        sourceType = item.sourceType,
+        sourceLabel = item.sourceLabel,
+        sourceUrl = item.sourceUrl,
+        captureKind = item.captureKind,
+        sourceAppPackage = item.sourceAppPackage,
+    )
+}
+
+fun locusCapturePresentation(text: ItemTextResponse?): CapturePresentation {
+    if (text == null) {
+        return CapturePresentation(
+            title = "",
+            sourceLabel = null,
+            sourceUrl = null,
+        )
+    }
+    return capturePresentation(
+        rawTitle = text.title,
+        rawUrl = text.url,
+        rawHost = text.host,
+        sourceType = text.sourceType,
+        sourceLabel = text.sourceLabel,
+        sourceUrl = text.sourceUrl,
+        captureKind = text.captureKind,
+        sourceAppPackage = text.sourceAppPackage,
+    )
+}
+
+fun nowPlayingCapturePresentation(item: NowPlayingSessionItem?): CapturePresentation {
+    if (item == null) {
+        return CapturePresentation(
+            title = "",
+            sourceLabel = null,
+            sourceUrl = null,
+        )
+    }
+    return capturePresentation(
+        rawTitle = item.title,
+        rawUrl = item.url,
+        rawHost = item.host,
+        sourceType = item.sourceType,
+        sourceLabel = item.sourceLabel,
+        sourceUrl = item.sourceUrl,
+        captureKind = item.captureKind,
+        sourceAppPackage = item.sourceAppPackage,
+    )
+}
+
+private fun capturePresentation(
+    rawTitle: String?,
+    rawUrl: String,
+    rawHost: String?,
+    sourceType: String?,
+    sourceLabel: String?,
+    sourceUrl: String?,
+    captureKind: String?,
+    sourceAppPackage: String?,
+): CapturePresentation {
+    val excerptLike = isExcerptLikeCapture(captureKind = captureKind, url = rawUrl)
+    val title = if (excerptLike) {
+        formatExcerptTitle(rawTitle = rawTitle, fallbackUrl = rawUrl)
+    } else {
+        rawTitle?.trim()?.takeIf { it.isNotEmpty() } ?: rawUrl
+    }
+    val label = sourceLabel?.trim()?.takeIf { it.isNotEmpty() }
+        ?: rawHost?.trim()?.takeIf { it.isNotEmpty() }
+        ?: sourceAppPackage?.trim()?.takeIf { it.isNotEmpty() }
+    val link = sourceUrl?.trim()?.takeIf { it.startsWithHttp() }
+        ?: rawUrl.takeIf { it.startsWithHttp() && !isSyntheticSharedTextUrl(it) }
+    val normalizedLabel = if (label != null) {
+        if (label.contains('.')) label.removePrefix("www.") else label
+    } else if (sourceType == "app") {
+        "App share"
+    } else {
+        null
+    }
+    return CapturePresentation(
+        title = title,
+        sourceLabel = normalizedLabel,
+        sourceUrl = link,
+    )
+}
+
+private fun isExcerptLikeCapture(captureKind: String?, url: String): Boolean {
+    val normalizedKind = captureKind?.trim()?.lowercase()
+    if (normalizedKind in setOf("shared_excerpt", "manual_text", "plain_text", "excerpt")) return true
+    return isSyntheticSharedTextUrl(url)
+}
+
+private fun formatExcerptTitle(rawTitle: String?, fallbackUrl: String): String {
+    val candidate = rawTitle
+        ?.lineSequence()
+        ?.map { it.trim() }
+        ?.firstOrNull { it.isNotEmpty() }
+        ?: fallbackUrl
+    val cleaned = candidate
+        .removePrefix("Excerpt:")
+        .trim()
+        .trim('"')
+        .trim()
+        .ifBlank { "Shared excerpt" }
+    val snippet = cleaned.take(96).let { if (it.length < cleaned.length) "$it…" else it }
+    return "Excerpt: \"$snippet\""
+}
+
+private fun String.startsWithHttp(): Boolean {
+    return startsWith("http://", ignoreCase = true) || startsWith("https://", ignoreCase = true)
+}
+
+private fun isSyntheticSharedTextUrl(url: String): Boolean {
+    if (!url.startsWithHttp()) return false
+    val host = runCatching { URI(url).host?.lowercase() }.getOrNull() ?: return false
+    return host == "shared-text.mimeo.local"
+}

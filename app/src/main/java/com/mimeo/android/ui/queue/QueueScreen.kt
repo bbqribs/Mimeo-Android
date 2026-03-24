@@ -92,6 +92,7 @@ import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.extractFirstHttpUrl
 import com.mimeo.android.share.isRetryablePendingSaveResult
+import com.mimeo.android.ui.common.queueCapturePresentation
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
@@ -2015,8 +2016,9 @@ private fun QueueItemCard(
     onDismissMenu: () -> Unit,
     onExpandMenu: () -> Unit,
 ) {
-    val title = item.title?.ifBlank { null } ?: item.url
-    val source = item.host?.ifBlank { null } ?: "Unknown source"
+    val capturePresentation = queueCapturePresentation(item)
+    val title = capturePresentation.title
+    val source = capturePresentation.sourceLabel ?: "Unknown source"
     val progress = item.progressPercent
     val isDone = item.furthestPercent >= DONE_PERCENT_THRESHOLD
     val captureStrategyLabel = queueCaptureStrategyLabel(item.strategyUsed)
