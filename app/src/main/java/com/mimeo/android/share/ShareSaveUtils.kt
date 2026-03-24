@@ -6,6 +6,7 @@ import java.util.Locale
 
 private val HTTP_URL_REGEX = """https?://[^\s<>()]+""".toRegex(RegexOption.IGNORE_CASE)
 private val TRAILING_URL_PUNCTUATION = charArrayOf('.', ',', ';', ':', '!', '?', ')', ']', '}', '"', '\'')
+private const val PLAIN_TEXT_SHARE_TITLE_MAX_CHARS = 96
 
 fun extractFirstHttpUrl(sharedText: String?): String? {
     if (sharedText.isNullOrBlank()) return null
@@ -14,12 +15,102 @@ fun extractFirstHttpUrl(sharedText: String?): String? {
     return trimmed.takeIf { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
 }
 
+fun shouldTreatShareAsUrlCapture(
+    sharedText: String?,
+    extractedUrl: String?,
+): Boolean {
+    val normalizedUrl = extractedUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+    val normalizedText = extractPlainTextShareBody(sharedText) ?: return true
+    val remainder = normalizedText
+        .replaceFirst(normalizedUrl, "")
+        .trim()
+        .trim(
+            '(', ')', '[', ']', '{', '}', '"', '\'', '.', ',', ';', ':', '!', '?', '-', '–', '—',
+        )
+    return remainder.isBlank()
+}
+
+fun normalizeSharedSourceUrl(url: String): String {
+    val trimmed = url.trim().trimTrailingUrlPunctuation()
+    val parsed = runCatching { URI(trimmed) }.getOrNull() ?: return trimmed
+    return runCatching {
+        URI(
+            parsed.scheme,
+            parsed.rawUserInfo,
+            parsed.host,
+            parsed.port,
+            parsed.rawPath,
+            parsed.rawQuery,
+            null, // strip fragment (e.g. :~:text browser fragments)
+        ).toASCIIString()
+    }.getOrDefault(trimmed)
+}
+
+fun removeSharedUrlFromText(sharedText: String, url: String): String {
+    val raw = sharedText.trim()
+    val normalizedUrl = url.trim().trimTrailingUrlPunctuation()
+    if (normalizedUrl.isBlank()) return raw
+    return raw
+        .replace(normalizedUrl, "")
+        .replace(url, "")
+        .replace(Regex("""\s+"""), " ")
+        .trim()
+}
+
+fun derivePlainTextSourceUrl(
+    sharedText: String?,
+    extractedUrl: String?,
+): String? {
+    val body = extractPlainTextShareBody(sharedText) ?: return null
+    val url = extractedUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val hasStandaloneText = removeSharedUrlFromText(body, url).isNotBlank()
+    if (!hasStandaloneText) return null
+    return normalizeSharedSourceUrl(url)
+}
+
+fun appendOriginalArticleFooter(
+    body: String,
+    sourceUrl: String?,
+): String {
+    val normalizedBody = body.trim()
+    val normalizedSource = sourceUrl?.trim().orEmpty()
+    if (normalizedSource.isBlank()) return normalizedBody
+    if (normalizedBody.isBlank()) {
+        return "To see the original article, open: $normalizedSource"
+    }
+    return "$normalizedBody\n\nTo see the original article, open: $normalizedSource"
+}
+
 fun buildShareIdempotencyKey(url: String): String {
     val normalized = normalizeUrlForIdempotency(url)
     val digest = MessageDigest.getInstance("SHA-256")
         .digest(normalized.toByteArray(Charsets.UTF_8))
         .joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
     return "android-share-${digest.take(24)}"
+}
+
+fun extractPlainTextShareBody(sharedText: String?): String? {
+    val normalized = sharedText?.trim().orEmpty()
+    if (normalized.isBlank()) return null
+    return normalized
+}
+
+fun derivePlainTextShareTitle(sharedTitle: String?, plainTextBody: String): String {
+    val subject = sharedTitle?.trim().orEmpty()
+    if (subject.isNotEmpty()) return subject.truncateWithEllipsis(PLAIN_TEXT_SHARE_TITLE_MAX_CHARS)
+    val firstMeaningfulLine = plainTextBody
+        .lineSequence()
+        .map { it.trim() }
+        .firstOrNull { it.isNotEmpty() }
+        ?: "Shared text"
+    return firstMeaningfulLine.truncateWithEllipsis(PLAIN_TEXT_SHARE_TITLE_MAX_CHARS)
+}
+
+fun buildPlainTextShareSyntheticUrl(title: String, plainTextBody: String): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+        .digest("$title\n$plainTextBody".toByteArray(Charsets.UTF_8))
+        .joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
+    return "https://shared-text.mimeo.local/${digest.take(20)}"
 }
 
 private fun normalizeUrlForIdempotency(url: String): String {
@@ -52,4 +143,9 @@ private fun String.trimTrailingUrlPunctuation(): String {
         endIndex -= 1
     }
     return substring(0, endIndex)
+}
+
+private fun String.truncateWithEllipsis(maxChars: Int): String {
+    if (length <= maxChars) return this
+    return take((maxChars - 1).coerceAtLeast(1)) + "…"
 }
