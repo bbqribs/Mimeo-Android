@@ -123,6 +123,7 @@ Rule: interruption handling changes transport behavior only, not queue/progress 
 
 Primary log tag:
 - `MimeoMediaButton`
+- `MimeoLocusContinue`
 
 Key expected lines:
 - `onAudioFocusChange focusChange=<code>`
@@ -130,5 +131,9 @@ Key expected lines:
 - `autoResumeAfterTransientGain` (only when safe resume rule is satisfied)
 - `handleMediaButtonIntent key=<...>`
 - `mediaButtonAnchor play/stop`
+- `continueTrigger item=<id> ...` (end-of-item continuation decision point)
+- `continueOpenNext from=<id> to=<id>` (next-item continuation handoff)
+- `bgAutoContinue load start/success/fail ... interactive=<...> locked=<...> background=<...>`
+- `audit=... interactive=<...> locked=<...> background=<...>` (service-side state snapshots)
 
 If media buttons route incorrectly, confirm platform routing targets `com.mimeo.android/MimeoPlayback/...` in system media logs.

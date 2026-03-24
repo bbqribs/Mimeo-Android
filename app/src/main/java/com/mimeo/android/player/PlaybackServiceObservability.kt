@@ -7,6 +7,9 @@ internal data class PlaybackAuditState(
     val mediaSessionActive: Boolean,
     val isForeground: Boolean,
     val anchorPlaying: Boolean,
+    val isDeviceInteractive: Boolean,
+    val isDeviceLocked: Boolean,
+    val appInBackground: Boolean,
 )
 
 internal data class PlaybackAuditEntry(
@@ -21,6 +24,7 @@ internal fun detectPlaybackDriftClues(state: PlaybackAuditState): List<String> {
     if (state.itemId == null && state.hasAudioFocus) clues += "focus-without-item"
     if (state.itemId == null && state.isForeground) clues += "foreground-without-item"
     if (state.itemId != null && state.isPlaying && !state.mediaSessionActive) clues += "playing-with-inactive-session"
+    if (state.itemId != null && state.isPlaying && !state.isForeground) clues += "playing-without-foreground-service"
     if (state.anchorPlaying && !state.hasAudioFocus) clues += "anchor-playing-without-focus"
     if (state.anchorPlaying && state.itemId == null) clues += "anchor-playing-without-item"
     return clues
@@ -75,6 +79,15 @@ internal class PlaybackServiceAuditTrail(
         }
         if (previous.isForeground != current.isForeground) changes += "foreground:${previous.isForeground}->${current.isForeground}"
         if (previous.anchorPlaying != current.anchorPlaying) changes += "anchor:${previous.anchorPlaying}->${current.anchorPlaying}"
+        if (previous.isDeviceInteractive != current.isDeviceInteractive) {
+            changes += "interactive:${previous.isDeviceInteractive}->${current.isDeviceInteractive}"
+        }
+        if (previous.isDeviceLocked != current.isDeviceLocked) {
+            changes += "locked:${previous.isDeviceLocked}->${current.isDeviceLocked}"
+        }
+        if (previous.appInBackground != current.appInBackground) {
+            changes += "background:${previous.appInBackground}->${current.appInBackground}"
+        }
         return if (changes.isEmpty()) null else changes.joinToString(",")
     }
 }
@@ -84,7 +97,9 @@ internal fun formatPlaybackAuditEntry(entry: PlaybackAuditEntry): String {
     val cluePart = if (entry.clues.isEmpty()) "" else " clues=${entry.clues.joinToString("|")}"
     return "audit=${entry.reason} item=${state.itemId ?: "none"} playing=${state.isPlaying} " +
         "focus=${state.hasAudioFocus} sessionActive=${state.mediaSessionActive} " +
-        "foreground=${state.isForeground} anchor=${state.anchorPlaying}$cluePart"
+        "foreground=${state.isForeground} anchor=${state.anchorPlaying} " +
+        "interactive=${state.isDeviceInteractive} locked=${state.isDeviceLocked} " +
+        "background=${state.appInBackground}$cluePart"
 }
 
 internal enum class MediaButtonDispatchAction {
