@@ -449,9 +449,7 @@ fun PlayerScreen(
     val playlists by vm.playlists.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val waitingForRequestedItem =
-        !compactControlsOnly &&
-            resolvedInitial &&
-            requestedItemId != null &&
+        requestedItemId != null &&
             requestedItemId != currentItemId
     val hasStalePayloadForCurrentItem =
         textPayload?.itemId?.let { it != currentItemId } == true
@@ -616,6 +614,18 @@ fun PlayerScreen(
         )
     }
 
+    LaunchedEffect(waitingForRequestedItem) {
+        if (!waitingForRequestedItem) return@LaunchedEffect
+        // During cross-item handoff, hide stale content immediately and wait for
+        // the requested item to become current before any load/reveal work.
+        preserveVisibleContentOnReload = false
+        bodyRevealReady = false
+        textPayload = null
+        usingCachedText = false
+        chunks = emptyList()
+        isLoading = true
+    }
+
     LaunchedEffect(locusTapSignal) {
         if (locusTapSignal == lastHandledLocusTapSignal) return@LaunchedEffect
         lastHandledLocusTapSignal = locusTapSignal
@@ -658,8 +668,14 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(currentItemId, resolvedInitial, reloadNonce) {
+    LaunchedEffect(currentItemId, resolvedInitial, reloadNonce, waitingForRequestedItem) {
         if (!resolvedInitial) return@LaunchedEffect
+        if (waitingForRequestedItem) {
+            continuationLog(
+                "loadItem skip waitingForRequestedItem currentItemId=$currentItemId requestedItemId=$requestedItemId reloadNonce=$reloadNonce",
+            )
+            return@LaunchedEffect
+        }
         continuationLog(
             "loadItem start currentItemId=$currentItemId reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
         )

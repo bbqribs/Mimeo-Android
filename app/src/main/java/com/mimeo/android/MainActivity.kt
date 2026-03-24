@@ -3676,11 +3676,6 @@ private fun MimeoApp(vm: AppViewModel) {
                                 },
                                 focusItemId = focusItemId,
                                 onOpenPlayer = { itemId ->
-                                    val shouldForceSameItemReload =
-                                        sessionNowPlayingItemId != null && sessionNowPlayingItemId == itemId
-                                    if (shouldForceSameItemReload) {
-                                        playerOpenRequestSignal += 1
-                                    }
                                     pendingLocusOpen = true
                                     pendingLocusItemId = itemId
                                     nav.navigate("$ROUTE_LOCUS/$itemId") {
