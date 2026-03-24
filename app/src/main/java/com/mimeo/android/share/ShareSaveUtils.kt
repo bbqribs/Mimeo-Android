@@ -15,6 +15,21 @@ fun extractFirstHttpUrl(sharedText: String?): String? {
     return trimmed.takeIf { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
 }
 
+fun shouldTreatShareAsUrlCapture(
+    sharedText: String?,
+    extractedUrl: String?,
+): Boolean {
+    val normalizedUrl = extractedUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+    val normalizedText = extractPlainTextShareBody(sharedText) ?: return true
+    val remainder = normalizedText
+        .replaceFirst(normalizedUrl, "")
+        .trim()
+        .trim(
+            '(', ')', '[', ']', '{', '}', '"', '\'', '.', ',', ';', ':', '!', '?', '-', '–', '—',
+        )
+    return remainder.isBlank()
+}
+
 fun buildShareIdempotencyKey(url: String): String {
     val normalized = normalizeUrlForIdempotency(url)
     val digest = MessageDigest.getInstance("SHA-256")

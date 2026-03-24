@@ -25,6 +25,7 @@ import com.mimeo.android.share.extractFirstHttpUrl
 import com.mimeo.android.share.extractPlainTextShareBody
 import com.mimeo.android.share.isAutoRetryEligiblePendingSaveResult
 import com.mimeo.android.share.isRetryablePendingSaveResult
+import com.mimeo.android.share.shouldTreatShareAsUrlCapture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -63,7 +64,8 @@ class ShareReceiverActivity : ComponentActivity() {
             val settingsStore = SettingsStore(applicationContext)
             val settings = settingsStore.settingsFlow.first()
             val normalizedUrl = extractFirstHttpUrl(sharedText)
-            val plainTextBody = if (normalizedUrl == null) extractPlainTextShareBody(sharedText) else null
+            val useUrlCapture = shouldTreatShareAsUrlCapture(sharedText = sharedText, extractedUrl = normalizedUrl)
+            val plainTextBody = if (!useUrlCapture) extractPlainTextShareBody(sharedText) else null
             val plainTextTitle = plainTextBody?.let { derivePlainTextShareTitle(sharedTitle = sharedTitle, plainTextBody = it) }
             val plainTextSyntheticUrl = if (plainTextBody != null && plainTextTitle != null) {
                 buildPlainTextShareSyntheticUrl(
@@ -73,7 +75,7 @@ class ShareReceiverActivity : ComponentActivity() {
             } else {
                 null
             }
-            if (normalizedUrl != null) {
+            if (useUrlCapture && normalizedUrl != null) {
                 settingsStore.enqueuePendingManualSave(
                     source = PendingSaveSource.SHARE,
                     type = PendingManualSaveType.URL,
@@ -99,7 +101,7 @@ class ShareReceiverActivity : ComponentActivity() {
                 )
             }
             val result = when {
-                normalizedUrl != null -> ShareSaveCoordinator(applicationContext).saveSharedText(
+                useUrlCapture && normalizedUrl != null -> ShareSaveCoordinator(applicationContext).saveSharedText(
                     sharedText = sharedText,
                     sharedTitle = sharedTitle,
                 )
@@ -111,7 +113,7 @@ class ShareReceiverActivity : ComponentActivity() {
                 else -> ShareSaveResult.SaveFailed
             }
             var surfacedResult: ShareSaveResult? = result
-            if (result is ShareSaveResult.Saved && result.itemId != null && normalizedUrl != null) {
+            if (result is ShareSaveResult.Saved && result.itemId != null && useUrlCapture && normalizedUrl != null) {
                 settingsStore.markMatchingPendingManualSaveResolved(
                     source = PendingSaveSource.SHARE,
                     type = PendingManualSaveType.URL,
@@ -135,7 +137,7 @@ class ShareReceiverActivity : ComponentActivity() {
                 )
             }
             if (isRetryablePendingSaveResult(result)) {
-                if (normalizedUrl != null) {
+                if (useUrlCapture && normalizedUrl != null) {
                     settingsStore.enqueuePendingManualSave(
                         source = PendingSaveSource.SHARE,
                         type = PendingManualSaveType.URL,

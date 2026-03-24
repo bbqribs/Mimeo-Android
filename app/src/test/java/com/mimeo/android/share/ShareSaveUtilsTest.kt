@@ -73,4 +73,24 @@ class ShareSaveUtilsTest {
         assertEquals(first, second)
         assertTrue(first.startsWith("https://shared-text.mimeo.local/"))
     }
+
+    @Test
+    fun `url-only share text uses url capture path`() {
+        val shared = "https://example.com/story"
+        val extracted = extractFirstHttpUrl(shared)
+
+        val useUrlPath = shouldTreatShareAsUrlCapture(sharedText = shared, extractedUrl = extracted)
+
+        assertTrue(useUrlPath)
+    }
+
+    @Test
+    fun `mixed text plus url uses plain-text capture path`() {
+        val shared = "Including link: https://example.com/story and this selected note matters."
+        val extracted = extractFirstHttpUrl(shared)
+
+        val useUrlPath = shouldTreatShareAsUrlCapture(sharedText = shared, extractedUrl = extracted)
+
+        assertEquals(false, useUrlPath)
+    }
 }
