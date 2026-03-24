@@ -86,3 +86,28 @@ internal fun formatPlaybackAuditEntry(entry: PlaybackAuditEntry): String {
         "focus=${state.hasAudioFocus} sessionActive=${state.mediaSessionActive} " +
         "foreground=${state.isForeground} anchor=${state.anchorPlaying}$cluePart"
 }
+
+internal enum class MediaButtonDispatchAction {
+    Play,
+    Pause,
+    Toggle,
+    None,
+}
+
+internal fun resolveMediaButtonDispatchAction(
+    keyCode: Int,
+    isCurrentlyPlaying: Boolean,
+): MediaButtonDispatchAction {
+    return when (keyCode) {
+        android.view.KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+            if (isCurrentlyPlaying) MediaButtonDispatchAction.Pause else MediaButtonDispatchAction.Play
+        }
+        android.view.KeyEvent.KEYCODE_MEDIA_PLAY -> {
+            if (isCurrentlyPlaying) MediaButtonDispatchAction.Pause else MediaButtonDispatchAction.Play
+        }
+        android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+        android.view.KeyEvent.KEYCODE_HEADSETHOOK,
+        -> MediaButtonDispatchAction.Toggle
+        else -> MediaButtonDispatchAction.None
+    }
+}
