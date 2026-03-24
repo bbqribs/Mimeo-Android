@@ -30,6 +30,57 @@ fun shouldTreatShareAsUrlCapture(
     return remainder.isBlank()
 }
 
+fun normalizeSharedSourceUrl(url: String): String {
+    val trimmed = url.trim().trimTrailingUrlPunctuation()
+    val parsed = runCatching { URI(trimmed) }.getOrNull() ?: return trimmed
+    return runCatching {
+        URI(
+            parsed.scheme,
+            parsed.rawUserInfo,
+            parsed.host,
+            parsed.port,
+            parsed.rawPath,
+            parsed.rawQuery,
+            null, // strip fragment (e.g. :~:text browser fragments)
+        ).toASCIIString()
+    }.getOrDefault(trimmed)
+}
+
+fun removeSharedUrlFromText(sharedText: String, url: String): String {
+    val raw = sharedText.trim()
+    val normalizedUrl = url.trim().trimTrailingUrlPunctuation()
+    if (normalizedUrl.isBlank()) return raw
+    return raw
+        .replace(normalizedUrl, "")
+        .replace(url, "")
+        .replace(Regex("""\s+"""), " ")
+        .trim()
+}
+
+fun derivePlainTextSourceUrl(
+    sharedText: String?,
+    extractedUrl: String?,
+): String? {
+    val body = extractPlainTextShareBody(sharedText) ?: return null
+    val url = extractedUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val hasStandaloneText = removeSharedUrlFromText(body, url).isNotBlank()
+    if (!hasStandaloneText) return null
+    return normalizeSharedSourceUrl(url)
+}
+
+fun appendOriginalArticleFooter(
+    body: String,
+    sourceUrl: String?,
+): String {
+    val normalizedBody = body.trim()
+    val normalizedSource = sourceUrl?.trim().orEmpty()
+    if (normalizedSource.isBlank()) return normalizedBody
+    if (normalizedBody.isBlank()) {
+        return "To see the original article, open: $normalizedSource"
+    }
+    return "$normalizedBody\n\nTo see the original article, open: $normalizedSource"
+}
+
 fun buildShareIdempotencyKey(url: String): String {
     val normalized = normalizeUrlForIdempotency(url)
     val digest = MessageDigest.getInstance("SHA-256")

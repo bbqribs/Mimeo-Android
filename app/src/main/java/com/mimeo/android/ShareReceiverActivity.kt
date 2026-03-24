@@ -19,12 +19,15 @@ import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.share.ShareSaveCoordinator
 import com.mimeo.android.share.ShareSaveResult
+import com.mimeo.android.share.appendOriginalArticleFooter
 import com.mimeo.android.share.buildPlainTextShareSyntheticUrl
 import com.mimeo.android.share.derivePlainTextShareTitle
+import com.mimeo.android.share.derivePlainTextSourceUrl
 import com.mimeo.android.share.extractFirstHttpUrl
 import com.mimeo.android.share.extractPlainTextShareBody
 import com.mimeo.android.share.isAutoRetryEligiblePendingSaveResult
 import com.mimeo.android.share.isRetryablePendingSaveResult
+import com.mimeo.android.share.removeSharedUrlFromText
 import com.mimeo.android.share.shouldTreatShareAsUrlCapture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -65,10 +68,23 @@ class ShareReceiverActivity : ComponentActivity() {
             val settings = settingsStore.settingsFlow.first()
             val normalizedUrl = extractFirstHttpUrl(sharedText)
             val useUrlCapture = shouldTreatShareAsUrlCapture(sharedText = sharedText, extractedUrl = normalizedUrl)
-            val plainTextBody = if (!useUrlCapture) extractPlainTextShareBody(sharedText) else null
+            val plainTextSourceUrl = if (!useUrlCapture) {
+                derivePlainTextSourceUrl(sharedText = sharedText, extractedUrl = normalizedUrl)
+            } else {
+                null
+            }
+            val plainTextBody = if (!useUrlCapture) {
+                extractPlainTextShareBody(sharedText)
+                    ?.let { body ->
+                        val withoutInlineUrl = if (normalizedUrl != null) removeSharedUrlFromText(body, normalizedUrl) else body
+                        appendOriginalArticleFooter(withoutInlineUrl, plainTextSourceUrl)
+                    }
+            } else {
+                null
+            }
             val plainTextTitle = plainTextBody?.let { derivePlainTextShareTitle(sharedTitle = sharedTitle, plainTextBody = it) }
-            val plainTextSyntheticUrl = if (plainTextBody != null && plainTextTitle != null) {
-                buildPlainTextShareSyntheticUrl(
+            val plainTextUrlInput = if (plainTextBody != null && plainTextTitle != null) {
+                plainTextSourceUrl ?: buildPlainTextShareSyntheticUrl(
                     title = plainTextTitle,
                     plainTextBody = plainTextBody,
                 )
@@ -87,11 +103,11 @@ class ShareReceiverActivity : ComponentActivity() {
                     autoRetryEligible = false,
                     incrementRetryCount = false,
                 )
-            } else if (plainTextBody != null && plainTextSyntheticUrl != null) {
+            } else if (plainTextBody != null && plainTextUrlInput != null) {
                 settingsStore.enqueuePendingManualSave(
                     source = PendingSaveSource.SHARE,
                     type = PendingManualSaveType.TEXT,
-                    urlInput = plainTextSyntheticUrl,
+                    urlInput = plainTextUrlInput,
                     titleInput = plainTextTitle,
                     bodyInput = plainTextBody,
                     destinationPlaylistId = settings.defaultSavePlaylistId,
@@ -105,8 +121,8 @@ class ShareReceiverActivity : ComponentActivity() {
                     sharedText = sharedText,
                     sharedTitle = sharedTitle,
                 )
-                plainTextBody != null && plainTextSyntheticUrl != null -> ShareSaveCoordinator(applicationContext).saveManualText(
-                    urlInput = plainTextSyntheticUrl,
+                plainTextBody != null && plainTextUrlInput != null -> ShareSaveCoordinator(applicationContext).saveManualText(
+                    urlInput = plainTextUrlInput,
                     titleInput = plainTextTitle,
                     bodyInput = plainTextBody,
                 )
@@ -124,11 +140,11 @@ class ShareReceiverActivity : ComponentActivity() {
                     resolvedItemId = result.itemId,
                     statusMessage = "Processing...",
                 )
-            } else if (result is ShareSaveResult.Saved && result.itemId != null && plainTextBody != null && plainTextSyntheticUrl != null) {
+            } else if (result is ShareSaveResult.Saved && result.itemId != null && plainTextBody != null && plainTextUrlInput != null) {
                 settingsStore.markMatchingPendingManualSaveResolved(
                     source = PendingSaveSource.SHARE,
                     type = PendingManualSaveType.TEXT,
-                    urlInput = plainTextSyntheticUrl,
+                    urlInput = plainTextUrlInput,
                     titleInput = plainTextTitle,
                     bodyInput = plainTextBody,
                     destinationPlaylistId = settings.defaultSavePlaylistId,
@@ -150,11 +166,11 @@ class ShareReceiverActivity : ComponentActivity() {
                         incrementRetryCount = false,
                     )
                     surfacedResult = null
-                } else if (plainTextBody != null && plainTextSyntheticUrl != null) {
+                } else if (plainTextBody != null && plainTextUrlInput != null) {
                     settingsStore.enqueuePendingManualSave(
                         source = PendingSaveSource.SHARE,
                         type = PendingManualSaveType.TEXT,
-                        urlInput = plainTextSyntheticUrl,
+                        urlInput = plainTextUrlInput,
                         titleInput = plainTextTitle,
                         bodyInput = plainTextBody,
                         destinationPlaylistId = settings.defaultSavePlaylistId,

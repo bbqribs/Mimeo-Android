@@ -93,4 +93,42 @@ class ShareSaveUtilsTest {
 
         assertEquals(false, useUrlPath)
     }
+
+    @Test
+    fun `normalizeSharedSourceUrl strips text fragment`() {
+        val url = "https://www.theguardian.com/x/y#:~:text=quoted%20fragment"
+
+        val normalized = normalizeSharedSourceUrl(url)
+
+        assertEquals("https://www.theguardian.com/x/y", normalized)
+    }
+
+    @Test
+    fun `removeSharedUrlFromText removes pasted url`() {
+        val shared = "\"Quote text\" https://example.com/story"
+        val stripped = removeSharedUrlFromText(sharedText = shared, url = "https://example.com/story")
+
+        assertEquals("\"Quote text\"", stripped)
+    }
+
+    @Test
+    fun `derivePlainTextSourceUrl returns normalized url when mixed text present`() {
+        val shared = "\"Quote text\" https://example.com/story#:~:text=foo"
+        val extracted = extractFirstHttpUrl(shared)
+
+        val source = derivePlainTextSourceUrl(sharedText = shared, extractedUrl = extracted)
+
+        assertEquals("https://example.com/story", source)
+    }
+
+    @Test
+    fun `appendOriginalArticleFooter appends source link line`() {
+        val body = "Quoted paragraph."
+        val source = "https://example.com/story"
+
+        val withFooter = appendOriginalArticleFooter(body = body, sourceUrl = source)
+
+        assertTrue(withFooter.contains("Quoted paragraph."))
+        assertTrue(withFooter.contains("To see the original article, open: https://example.com/story"))
+    }
 }
