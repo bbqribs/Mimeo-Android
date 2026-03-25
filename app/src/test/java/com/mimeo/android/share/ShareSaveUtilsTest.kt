@@ -124,6 +124,20 @@ class ShareSaveUtilsTest {
     }
 
     @Test
+    fun `hasTrailingBrowserSelectionFragment detects trailing text fragment marker`() {
+        val shared = "\"Quote\" https://news.ycombinator.com/item?id=1#:~:text=Quote"
+
+        assertTrue(hasTrailingBrowserSelectionFragment(shared))
+    }
+
+    @Test
+    fun `hasTrailingBrowserSelectionFragment ignores plain trailing urls`() {
+        val shared = "\"Quote\"\nhttps://www.bbc.co.uk/news/example"
+
+        assertEquals(false, hasTrailingBrowserSelectionFragment(shared))
+    }
+
+    @Test
     fun `normalizeSharedSourceUrl strips text fragment`() {
         val url = "https://www.theguardian.com/x/y#:~:text=quoted%20fragment"
 

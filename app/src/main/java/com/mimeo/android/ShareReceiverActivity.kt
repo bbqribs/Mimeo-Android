@@ -29,6 +29,7 @@ import com.mimeo.android.share.extractFirstHttpUrl
 import com.mimeo.android.share.extractPlainTextShareBody
 import com.mimeo.android.share.isAutoRetryEligiblePendingSaveResult
 import com.mimeo.android.share.isRetryablePendingSaveResult
+import com.mimeo.android.share.hasTrailingBrowserSelectionFragment
 import com.mimeo.android.share.normalizeSharedSubjectTitle
 import com.mimeo.android.share.removeTrailingSourceUrlFromText
 import com.mimeo.android.share.shouldTreatShareAsUrlCapture
@@ -74,8 +75,15 @@ class ShareReceiverActivity : ComponentActivity() {
             val sourceAppPackage = deriveSourceAppPackage(incomingIntent)
             val sourceAppLabel = deriveSourceAppLabel(sourceAppPackage)
             val useUrlCapture = shouldTreatShareAsUrlCapture(sharedText = sharedText, extractedUrl = normalizedUrl)
+            val browserProvenanceMarker = hasTrailingBrowserSelectionFragment(sharedText)
             val plainTextSourceUrl = if (!useUrlCapture) {
-                derivePlainTextSourceUrl(sharedText = sharedText, extractedUrl = normalizedUrl)
+                val trustedBrowserSource = (sourceAppPackage != null && isLikelyBrowserPackage(sourceAppPackage)) ||
+                    (sourceAppPackage == null && browserProvenanceMarker)
+                if (trustedBrowserSource) {
+                    derivePlainTextSourceUrl(sharedText = sharedText, extractedUrl = normalizedUrl)
+                } else {
+                    null
+                }
             } else {
                 null
             }
@@ -386,4 +394,16 @@ private fun ShareReceiverActivity.deriveSourceAppLabel(sourceAppPackage: String?
         val appInfo = packageManager.getApplicationInfo(packageName, 0)
         packageManager.getApplicationLabel(appInfo).toString().trim()
     }.getOrNull()?.takeIf { it.isNotEmpty() }
+}
+
+private fun isLikelyBrowserPackage(packageName: String): Boolean {
+    val normalized = packageName.lowercase()
+    if (normalized.contains("chrome")) return true
+    if (normalized.contains("firefox")) return true
+    if (normalized.contains("brave")) return true
+    if (normalized.contains("opera")) return true
+    if (normalized.contains("edge")) return true
+    if (normalized.contains("browser")) return true
+    if (normalized.contains("samsung.android.app.sbrowser")) return true
+    return false
 }

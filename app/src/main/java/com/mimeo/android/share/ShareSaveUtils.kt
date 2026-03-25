@@ -94,6 +94,14 @@ fun derivePlainTextSourceUrl(
     return normalizeSharedSourceUrl(candidate)
 }
 
+fun hasTrailingBrowserSelectionFragment(sharedText: String?): Boolean {
+    val body = extractPlainTextShareBody(sharedText) ?: return false
+    val trailing = extractHttpUrls(body).lastOrNull() ?: return false
+    val trimmedTail = body.trimEnd().trimEnd(*TRAILING_URL_PUNCTUATION)
+    if (!trimmedTail.endsWith(trailing, ignoreCase = true)) return false
+    return trailing.contains("#:~:text=", ignoreCase = true)
+}
+
 fun removeTrailingSourceUrlFromText(
     sharedText: String,
     sourceUrl: String,
