@@ -592,6 +592,14 @@ fun PlayerScreen(
     LaunchedEffect(initialItemId, requestedItemId) {
         if (resolvedInitial) return@LaunchedEffect
         val resolvedId = requestedItemId ?: vm.resolveInitialPlayerItemId(initialItemId)
+        if (hasLockedPlaybackOwner && resolvedId != currentItemId) {
+            continuationLog(
+                "initialResolve previewOnly resolved=$resolvedId current=$currentItemId " +
+                    "speaking=$isSpeaking auto=$isAutoPlaying",
+            )
+            resolvedInitial = true
+            return@LaunchedEffect
+        }
         val attachToActiveSession = shouldSkipInitialReopen(
             resolvedItemId = resolvedId,
             currentItemId = currentItemId,
