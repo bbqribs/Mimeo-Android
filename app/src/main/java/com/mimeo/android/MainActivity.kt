@@ -3471,10 +3471,18 @@ private fun MimeoApp(vm: AppViewModel) {
     val queueOffline by vm.queueOffline.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val pendingNavigationRoute by vm.pendingNavigationRoute.collectAsState()
+    val playbackEngineState by vm.playbackEngineState.collectAsState()
     val requiresSignIn = settings.apiToken.isBlank()
     var pendingLocusOpen by rememberSaveable { mutableStateOf(false) }
     var pendingLocusItemId by rememberSaveable { mutableIntStateOf(-1) }
     val sessionNowPlayingItemId = vm.currentNowPlayingItemId()
+    val hasPlaybackItemInProgress =
+        (sessionNowPlayingItemId ?: -1) > 0 &&
+            (
+                playbackEngineState.hasStartedPlaybackForCurrentItem ||
+                    playbackEngineState.isSpeaking ||
+                    playbackEngineState.isAutoPlaying
+                )
     val routeItemId = navBackStack?.arguments?.let { args ->
         if (args.containsKey("itemId")) args.getInt("itemId").takeIf { it > 0 } else null
     }
@@ -3818,11 +3826,11 @@ private fun MimeoApp(vm: AppViewModel) {
                                 focusItemId = focusItemId,
                                 onOpenPlayer = { itemId ->
                                     val activeNowPlayingItemId = sessionNowPlayingItemId?.takeIf { it > 0 }
-                                    if (playbackActive && activeNowPlayingItemId != null && activeNowPlayingItemId != itemId) {
+                                    if (hasPlaybackItemInProgress && activeNowPlayingItemId != null && activeNowPlayingItemId != itemId) {
                                         pendingLocusOpen = true
                                         pendingLocusItemId = activeNowPlayingItemId
                                         vm.showSnackbar(
-                                            "Playback continues on current item. Pause first to switch.",
+                                            "Playback continues on current item. Use long-press Play or 'Play this item' to switch.",
                                             null,
                                             null,
                                         )
