@@ -73,20 +73,13 @@ fun derivePlainTextSourceUrl(
     extractedUrl: String?,
 ): String? {
     val body = extractPlainTextShareBody(sharedText) ?: return null
-    val urls = extractHttpUrls(body).ifEmpty {
-        extractedUrl?.trim()?.takeIf { it.isNotEmpty() }?.let(::listOf) ?: emptyList()
-    }
-    if (urls.isEmpty()) return null
-    val candidate = when {
-        urls.size == 1 -> urls.first()
-        else -> {
-            val trailing = urls.last()
-            val trimmedTail = body.trimEnd().trimEnd(*TRAILING_URL_PUNCTUATION)
-            if (trimmedTail.endsWith(trailing)) trailing else null
-        }
-    } ?: return null
+    val candidate = extractStandaloneTrailingSourceUrl(body) ?: return null
     val hasStandaloneText = removeSharedUrlFromText(body, candidate).isNotBlank()
     if (!hasStandaloneText) return null
+    val remainingBody = removeSharedUrlFromText(body, candidate)
+    val hasOtherUrls = extractHttpUrls(remainingBody).isNotEmpty()
+    val hasExplicitSelectionFragment = candidate.contains("#:~:text=", ignoreCase = true)
+    if (hasOtherUrls && !hasExplicitSelectionFragment) return null
     return normalizeSharedSourceUrl(candidate)
 }
 
@@ -144,6 +137,21 @@ fun buildManualTextSourcePayload(
 private fun isSyntheticSharedTextUrl(url: String): Boolean {
     val host = runCatching { URI(url).host }.getOrNull()?.lowercase(Locale.US) ?: return false
     return host == "shared-text.mimeo.local"
+}
+
+private fun extractStandaloneTrailingSourceUrl(body: String): String? {
+    val lines = body.lines()
+    val lastNonBlankIndex = lines.indexOfLast { it.isNotBlank() }
+    if (lastNonBlankIndex < 0) return null
+    val trailingLineRaw = lines[lastNonBlankIndex].trim()
+    val trailingLine = trailingLineRaw.trimTrailingUrlPunctuation()
+    val url = extractFirstHttpUrl(trailingLine) ?: return null
+    if (!trailingLine.equals(url, ignoreCase = true)) return null
+    if (lastNonBlankIndex > 0) {
+        val priorLine = lines[lastNonBlankIndex - 1]
+        if (priorLine.isNotBlank()) return null
+    }
+    return url
 }
 
 fun buildShareIdempotencyKey(url: String): String {

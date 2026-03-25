@@ -121,8 +121,8 @@ class ShareSaveUtilsTest {
     }
 
     @Test
-    fun `derivePlainTextSourceUrl returns normalized url when mixed text present`() {
-        val shared = "\"Quote text\" https://example.com/story#:~:text=foo"
+    fun `derivePlainTextSourceUrl returns normalized trailing standalone source url`() {
+        val shared = "\"Quote text\"\n\nhttps://example.com/story#:~:text=foo"
         val extracted = extractFirstHttpUrl(shared)
 
         val source = derivePlainTextSourceUrl(sharedText = shared, extractedUrl = extracted)
@@ -131,8 +131,13 @@ class ShareSaveUtilsTest {
     }
 
     @Test
-    fun `derivePlainTextSourceUrl prefers trailing source-style url when multiple urls are present`() {
-        val shared = "See https://first.example/inside and details https://source.example/article"
+    fun `derivePlainTextSourceUrl keeps browser source when trailing marker exists with inline links`() {
+        val shared = """
+            Reference one: https://first.example/inside
+            Reference two: https://second.example/inside
+
+            https://source.example/article#:~:text=selected%20quote
+        """.trimIndent()
         val extracted = extractFirstHttpUrl(shared)
 
         val source = derivePlainTextSourceUrl(sharedText = shared, extractedUrl = extracted)
@@ -141,8 +146,12 @@ class ShareSaveUtilsTest {
     }
 
     @Test
-    fun `derivePlainTextSourceUrl ignores multi-url bodies without trailing source pattern`() {
-        val shared = "Links: https://first.example/a and https://second.example/b in body text continues."
+    fun `derivePlainTextSourceUrl ignores multi-url bodies without explicit trailing source marker`() {
+        val shared = """
+            Links: https://first.example/a and https://second.example/b in body text continues.
+
+            https://source.example/article
+        """.trimIndent()
         val extracted = extractFirstHttpUrl(shared)
 
         val source = derivePlainTextSourceUrl(sharedText = shared, extractedUrl = extracted)
