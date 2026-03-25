@@ -192,6 +192,25 @@ class ShareSaveUtilsTest {
     }
 
     @Test
+    fun `removeTrailingSourceUrlFromText removes raw fragment url when source is normalized`() {
+        val shared = """
+            introduced the Gambling Act in 2005.
+            https://www.bbc.co.uk/news/entertainment-arts-64510095
+            https://news.ycombinator.com/item?id=41668905#:~:text=introduced%20the%20Gambling
+        """.trimIndent()
+
+        val cleaned = removeTrailingSourceUrlFromText(
+            sharedText = shared,
+            sourceUrl = "https://news.ycombinator.com/item?id=41668905",
+        )
+
+        assertEquals(
+            "introduced the Gambling Act in 2005.\nhttps://www.bbc.co.uk/news/entertainment-arts-64510095",
+            cleaned,
+        )
+    }
+
+    @Test
     fun `appendOriginalArticleFooter appends source link line`() {
         val body = "Quoted paragraph."
         val source = "https://example.com/story"

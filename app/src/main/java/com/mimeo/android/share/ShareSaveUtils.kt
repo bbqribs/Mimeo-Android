@@ -102,11 +102,22 @@ fun removeTrailingSourceUrlFromText(
     val normalized = sourceUrl.trim().trimTrailingUrlPunctuation()
     if (normalized.isBlank()) return body
     val lastIndex = body.lastIndexOf(normalized)
-    if (lastIndex < 0) return body
-    val tail = body.substring(lastIndex + normalized.length).trim()
+    if (lastIndex >= 0) {
+        val tail = body.substring(lastIndex + normalized.length).trim()
+        if (tail.isEmpty() || tail.all { it.isWhitespace() || it in TRAILING_URL_PUNCTUATION }) {
+            return body.substring(0, lastIndex).trimEnd()
+        }
+    }
+    val allUrls = extractHttpUrls(body)
+    val trailingRaw = allUrls.lastOrNull()?.takeIf { candidate ->
+        val trimmedTail = body.trimEnd().trimEnd(*TRAILING_URL_PUNCTUATION)
+        trimmedTail.endsWith(candidate, ignoreCase = true)
+    } ?: return body
+    val rawTailIndex = body.lastIndexOf(trailingRaw)
+    if (rawTailIndex < 0) return body
+    val tail = body.substring(rawTailIndex + trailingRaw.length).trim()
     if (tail.isNotEmpty() && tail.any { !it.isWhitespace() && it !in TRAILING_URL_PUNCTUATION }) return body
-    val prefix = body.substring(0, lastIndex).trimEnd()
-    return prefix
+    return body.substring(0, rawTailIndex).trimEnd()
 }
 
 fun appendOriginalArticleFooter(
