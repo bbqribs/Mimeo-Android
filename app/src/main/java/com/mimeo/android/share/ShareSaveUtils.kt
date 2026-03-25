@@ -123,7 +123,7 @@ fun buildManualTextSourcePayload(
             ?.takeIf { it.isNotBlank() }
             ?: normalizedSourceUrl
     } else {
-        appLabel ?: appPackage ?: "manual"
+        appLabel ?: appPackage ?: "Android selection"
     }
     return ManualTextSourcePayload(
         sourceType = if (isWebSource) "web" else "app",

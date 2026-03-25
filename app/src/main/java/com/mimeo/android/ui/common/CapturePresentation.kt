@@ -80,17 +80,31 @@ private fun capturePresentation(
     } else {
         rawTitle?.trim()?.takeIf { it.isNotEmpty() } ?: rawUrl
     }
-    val label = sourceLabel?.trim()?.takeIf { it.isNotEmpty() }
-        ?: rawHost?.trim()?.takeIf { it.isNotEmpty() }
-        ?: sourceAppPackage?.trim()?.takeIf { it.isNotEmpty() }
-    val link = sourceUrl?.trim()?.takeIf { it.startsWithHttp() }
-        ?: rawUrl.takeIf { it.startsWithHttp() && !isSyntheticSharedTextUrl(it) }
-    val normalizedLabel = if (label != null) {
-        if (label.contains('.')) label.removePrefix("www.") else label
-    } else if (sourceType == "app") {
-        "App share"
+    val trustedLink = sourceUrl?.trim()?.takeIf { it.startsWithHttp() }
+    val normalizedLabel = if (excerptLike) {
+        val provenanceLabel = trustedLink
+            ?.let(::extractHost)
+            ?.removePrefix("www.")
+            ?.takeIf { it.isNotBlank() }
+        val originLabel = sourceLabel?.trim()?.takeIf { it.isNotEmpty() }
+            ?: sourceAppPackage?.trim()?.takeIf { it.isNotEmpty() }
+        provenanceLabel ?: originLabel ?: "Android selection"
     } else {
-        null
+        val label = sourceLabel?.trim()?.takeIf { it.isNotEmpty() }
+            ?: rawHost?.trim()?.takeIf { it.isNotEmpty() }
+            ?: sourceAppPackage?.trim()?.takeIf { it.isNotEmpty() }
+        if (label != null) {
+            if (label.contains('.')) label.removePrefix("www.") else label
+        } else if (sourceType == "app") {
+            "App share"
+        } else {
+            null
+        }
+    }
+    val link = if (excerptLike) {
+        trustedLink
+    } else {
+        trustedLink ?: rawUrl.takeIf { it.startsWithHttp() && !isSyntheticSharedTextUrl(it) }
     }
     return CapturePresentation(
         title = title,
@@ -123,6 +137,10 @@ private fun formatExcerptTitle(rawTitle: String?, fallbackUrl: String): String {
 
 private fun String.startsWithHttp(): Boolean {
     return startsWith("http://", ignoreCase = true) || startsWith("https://", ignoreCase = true)
+}
+
+private fun extractHost(url: String): String? {
+    return runCatching { URI(url).host }.getOrNull()
 }
 
 private fun isSyntheticSharedTextUrl(url: String): Boolean {

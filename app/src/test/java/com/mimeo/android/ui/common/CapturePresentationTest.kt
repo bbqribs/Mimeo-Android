@@ -47,7 +47,7 @@ class CapturePresentationTest {
     }
 
     @Test
-    fun `synthetic shared text url uses excerpt title and no source link`() {
+    fun `synthetic shared text url uses excerpt title and android selection fallback`() {
         val item = PlaybackQueueItem(
             itemId = 3,
             title = "Shared paragraph from app",
@@ -59,7 +59,27 @@ class CapturePresentationTest {
         val presentation = queueCapturePresentation(item)
 
         assertTrue(presentation.title.startsWith("Excerpt: \""))
-        assertEquals("shared-text.mimeo.local", presentation.sourceLabel)
+        assertEquals("Android selection", presentation.sourceLabel)
+        assertNull(presentation.sourceUrl)
+    }
+
+    @Test
+    fun `excerpt capture ignores legacy raw host when trusted provenance is absent`() {
+        val item = PlaybackQueueItem(
+            itemId = 5,
+            title = "Legacy excerpt",
+            url = "https://legacy.example.com/source",
+            host = "legacy.example.com",
+            captureKind = "shared_excerpt",
+            sourceType = null,
+            sourceLabel = null,
+            sourceUrl = null,
+            sourceAppPackage = null,
+        )
+
+        val presentation = queueCapturePresentation(item)
+
+        assertEquals("Android selection", presentation.sourceLabel)
         assertNull(presentation.sourceUrl)
     }
 

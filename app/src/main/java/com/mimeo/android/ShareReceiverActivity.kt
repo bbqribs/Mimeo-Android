@@ -20,16 +20,13 @@ import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.share.ShareSaveCoordinator
 import com.mimeo.android.share.ShareSaveResult
-import com.mimeo.android.share.appendOriginalArticleFooter
 import com.mimeo.android.share.buildManualTextSourcePayload
 import com.mimeo.android.share.buildPlainTextShareSyntheticUrl
 import com.mimeo.android.share.derivePlainTextShareTitle
-import com.mimeo.android.share.derivePlainTextSourceUrl
 import com.mimeo.android.share.extractFirstHttpUrl
 import com.mimeo.android.share.extractPlainTextShareBody
 import com.mimeo.android.share.isAutoRetryEligiblePendingSaveResult
 import com.mimeo.android.share.isRetryablePendingSaveResult
-import com.mimeo.android.share.removeSharedUrlFromText
 import com.mimeo.android.share.shouldTreatShareAsUrlCapture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -70,17 +67,9 @@ class ShareReceiverActivity : ComponentActivity() {
             val settings = settingsStore.settingsFlow.first()
             val normalizedUrl = extractFirstHttpUrl(sharedText)
             val useUrlCapture = shouldTreatShareAsUrlCapture(sharedText = sharedText, extractedUrl = normalizedUrl)
-            val plainTextSourceUrl = if (!useUrlCapture) {
-                derivePlainTextSourceUrl(sharedText = sharedText, extractedUrl = normalizedUrl)
-            } else {
-                null
-            }
+            val plainTextSourceUrl: String? = null
             val plainTextBody = if (!useUrlCapture) {
                 extractPlainTextShareBody(sharedText)
-                    ?.let { body ->
-                        val withoutInlineUrl = if (normalizedUrl != null) removeSharedUrlFromText(body, normalizedUrl) else body
-                        appendOriginalArticleFooter(withoutInlineUrl, plainTextSourceUrl)
-                    }
             } else {
                 null
             }
@@ -95,13 +84,13 @@ class ShareReceiverActivity : ComponentActivity() {
             }
             val sourceAppPackage = deriveSourceAppPackage(incomingIntent)
             val sourceAppLabel = deriveSourceAppLabel(sourceAppPackage)
-            val forceAppSource = sourceAppPackage != null && !isLikelyBrowserPackage(sourceAppPackage)
+            val forceAppSource = true
             val plainTextSourceMetadata = if (plainTextBody != null && plainTextUrlInput != null) {
                 buildManualTextSourcePayload(
                     urlInput = plainTextUrlInput,
                     explicitSourceUrl = plainTextSourceUrl,
                     sourceAppPackage = sourceAppPackage,
-                    sourceAppLabel = sourceAppLabel,
+                    sourceAppLabel = sourceAppLabel ?: "Android selection",
                     forceAppSource = forceAppSource,
                     captureKind = "shared_excerpt",
                 )
@@ -378,18 +367,6 @@ private fun ShareReceiverActivity.deriveSourceAppLabel(sourceAppPackage: String?
     val packageName = sourceAppPackage?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     return runCatching {
         val appInfo = packageManager.getApplicationInfo(packageName, 0)
-        packageManager.getApplicationLabel(appInfo)?.toString()?.trim()
+        packageManager.getApplicationLabel(appInfo).toString().trim()
     }.getOrNull()?.takeIf { it.isNotEmpty() }
-}
-
-private fun isLikelyBrowserPackage(packageName: String): Boolean {
-    val normalized = packageName.lowercase()
-    if (normalized.contains("chrome")) return true
-    if (normalized.contains("firefox")) return true
-    if (normalized.contains("brave")) return true
-    if (normalized.contains("opera")) return true
-    if (normalized.contains("edge")) return true
-    if (normalized.contains("browser")) return true
-    if (normalized.contains("samsung.android.app.sbrowser")) return true
-    return false
 }
