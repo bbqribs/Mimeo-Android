@@ -69,6 +69,16 @@ class ShareSaveUtilsTest {
     }
 
     @Test
+    fun `derivePlainTextShareTitle ignores boilerplate subject with link`() {
+        val title = derivePlainTextShareTitle(
+            sharedTitle = "Including link: https://superuser.com/questions/123",
+            plainTextBody = "I was forwarded to a different website with SSL enabled.",
+        )
+
+        assertEquals("Excerpt: \"I was forwarded to a different website with SSL enabled.\"", title)
+    }
+
+    @Test
     fun `buildPlainTextShareSyntheticUrl is stable and https`() {
         val first = buildPlainTextShareSyntheticUrl(
             title = "Shared text",
@@ -104,6 +114,16 @@ class ShareSaveUtilsTest {
     }
 
     @Test
+    fun `selected url plus trailing browser provenance stays url capture`() {
+        val shared = "\"https://www.bbc.co.uk/news/entertainment-arts-64510095\" https://news.ycombinator.com/item?id=41668905#:~:text=https://www.bbc.co.uk/news/entertainment-arts-64510095"
+        val extracted = extractFirstHttpUrl(shared)
+
+        val useUrlPath = shouldTreatShareAsUrlCapture(sharedText = shared, extractedUrl = extracted)
+
+        assertTrue(useUrlPath)
+    }
+
+    @Test
     fun `normalizeSharedSourceUrl strips text fragment`() {
         val url = "https://www.theguardian.com/x/y#:~:text=quoted%20fragment"
 
@@ -122,7 +142,7 @@ class ShareSaveUtilsTest {
 
     @Test
     fun `derivePlainTextSourceUrl returns normalized trailing standalone source url`() {
-        val shared = "\"Quote text\"\n\nhttps://example.com/story#:~:text=foo"
+        val shared = "\"Quote text\" https://example.com/story#:~:text=foo"
         val extracted = extractFirstHttpUrl(shared)
 
         val source = derivePlainTextSourceUrl(sharedText = shared, extractedUrl = extracted)
@@ -157,6 +177,18 @@ class ShareSaveUtilsTest {
         val source = derivePlainTextSourceUrl(sharedText = shared, extractedUrl = extracted)
 
         assertNull(source)
+    }
+
+    @Test
+    fun `removeTrailingSourceUrlFromText removes only trailing source footer url`() {
+        val shared = "\"Quote text with https://content.example/link\" https://source.example/article#:~:text=quote"
+
+        val cleaned = removeTrailingSourceUrlFromText(
+            sharedText = shared,
+            sourceUrl = "https://source.example/article#:~:text=quote",
+        )
+
+        assertEquals("\"Quote text with https://content.example/link\"", cleaned)
     }
 
     @Test

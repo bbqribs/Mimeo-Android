@@ -38,7 +38,18 @@ fun shouldTreatShareAsUrlCapture(
         .trim(
             '(', ')', '[', ']', '{', '}', '"', '\'', '.', ',', ';', ':', '!', '?', '-', '–', '—',
         )
-    return remainder.isBlank()
+    if (remainder.isBlank()) return true
+    val remainderUrls = extractHttpUrls(remainder)
+    if (remainderUrls.size == 1 && remainderUrls.first().contains("#:~:text=", ignoreCase = true)) {
+        val leftover = remainder
+            .replaceFirst(remainderUrls.first(), "")
+            .trim()
+            .trim(
+                '(', ')', '[', ']', '{', '}', '"', '\'', '.', ',', ';', ':', '!', '?', '-', '–', '—',
+            )
+        if (leftover.isBlank()) return true
+    }
+    return false
 }
 
 fun normalizeSharedSourceUrl(url: String): String {
@@ -73,7 +84,7 @@ fun derivePlainTextSourceUrl(
     extractedUrl: String?,
 ): String? {
     val body = extractPlainTextShareBody(sharedText) ?: return null
-    val candidate = extractStandaloneTrailingSourceUrl(body) ?: return null
+    val candidate = extractTrailingSourceUrl(body) ?: return null
     val hasStandaloneText = removeSharedUrlFromText(body, candidate).isNotBlank()
     if (!hasStandaloneText) return null
     val remainingBody = removeSharedUrlFromText(body, candidate)
@@ -81,6 +92,21 @@ fun derivePlainTextSourceUrl(
     val hasExplicitSelectionFragment = candidate.contains("#:~:text=", ignoreCase = true)
     if (hasOtherUrls && !hasExplicitSelectionFragment) return null
     return normalizeSharedSourceUrl(candidate)
+}
+
+fun removeTrailingSourceUrlFromText(
+    sharedText: String,
+    sourceUrl: String,
+): String {
+    val body = sharedText.trim()
+    val normalized = sourceUrl.trim().trimTrailingUrlPunctuation()
+    if (normalized.isBlank()) return body
+    val lastIndex = body.lastIndexOf(normalized)
+    if (lastIndex < 0) return body
+    val tail = body.substring(lastIndex + normalized.length).trim()
+    if (tail.isNotEmpty() && tail.any { !it.isWhitespace() && it !in TRAILING_URL_PUNCTUATION }) return body
+    val prefix = body.substring(0, lastIndex).trimEnd()
+    return prefix
 }
 
 fun appendOriginalArticleFooter(
@@ -139,6 +165,16 @@ private fun isSyntheticSharedTextUrl(url: String): Boolean {
     return host == "shared-text.mimeo.local"
 }
 
+private fun extractTrailingSourceUrl(body: String): String? {
+    extractStandaloneTrailingSourceUrl(body)?.let { return it }
+    val allUrls = extractHttpUrls(body)
+    val trailing = allUrls.lastOrNull() ?: return null
+    if (!trailing.contains("#:~:text=", ignoreCase = true)) return null
+    val trimmedTail = body.trimEnd().trimEnd(*TRAILING_URL_PUNCTUATION)
+    if (!trimmedTail.endsWith(trailing, ignoreCase = true)) return null
+    return trailing
+}
+
 private fun extractStandaloneTrailingSourceUrl(body: String): String? {
     val lines = body.lines()
     val lastNonBlankIndex = lines.indexOfLast { it.isNotBlank() }
@@ -170,6 +206,7 @@ fun extractPlainTextShareBody(sharedText: String?): String? {
 
 fun derivePlainTextShareTitle(sharedTitle: String?, plainTextBody: String): String {
     val subject = sharedTitle?.trim().orEmpty().takeIf { it.isNotEmpty() }
+        ?.takeUnless(::looksLikeShareBoilerplateTitle)
     val firstMeaningfulLine = plainTextBody
         .lineSequence()
         .map { it.trim() }
@@ -183,6 +220,15 @@ fun derivePlainTextShareTitle(sharedTitle: String?, plainTextBody: String): Stri
         .ifBlank { "Shared text" }
     val snippet = seed.truncateWithEllipsis(PLAIN_TEXT_SHARE_TITLE_MAX_CHARS)
     return "Excerpt: \"$snippet\""
+}
+
+private fun looksLikeShareBoilerplateTitle(title: String): Boolean {
+    val normalized = title.trim().lowercase(Locale.US)
+    if (normalized.startsWith("including link:")) return true
+    if (normalized.startsWith("link:")) return true
+    if (normalized.startsWith("shared from")) return true
+    if (normalized.contains("http://") || normalized.contains("https://")) return true
+    return false
 }
 
 fun buildPlainTextShareSyntheticUrl(title: String, plainTextBody: String): String {
