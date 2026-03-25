@@ -30,6 +30,15 @@ class ShareSaveUtilsTest {
     }
 
     @Test
+    fun `extractHttpUrls returns all http urls in order`() {
+        val sharedText = "One https://a.example/x and two https://b.example/y."
+
+        val urls = extractHttpUrls(sharedText)
+
+        assertEquals(listOf("https://a.example/x", "https://b.example/y"), urls)
+    }
+
+    @Test
     fun `buildShareIdempotencyKey stays stable for normalized duplicates`() {
         val first = buildShareIdempotencyKey("https://Example.com:443/story?id=42#fragment")
         val second = buildShareIdempotencyKey("https://example.com/story?id=42")
@@ -119,6 +128,26 @@ class ShareSaveUtilsTest {
         val source = derivePlainTextSourceUrl(sharedText = shared, extractedUrl = extracted)
 
         assertEquals("https://example.com/story", source)
+    }
+
+    @Test
+    fun `derivePlainTextSourceUrl prefers trailing source-style url when multiple urls are present`() {
+        val shared = "See https://first.example/inside and details https://source.example/article"
+        val extracted = extractFirstHttpUrl(shared)
+
+        val source = derivePlainTextSourceUrl(sharedText = shared, extractedUrl = extracted)
+
+        assertEquals("https://source.example/article", source)
+    }
+
+    @Test
+    fun `derivePlainTextSourceUrl ignores multi-url bodies without trailing source pattern`() {
+        val shared = "Links: https://first.example/a and https://second.example/b in body text continues."
+        val extracted = extractFirstHttpUrl(shared)
+
+        val source = derivePlainTextSourceUrl(sharedText = shared, extractedUrl = extracted)
+
+        assertNull(source)
     }
 
     @Test

@@ -16,6 +16,16 @@ fun extractFirstHttpUrl(sharedText: String?): String? {
     return trimmed.takeIf { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
 }
 
+fun extractHttpUrls(sharedText: String?): List<String> {
+    if (sharedText.isNullOrBlank()) return emptyList()
+    return HTTP_URL_REGEX.findAll(sharedText)
+        .mapNotNull { match ->
+            match.value.trim().trimTrailingUrlPunctuation()
+                .takeIf { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
+        }
+        .toList()
+}
+
 fun shouldTreatShareAsUrlCapture(
     sharedText: String?,
     extractedUrl: String?,
@@ -63,10 +73,21 @@ fun derivePlainTextSourceUrl(
     extractedUrl: String?,
 ): String? {
     val body = extractPlainTextShareBody(sharedText) ?: return null
-    val url = extractedUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-    val hasStandaloneText = removeSharedUrlFromText(body, url).isNotBlank()
+    val urls = extractHttpUrls(body).ifEmpty {
+        extractedUrl?.trim()?.takeIf { it.isNotEmpty() }?.let(::listOf) ?: emptyList()
+    }
+    if (urls.isEmpty()) return null
+    val candidate = when {
+        urls.size == 1 -> urls.first()
+        else -> {
+            val trailing = urls.last()
+            val trimmedTail = body.trimEnd().trimEnd(*TRAILING_URL_PUNCTUATION)
+            if (trimmedTail.endsWith(trailing)) trailing else null
+        }
+    } ?: return null
+    val hasStandaloneText = removeSharedUrlFromText(body, candidate).isNotBlank()
     if (!hasStandaloneText) return null
-    return normalizeSharedSourceUrl(url)
+    return normalizeSharedSourceUrl(candidate)
 }
 
 fun appendOriginalArticleFooter(
@@ -199,3 +220,4 @@ private fun String.truncateWithEllipsis(maxChars: Int): String {
     if (length <= maxChars) return this
     return take((maxChars - 1).coerceAtLeast(1)) + "…"
 }
+
