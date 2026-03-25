@@ -432,6 +432,9 @@ fun PlayerScreen(
     var resolvedInitial by rememberSaveable(initialItemId) { mutableStateOf(false) }
     val reloadNonce = engineState.reloadNonce
     var textPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
+    var viewerOverrideItemId by rememberSaveable { mutableIntStateOf(-1) }
+    var viewerPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
+    var viewerChunks by remember { mutableStateOf<List<PlaybackChunk>>(emptyList()) }
     var usingCachedText by remember { mutableStateOf(false) }
     var chunks by remember { mutableStateOf<List<PlaybackChunk>>(emptyList()) }
     var uiMessage by remember { mutableStateOf<String?>(null) }
@@ -465,9 +468,18 @@ fun PlayerScreen(
     val settings by vm.settings.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
+    val hasLockedPlaybackOwner =
+        currentItemId > 0 &&
+            (
+                engineState.hasStartedPlaybackForCurrentItem ||
+                    isSpeaking ||
+                    isAutoPlaying
+                )
+    val previewModeActive = viewerOverrideItemId > 0
     val waitingForRequestedItem =
         requestedItemId != null &&
-            requestedItemId != currentItemId
+            requestedItemId != currentItemId &&
+            !previewModeActive
     val hasStalePayloadForCurrentItem =
         textPayload?.itemId?.let { it != currentItemId } == true
     val transitionSettled = !waitingForRequestedItem && !hasStalePayloadForCurrentItem && bodyRevealReady
@@ -614,10 +626,40 @@ fun PlayerScreen(
     LaunchedEffect(requestedItemId, resolvedInitial) {
         if (!resolvedInitial) return@LaunchedEffect
         val target = requestedItemId ?: return@LaunchedEffect
-        if (target == currentItemId) return@LaunchedEffect
+        if (target == currentItemId) {
+            viewerOverrideItemId = -1
+            viewerPayload = null
+            viewerChunks = emptyList()
+            return@LaunchedEffect
+        }
+        if (hasLockedPlaybackOwner) {
+            continuationLog(
+                "requestedItemEffect previewOnly target=$target current=$currentItemId speaking=$isSpeaking auto=$isAutoPlaying",
+            )
+            viewerOverrideItemId = target
+            viewerPayload = null
+            viewerChunks = emptyList()
+            isLoading = true
+            bodyRevealReady = false
+            vm.fetchItemText(target)
+                .onSuccess { loaded ->
+                    viewerPayload = loaded.payload
+                    viewerChunks = buildPlaybackChunks(loaded.payload)
+                }
+                .onFailure { err ->
+                    if (err is CancellationException) return@onFailure
+                    uiMessage = err.message ?: "Failed to load item"
+                }
+            isLoading = false
+            bodyRevealReady = true
+            return@LaunchedEffect
+        }
         continuationLog(
             "requestedItemEffect target=$target current=$currentItemId autoPlayAfterLoad=$autoPlayAfterLoad",
         )
+        viewerOverrideItemId = -1
+        viewerPayload = null
+        viewerChunks = emptyList()
         stopSpeaking(forceSync = true)
         // Clear current body immediately so the previously viewed article cannot flash
         // while the newly requested item is loading.
@@ -654,6 +696,13 @@ fun PlayerScreen(
     LaunchedEffect(locusTapSignal) {
         if (locusTapSignal == lastHandledLocusTapSignal) return@LaunchedEffect
         lastHandledLocusTapSignal = locusTapSignal
+        if (viewerOverrideItemId > 0 && currentItemId > 0) {
+            viewerOverrideItemId = -1
+            viewerPayload = null
+            viewerChunks = emptyList()
+            onOpenItem(currentItemId)
+            return@LaunchedEffect
+        }
         readerScrollTriggerSignal += 1
     }
 
@@ -806,10 +855,14 @@ fun PlayerScreen(
     val safePosition = normalizedPosition(currentPosition)
     val totalChars = totalCharsForPercent()
     val currentPercent = calculateCanonicalPercent(totalChars, chunks, safePosition)
-    val capturePresentation = locusCapturePresentation(textPayload)
-    val currentTitle = capturePresentation.title.ifBlank { textPayload?.url.orEmpty() }
+    val displayPayload = viewerPayload ?: textPayload
+    val displayChunks = if (previewModeActive) viewerChunks else chunks
+    val capturePresentation = locusCapturePresentation(displayPayload)
+    val currentTitle = capturePresentation.title.ifBlank { displayPayload?.url.orEmpty() }
     val currentSourceLabel = capturePresentation.sourceLabel
-    val chunkLabel = if (chunks.isEmpty()) {
+    val chunkLabel = if (previewModeActive) {
+        "Previewing item while playback continues"
+    } else if (chunks.isEmpty()) {
         "Chunk 0 / 0"
     } else {
         "Chunk ${safePosition.chunkIndex + 1} / ${chunks.size}"
@@ -911,10 +964,13 @@ fun PlayerScreen(
         val nextIndex = currentIndex + 1
         return session.items.getOrNull(nextIndex)?.itemId
     }
-    val locusItemId = requestedItemId ?: currentItemId
+    val locusItemId = viewerOverrideItemId.takeIf { it > 0 } ?: requestedItemId ?: currentItemId
     fun playLocusItem() {
         if (locusItemId <= 0) return
         if (locusItemId != currentItemId) {
+            viewerOverrideItemId = -1
+            viewerPayload = null
+            viewerChunks = emptyList()
             vm.playbackOpenItem(
                 itemId = locusItemId,
                 intent = PlaybackOpenIntent.ManualOpen,
@@ -1116,7 +1172,7 @@ fun PlayerScreen(
                         ExpandedPlayerTopBar(
                             playbackSpeed = settings.playbackSpeed,
                             overflowExpanded = overflowExpanded,
-                            canMarkDone = textPayload != null,
+                            canMarkDone = displayPayload != null,
                             isDone = showCompleted,
                             refreshState = refreshActionState,
                             showConnectivityIssue = queueOffline || hasRefreshProblem,
@@ -1232,7 +1288,7 @@ fun PlayerScreen(
                         chunkLabel,
                     ).joinToString("  -  ")
                     LocusPeekCard(
-                        title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
+                        title = if (currentTitle.isNotBlank()) currentTitle else "Item $locusItemId",
                         statusLine = locusStatusLine,
                         overflowExpanded = overflowExpanded,
                         overflowMenuContent = {
@@ -1259,13 +1315,15 @@ fun PlayerScreen(
                                 },
                         ) {
                             ReaderBody(
-                                fullText = textPayload?.text,
-                                chunks = chunks,
-                                currentChunkIndex = safePosition.chunkIndex,
-                                currentChunkOffsetInChars = safePosition.offsetInChunkChars,
-                                activeRangeInChunk = activeChunkRange,
+                                fullText = displayPayload?.text,
+                                chunks = displayChunks,
+                                currentChunkIndex = if (previewModeActive) 0 else safePosition.chunkIndex,
+                                currentChunkOffsetInChars = if (previewModeActive) 0 else safePosition.offsetInChunkChars,
+                                activeRangeInChunk = if (previewModeActive) null else activeChunkRange,
                                 scrollTriggerSignal = readerScrollTriggerSignal,
-                                autoScrollWhileListening = settings.autoScrollWhileListening && (isSpeaking || isAutoPlaying),
+                                autoScrollWhileListening = !previewModeActive &&
+                                    settings.autoScrollWhileListening &&
+                                    (isSpeaking || isAutoPlaying),
                                 readingFontSizeSp = settings.readingFontSizeSp,
                                 readingFontOption = settings.readingFontOption,
                                 readingLineHeightPercent = settings.readingLineHeightPercent,
@@ -1292,7 +1350,7 @@ fun PlayerScreen(
                                 ExpandedPlayerTopBar(
                                     playbackSpeed = settings.playbackSpeed,
                                     overflowExpanded = overflowExpanded,
-                                    canMarkDone = textPayload != null,
+                                    canMarkDone = displayPayload != null,
                                     isDone = showCompleted,
                                     refreshState = refreshActionState,
                                     showConnectivityIssue = queueOffline || hasRefreshProblem,
@@ -1442,7 +1500,7 @@ fun PlayerScreen(
 
     if (showPlaylistPicker) {
         PlaylistPickerDialog(
-            itemTitle = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
+            itemTitle = if (currentTitle.isNotBlank()) currentTitle else "Item $locusItemId",
             playlistChoices = playlistChoices,
             isLoading = false,
             onDismiss = { showPlaylistPicker = false },

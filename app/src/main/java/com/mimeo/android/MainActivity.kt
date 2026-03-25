@@ -3828,13 +3828,13 @@ private fun MimeoApp(vm: AppViewModel) {
                                     val activeNowPlayingItemId = sessionNowPlayingItemId?.takeIf { it > 0 }
                                     if (hasPlaybackItemInProgress && activeNowPlayingItemId != null && activeNowPlayingItemId != itemId) {
                                         pendingLocusOpen = true
-                                        pendingLocusItemId = activeNowPlayingItemId
+                                        pendingLocusItemId = itemId
                                         vm.showSnackbar(
-                                            "Playback continues on current item. Use long-press Play or 'Play this item' to switch.",
+                                            "Viewing item while playback continues. Use long-press Play or 'Play this item' to switch.",
                                             null,
                                             null,
                                         )
-                                        nav.navigate("$ROUTE_LOCUS/$activeNowPlayingItemId") {
+                                        nav.navigate("$ROUTE_LOCUS/$itemId") {
                                             launchSingleTop = true
                                         }
                                         return@QueueScreen
