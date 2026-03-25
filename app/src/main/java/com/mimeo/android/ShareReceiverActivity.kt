@@ -29,6 +29,7 @@ import com.mimeo.android.share.extractFirstHttpUrl
 import com.mimeo.android.share.extractPlainTextShareBody
 import com.mimeo.android.share.isAutoRetryEligiblePendingSaveResult
 import com.mimeo.android.share.isRetryablePendingSaveResult
+import com.mimeo.android.share.normalizeSharedSubjectTitle
 import com.mimeo.android.share.removeTrailingSourceUrlFromText
 import com.mimeo.android.share.shouldTreatShareAsUrlCapture
 import kotlinx.coroutines.CoroutineScope
@@ -63,6 +64,7 @@ class ShareReceiverActivity : ComponentActivity() {
 
         val sharedText = incomingIntent.getStringExtra(Intent.EXTRA_TEXT)
         val sharedTitle = incomingIntent.getStringExtra(Intent.EXTRA_SUBJECT)
+        val normalizedSharedTitle = normalizeSharedSubjectTitle(sharedTitle)
         backgroundScope.launch {
             val notifications = ShareResultNotifications(applicationContext)
             val notificationId = notifications.postAccepted()
@@ -117,7 +119,7 @@ class ShareReceiverActivity : ComponentActivity() {
                     source = PendingSaveSource.SHARE,
                     type = PendingManualSaveType.URL,
                     urlInput = normalizedUrl,
-                    titleInput = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
+                    titleInput = normalizedSharedTitle,
                     bodyInput = null,
                     destinationPlaylistId = settings.defaultSavePlaylistId,
                     lastFailureMessage = "Saving...",
@@ -140,7 +142,7 @@ class ShareReceiverActivity : ComponentActivity() {
             val result = when {
                 useUrlCapture && normalizedUrl != null -> ShareSaveCoordinator(applicationContext).saveSharedText(
                     sharedText = sharedText,
-                    sharedTitle = sharedTitle,
+                    sharedTitle = normalizedSharedTitle,
                 )
                 plainTextBody != null && plainTextUrlInput != null -> ShareSaveCoordinator(applicationContext).saveManualText(
                     urlInput = plainTextUrlInput,
@@ -156,7 +158,7 @@ class ShareReceiverActivity : ComponentActivity() {
                     source = PendingSaveSource.SHARE,
                     type = PendingManualSaveType.URL,
                     urlInput = normalizedUrl,
-                    titleInput = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
+                    titleInput = normalizedSharedTitle,
                     bodyInput = null,
                     destinationPlaylistId = settings.defaultSavePlaylistId,
                     resolvedItemId = result.itemId,
@@ -180,7 +182,7 @@ class ShareReceiverActivity : ComponentActivity() {
                         source = PendingSaveSource.SHARE,
                         type = PendingManualSaveType.URL,
                         urlInput = normalizedUrl,
-                        titleInput = sharedTitle?.trim()?.takeIf { it.isNotEmpty() },
+                        titleInput = normalizedSharedTitle,
                         bodyInput = null,
                         destinationPlaylistId = settings.defaultSavePlaylistId,
                         lastFailureMessage = result.notificationText,

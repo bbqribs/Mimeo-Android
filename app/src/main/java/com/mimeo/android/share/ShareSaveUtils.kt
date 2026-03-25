@@ -216,8 +216,7 @@ fun extractPlainTextShareBody(sharedText: String?): String? {
 }
 
 fun derivePlainTextShareTitle(sharedTitle: String?, plainTextBody: String): String {
-    val subject = sharedTitle?.trim().orEmpty().takeIf { it.isNotEmpty() }
-        ?.takeUnless(::looksLikeShareBoilerplateTitle)
+    val subject = normalizeSharedSubjectTitle(sharedTitle)
     val firstMeaningfulLine = plainTextBody
         .lineSequence()
         .map { it.trim() }
@@ -231,6 +230,11 @@ fun derivePlainTextShareTitle(sharedTitle: String?, plainTextBody: String): Stri
         .ifBlank { "Shared text" }
     val snippet = seed.truncateWithEllipsis(PLAIN_TEXT_SHARE_TITLE_MAX_CHARS)
     return "Excerpt: \"$snippet\""
+}
+
+fun normalizeSharedSubjectTitle(sharedTitle: String?): String? {
+    val subject = sharedTitle?.trim().orEmpty().takeIf { it.isNotEmpty() } ?: return null
+    return subject.takeUnless(::looksLikeShareBoilerplateTitle)
 }
 
 private fun looksLikeShareBoilerplateTitle(title: String): Boolean {
