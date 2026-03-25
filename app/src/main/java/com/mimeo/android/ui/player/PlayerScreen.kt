@@ -911,6 +911,23 @@ fun PlayerScreen(
         val nextIndex = currentIndex + 1
         return session.items.getOrNull(nextIndex)?.itemId
     }
+    val locusItemId = requestedItemId ?: currentItemId
+    fun playLocusItem() {
+        if (locusItemId <= 0) return
+        if (locusItemId != currentItemId) {
+            vm.playbackOpenItem(
+                itemId = locusItemId,
+                intent = PlaybackOpenIntent.ManualOpen,
+                autoPlayAfterLoad = true,
+            )
+            onOpenItem(locusItemId)
+            onShowSnackbar("Playing item shown in Locus", null, null)
+            return
+        }
+        if (!(isSpeaking || isAutoPlaying) && chunks.isNotEmpty()) {
+            vm.playbackPlay()
+        }
+    }
 
     val renderPlayerControlBar: @Composable () -> Unit = {
         PlayerControlBar(
@@ -968,6 +985,7 @@ fun PlayerScreen(
                     vm.playbackPlay()
                 }
             },
+            onPlayButtonLongPress = { playLocusItem() },
             onNextSegment = {
                 if (chunks.isNotEmpty() && safePosition.chunkIndex < chunks.lastIndex) {
                     val target = safePosition.chunkIndex + 1
@@ -1190,6 +1208,10 @@ fun PlayerScreen(
                             onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
                             overflowMenuContent = {
                                 LocusOverflowMenuItems(
+                                    onPlayCurrentItem = {
+                                        overflowExpanded = false
+                                        playLocusItem()
+                                    },
                                     onOpenPlaylists = {
                                         overflowExpanded = false
                                         vm.refreshPlaylists()
@@ -1362,6 +1384,10 @@ fun PlayerScreen(
                                     onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
                                     overflowMenuContent = {
                                         LocusOverflowMenuItems(
+                                            onPlayCurrentItem = {
+                                                overflowExpanded = false
+                                                playLocusItem()
+                                            },
                                             onOpenPlaylists = {
                                                 overflowExpanded = false
                                                 vm.refreshPlaylists()
@@ -1948,10 +1974,15 @@ private fun LocusOverflowMenu(
 
 @Composable
 private fun LocusOverflowMenuItems(
+    onPlayCurrentItem: () -> Unit,
     onOpenPlaylists: () -> Unit,
     isExpanded: Boolean,
     onToggleExpanded: () -> Unit,
 ) {
+    DropdownMenuItem(
+        text = { Text("Play this item") },
+        onClick = onPlayCurrentItem,
+    )
     DropdownMenuItem(
         text = { Text("Playlists...") },
         onClick = onOpenPlaylists,
@@ -2163,6 +2194,7 @@ private fun PlayerChromeChevron(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun PlayerControlBar(
     progressPercent: Int,
     minimal: Boolean,
@@ -2174,6 +2206,7 @@ private fun PlayerControlBar(
     onSeekToPercent: (Int) -> Unit,
     onPreviousSegment: () -> Unit,
     onPlayPause: () -> Unit,
+    onPlayButtonLongPress: () -> Unit,
     onNextSegment: () -> Unit,
     onPreviousItem: () -> Unit,
     onNextItem: () -> Unit,
@@ -2239,7 +2272,16 @@ private fun PlayerControlBar(
                 )
             }
             Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
-            IconButton(onClick = onPlayPause, enabled = canPlay, modifier = Modifier.size(CONTROL_SLOT_SIZE)) {
+            Box(
+                modifier = Modifier
+                    .size(CONTROL_SLOT_SIZE)
+                    .combinedClickable(
+                        enabled = canPlay,
+                        onClick = onPlayPause,
+                        onLongClick = onPlayButtonLongPress,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(
                     painter = painterResource(
                         id = if (isPlaying) R.drawable.msr_pause_24 else R.drawable.msr_play_arrow_24,
