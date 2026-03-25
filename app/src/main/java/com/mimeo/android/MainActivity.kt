@@ -154,6 +154,7 @@ import com.mimeo.android.ui.player.PlaybackEngineSettings
 import com.mimeo.android.ui.player.PlaybackEngineState
 import com.mimeo.android.ui.player.PlaybackOpenIntent
 import com.mimeo.android.ui.player.buildPlaybackChunks
+import com.mimeo.android.ui.common.nowPlayingCapturePresentation
 import com.mimeo.android.ui.playlists.PlaylistsScreen
 import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.ui.signin.SignInScreen
@@ -3536,21 +3537,10 @@ private fun MimeoApp(vm: AppViewModel) {
     val presentingLocus = isOnLocusRoute
     val compactControlsOnly = !isOnLocusRoute
     var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
-    val nowPlayingStripTitle = nowPlayingSession
-        ?.currentItem
-        ?.let { current ->
-            current.title?.takeIf { it.isNotBlank() }
-                ?: current.url.takeIf { it.isNotBlank() }
-                ?: "Item ${current.itemId}"
-        } ?: "No active playback"
-    val nowPlayingStripDomain = nowPlayingSession
-        ?.currentItem
-        ?.host
-        ?.takeIf { it.isNotBlank() }
-    val nowPlayingStripSourceUrl = nowPlayingSession
-        ?.currentItem
-        ?.url
-        ?.takeIf { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
+    val nowPlayingPresentation = nowPlayingCapturePresentation(nowPlayingSession?.currentItem)
+    val nowPlayingStripTitle = nowPlayingPresentation.title.ifBlank { "No active playback" }
+    val nowPlayingStripDomain = nowPlayingPresentation.sourceLabel
+    val nowPlayingStripSourceUrl = nowPlayingPresentation.sourceUrl
     val canExpandNowPlayingTitle = nowPlayingSession?.currentItem != null
     val baseUrlHint = vm.baseUrlHintForDevice(isLikelyPhysicalDevice())
     val baseAddress = settings.baseUrl.trim().removePrefix("http://").removePrefix("https://")
