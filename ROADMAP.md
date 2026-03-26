@@ -81,6 +81,26 @@
 4. [ ] Keep-screen-on/session UX follow-up: refine “active session” heuristics and user copy for reader-only vs speaking states without changing playback ownership.
 5. [ ] Offline/no-active-content follow-up from lived use: tighten retry affordances and recovery messaging for the remaining edge cases that are hard to reproduce on demand.
 
+## Reader/Player UX fidelity + state persistence backlog
+
+### Near-term implementation candidates (ranked)
+1. [ ] Search within Locus: in-article text search with next/previous result navigation, visible match count, and preservation of active playback highlight behavior.
+2. [ ] Scroll-level persistence across tabs (Locus rules): persist per-item scroll offset, restore when returning to the same viewed item, and snap back to now-playing item only when user explicitly returns via Locus-tab-now-playing path.
+3. [ ] Reader/Locus paragraph formatting fidelity: preserve paragraph breaks/spacing consistently between fetched text and rendered Locus body, including edge cases from manual/excerpt saves.
+4. [ ] Reader/Locus clickable links: render links as tappable in-body spans with safe external-open behavior, while preserving current selection and playback UX.
+5. [ ] Locus bottom-gap transition issue: remove the intermittent bottom-gap/blank-space artifact during Locus open/close and mode transitions.
+6. [ ] Progress/player scroll jerk during drag: smooth seek-drag + scroll coupling so seek interaction does not cause abrupt jump/jitter in reader scroll position.
+7. [ ] Collapsible pending-item section in Up Next: make pending rows collapsible/expandable with persisted collapsed state to reduce queue noise without hiding failures.
+
+### Spec/design-first items (clarify behavior before coding)
+1. [ ] Auto-archive toggle at end of article: define exact interaction between completion cue, continue-to-next, and archive/bin semantics (including playlist-scoped sessions).
+2. [ ] Undo last article archive/delete: define one-step undo scope, timeout, and cross-surface behavior for archive/bin actions (including active-item actions in Locus).
+3. [ ] Start-in-full-screen toggle for Locus: define launch rules vs remembered player mode and explicit user overrides.
+4. [ ] Full-text view in Locus: specify when/how to present full unchunked text mode vs current chunk-driven reading, including performance constraints and highlight behavior.
+
+### Later / exploratory
+1. [ ] Soft fast-forward/rewind (time/character based, not chunk-based): evaluate interaction model and accessibility impacts relative to existing chunk controls.
+
 ## Android Redesign v1.1
 1. [~] Foundation: 4-tab nav shell (Up Next / Locus / Collections / Settings) plus black/purple theme foundations.
 2. [x] Mini control panel (collapsed Locus peek) for active playback/session continuity.
