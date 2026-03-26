@@ -1290,14 +1290,14 @@ fun PlayerScreen(
                             onSpeedChange = { speed -> vm.savePlaybackSpeed(speed) },
                             onToggleFavorite = {
                                 actionScope.launch {
-                                    vm.setItemFavorited(locusItemId, favorited = !isLocusItemFavorited)
+                                            vm.setItemFavorited(locusItemId, favorited = !isLocusItemFavorited)
                                         .onSuccess {
-                                            val message = if (isLocusItemFavorited) "Removed from favorites" else "Added to favorites"
+                                            val message = if (isLocusItemFavorited) "Removed from favourites" else "Added to favourites"
                                             onShowSnackbar(message, null, null)
                                         }
                                         .onFailure { error ->
                                             if (error is CancellationException) return@onFailure
-                                            onShowSnackbar("Couldn't update favorite", "Diagnostics", "open_diagnostics")
+                                            onShowSnackbar("Couldn't update favourite", "Diagnostics", "open_diagnostics")
                                         }
                                 }
                             },
@@ -1511,14 +1511,14 @@ fun PlayerScreen(
                                     onSpeedChange = { speed -> vm.savePlaybackSpeed(speed) },
                                     onToggleFavorite = {
                                         actionScope.launch {
-                                            vm.setItemFavorited(locusItemId, favorited = !isLocusItemFavorited)
+                                                vm.setItemFavorited(locusItemId, favorited = !isLocusItemFavorited)
                                                 .onSuccess {
-                                                    val message = if (isLocusItemFavorited) "Removed from favorites" else "Added to favorites"
+                                                    val message = if (isLocusItemFavorited) "Removed from favourites" else "Added to favourites"
                                                     onShowSnackbar(message, null, null)
                                                 }
                                                 .onFailure { error ->
                                                     if (error is CancellationException) return@onFailure
-                                                    onShowSnackbar("Couldn't update favorite", "Diagnostics", "open_diagnostics")
+                                                    onShowSnackbar("Couldn't update favourite", "Diagnostics", "open_diagnostics")
                                                 }
                                         }
                                     },
@@ -1773,7 +1773,7 @@ private fun ExpandedPlayerTopBar(
                     onSpeedChange = onSpeedChange,
                 )
             }
-            ActionHintTooltip(label = if (isFavorited) "Unfavorite" else "Favorite") {
+            ActionHintTooltip(label = if (isFavorited) "Unfavourite" else "Favourite") {
                 IconToggleButton(
                     checked = isFavorited,
                     onCheckedChange = { onToggleFavorite() },
