@@ -35,7 +35,9 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
@@ -47,7 +49,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -1488,6 +1489,7 @@ fun PlayerScreen(
                                     title = locusActionBarTitle,
                                     playbackSpeed = settings.playbackSpeed,
                                     overflowExpanded = overflowExpanded,
+                                    showTopBar = !(readerChromeHidden && locusSearchActive),
                                     canMarkDone = displayPayload != null,
                                     isDone = showCompleted,
                                     refreshState = refreshActionState,
@@ -1723,6 +1725,7 @@ private fun ExpandedPlayerTopBar(
     title: String,
     playbackSpeed: Float,
     overflowExpanded: Boolean,
+    showTopBar: Boolean = true,
     canMarkDone: Boolean,
     isDone: Boolean,
     refreshState: RefreshActionVisualState,
@@ -1742,77 +1745,79 @@ private fun ExpandedPlayerTopBar(
     overflowMenuContent: @Composable () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        TopAppBar(
-            modifier = Modifier.height(48.dp),
-            windowInsets = WindowInsets(0, 0, 0, 0),
-            title = {
-                Text(
-                    text = title,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleSmall,
-                )
-            },
-            actions = {
-                ActionHintTooltip(label = if (isDone) "Mark as not done" else "Mark as done") {
-                    IconToggleButton(
-                        checked = isDone,
-                        enabled = canMarkDone,
-                        onCheckedChange = { checked ->
-                            if (checked != isDone) {
-                                onMarkDone()
-                            }
-                        },
-                    ) {
-                        Icon(
-                            painter = painterResource(id = if (isDone) R.drawable.ic_book_closed_24 else R.drawable.ic_book_open_24),
-                            contentDescription = if (isDone) "Mark as not done" else "Mark as done",
-                            tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.size(22.dp),
+        AnimatedVisibility(visible = showTopBar) {
+            TopAppBar(
+                modifier = Modifier.height(48.dp),
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                title = {
+                    Text(
+                        text = title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                },
+                actions = {
+                    ActionHintTooltip(label = if (isDone) "Mark as not done" else "Mark as done") {
+                        IconToggleButton(
+                            checked = isDone,
+                            enabled = canMarkDone,
+                            onCheckedChange = { checked ->
+                                if (checked != isDone) {
+                                    onMarkDone()
+                                }
+                            },
+                        ) {
+                            Icon(
+                                painter = painterResource(id = if (isDone) R.drawable.ic_book_closed_24 else R.drawable.ic_book_open_24),
+                                contentDescription = if (isDone) "Mark as not done" else "Mark as done",
+                                tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                    ActionHintTooltip(label = "Refresh") {
+                        RefreshActionButton(
+                            state = refreshState,
+                            showConnectivityIssue = showConnectivityIssue,
+                            onClick = onRefresh,
+                            contentDescription = "Refresh item",
                         )
                     }
-                }
-                ActionHintTooltip(label = "Refresh") {
-                    RefreshActionButton(
-                        state = refreshState,
-                        showConnectivityIssue = showConnectivityIssue,
-                        onClick = onRefresh,
-                        contentDescription = "Refresh item",
-                    )
-                }
-                ActionHintTooltip(label = if (searchActive) "Hide search" else "Search in item") {
-                    IconButton(onClick = onSearchToggle) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.msr_search_24),
-                            contentDescription = if (searchActive) "Hide search" else "Search in item",
-                            modifier = Modifier.size(20.dp),
+                    ActionHintTooltip(label = if (searchActive) "Hide search" else "Search in item") {
+                        IconButton(onClick = onSearchToggle) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.msr_search_24),
+                                contentDescription = if (searchActive) "Hide search" else "Search in item",
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                    ActionHintTooltip(label = "Speed") {
+                        SpeedControlButton(
+                            speed = playbackSpeed,
+                            onSpeedChange = onSpeedChange,
                         )
                     }
-                }
-                ActionHintTooltip(label = "Speed") {
-                    SpeedControlButton(
-                        speed = playbackSpeed,
-                        onSpeedChange = onSpeedChange,
-                    )
-                }
-                ActionHintTooltip(label = "Archive") {
-                    IconButton(onClick = onArchive) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_archive_box_24),
-                            contentDescription = "Archive item",
-                            modifier = Modifier.size(20.dp),
+                    ActionHintTooltip(label = "Archive") {
+                        IconButton(onClick = onArchive) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_archive_box_24),
+                                contentDescription = "Archive item",
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                    ActionHintTooltip(label = "More actions") {
+                        LocusOverflowMenu(
+                            expanded = overflowExpanded,
+                            onExpandedChange = onOverflowExpandedChange,
+                            content = overflowMenuContent,
                         )
                     }
-                }
-                ActionHintTooltip(label = "More actions") {
-                    LocusOverflowMenu(
-                        expanded = overflowExpanded,
-                        onExpandedChange = onOverflowExpandedChange,
-                        content = overflowMenuContent,
-                    )
-                }
-            },
-        )
+                },
+            )
+        }
         AnimatedVisibility(visible = searchActive) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -1827,16 +1832,39 @@ private fun ExpandedPlayerTopBar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = onSearchQueryChange,
-                        singleLine = true,
-                        placeholder = { Text("Search this item") },
-                        textStyle = MaterialTheme.typography.bodyMedium,
+                    Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(48.dp),
-                    )
+                            .height(42.dp)
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                                shape = MaterialTheme.shapes.small,
+                            )
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = onSearchQueryChange,
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                color = MaterialTheme.colorScheme.onSurface,
+                            ),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            modifier = Modifier.fillMaxWidth(),
+                            decorationBox = { innerTextField ->
+                                if (searchQuery.isBlank()) {
+                                    Text(
+                                        text = "Search this item",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                innerTextField()
+                            },
+                        )
+                    }
                     IconButton(
                         onClick = onSearchPrevious,
                         enabled = searchQuery.isNotBlank(),

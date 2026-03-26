@@ -46,7 +46,7 @@ import kotlin.math.roundToInt
 
 private val READER_SCROLL_TOP_PADDING = 0.dp
 private val READER_SCROLL_BOTTOM_PADDING = 0.dp
-private val READER_SEARCH_FOCUS_EXTRA_TOP_PADDING = 96.dp
+private val READER_SEARCH_FOCUS_EXTRA_TOP_PADDING = 120.dp
 private const val MANUAL_SCROLL_SUPPRESS_MS = 1200L
 
 @Composable
