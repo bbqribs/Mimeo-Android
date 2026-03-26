@@ -178,7 +178,7 @@ private data class ManualSavePayload(
 
 private enum class QueueFilterChip(val label: String, val enabled: Boolean = true) {
     ALL("All"),
-    FAVORITES("Favorites"),
+    FAVORITES("Favourites"),
     UNREAD("Unread"),
     IN_PROGRESS("In progress"),
     DONE("Done"),
@@ -362,7 +362,12 @@ fun QueueScreen(
         cachedItemIds = cachedItemIds,
         noActiveContentItemIds = noActiveContentItemIds,
     )
-    val hasVisibleQueueContent = displayedItems.isNotEmpty() || projectedPendingItems.isNotEmpty()
+    val visibleProjectedPendingItems = if (selectedFilter == QueueFilterChip.ALL && searchQuery.isBlank()) {
+        projectedPendingItems
+    } else {
+        emptyList()
+    }
+    val hasVisibleQueueContent = displayedItems.isNotEmpty() || visibleProjectedPendingItems.isNotEmpty()
     val pullRefreshProgress = (pullRefreshDistancePx / pullRefreshThresholdPx).coerceIn(0f, 1f)
     val emptyStateMessage = when {
         loading -> null
@@ -486,8 +491,8 @@ fun QueueScreen(
         }
     }
 
-    LaunchedEffect(projectedPendingItems) {
-        val currentIds = projectedPendingItems.map { it.id }
+    LaunchedEffect(visibleProjectedPendingItems) {
+        val currentIds = visibleProjectedPendingItems.map { it.id }
         val previousIds = previousProjectedPendingIds.toHashSet()
         val hasNewProjectedPending = currentIds.any { it !in previousIds }
         if (hasNewProjectedPending && currentIds.isNotEmpty()) {
@@ -927,7 +932,7 @@ fun QueueScreen(
                 verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
                 itemsIndexed(
-                    items = projectedPendingItems,
+                    items = visibleProjectedPendingItems,
                     key = { _, item -> "pending-${item.id}" },
                 ) { index, item ->
                     Column(modifier = Modifier) {
@@ -942,7 +947,7 @@ fun QueueScreen(
                                 }
                             },
                         )
-                        if (index < projectedPendingItems.lastIndex || displayedItems.isNotEmpty()) {
+                        if (index < visibleProjectedPendingItems.lastIndex || displayedItems.isNotEmpty()) {
                             ThinQueueDivider()
                         }
                     }
@@ -1045,11 +1050,11 @@ fun QueueScreen(
                                     actionScope.launch {
                                         vm.setItemFavorited(item.itemId, favorited = !item.isFavorited)
                                             .onSuccess {
-                                                val message = if (item.isFavorited) "Removed from favorites" else "Added to favorites"
+                                                val message = if (item.isFavorited) "Removed from favourites" else "Added to favourites"
                                                 onShowSnackbar(message, null, null)
                                             }
                                             .onFailure {
-                                                onShowSnackbar("Couldn't update favorite", "Diagnostics", "open_diagnostics")
+                                                onShowSnackbar("Couldn't update favourite", "Diagnostics", "open_diagnostics")
                                             }
                                     }
                                 },
@@ -2149,7 +2154,7 @@ private fun QueueItemCard(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text(if (item.isFavorited) "Unfavorite" else "Favorite") },
+                            text = { Text(if (item.isFavorited) "Unfavourite" else "Favourite") },
                             onClick = {
                                 onDismissMenu()
                                 onToggleFavorite()
