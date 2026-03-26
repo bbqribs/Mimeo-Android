@@ -18,6 +18,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -2737,7 +2738,14 @@ private fun PlayerControlBar(
     onPreviousItem: () -> Unit,
     onNextItem: () -> Unit,
 ) {
-    var sliderValue by remember(progressPercent) { mutableStateOf(progressPercent.coerceIn(0, 100) / 100f) }
+    val sliderInteractionSource = remember { MutableInteractionSource() }
+    val isDraggingSlider by sliderInteractionSource.collectIsDraggedAsState()
+    var sliderValue by remember { mutableFloatStateOf(progressPercent.coerceIn(0, 100) / 100f) }
+    LaunchedEffect(progressPercent, isDraggingSlider) {
+        if (!isDraggingSlider) {
+            sliderValue = progressPercent.coerceIn(0, 100) / 100f
+        }
+    }
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(0.dp),
@@ -2752,9 +2760,12 @@ private fun PlayerControlBar(
                     value = sliderValue,
                     onValueChange = { sliderValue = it.coerceIn(0f, 1f) },
                     onValueChangeFinished = {
-                        onSeekToPercent((sliderValue * 100).toInt().coerceIn(0, 100))
+                        val targetPercent = (sliderValue * 100).toInt().coerceIn(0, 100)
+                        sliderValue = targetPercent / 100f
+                        onSeekToPercent(targetPercent)
                     },
                     enabled = canSeek,
+                    interactionSource = sliderInteractionSource,
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.Center)
