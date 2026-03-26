@@ -178,6 +178,7 @@ private data class ManualSavePayload(
 
 private enum class QueueFilterChip(val label: String, val enabled: Boolean = true) {
     ALL("All"),
+    FAVORITES("Favorites"),
     UNREAD("Unread"),
     IN_PROGRESS("In progress"),
     DONE("Done"),
@@ -339,6 +340,7 @@ fun QueueScreen(
         }
         val matchesFilter = when (selectedFilter) {
             QueueFilterChip.ALL -> true
+            QueueFilterChip.FAVORITES -> item.isFavorited
             QueueFilterChip.UNREAD -> item.furthestPercent <= 0
             QueueFilterChip.IN_PROGRESS -> item.furthestPercent in 1 until DONE_PERCENT_THRESHOLD
             QueueFilterChip.DONE -> item.furthestPercent >= DONE_PERCENT_THRESHOLD
@@ -1017,6 +1019,39 @@ fun QueueScreen(
                                                 onShowSnackbar("Couldn't archive item", "Diagnostics", "open_diagnostics")
                                             }
                                         }
+                                },
+                                onMoveToBin = {
+                                    actionScope.launch {
+                                        if (item.itemId in collapsingArchivedItemIds) return@launch
+                                        collapsingArchivedItemIds = collapsingArchivedItemIds + item.itemId
+                                        delay(220)
+                                        suppressAutoScrollToTopOnce = true
+                                        vm.moveItemToBin(
+                                            item.itemId,
+                                            refreshQueue = false,
+                                        )
+                                            .onSuccess {
+                                                collapsingArchivedItemIds = collapsingArchivedItemIds - item.itemId
+                                                onShowSnackbar("Moved to Bin (14 days)", null, null)
+                                            }
+                                            .onFailure {
+                                                collapsingArchivedItemIds = collapsingArchivedItemIds - item.itemId
+                                                suppressAutoScrollToTopOnce = false
+                                                onShowSnackbar("Couldn't move item to Bin", "Diagnostics", "open_diagnostics")
+                                            }
+                                    }
+                                },
+                                onToggleFavorite = {
+                                    actionScope.launch {
+                                        vm.setItemFavorited(item.itemId, favorited = !item.isFavorited)
+                                            .onSuccess {
+                                                val message = if (item.isFavorited) "Removed from favorites" else "Added to favorites"
+                                                onShowSnackbar(message, null, null)
+                                            }
+                                            .onFailure {
+                                                onShowSnackbar("Couldn't update favorite", "Diagnostics", "open_diagnostics")
+                                            }
+                                    }
                                 },
                                 isMenuExpanded = rowMenuItemId == item.itemId,
                                 onDismissMenu = { rowMenuItemId = -1 },
@@ -2012,6 +2047,8 @@ private fun QueueItemCard(
     onDownload: () -> Unit,
     onOpenPlaylistPicker: () -> Unit,
     onArchive: () -> Unit,
+    onMoveToBin: () -> Unit,
+    onToggleFavorite: () -> Unit,
     isMenuExpanded: Boolean,
     onDismissMenu: () -> Unit,
     onExpandMenu: () -> Unit,
@@ -2112,10 +2149,24 @@ private fun QueueItemCard(
                             },
                         )
                         DropdownMenuItem(
+                            text = { Text(if (item.isFavorited) "Unfavorite" else "Favorite") },
+                            onClick = {
+                                onDismissMenu()
+                                onToggleFavorite()
+                            },
+                        )
+                        DropdownMenuItem(
                             text = { Text("Archive") },
                             onClick = {
                                 onDismissMenu()
                                 onArchive()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Move to Bin (14 days)") },
+                            onClick = {
+                                onDismissMenu()
+                                onMoveToBin()
                             },
                         )
                     }
@@ -2152,6 +2203,13 @@ private fun QueueItemCard(
                         tint = secondaryTextColor,
                         modifier = Modifier.size(16.dp),
                     )
+                    if (item.isFavorited) {
+                        Text(
+                            text = "\u2665",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
             }
         }

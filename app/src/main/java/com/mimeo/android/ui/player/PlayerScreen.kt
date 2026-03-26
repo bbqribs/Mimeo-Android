@@ -891,6 +891,7 @@ fun PlayerScreen(
     }
     val capturePresentation = locusCapturePresentation(displayPayload)
     val queuedPreviewTitle = queueItems.firstOrNull { it.itemId == locusItemId }?.title.orEmpty()
+    val isLocusItemFavorited = queueItems.firstOrNull { it.itemId == locusItemId }?.isFavorited == true
     val currentTitle = when {
         previewModeActive -> {
             viewerOverrideTitle
@@ -1228,6 +1229,7 @@ fun PlayerScreen(
                             isDone = showCompleted,
                             refreshState = refreshActionState,
                             showConnectivityIssue = queueOffline || hasRefreshProblem,
+                            isFavorited = isLocusItemFavorited,
                             onRefresh = {
                                 if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
                                 actionScope.launch {
@@ -1286,6 +1288,19 @@ fun PlayerScreen(
                                 }
                             },
                             onSpeedChange = { speed -> vm.savePlaybackSpeed(speed) },
+                            onToggleFavorite = {
+                                actionScope.launch {
+                                    vm.setItemFavorited(locusItemId, favorited = !isLocusItemFavorited)
+                                        .onSuccess {
+                                            val message = if (isLocusItemFavorited) "Removed from favorites" else "Added to favorites"
+                                            onShowSnackbar(message, null, null)
+                                        }
+                                        .onFailure { error ->
+                                            if (error is CancellationException) return@onFailure
+                                            onShowSnackbar("Couldn't update favorite", "Diagnostics", "open_diagnostics")
+                                        }
+                                }
+                            },
                             onArchive = {
                                 actionScope.launch {
                                     val nextItemId = nextSessionItemIdForArchive(currentItemId)
@@ -1319,6 +1334,34 @@ fun PlayerScreen(
                                     onPlayCurrentItem = {
                                         overflowExpanded = false
                                         playLocusItem()
+                                    },
+                                    onMoveToBin = {
+                                        overflowExpanded = false
+                                        actionScope.launch {
+                                            val nextItemId = nextSessionItemIdForArchive(currentItemId)
+                                            vm.moveItemToBin(
+                                                currentItemId,
+                                                refreshQueue = false,
+                                            )
+                                                .onSuccess {
+                                                    onShowSnackbar("Moved to Bin (14 days)", null, null)
+                                                    if (nextItemId != null) {
+                                                        vm.startNowPlayingSession(startItemId = nextItemId)
+                                                        vm.playbackOpenItem(
+                                                            itemId = nextItemId,
+                                                            intent = PlaybackOpenIntent.ManualOpen,
+                                                            autoPlayAfterLoad = false,
+                                                        )
+                                                        onOpenItem(nextItemId)
+                                                    } else {
+                                                        onRequestBack()
+                                                    }
+                                                }
+                                                .onFailure { error ->
+                                                    if (error is CancellationException) return@onFailure
+                                                    onShowSnackbar("Couldn't move item to Bin", "Diagnostics", "open_diagnostics")
+                                                }
+                                        }
                                     },
                                     onOpenPlaylists = {
                                         overflowExpanded = false
@@ -1407,6 +1450,7 @@ fun PlayerScreen(
                                     isDone = showCompleted,
                                     refreshState = refreshActionState,
                                     showConnectivityIssue = queueOffline || hasRefreshProblem,
+                                    isFavorited = isLocusItemFavorited,
                                     onRefresh = {
                                         if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
                                         actionScope.launch {
@@ -1465,6 +1509,19 @@ fun PlayerScreen(
                                         }
                                     },
                                     onSpeedChange = { speed -> vm.savePlaybackSpeed(speed) },
+                                    onToggleFavorite = {
+                                        actionScope.launch {
+                                            vm.setItemFavorited(locusItemId, favorited = !isLocusItemFavorited)
+                                                .onSuccess {
+                                                    val message = if (isLocusItemFavorited) "Removed from favorites" else "Added to favorites"
+                                                    onShowSnackbar(message, null, null)
+                                                }
+                                                .onFailure { error ->
+                                                    if (error is CancellationException) return@onFailure
+                                                    onShowSnackbar("Couldn't update favorite", "Diagnostics", "open_diagnostics")
+                                                }
+                                        }
+                                    },
                                     onArchive = {
                                         actionScope.launch {
                                             val nextItemId = nextSessionItemIdForArchive(currentItemId)
@@ -1498,6 +1555,34 @@ fun PlayerScreen(
                                             onPlayCurrentItem = {
                                                 overflowExpanded = false
                                                 playLocusItem()
+                                            },
+                                            onMoveToBin = {
+                                                overflowExpanded = false
+                                                actionScope.launch {
+                                                    val nextItemId = nextSessionItemIdForArchive(currentItemId)
+                                                    vm.moveItemToBin(
+                                                        currentItemId,
+                                                        refreshQueue = false,
+                                                    )
+                                                        .onSuccess {
+                                                            onShowSnackbar("Moved to Bin (14 days)", null, null)
+                                                            if (nextItemId != null) {
+                                                                vm.startNowPlayingSession(startItemId = nextItemId)
+                                                                vm.playbackOpenItem(
+                                                                    itemId = nextItemId,
+                                                                    intent = PlaybackOpenIntent.ManualOpen,
+                                                                    autoPlayAfterLoad = false,
+                                                                )
+                                                                onOpenItem(nextItemId)
+                                                            } else {
+                                                                onRequestBack()
+                                                            }
+                                                        }
+                                                        .onFailure { error ->
+                                                            if (error is CancellationException) return@onFailure
+                                                            onShowSnackbar("Couldn't move item to Bin", "Diagnostics", "open_diagnostics")
+                                                        }
+                                                }
                                             },
                                             onOpenPlaylists = {
                                                 overflowExpanded = false
@@ -1635,9 +1720,11 @@ private fun ExpandedPlayerTopBar(
     isDone: Boolean,
     refreshState: RefreshActionVisualState,
     showConnectivityIssue: Boolean,
+    isFavorited: Boolean,
     onRefresh: () -> Unit,
     onMarkDone: () -> Unit,
     onSpeedChange: (Float) -> Unit,
+    onToggleFavorite: () -> Unit,
     onArchive: () -> Unit,
     onOverflowExpandedChange: (Boolean) -> Unit,
     overflowMenuContent: @Composable () -> Unit,
@@ -1685,6 +1772,22 @@ private fun ExpandedPlayerTopBar(
                     speed = playbackSpeed,
                     onSpeedChange = onSpeedChange,
                 )
+            }
+            ActionHintTooltip(label = if (isFavorited) "Unfavorite" else "Favorite") {
+                IconToggleButton(
+                    checked = isFavorited,
+                    onCheckedChange = { onToggleFavorite() },
+                ) {
+                    Text(
+                        text = if (isFavorited) "\u2665" else "\u2661",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (isFavorited) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
             }
             ActionHintTooltip(label = "Archive") {
                 IconButton(onClick = onArchive) {
@@ -2094,6 +2197,7 @@ private fun LocusOverflowMenu(
 @Composable
 private fun LocusOverflowMenuItems(
     onPlayCurrentItem: () -> Unit,
+    onMoveToBin: () -> Unit,
     onOpenPlaylists: () -> Unit,
     isExpanded: Boolean,
     onToggleExpanded: () -> Unit,
@@ -2105,6 +2209,10 @@ private fun LocusOverflowMenuItems(
     DropdownMenuItem(
         text = { Text("Playlists...") },
         onClick = onOpenPlaylists,
+    )
+    DropdownMenuItem(
+        text = { Text("Move to Bin (14 days)") },
+        onClick = onMoveToBin,
     )
     DropdownMenuItem(
         text = { Text(if (isExpanded) "Collapse player" else "Expand player") },

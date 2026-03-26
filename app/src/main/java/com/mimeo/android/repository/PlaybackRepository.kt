@@ -256,6 +256,21 @@ class PlaybackRepository(
         return ProgressPostResult(queued = false)
     }
 
+    suspend fun moveItemToBin(baseUrl: String, token: String, itemId: Int): ProgressPostResult {
+        apiClient.moveItemToBin(baseUrl, token, itemId)
+        return ProgressPostResult(queued = false)
+    }
+
+    suspend fun setFavoriteState(
+        baseUrl: String,
+        token: String,
+        itemId: Int,
+        favorited: Boolean,
+    ): ProgressPostResult {
+        apiClient.setFavoriteState(baseUrl, token, itemId, favorited)
+        return ProgressPostResult(queued = false)
+    }
+
     suspend fun flushPendingProgress(baseUrl: String, token: String): FlushProgressResult {
         val dao = database.pendingProgressDao()
         val pending = dao.listPending()
