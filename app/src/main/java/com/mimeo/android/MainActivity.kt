@@ -3907,6 +3907,7 @@ private fun MimeoApp(vm: AppViewModel) {
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             AnimatedVisibility(
                 visible = !requiresSignIn && !(presentingLocus && readerChromeHidden),
