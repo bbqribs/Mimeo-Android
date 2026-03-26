@@ -642,13 +642,11 @@ fun PlayerScreen(
         if (!resolvedInitial) return@LaunchedEffect
         val target = requestedItemId ?: return@LaunchedEffect
         if (target == currentItemId) {
-            if (viewerOverrideItemId <= 0 || viewerOverrideItemId == currentItemId) {
-                viewerOverrideItemId = -1
-                viewerOverrideTitle = ""
-                viewerPayload = null
-                viewerPayloadItemId = -1
-                viewerChunks = emptyList()
-            }
+            viewerOverrideItemId = -1
+            viewerOverrideTitle = ""
+            viewerPayload = null
+            viewerPayloadItemId = -1
+            viewerChunks = emptyList()
             return@LaunchedEffect
         }
         if (hasLockedPlaybackOwner) {
@@ -764,8 +762,14 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(currentItemId, resolvedInitial, reloadNonce, waitingForRequestedItem) {
+    LaunchedEffect(currentItemId, resolvedInitial, reloadNonce, waitingForRequestedItem, previewModeActive) {
         if (!resolvedInitial) return@LaunchedEffect
+        if (previewModeActive) {
+            continuationLog(
+                "loadItem skip previewModeActive currentItemId=$currentItemId requestedItemId=$requestedItemId reloadNonce=$reloadNonce",
+            )
+            return@LaunchedEffect
+        }
         if (waitingForRequestedItem) {
             continuationLog(
                 "loadItem skip waitingForRequestedItem currentItemId=$currentItemId requestedItemId=$requestedItemId reloadNonce=$reloadNonce",
@@ -897,6 +901,7 @@ fun PlayerScreen(
         }
         else -> capturePresentation.title.ifBlank { displayPayload?.url.orEmpty() }
     }
+    val locusActionBarTitle = if (previewModeActive) "" else if (currentTitle.isNotBlank()) currentTitle else "Item $locusItemId"
     val currentSourceLabel = capturePresentation.sourceLabel
     val chunkLabel = if (previewModeActive) {
         "Previewing item while playback continues"
@@ -1216,7 +1221,7 @@ fun PlayerScreen(
                         exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(animationSpec = tween(120)),
                     ) {
                         ExpandedPlayerTopBar(
-                            title = if (currentTitle.isNotBlank()) currentTitle else "Item $locusItemId",
+                            title = locusActionBarTitle,
                             playbackSpeed = settings.playbackSpeed,
                             overflowExpanded = overflowExpanded,
                             canMarkDone = displayPayload != null,
@@ -1335,7 +1340,7 @@ fun PlayerScreen(
                         chunkLabel,
                     ).joinToString("  -  ")
                     LocusPeekCard(
-                        title = if (currentTitle.isNotBlank()) currentTitle else "Item $locusItemId",
+                        title = locusActionBarTitle,
                         statusLine = locusStatusLine,
                         overflowExpanded = overflowExpanded,
                         overflowMenuContent = {
@@ -1395,7 +1400,7 @@ fun PlayerScreen(
                                     .fillMaxWidth(),
                             ) {
                                 ExpandedPlayerTopBar(
-                                    title = if (currentTitle.isNotBlank()) currentTitle else "Item $locusItemId",
+                                    title = locusActionBarTitle,
                                     playbackSpeed = settings.playbackSpeed,
                                     overflowExpanded = overflowExpanded,
                                     canMarkDone = displayPayload != null,
