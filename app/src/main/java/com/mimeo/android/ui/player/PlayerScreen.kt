@@ -485,7 +485,8 @@ fun PlayerScreen(
     val waitingForRequestedItem =
         requestedItemId != null &&
             requestedItemId != currentItemId &&
-            !previewModeActive
+            !previewModeActive &&
+            previewRouteItemId == null
     val hasStalePayloadForCurrentItem =
         textPayload?.itemId?.let { it != currentItemId } == true
     val transitionSettled = !waitingForRequestedItem && !hasStalePayloadForCurrentItem && bodyRevealReady
@@ -659,8 +660,6 @@ fun PlayerScreen(
             viewerPayload = null
             viewerPayloadItemId = -1
             viewerChunks = emptyList()
-            isLoading = true
-            bodyRevealReady = false
             vm.fetchItemText(target)
                 .onSuccess { loaded ->
                     viewerPayload = loaded.payload
@@ -671,8 +670,6 @@ fun PlayerScreen(
                     if (err is CancellationException) return@onFailure
                     uiMessage = err.message ?: "Failed to load item"
                 }
-            isLoading = false
-            bodyRevealReady = true
             return@LaunchedEffect
         }
         continuationLog(
