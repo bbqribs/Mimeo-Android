@@ -88,6 +88,9 @@ fun SettingsScreen(
     var autoAdvance by remember(settings.autoAdvanceOnCompletion) {
         mutableStateOf(settings.autoAdvanceOnCompletion)
     }
+    var autoArchiveAtArticleEnd by remember(settings.autoArchiveAtArticleEnd) {
+        mutableStateOf(settings.autoArchiveAtArticleEnd)
+    }
     var speakTitleBeforeArticle by remember(settings.speakTitleBeforeArticle) {
         mutableStateOf(settings.speakTitleBeforeArticle)
     }
@@ -196,6 +199,7 @@ fun SettingsScreen(
             remoteBaseUrl = remoteBaseUrl,
             token = token,
             autoAdvanceOnCompletion = autoAdvance,
+            autoArchiveAtArticleEnd = autoArchiveAtArticleEnd,
             speakTitleBeforeArticle = speakTitleBeforeArticle,
             skipDuplicateOpeningAfterTitleIntro = skipDuplicateOpeningAfterTitleIntro,
             playCompletionCueAtArticleEnd = playCompletionCueAtArticleEnd,
@@ -688,6 +692,30 @@ fun SettingsScreen(
                         onCheckedChange = {
                             autoAdvance = it
                             vm.saveAutoAdvanceOnCompletion(it)
+                        },
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text("Auto-archive at end of article")
+                        Text(
+                            text = "When playback reaches a real end-of-article, move that item to Archive.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = autoArchiveAtArticleEnd,
+                        onCheckedChange = {
+                            autoArchiveAtArticleEnd = it
+                            vm.saveAutoArchiveAtArticleEnd(it)
                         },
                     )
                 }
