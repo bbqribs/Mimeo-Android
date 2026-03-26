@@ -106,6 +106,9 @@ fun SettingsScreen(
     var autoScrollWhileListening by remember(settings.autoScrollWhileListening) {
         mutableStateOf(settings.autoScrollWhileListening)
     }
+    var locusTabReturnsToPlaybackPosition by remember(settings.locusTabReturnsToPlaybackPosition) {
+        mutableStateOf(settings.locusTabReturnsToPlaybackPosition)
+    }
     var continuousNowPlayingMarquee by remember(settings.continuousNowPlayingMarquee) {
         mutableStateOf(settings.continuousNowPlayingMarquee)
     }
@@ -199,6 +202,7 @@ fun SettingsScreen(
             keepScreenOnDuringSession = keepScreenOnDuringSession,
             persistentPlayerEnabled = persistentPlayerEnabled,
             autoScrollWhileListening = autoScrollWhileListening,
+            locusTabReturnsToPlaybackPosition = locusTabReturnsToPlaybackPosition,
             continuousNowPlayingMarquee = continuousNowPlayingMarquee,
             forceSentenceHighlightFallback = forceSentenceHighlightFallback,
             showPlaybackDiagnostics = showPlaybackDiagnostics,
@@ -782,6 +786,30 @@ fun SettingsScreen(
                     Switch(
                         checked = autoScrollWhileListening,
                         onCheckedChange = { autoScrollWhileListening = it },
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text("Locus return follows now-playing")
+                        Text(
+                            text = "While previewing another item, tapping Locus returns to the now-playing item. On: jump to live playback line. Off: keep the last reader position.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = locusTabReturnsToPlaybackPosition,
+                        onCheckedChange = {
+                            locusTabReturnsToPlaybackPosition = it
+                            vm.saveLocusTabReturnsToPlaybackPosition(it)
+                        },
                     )
                 }
                 Row(

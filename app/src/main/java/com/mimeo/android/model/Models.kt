@@ -256,6 +256,7 @@ data class AppSettings(
     val keepScreenOnDuringSession: Boolean = false,
     val persistentPlayerEnabled: Boolean = true,
     val autoScrollWhileListening: Boolean = true,
+    val locusTabReturnsToPlaybackPosition: Boolean = false,
     val continuousNowPlayingMarquee: Boolean = true,
     val forceSentenceHighlightFallback: Boolean = false,
     val showPlaybackDiagnostics: Boolean = false,

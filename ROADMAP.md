@@ -85,7 +85,7 @@
 
 ### Near-term implementation candidates (ranked)
 1. [ ] Search within Locus: in-article text search with next/previous result navigation, visible match count, and preservation of active playback highlight behavior.
-2. [ ] Scroll-level persistence across tabs (Locus rules): persist per-item scroll offset, restore when returning to the same viewed item, and snap back to now-playing item only when user explicitly returns via Locus-tab-now-playing path.
+2. [x] Scroll-level persistence across tabs (Locus rules): per-item reader scroll offsets now persist/restore; Locus-tab return from preview now reattaches to now-playing item using a Settings toggle for either last reader position (default) or live playback pointer.
 3. [ ] Reader/Locus paragraph formatting fidelity: preserve paragraph breaks/spacing consistently between fetched text and rendered Locus body, including edge cases from manual/excerpt saves.
 4. [ ] Reader/Locus clickable links: render links as tappable in-body spans with safe external-open behavior, while preserving current selection and playback UX.
 5. [ ] Locus bottom-gap transition issue: remove the intermittent bottom-gap/blank-space artifact during Locus open/close and mode transitions.

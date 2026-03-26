@@ -154,4 +154,43 @@ class PlaybackObservabilityTest {
         assertEquals(false, cleared.containsKey(100))
         assertEquals(88, cleared[101])
     }
+
+    @Test
+    fun locusTabTapPreviewDefaultsToReaderPositionOnReturn() {
+        val action = resolveLocusTabTapAction(
+            previewModeActive = true,
+            currentItemId = 101,
+            returnToPlaybackPositionAfterPreview = false,
+        )
+
+        assertTrue(action.returnToNowPlayingItem)
+        assertEquals(false, action.triggerScrollToPlaybackImmediately)
+        assertEquals(false, action.triggerScrollToPlaybackAfterReturn)
+    }
+
+    @Test
+    fun locusTabTapPreviewCanRequestPlaybackPositionOnReturn() {
+        val action = resolveLocusTabTapAction(
+            previewModeActive = true,
+            currentItemId = 101,
+            returnToPlaybackPositionAfterPreview = true,
+        )
+
+        assertTrue(action.returnToNowPlayingItem)
+        assertEquals(false, action.triggerScrollToPlaybackImmediately)
+        assertTrue(action.triggerScrollToPlaybackAfterReturn)
+    }
+
+    @Test
+    fun locusTabTapOutsidePreviewJumpsToPlaybackPositionImmediately() {
+        val action = resolveLocusTabTapAction(
+            previewModeActive = false,
+            currentItemId = 101,
+            returnToPlaybackPositionAfterPreview = false,
+        )
+
+        assertEquals(false, action.returnToNowPlayingItem)
+        assertTrue(action.triggerScrollToPlaybackImmediately)
+        assertEquals(false, action.triggerScrollToPlaybackAfterReturn)
+    }
 }

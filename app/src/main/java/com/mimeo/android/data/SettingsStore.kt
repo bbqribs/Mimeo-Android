@@ -54,6 +54,8 @@ class SettingsStore(private val context: Context) {
         booleanPreferencesKey("persistent_player_enabled")
     private val autoScrollWhileListeningKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("auto_scroll_while_listening")
+    private val locusTabReturnsToPlaybackPositionKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("locus_tab_returns_to_playback_position")
     private val continuousNowPlayingMarqueeKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("continuous_now_playing_marquee")
     private val forceSentenceHighlightFallbackKey: Preferences.Key<Boolean> =
@@ -133,6 +135,7 @@ class SettingsStore(private val context: Context) {
             keepScreenOnDuringSession = prefs[keepScreenOnDuringSessionKey] ?: false,
             persistentPlayerEnabled = prefs[persistentPlayerEnabledKey] ?: true,
             autoScrollWhileListening = prefs[autoScrollWhileListeningKey] ?: true,
+            locusTabReturnsToPlaybackPosition = prefs[locusTabReturnsToPlaybackPositionKey] ?: false,
             continuousNowPlayingMarquee = prefs[continuousNowPlayingMarqueeKey] ?: true,
             forceSentenceHighlightFallback = prefs[forceSentenceHighlightFallbackKey] ?: false,
             showPlaybackDiagnostics = prefs[showPlaybackDiagnosticsKey] ?: false,
@@ -191,6 +194,7 @@ class SettingsStore(private val context: Context) {
         keepScreenOnDuringSession: Boolean,
         persistentPlayerEnabled: Boolean,
         autoScrollWhileListening: Boolean,
+        locusTabReturnsToPlaybackPosition: Boolean,
         continuousNowPlayingMarquee: Boolean,
         forceSentenceHighlightFallback: Boolean,
         showPlaybackDiagnostics: Boolean,
@@ -229,6 +233,7 @@ class SettingsStore(private val context: Context) {
             prefs[keepScreenOnDuringSessionKey] = keepScreenOnDuringSession
             prefs[persistentPlayerEnabledKey] = persistentPlayerEnabled
             prefs[autoScrollWhileListeningKey] = autoScrollWhileListening
+            prefs[locusTabReturnsToPlaybackPositionKey] = locusTabReturnsToPlaybackPosition
             prefs[continuousNowPlayingMarqueeKey] = continuousNowPlayingMarquee
             prefs[forceSentenceHighlightFallbackKey] = forceSentenceHighlightFallback
             prefs[showPlaybackDiagnosticsKey] = showPlaybackDiagnostics
@@ -359,6 +364,12 @@ class SettingsStore(private val context: Context) {
     suspend fun saveKeepScreenOnDuringSession(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[keepScreenOnDuringSessionKey] = enabled
+        }
+    }
+
+    suspend fun saveLocusTabReturnsToPlaybackPosition(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[locusTabReturnsToPlaybackPositionKey] = enabled
         }
     }
 

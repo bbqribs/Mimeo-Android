@@ -138,3 +138,14 @@ Key expected lines:
 - `audit=... interactive=<...> locked=<...> background=<...>` (service-side state snapshots)
 
 If media buttons route incorrectly, confirm platform routing targets `com.mimeo.android/MimeoPlayback/...` in system media logs.
+
+## 10) Locus Return Rules (Scroll + Playback Pointer)
+
+- Locus keeps a per-item reader scroll offset and restores it when returning to that same item.
+- While previewing item B during playback of item A, tapping the Locus tab always returns to item A (now-playing item) without reopening/reseeding playback.
+- Return scroll behavior is settings-driven:
+  - `Locus return follows now-playing = Off` (default): return to item A at the last reader position for item A.
+  - `Locus return follows now-playing = On`: return to item A and jump to the current playback-highlight position.
+- Tapping Locus while already on the active item (not in preview mode) keeps the existing “jump to playback pointer” behavior.
+
+These rules are UX-only navigation/scroll rules and do not alter interruption policy, playback ownership, or queue/progress semantics.

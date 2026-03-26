@@ -295,6 +295,31 @@ internal fun resetReaderScrollOffset(
     return offsets - itemId
 }
 
+internal data class LocusTabTapAction(
+    val returnToNowPlayingItem: Boolean,
+    val triggerScrollToPlaybackImmediately: Boolean,
+    val triggerScrollToPlaybackAfterReturn: Boolean,
+)
+
+internal fun resolveLocusTabTapAction(
+    previewModeActive: Boolean,
+    currentItemId: Int,
+    returnToPlaybackPositionAfterPreview: Boolean,
+): LocusTabTapAction {
+    if (previewModeActive && currentItemId > 0) {
+        return LocusTabTapAction(
+            returnToNowPlayingItem = true,
+            triggerScrollToPlaybackImmediately = false,
+            triggerScrollToPlaybackAfterReturn = returnToPlaybackPositionAfterPreview,
+        )
+    }
+    return LocusTabTapAction(
+        returnToNowPlayingItem = false,
+        triggerScrollToPlaybackImmediately = true,
+        triggerScrollToPlaybackAfterReturn = false,
+    )
+}
+
 internal fun shouldSpeakTitleBeforeBody(
     enabled: Boolean,
     title: String?,
@@ -511,6 +536,7 @@ fun PlayerScreen(
     var readerSelectionResetSignal by rememberSaveable { mutableIntStateOf(0) }
     var selectionClearArmed by rememberSaveable { mutableStateOf(false) }
     var lastHandledLocusTapSignal by rememberSaveable { mutableIntStateOf(locusTapSignal) }
+    var pendingLocusTabPlaybackScrollAfterReturn by rememberSaveable { mutableStateOf(false) }
     var lastHandledOpenRequestSignal by rememberSaveable { mutableIntStateOf(openRequestSignal) }
     val lastOpenDiagnostics = engineState.lastOpenDiagnostics
     var lastObservedPercent by remember { mutableIntStateOf(-1) }
@@ -539,6 +565,8 @@ fun PlayerScreen(
     // - Persist per displayed item (including preview mode) so tab/surface returns feel stable.
     // - Reset for explicit same-item reopen requests, which should behave like a fresh open.
     // - Playback/search driven scroll events can still override via existing trigger signals.
+    // - Locus-tab return from preview follows settings:
+    //   default -> restore reader position, optional -> jump to playback pointer.
     var readerViewportSessionNonce by rememberSaveable { mutableIntStateOf(0) }
     var readerScrollOffsets by rememberSaveable { mutableStateOf<Map<Int, Int>>(emptyMap()) }
     val readerInitialOffset = readerScrollOffsets[readerScrollItemId]?.coerceAtLeast(0) ?: 0
@@ -710,6 +738,10 @@ fun PlayerScreen(
             viewerPayload = null
             viewerPayloadItemId = -1
             viewerChunks = emptyList()
+            if (pendingLocusTabPlaybackScrollAfterReturn) {
+                pendingLocusTabPlaybackScrollAfterReturn = false
+                readerScrollTriggerSignal += 1
+            }
             return@LaunchedEffect
         }
         if (hasLockedPlaybackOwner) {
@@ -777,16 +809,25 @@ fun PlayerScreen(
     LaunchedEffect(locusTapSignal) {
         if (locusTapSignal == lastHandledLocusTapSignal) return@LaunchedEffect
         lastHandledLocusTapSignal = locusTapSignal
-        if (viewerOverrideItemId > 0 && currentItemId > 0) {
+        pendingLocusTabPlaybackScrollAfterReturn = false
+        val tapAction = resolveLocusTabTapAction(
+            previewModeActive = previewModeActive,
+            currentItemId = currentItemId,
+            returnToPlaybackPositionAfterPreview = settings.locusTabReturnsToPlaybackPosition,
+        )
+        if (tapAction.returnToNowPlayingItem) {
             viewerOverrideItemId = -1
             viewerOverrideTitle = ""
             viewerPayload = null
             viewerPayloadItemId = -1
             viewerChunks = emptyList()
+            pendingLocusTabPlaybackScrollAfterReturn = tapAction.triggerScrollToPlaybackAfterReturn
             onOpenItem(currentItemId)
             return@LaunchedEffect
         }
-        readerScrollTriggerSignal += 1
+        if (tapAction.triggerScrollToPlaybackImmediately) {
+            readerScrollTriggerSignal += 1
+        }
     }
 
     LaunchedEffect(openRequestSignal, resolvedInitial, requestedItemId) {

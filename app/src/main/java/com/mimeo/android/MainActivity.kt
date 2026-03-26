@@ -917,6 +917,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         keepScreenOnDuringSession: Boolean,
         persistentPlayerEnabled: Boolean,
         autoScrollWhileListening: Boolean,
+        locusTabReturnsToPlaybackPosition: Boolean,
         continuousNowPlayingMarquee: Boolean,
         forceSentenceHighlightFallback: Boolean,
         showPlaybackDiagnostics: Boolean,
@@ -942,6 +943,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 keepScreenOnDuringSession = keepScreenOnDuringSession,
                 persistentPlayerEnabled = persistentPlayerEnabled,
                 autoScrollWhileListening = autoScrollWhileListening,
+                locusTabReturnsToPlaybackPosition = locusTabReturnsToPlaybackPosition,
                 continuousNowPlayingMarquee = continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = forceSentenceHighlightFallback,
                 showPlaybackDiagnostics = showPlaybackDiagnostics,
@@ -990,6 +992,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 keepScreenOnDuringSession = settings.value.keepScreenOnDuringSession,
                 persistentPlayerEnabled = settings.value.persistentPlayerEnabled,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
+                locusTabReturnsToPlaybackPosition = settings.value.locusTabReturnsToPlaybackPosition,
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 showPlaybackDiagnostics = settings.value.showPlaybackDiagnostics,
@@ -1031,6 +1034,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 keepScreenOnDuringSession = settings.value.keepScreenOnDuringSession,
                 persistentPlayerEnabled = settings.value.persistentPlayerEnabled,
                 autoScrollWhileListening = settings.value.autoScrollWhileListening,
+                locusTabReturnsToPlaybackPosition = settings.value.locusTabReturnsToPlaybackPosition,
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 showPlaybackDiagnostics = settings.value.showPlaybackDiagnostics,
@@ -1101,6 +1105,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _settings.value = current.copy(keepScreenOnDuringSession = enabled)
         viewModelScope.launch {
             settingsStore.saveKeepScreenOnDuringSession(enabled)
+        }
+    }
+
+    fun saveLocusTabReturnsToPlaybackPosition(enabled: Boolean) {
+        val current = settings.value
+        _settings.value = current.copy(locusTabReturnsToPlaybackPosition = enabled)
+        viewModelScope.launch {
+            settingsStore.saveLocusTabReturnsToPlaybackPosition(enabled)
         }
     }
 
