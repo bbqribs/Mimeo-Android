@@ -91,6 +91,14 @@ Direction:
 Direction:
 - app -> backend, with pending retry queue fallback on retryable IO failures.
 
+Payload notes (current):
+- Always sends canonical `percent`.
+- Also sends pointer metadata when available:
+  - `chunk_index`
+  - `offset_in_chunk_chars`
+  - `reader_scroll_offset`
+- If backend rejects pointer fields (400/422), Android retries the same request with legacy percent-only payload for compatibility.
+
 ### Done/reset actions
 `vm.toggleCompletion(...)` -> repository -> backend done/reset endpoint.
 

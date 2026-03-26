@@ -2627,8 +2627,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun postProgress(itemId: Int, percent: Int): Result<ProgressPostResult> {
         val current = settings.value
         val clamped = percent.coerceIn(0, 100)
+        val playbackPointer = playbackPositionByItem.value[itemId]
+            ?: nowPlayingSession.value?.items?.firstOrNull { it.itemId == itemId }?.let { item ->
+                PlaybackPosition(
+                    chunkIndex = item.chunkIndex.coerceAtLeast(0),
+                    offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
+                )
+            }
+        val readerPointer = nowPlayingSession.value
+            ?.items
+            ?.firstOrNull { it.itemId == itemId }
+            ?.readerScrollOffset
         return try {
-            val result = repository.postProgress(current.baseUrl, current.apiToken, itemId, clamped)
+            val result = repository.postProgress(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                itemId = itemId,
+                percent = clamped,
+                chunkIndex = playbackPointer?.chunkIndex,
+                offsetInChunkChars = playbackPointer?.offsetInChunkChars,
+                readerScrollOffset = readerPointer,
+            )
             applyLocalProgress(itemId = itemId, percent = clamped)
             if (result.queued) {
                 _queueOffline.value = true
@@ -3185,6 +3204,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 itemId = itemId,
                 chunkIndex = normalized.chunkIndex,
                 offsetInChunkChars = normalized.offsetInChunkChars,
+            )
+            if (updated != null) {
+                _nowPlayingSession.value = updated
+            }
+        }
+    }
+
+    fun setReaderScrollOffset(itemId: Int, offset: Int) {
+        val safeOffset = offset.coerceAtLeast(0)
+        viewModelScope.launch {
+            val updated = repository.setCurrentReaderScrollOffset(
+                itemId = itemId,
+                readerScrollOffset = safeOffset,
             )
             if (updated != null) {
                 _nowPlayingSession.value = updated

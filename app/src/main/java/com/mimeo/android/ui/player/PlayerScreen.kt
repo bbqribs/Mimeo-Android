@@ -116,6 +116,7 @@ import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import com.mimeo.android.ui.reader.ReaderBody
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -569,7 +570,15 @@ fun PlayerScreen(
     //   default -> restore reader position, optional -> jump to playback pointer.
     var readerViewportSessionNonce by rememberSaveable { mutableIntStateOf(0) }
     var readerScrollOffsets by rememberSaveable { mutableStateOf<Map<Int, Int>>(emptyMap()) }
-    val readerInitialOffset = readerScrollOffsets[readerScrollItemId]?.coerceAtLeast(0) ?: 0
+    var persistedReaderScrollOffsets by rememberSaveable { mutableStateOf<Map<Int, Int>>(emptyMap()) }
+    val persistedReaderOffset = nowPlayingSession
+        ?.items
+        ?.firstOrNull { it.itemId == readerScrollItemId }
+        ?.readerScrollOffset
+        ?.coerceAtLeast(0)
+    val readerInitialOffset = readerScrollOffsets[readerScrollItemId]?.coerceAtLeast(0)
+        ?: persistedReaderOffset
+        ?: 0
     val readerScrollState = rememberSaveable(readerScrollItemId, readerViewportSessionNonce, saver = ScrollState.Saver) {
         ScrollState(readerInitialOffset)
     }
@@ -971,12 +980,25 @@ fun PlayerScreen(
 
     LaunchedEffect(readerScrollItemId, readerScrollState) {
         snapshotFlow { readerScrollState.value }
+            .distinctUntilChanged()
             .collect { offset ->
                 readerScrollOffsets = updateReaderScrollOffsets(
                     offsets = readerScrollOffsets,
                     itemId = readerScrollItemId,
                     offset = offset,
                 )
+                val previousPersisted = persistedReaderScrollOffsets[readerScrollItemId]
+                if (previousPersisted == null || abs(previousPersisted - offset) >= 24) {
+                    persistedReaderScrollOffsets = updateReaderScrollOffsets(
+                        offsets = persistedReaderScrollOffsets,
+                        itemId = readerScrollItemId,
+                        offset = offset,
+                    )
+                    vm.setReaderScrollOffset(
+                        itemId = readerScrollItemId,
+                        offset = offset,
+                    )
+                }
             }
     }
 

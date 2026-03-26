@@ -58,6 +58,7 @@ class PlaylistContinuationTest {
                     lastReadPercent = 0,
                     chunkIndex = 0,
                     offsetInChunkChars = 0,
+                    readerScrollOffset = 0,
                 )
             },
             currentIndex = currentIndex,

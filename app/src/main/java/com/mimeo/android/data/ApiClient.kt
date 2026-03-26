@@ -413,20 +413,45 @@ class ApiClient(
         percent: Int,
         source: String? = null,
         clientTimestamp: String? = null,
+        chunkIndex: Int? = null,
+        offsetInChunkChars: Int? = null,
+        readerScrollOffset: Int? = null,
     ) = withContext(Dispatchers.IO) {
-        val body = json.encodeToString(
-            ProgressPayload(
+        val progressUrl = resolveUrl(baseUrl, "/items/$itemId/progress")
+        val payload = ProgressPayload(
+            percent = percent,
+            source = source,
+            clientTimestamp = clientTimestamp,
+            chunkIndex = chunkIndex,
+            offsetInChunkChars = offsetInChunkChars,
+            readerScrollOffset = readerScrollOffset,
+        )
+        try {
+            executeNoBody(buildProgressRequest(progressUrl, token, payload))
+        } catch (error: ApiException) {
+            val shouldRetryLegacy = (error.statusCode == 400 || error.statusCode == 422) &&
+                (chunkIndex != null || offsetInChunkChars != null || readerScrollOffset != null)
+            if (!shouldRetryLegacy) throw error
+            val legacyPayload = ProgressPayload(
                 percent = percent,
                 source = source,
                 clientTimestamp = clientTimestamp,
             )
-        ).toRequestBody("application/json".toMediaType())
-        val request = Request.Builder()
-            .url(resolveUrl(baseUrl, "/items/$itemId/progress"))
+            executeNoBody(buildProgressRequest(progressUrl, token, legacyPayload))
+        }
+    }
+
+    private fun buildProgressRequest(
+        url: String,
+        token: String,
+        payload: ProgressPayload,
+    ): Request {
+        val body = json.encodeToString(payload).toRequestBody("application/json".toMediaType())
+        return Request.Builder()
+            .url(url)
             .header("Authorization", "Bearer $token")
             .post(body)
             .build()
-        executeNoBody(request)
     }
 
     suspend fun markItemDone(

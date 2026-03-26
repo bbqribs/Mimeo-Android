@@ -159,6 +159,9 @@ data class ProgressPayload(
     val percent: Int,
     val source: String? = null,
     @SerialName("client_timestamp") val clientTimestamp: String? = null,
+    @SerialName("chunk_index") val chunkIndex: Int? = null,
+    @SerialName("offset_in_chunk_chars") val offsetInChunkChars: Int? = null,
+    @SerialName("reader_scroll_offset") val readerScrollOffset: Int? = null,
 )
 
 @Serializable
