@@ -85,6 +85,61 @@ class ApiClientCompletionSemanticsTest {
     }
 
     @Test
+    fun getTrashedItemsUsesTrashedQueryFlag() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody("[]"),
+        )
+        server.start()
+        try {
+            val client = ApiClient(okHttpClient = OkHttpClient.Builder().followRedirects(false).build())
+            client.getTrashedItems(server.url("/").toString(), "token", limit = 25)
+
+            val request = server.takeRequest()
+            assertEquals("GET", request.method)
+            assertEquals("/items?trashed=true&limit=25", request.path)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun restoreFromBinUsesRestoreRoute() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(200))
+        server.start()
+        try {
+            val client = ApiClient(okHttpClient = OkHttpClient.Builder().followRedirects(false).build())
+            client.restoreItemFromBin(server.url("/").toString(), "token", 42)
+
+            val request = server.takeRequest()
+            assertEquals("POST", request.method)
+            assertEquals("/items/42/restore", request.path)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun purgeFromBinUsesPurgeRoute() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(204))
+        server.start()
+        try {
+            val client = ApiClient(okHttpClient = OkHttpClient.Builder().followRedirects(false).build())
+            client.purgeItemFromBin(server.url("/").toString(), "token", 42)
+
+            val request = server.takeRequest()
+            assertEquals("POST", request.method)
+            assertEquals("/items/42/purge", request.path)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun createManualTextItemSendsSourceMetadataWhenProvided() = runBlocking {
         val server = MockWebServer()
         server.enqueue(

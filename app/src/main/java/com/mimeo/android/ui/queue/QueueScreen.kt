@@ -182,7 +182,7 @@ private enum class QueueFilterChip(val label: String, val enabled: Boolean = tru
     UNREAD("Unread"),
     IN_PROGRESS("In progress"),
     DONE("Done"),
-    ARCHIVED("Archived", enabled = false),
+    ARCHIVED("Bin"),
 }
 
 private enum class QueueSortOption(val label: String) {
@@ -248,6 +248,7 @@ fun QueueScreen(
 ) {
     val context = LocalContext.current
     val items by vm.queueItems.collectAsState()
+    val binItems by vm.binItems.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val settings by vm.settings.collectAsState()
     val loading by vm.queueLoading.collectAsState()
@@ -323,7 +324,14 @@ fun QueueScreen(
             )
         }
     }.orEmpty()
-    val filteredItems = items.filter { item ->
+    LaunchedEffect(selectedFilter) {
+        if (selectedFilter == QueueFilterChip.ARCHIVED) {
+            vm.loadBinItems()
+        }
+    }
+
+    val activeItems = if (selectedFilter == QueueFilterChip.ARCHIVED) binItems else items
+    val filteredItems = activeItems.filter { item ->
         val matchesSearch = if (searchQuery.isBlank()) {
             true
         } else {
@@ -344,7 +352,7 @@ fun QueueScreen(
             QueueFilterChip.UNREAD -> item.furthestPercent <= 0
             QueueFilterChip.IN_PROGRESS -> item.furthestPercent in 1 until DONE_PERCENT_THRESHOLD
             QueueFilterChip.DONE -> item.furthestPercent >= DONE_PERCENT_THRESHOLD
-            QueueFilterChip.ARCHIVED -> false
+            QueueFilterChip.ARCHIVED -> true
         }
         matchesSearch && matchesFilter
     }
@@ -358,7 +366,7 @@ fun QueueScreen(
     val projectedPendingItems = projectPendingItemsForDestination(
         pendingItems = pendingManualSaves,
         selectedPlaylistId = settings.selectedPlaylistId,
-        queueItems = items,
+        queueItems = activeItems,
         cachedItemIds = cachedItemIds,
         noActiveContentItemIds = noActiveContentItemIds,
     )
@@ -379,6 +387,8 @@ fun QueueScreen(
         !hasVisibleQueueContent -> "No items in Smart queue yet. Share a link to add one."
         displayedItems.isEmpty() && searchQuery.isNotBlank() ->
             "No results for \"$searchQuery\" in $selectedPlaylistName."
+        displayedItems.isEmpty() && selectedFilter == QueueFilterChip.ARCHIVED ->
+            "Bin is empty. Items stay in Bin for 14 days unless purged earlier."
         displayedItems.isEmpty() && selectedFilter != QueueFilterChip.ALL ->
             "No items match the ${selectedFilter.label.lowercase()} filter."
         displayedItems.isEmpty() -> "No items match the current search/filter."
@@ -387,7 +397,11 @@ fun QueueScreen(
     suspend fun refreshQueueContent() {
         if (refreshActionState == RefreshActionVisualState.Refreshing) return
         refreshActionState = RefreshActionVisualState.Refreshing
-        val result = vm.loadQueueOnce(forceAutoDownloadAllVisibleUncached = true)
+        val result = if (selectedFilter == QueueFilterChip.ARCHIVED) {
+            vm.loadBinItems()
+        } else {
+            vm.loadQueueOnce(forceAutoDownloadAllVisibleUncached = true)
+        }
         hasRefreshProblem = result.isFailure
         refreshActionState = if (result.isSuccess) {
             RefreshActionVisualState.Success
@@ -964,6 +978,7 @@ fun QueueScreen(
                         ) {
                             QueueItemCard(
                                 item = item,
+                                isBinView = selectedFilter == QueueFilterChip.ARCHIVED,
                                 cached = cachedItemIds.contains(item.itemId),
                                 noActiveContent = noActiveContentItemIds.contains(item.itemId),
                                 failedProcessing = hasFailedPendingProjectionStatus(item),
@@ -1055,6 +1070,28 @@ fun QueueScreen(
                                             }
                                             .onFailure {
                                                 onShowSnackbar("Couldn't update favourite", "Diagnostics", "open_diagnostics")
+                                            }
+                                    }
+                                },
+                                onRestoreFromBin = {
+                                    actionScope.launch {
+                                        vm.restoreItemFromBin(item.itemId)
+                                            .onSuccess {
+                                                onShowSnackbar("Restored from Bin", null, null)
+                                            }
+                                            .onFailure {
+                                                onShowSnackbar("Couldn't restore from Bin", "Diagnostics", "open_diagnostics")
+                                            }
+                                    }
+                                },
+                                onPurgeFromBin = {
+                                    actionScope.launch {
+                                        vm.purgeItemFromBin(item.itemId)
+                                            .onSuccess {
+                                                onShowSnackbar("Permanently deleted", null, null)
+                                            }
+                                            .onFailure {
+                                                onShowSnackbar("Couldn't purge item", "Diagnostics", "open_diagnostics")
                                             }
                                     }
                                 },
@@ -2044,6 +2081,7 @@ internal fun queueDownloadMenuLabel(
 @Composable
 private fun QueueItemCard(
     item: PlaybackQueueItem,
+    isBinView: Boolean,
     cached: Boolean,
     noActiveContent: Boolean,
     failedProcessing: Boolean,
@@ -2053,6 +2091,8 @@ private fun QueueItemCard(
     onOpenPlaylistPicker: () -> Unit,
     onArchive: () -> Unit,
     onMoveToBin: () -> Unit,
+    onRestoreFromBin: () -> Unit,
+    onPurgeFromBin: () -> Unit,
     onToggleFavorite: () -> Unit,
     isMenuExpanded: Boolean,
     onDismissMenu: () -> Unit,
@@ -2099,7 +2139,7 @@ private fun QueueItemCard(
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onOpenPlayer() },
+            .clickable(enabled = !isBinView) { onOpenPlayer() },
     ) {
         Column(
             modifier = Modifier
@@ -2135,45 +2175,62 @@ private fun QueueItemCard(
                         expanded = isMenuExpanded,
                         onDismissRequest = onDismissMenu,
                     ) {
-                        if (!cached) {
+                        if (isBinView) {
                             DropdownMenuItem(
-                                text = {
-                                    Text(queueDownloadMenuLabel(noActiveContent, failedProcessing))
-                                },
+                                text = { Text("Restore") },
                                 onClick = {
                                     onDismissMenu()
-                                    onDownload()
+                                    onRestoreFromBin()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Purge permanently") },
+                                onClick = {
+                                    onDismissMenu()
+                                    onPurgeFromBin()
+                                },
+                            )
+                        } else {
+                            if (!cached) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(queueDownloadMenuLabel(noActiveContent, failedProcessing))
+                                    },
+                                    onClick = {
+                                        onDismissMenu()
+                                        onDownload()
+                                    },
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("Playlists...") },
+                                onClick = {
+                                    onDismissMenu()
+                                    onOpenPlaylistPicker()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (item.isFavorited) "Unfavourite" else "Favourite") },
+                                onClick = {
+                                    onDismissMenu()
+                                    onToggleFavorite()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Archive") },
+                                onClick = {
+                                    onDismissMenu()
+                                    onArchive()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Move to Bin (14 days)") },
+                                onClick = {
+                                    onDismissMenu()
+                                    onMoveToBin()
                                 },
                             )
                         }
-                        DropdownMenuItem(
-                            text = { Text("Playlists...") },
-                            onClick = {
-                                onDismissMenu()
-                                onOpenPlaylistPicker()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (item.isFavorited) "Unfavourite" else "Favourite") },
-                            onClick = {
-                                onDismissMenu()
-                                onToggleFavorite()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Archive") },
-                            onClick = {
-                                onDismissMenu()
-                                onArchive()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Move to Bin (14 days)") },
-                            onClick = {
-                                onDismissMenu()
-                                onMoveToBin()
-                            },
-                        )
                     }
                 }
             }
