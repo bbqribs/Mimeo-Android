@@ -47,9 +47,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.PlainTooltip
@@ -138,6 +140,38 @@ private val PLAYBACK_SPEED_PILLS = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
 private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 private const val MANUAL_OPEN_DEBUG_TAG = "MimeoManualOpen"
 private const val ACTION_KEY_UNDO_ARCHIVE = "undo_archive"
+
+internal data class LocusSearchMatch(
+    val chunkIndex: Int,
+    val rangeInChunk: IntRange,
+)
+
+internal fun collectLocusSearchMatches(
+    chunks: List<PlaybackChunk>,
+    query: String,
+): List<LocusSearchMatch> {
+    val needle = query.trim()
+    if (needle.isEmpty()) return emptyList()
+    val loweredNeedle = needle.lowercase(Locale.ROOT)
+    val matches = mutableListOf<LocusSearchMatch>()
+    chunks.forEachIndexed { index, chunk ->
+        val haystack = chunk.text
+        if (haystack.isBlank()) return@forEachIndexed
+        val loweredHaystack = haystack.lowercase(Locale.ROOT)
+        var from = 0
+        while (true) {
+            val at = loweredHaystack.indexOf(loweredNeedle, startIndex = from)
+            if (at < 0) break
+            val endExclusive = (at + loweredNeedle.length).coerceAtMost(haystack.length)
+            matches += LocusSearchMatch(
+                chunkIndex = index,
+                rangeInChunk = at until endExclusive,
+            )
+            from = (at + 1).coerceAtMost(loweredHaystack.length)
+        }
+    }
+    return matches
+}
 
 enum class PlaybackOpenIntent {
     ManualOpen,
@@ -889,6 +923,40 @@ fun PlayerScreen(
         previewModeActive -> emptyList()
         else -> chunks
     }
+    var locusSearchActive by rememberSaveable(locusItemId) { mutableStateOf(false) }
+    var locusSearchQuery by rememberSaveable(locusItemId) { mutableStateOf("") }
+    var locusSearchMatchIndex by rememberSaveable(locusItemId) { mutableIntStateOf(-1) }
+    var locusSearchScrollTriggerSignal by remember(locusItemId) { mutableIntStateOf(0) }
+    val locusSearchMatches = remember(displayChunks, locusSearchQuery) {
+        collectLocusSearchMatches(displayChunks, locusSearchQuery)
+    }
+    val activeLocusSearchMatch = locusSearchMatches.getOrNull(locusSearchMatchIndex)
+    val locusSearchSummary = when {
+        locusSearchQuery.isBlank() -> null
+        locusSearchMatches.isEmpty() -> "No matches"
+        activeLocusSearchMatch == null -> "1 / ${locusSearchMatches.size}"
+        else -> "${locusSearchMatchIndex + 1} / ${locusSearchMatches.size}"
+    }
+    fun focusLocusSearchMatch(index: Int) {
+        if (index !in locusSearchMatches.indices) return
+        locusSearchMatchIndex = index
+        locusSearchScrollTriggerSignal += 1
+    }
+    fun moveLocusSearchMatch(step: Int) {
+        if (locusSearchMatches.isEmpty()) return
+        val from = if (locusSearchMatchIndex in locusSearchMatches.indices) locusSearchMatchIndex else 0
+        val next = ((from + step) % locusSearchMatches.size + locusSearchMatches.size) % locusSearchMatches.size
+        focusLocusSearchMatch(next)
+    }
+    LaunchedEffect(locusSearchQuery, locusSearchMatches, locusItemId) {
+        if (locusSearchQuery.isBlank() || locusSearchMatches.isEmpty()) {
+            locusSearchMatchIndex = -1
+            return@LaunchedEffect
+        }
+        if (locusSearchMatchIndex !in locusSearchMatches.indices) {
+            focusLocusSearchMatch(0)
+        }
+    }
     val capturePresentation = locusCapturePresentation(displayPayload)
     val queuedPreviewTitle = queueItems.firstOrNull { it.itemId == locusItemId }?.title.orEmpty()
     val currentTitle = when {
@@ -1286,6 +1354,13 @@ fun PlayerScreen(
                                 }
                             },
                             onSpeedChange = { speed -> vm.savePlaybackSpeed(speed) },
+                            searchActive = locusSearchActive,
+                            searchQuery = locusSearchQuery,
+                            searchSummary = locusSearchSummary,
+                            onSearchToggle = { locusSearchActive = !locusSearchActive },
+                            onSearchQueryChange = { locusSearchQuery = it },
+                            onSearchNext = { moveLocusSearchMatch(1) },
+                            onSearchPrevious = { moveLocusSearchMatch(-1) },
                             onArchive = {
                                 actionScope.launch {
                                     val nextItemId = nextSessionItemIdForArchive(currentItemId)
@@ -1372,6 +1447,9 @@ fun PlayerScreen(
                                 currentChunkIndex = if (previewModeActive) 0 else safePosition.chunkIndex,
                                 currentChunkOffsetInChars = if (previewModeActive) 0 else safePosition.offsetInChunkChars,
                                 activeRangeInChunk = if (previewModeActive) null else activeChunkRange,
+                                searchFocusChunkIndex = activeLocusSearchMatch?.chunkIndex,
+                                searchFocusRangeInChunk = activeLocusSearchMatch?.rangeInChunk,
+                                searchFocusTriggerSignal = locusSearchScrollTriggerSignal,
                                 scrollTriggerSignal = readerScrollTriggerSignal,
                                 autoScrollWhileListening = !previewModeActive &&
                                     settings.autoScrollWhileListening &&
@@ -1465,6 +1543,13 @@ fun PlayerScreen(
                                         }
                                     },
                                     onSpeedChange = { speed -> vm.savePlaybackSpeed(speed) },
+                                    searchActive = locusSearchActive,
+                                    searchQuery = locusSearchQuery,
+                                    searchSummary = locusSearchSummary,
+                                    onSearchToggle = { locusSearchActive = !locusSearchActive },
+                                    onSearchQueryChange = { locusSearchQuery = it },
+                                    onSearchNext = { moveLocusSearchMatch(1) },
+                                    onSearchPrevious = { moveLocusSearchMatch(-1) },
                                     onArchive = {
                                         actionScope.launch {
                                             val nextItemId = nextSessionItemIdForArchive(currentItemId)
@@ -1638,72 +1723,114 @@ private fun ExpandedPlayerTopBar(
     onRefresh: () -> Unit,
     onMarkDone: () -> Unit,
     onSpeedChange: (Float) -> Unit,
+    searchActive: Boolean,
+    searchQuery: String,
+    searchSummary: String?,
+    onSearchToggle: () -> Unit,
+    onSearchQueryChange: (String) -> Unit,
+    onSearchNext: () -> Unit,
+    onSearchPrevious: () -> Unit,
     onArchive: () -> Unit,
     onOverflowExpandedChange: (Boolean) -> Unit,
     overflowMenuContent: @Composable () -> Unit,
 ) {
-    TopAppBar(
-        modifier = Modifier.height(48.dp),
-        windowInsets = WindowInsets(0, 0, 0, 0),
-        title = {
-            Text(
-                text = title,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.titleSmall,
-            )
-        },
-        actions = {
-            ActionHintTooltip(label = if (isDone) "Mark as not done" else "Mark as done") {
-                IconToggleButton(
-                    checked = isDone,
-                    enabled = canMarkDone,
-                    onCheckedChange = { checked ->
-                        if (checked != isDone) {
-                            onMarkDone()
-                        }
-                    },
-                ) {
-                    Icon(
-                        painter = painterResource(id = if (isDone) R.drawable.ic_book_closed_24 else R.drawable.ic_book_open_24),
-                        contentDescription = if (isDone) "Mark as not done" else "Mark as done",
-                        tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.size(22.dp),
+    Column(modifier = Modifier.fillMaxWidth()) {
+        TopAppBar(
+            modifier = Modifier.height(48.dp),
+            windowInsets = WindowInsets(0, 0, 0, 0),
+            title = {
+                Text(
+                    text = title,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+            },
+            actions = {
+                ActionHintTooltip(label = if (isDone) "Mark as not done" else "Mark as done") {
+                    IconToggleButton(
+                        checked = isDone,
+                        enabled = canMarkDone,
+                        onCheckedChange = { checked ->
+                            if (checked != isDone) {
+                                onMarkDone()
+                            }
+                        },
+                    ) {
+                        Icon(
+                            painter = painterResource(id = if (isDone) R.drawable.ic_book_closed_24 else R.drawable.ic_book_open_24),
+                            contentDescription = if (isDone) "Mark as not done" else "Mark as done",
+                            tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+                ActionHintTooltip(label = "Refresh") {
+                    RefreshActionButton(
+                        state = refreshState,
+                        showConnectivityIssue = showConnectivityIssue,
+                        onClick = onRefresh,
+                        contentDescription = "Refresh item",
                     )
                 }
-            }
-            ActionHintTooltip(label = "Refresh") {
-                RefreshActionButton(
-                    state = refreshState,
-                    showConnectivityIssue = showConnectivityIssue,
-                    onClick = onRefresh,
-                    contentDescription = "Refresh item",
-                )
-            }
-            ActionHintTooltip(label = "Speed") {
-                SpeedControlButton(
-                    speed = playbackSpeed,
-                    onSpeedChange = onSpeedChange,
-                )
-            }
-            ActionHintTooltip(label = "Archive") {
-                IconButton(onClick = onArchive) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_archive_box_24),
-                        contentDescription = "Archive item",
-                        modifier = Modifier.size(20.dp),
+                ActionHintTooltip(label = if (searchActive) "Hide search" else "Search in item") {
+                    IconButton(onClick = onSearchToggle) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.msr_search_24),
+                            contentDescription = if (searchActive) "Hide search" else "Search in item",
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+                ActionHintTooltip(label = "Speed") {
+                    SpeedControlButton(
+                        speed = playbackSpeed,
+                        onSpeedChange = onSpeedChange,
                     )
                 }
-            }
-            ActionHintTooltip(label = "More actions") {
-                LocusOverflowMenu(
-                    expanded = overflowExpanded,
-                    onExpandedChange = onOverflowExpandedChange,
-                    content = overflowMenuContent,
+                ActionHintTooltip(label = "Archive") {
+                    IconButton(onClick = onArchive) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_archive_box_24),
+                            contentDescription = "Archive item",
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+                ActionHintTooltip(label = "More actions") {
+                    LocusOverflowMenu(
+                        expanded = overflowExpanded,
+                        onExpandedChange = onOverflowExpandedChange,
+                        content = overflowMenuContent,
+                    )
+                }
+            },
+        )
+        AnimatedVisibility(visible = searchActive) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    singleLine = true,
+                    placeholder = { Text("Search this item") },
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onSearchPrevious, enabled = searchQuery.isNotBlank()) { Text("Prev") }
+                TextButton(onClick = onSearchNext, enabled = searchQuery.isNotBlank()) { Text("Next") }
+                Text(
+                    text = searchSummary ?: "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-        },
-    )
+        }
+    }
 }
 
 @Composable
