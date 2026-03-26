@@ -1385,13 +1385,13 @@ fun PlayerScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .then(modifier),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.Top,
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f, fill = true),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.Top,
             ) {
                 if (!isExpanded) {
                     AnimatedVisibility(
