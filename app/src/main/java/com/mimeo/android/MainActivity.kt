@@ -2720,6 +2720,77 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    suspend fun moveItemToBin(
+        itemId: Int,
+        refreshQueue: Boolean = true,
+    ): Result<Unit> {
+        val current = settings.value
+        return try {
+            repository.moveItemToBin(current.baseUrl, current.apiToken, itemId)
+            val binnedCurrentSessionItem = currentNowPlayingItemId() == itemId
+            if (binnedCurrentSessionItem) {
+                playbackPause(forceSync = true)
+                clearNowPlayingSessionNow()
+            }
+            if (refreshQueue) {
+                val refreshResult = loadQueueOnce(autoRetryPendingSaves = false)
+                if (refreshResult.isFailure) {
+                    removeArchivedItemLocally(itemId)
+                    _statusMessage.value = "Moved to Bin (14 days); queue refresh failed"
+                } else {
+                    _statusMessage.value = "Moved to Bin (14 days)"
+                }
+            } else {
+                removeArchivedItemLocally(itemId)
+                _statusMessage.value = "Moved to Bin (14 days)"
+            }
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun setItemFavorited(
+        itemId: Int,
+        favorited: Boolean,
+    ): Result<Unit> {
+        val current = settings.value
+        return try {
+            repository.setFavoriteState(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                itemId = itemId,
+                favorited = favorited,
+            )
+            applyLocalFavoriteState(itemId, favorited)
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+            }
+            Result.failure(error)
+        }
+    }
+
     suspend fun undoLastArchive(): Result<ArchiveUndoOutcome> {
         val current = settings.value
         val snapshot = lastArchiveUndoSnapshot ?: return Result.failure(IllegalStateException("Nothing to undo"))
@@ -2787,6 +2858,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
         if (currentNowPlayingItemId() == itemId) {
             clearNowPlayingSessionNow()
+        }
+    }
+
+    private fun applyLocalFavoriteState(itemId: Int, favorited: Boolean) {
+        _queueItems.update { existing ->
+            existing.map { item ->
+                if (item.itemId != itemId) {
+                    item
+                } else {
+                    item.copy(isFavorited = favorited)
+                }
+            }
         }
     }
 

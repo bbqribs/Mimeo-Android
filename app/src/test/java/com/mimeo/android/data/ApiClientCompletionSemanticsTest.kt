@@ -44,6 +44,47 @@ class ApiClientCompletionSemanticsTest {
     }
 
     @Test
+    fun moveToBinUsesDeleteItemRoute() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(204))
+        server.start()
+        try {
+            val client = ApiClient(okHttpClient = OkHttpClient.Builder().followRedirects(false).build())
+            client.moveItemToBin(server.url("/").toString(), "token", 42)
+
+            val request = server.takeRequest()
+            assertEquals("DELETE", request.method)
+            assertEquals("/items/42", request.path)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun setFavoriteUsesPutFavoriteRoute() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(200))
+        server.start()
+        try {
+            val client = ApiClient(okHttpClient = OkHttpClient.Builder().followRedirects(false).build())
+            client.setFavoriteState(
+                baseUrl = server.url("/").toString(),
+                token = "token",
+                itemId = 42,
+                favorited = true,
+            )
+
+            val request = server.takeRequest()
+            val body = request.body.readUtf8()
+            assertEquals("PUT", request.method)
+            assertEquals("/items/42/favorite", request.path)
+            assertTrue(body.contains("\"favorited\":true"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun createManualTextItemSendsSourceMetadataWhenProvided() = runBlocking {
         val server = MockWebServer()
         server.enqueue(
