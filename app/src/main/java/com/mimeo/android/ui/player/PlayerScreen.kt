@@ -710,6 +710,11 @@ fun PlayerScreen(
             viewerPayload = null
             viewerPayloadItemId = -1
             viewerChunks = emptyList()
+            if (isSpeaking || isAutoPlaying) {
+                // Same-item reopen while actively playing should align the reader
+                // to the live playback highlight rather than stale manual scroll.
+                readerScrollTriggerSignal += 1
+            }
             return@LaunchedEffect
         }
         if (hasLockedPlaybackOwner) {
@@ -823,6 +828,14 @@ fun PlayerScreen(
     LaunchedEffect(compactControlsOnly) {
         if (compactControlsOnly && readerModeEnabled) {
             readerModeEnabled = false
+        }
+    }
+
+    LaunchedEffect(compactControlsOnly, isSpeaking, isAutoPlaying) {
+        if (!compactControlsOnly && (isSpeaking || isAutoPlaying)) {
+            // Entering full Locus while playback is active should bring the user
+            // to the live spoken position.
+            readerScrollTriggerSignal += 1
         }
     }
 
