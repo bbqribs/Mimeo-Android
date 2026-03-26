@@ -1178,6 +1178,7 @@ fun PlayerScreen(
                         exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(animationSpec = tween(120)),
                     ) {
                         ExpandedPlayerTopBar(
+                            title = if (currentTitle.isNotBlank()) currentTitle else "Item $locusItemId",
                             playbackSpeed = settings.playbackSpeed,
                             overflowExpanded = overflowExpanded,
                             canMarkDone = displayPayload != null,
@@ -1356,6 +1357,7 @@ fun PlayerScreen(
                                     .fillMaxWidth(),
                             ) {
                                 ExpandedPlayerTopBar(
+                                    title = if (currentTitle.isNotBlank()) currentTitle else "Item $locusItemId",
                                     playbackSpeed = settings.playbackSpeed,
                                     overflowExpanded = overflowExpanded,
                                     canMarkDone = displayPayload != null,
@@ -1583,6 +1585,7 @@ private fun PlaybackObservabilityStrip(
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun ExpandedPlayerTopBar(
+    title: String,
     playbackSpeed: Float,
     overflowExpanded: Boolean,
     canMarkDone: Boolean,
@@ -1599,7 +1602,14 @@ private fun ExpandedPlayerTopBar(
     TopAppBar(
         modifier = Modifier.height(48.dp),
         windowInsets = WindowInsets(0, 0, 0, 0),
-        title = {},
+        title = {
+            Text(
+                text = title,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.titleSmall,
+            )
+        },
         actions = {
             ActionHintTooltip(label = if (isDone) "Mark as not done" else "Mark as done") {
                 IconToggleButton(
