@@ -2,7 +2,6 @@ package com.mimeo.android.ui.player
 
 import com.mimeo.android.model.PlaybackChunk
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -46,17 +45,6 @@ class LocusSearchMatchTest {
 
         assertTrue(blankMatches.isEmpty())
         assertTrue(missMatches.isEmpty())
-    }
-
-    @Test
-    fun buildSearchPreviewIncludesMatchedContext() {
-        val chunks = listOf(chunk(index = 0, text = "One two three four five six"))
-        val match = LocusSearchMatch(chunkIndex = 0, rangeInChunk = 8 until 13)
-
-        val preview = buildLocusSearchPreview(chunks, match)
-
-        assertNotNull(preview)
-        assertTrue(preview!!.contains("three"))
     }
 
     private fun chunk(index: Int, text: String): PlaybackChunk {

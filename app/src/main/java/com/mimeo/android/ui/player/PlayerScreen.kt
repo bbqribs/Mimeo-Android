@@ -52,7 +52,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.PlainTooltip
@@ -172,24 +171,6 @@ internal fun collectLocusSearchMatches(
         }
     }
     return matches
-}
-
-internal fun buildLocusSearchPreview(
-    chunks: List<PlaybackChunk>,
-    match: LocusSearchMatch?,
-): String? {
-    val activeMatch = match ?: return null
-    val chunk = chunks.getOrNull(activeMatch.chunkIndex) ?: return null
-    val text = chunk.text
-    if (text.isBlank()) return null
-    val start = activeMatch.rangeInChunk.first.coerceIn(0, text.length)
-    val endExclusive = (activeMatch.rangeInChunk.last + 1).coerceIn(start, text.length)
-    if (start >= endExclusive) return null
-    val contextStart = (start - 24).coerceAtLeast(0)
-    val contextEnd = (endExclusive + 36).coerceAtMost(text.length)
-    val prefix = if (contextStart > 0) "..." else ""
-    val suffix = if (contextEnd < text.length) "..." else ""
-    return prefix + text.substring(contextStart, contextEnd).replace('\n', ' ') + suffix
 }
 
 enum class PlaybackOpenIntent {
@@ -950,9 +931,6 @@ fun PlayerScreen(
         collectLocusSearchMatches(displayChunks, locusSearchQuery)
     }
     val activeLocusSearchMatch = locusSearchMatches.getOrNull(locusSearchMatchIndex)
-    val locusSearchPreview = remember(displayChunks, activeLocusSearchMatch) {
-        buildLocusSearchPreview(displayChunks, activeLocusSearchMatch)
-    }
     val locusSearchSummary = when {
         locusSearchQuery.isBlank() -> null
         locusSearchMatches.isEmpty() -> "No matches"
@@ -1379,7 +1357,6 @@ fun PlayerScreen(
                             searchActive = locusSearchActive,
                             searchQuery = locusSearchQuery,
                             searchSummary = locusSearchSummary,
-                            searchPreview = locusSearchPreview,
                             onSearchToggle = { locusSearchActive = !locusSearchActive },
                             onSearchQueryChange = { locusSearchQuery = it },
                             onSearchNext = { moveLocusSearchMatch(1) },
@@ -1569,7 +1546,6 @@ fun PlayerScreen(
                                     searchActive = locusSearchActive,
                                     searchQuery = locusSearchQuery,
                                     searchSummary = locusSearchSummary,
-                                    searchPreview = locusSearchPreview,
                                     onSearchToggle = { locusSearchActive = !locusSearchActive },
                                     onSearchQueryChange = { locusSearchQuery = it },
                                     onSearchNext = { moveLocusSearchMatch(1) },
@@ -1750,7 +1726,6 @@ private fun ExpandedPlayerTopBar(
     searchActive: Boolean,
     searchQuery: String,
     searchSummary: String?,
-    searchPreview: String?,
     onSearchToggle: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSearchNext: () -> Unit,
@@ -1835,44 +1810,57 @@ private fun ExpandedPlayerTopBar(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 2.dp,
-                shadowElevation = 2.dp,
+                tonalElevation = 1.dp,
+                shadowElevation = 1.dp,
             ) {
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = onSearchQueryChange,
+                        singleLine = true,
+                        placeholder = { Text("Search this item") },
+                        textStyle = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                    )
+                    IconButton(
+                        onClick = onSearchPrevious,
+                        enabled = searchQuery.isNotBlank(),
+                        modifier = Modifier.size(32.dp),
                     ) {
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = onSearchQueryChange,
-                            singleLine = true,
-                            placeholder = { Text("Search this item") },
-                            modifier = Modifier.weight(1f),
+                        Icon(
+                            painter = painterResource(id = R.drawable.msr_chevron_right_24),
+                            contentDescription = "Previous match",
+                            modifier = Modifier
+                                .size(20.dp)
+                                .graphicsLayer { rotationZ = -90f },
                         )
-                        TextButton(onClick = onSearchPrevious, enabled = searchQuery.isNotBlank()) { Text("Prev") }
-                        TextButton(onClick = onSearchNext, enabled = searchQuery.isNotBlank()) { Text("Next") }
+                    }
+                    IconButton(
+                        onClick = onSearchNext,
+                        enabled = searchQuery.isNotBlank(),
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.msr_chevron_right_24),
+                            contentDescription = "Next match",
+                            modifier = Modifier
+                                .size(20.dp)
+                                .graphicsLayer { rotationZ = 90f },
+                        )
                     }
                     Text(
                         text = searchSummary ?: "",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (!searchPreview.isNullOrBlank()) {
-                        Text(
-                            text = searchPreview,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
                 }
             }
         }
