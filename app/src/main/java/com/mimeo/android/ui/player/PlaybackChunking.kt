@@ -67,7 +67,17 @@ internal fun buildPlaybackChunks(payload: ItemTextResponse): List<PlaybackChunk>
 }
 
 private fun normalizeChunkWhitespace(value: String): String {
-    return value.replace(Regex("\\s+"), " ").trim()
+    val normalizedNewlines = value
+        .replace("\r\n", "\n")
+        .replace('\r', '\n')
+    val normalizedLines = normalizedNewlines
+        .split('\n')
+        .joinToString("\n") { line ->
+            line.replace(Regex("[\\t\\u000B\\u000C ]+"), " ").trim()
+        }
+    return normalizedLines
+        .replace(Regex("\n{3,}"), "\n\n")
+        .trim()
 }
 
 private fun splitChunkByLength(value: String, maxChars: Int): List<String> {

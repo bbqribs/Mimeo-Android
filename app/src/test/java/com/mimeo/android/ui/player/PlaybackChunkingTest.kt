@@ -45,5 +45,28 @@ class PlaybackChunkingTest {
         assertEquals(0, chunks[0].startChar)
         assertTrue(chunks[0].text.contains("hello world"))
     }
+
+    @Test
+    fun buildPlaybackChunksPreservesParagraphBreaksFromApiChunkText() {
+        val payload = ItemTextResponse(
+            itemId = 2,
+            url = "https://example.com",
+            text = "ignored",
+            chunks = listOf(
+                ItemTextChunk(
+                    index = 0,
+                    startChar = 0,
+                    endChar = 40,
+                    text = "Para one.\n\nPara two with   extra   spaces.",
+                ),
+            ),
+        )
+
+        val chunks = buildPlaybackChunks(payload)
+
+        assertEquals(1, chunks.size)
+        assertTrue(chunks[0].text.contains("Para one.\n\nPara two"))
+        assertTrue(!chunks[0].text.contains("with   extra"))
+    }
 }
 

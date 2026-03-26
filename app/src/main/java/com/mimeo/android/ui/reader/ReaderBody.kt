@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -33,10 +34,12 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalUriHandler
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.ReaderFontOption
@@ -48,6 +51,7 @@ private val READER_SCROLL_TOP_PADDING = 0.dp
 private val READER_SCROLL_BOTTOM_PADDING = 0.dp
 private val READER_SEARCH_FOCUS_EXTRA_TOP_PADDING = 120.dp
 private const val MANUAL_SCROLL_SUPPRESS_MS = 1200L
+private const val URL_ANNOTATION_TAG = "reader-url"
 
 @Composable
 fun ReaderBody(
@@ -72,6 +76,7 @@ fun ReaderBody(
     showEmptyPlaceholder: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
+    val uriHandler = LocalUriHandler.current
     val paragraphSpacingDp = when (paragraphSpacing) {
         ParagraphSpacingOption.SMALL -> 12.dp
         ParagraphSpacingOption.MEDIUM -> 18.dp
@@ -163,45 +168,61 @@ fun ReaderBody(
                             } else {
                                 null
                             }
-                            val chunkText = if (effectiveHighlightRange != null || effectiveSearchRange != null || passiveSearchRanges.isNotEmpty()) {
-                                buildAnnotatedString {
-                                    append(chunk.text)
-                                    passiveSearchRanges.forEach { range ->
-                                        val start = range.first.coerceIn(0, chunk.text.length)
-                                        val endExclusive = (range.last + 1).coerceIn(start, chunk.text.length)
-                                        if (start < endExclusive) {
-                                            addStyle(
-                                                style = SpanStyle(
-                                                    background = searchHighlightBg,
-                                                ),
-                                                start = start,
-                                                end = endExclusive,
-                                            )
-                                        }
-                                    }
-                                    if (effectiveHighlightRange != null) {
-                                        addStyle(
-                                            style = SpanStyle(
-                                                background = highlightBg,
-                                            ),
-                                            start = effectiveHighlightRange.first,
-                                            end = (effectiveHighlightRange.last + 1).coerceAtMost(chunk.text.length),
+                            val chunkText = buildAnnotatedString {
+                                append(chunk.text)
+                                extractReaderHttpLinks(chunk.text).forEach { link ->
+                                    val start = link.start.coerceIn(0, chunk.text.length)
+                                    val endExclusive = link.endExclusive.coerceIn(start, chunk.text.length)
+                                    if (start < endExclusive) {
+                                        addStringAnnotation(
+                                            tag = URL_ANNOTATION_TAG,
+                                            annotation = link.url,
+                                            start = start,
+                                            end = endExclusive,
                                         )
-                                    }
-                                    if (effectiveSearchRange != null) {
                                         addStyle(
                                             style = SpanStyle(
-                                                background = searchActiveHighlightBg,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                textDecoration = TextDecoration.Underline,
                                             ),
-                                            start = effectiveSearchRange.first,
-                                            end = (effectiveSearchRange.last + 1).coerceAtMost(chunk.text.length),
+                                            start = start,
+                                            end = endExclusive,
                                         )
                                     }
                                 }
-                            } else {
-                                buildAnnotatedString { append(chunk.text) }
+                                passiveSearchRanges.forEach { range ->
+                                    val start = range.first.coerceIn(0, chunk.text.length)
+                                    val endExclusive = (range.last + 1).coerceIn(start, chunk.text.length)
+                                    if (start < endExclusive) {
+                                        addStyle(
+                                            style = SpanStyle(
+                                                background = searchHighlightBg,
+                                            ),
+                                            start = start,
+                                            end = endExclusive,
+                                        )
+                                    }
+                                }
+                                if (effectiveHighlightRange != null) {
+                                    addStyle(
+                                        style = SpanStyle(
+                                            background = highlightBg,
+                                        ),
+                                        start = effectiveHighlightRange.first,
+                                        end = (effectiveHighlightRange.last + 1).coerceAtMost(chunk.text.length),
+                                    )
+                                }
+                                if (effectiveSearchRange != null) {
+                                    addStyle(
+                                        style = SpanStyle(
+                                            background = searchActiveHighlightBg,
+                                        ),
+                                        start = effectiveSearchRange.first,
+                                        end = (effectiveSearchRange.last + 1).coerceAtMost(chunk.text.length),
+                                    )
+                                }
                             }
-                            Text(
+                            ClickableText(
                                 text = chunkText,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -231,6 +252,16 @@ fun ReaderBody(
                                     }
                                     if (isSearchFocused) {
                                         searchTextLayout = layout
+                                    }
+                                },
+                                onClick = { offset ->
+                                    val url = chunkText.getStringAnnotations(
+                                        tag = URL_ANNOTATION_TAG,
+                                        start = offset,
+                                        end = offset,
+                                    ).firstOrNull()?.item
+                                    if (!url.isNullOrBlank()) {
+                                        runCatching { uriHandler.openUri(url) }
                                     }
                                 },
                             )
