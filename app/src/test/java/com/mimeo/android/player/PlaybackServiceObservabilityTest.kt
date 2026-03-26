@@ -60,25 +60,6 @@ class PlaybackServiceObservabilityTest {
     }
 
     @Test
-    fun `drift clues include loaded item without focus`() {
-        val clues = detectPlaybackDriftClues(
-            PlaybackAuditState(
-                itemId = 77,
-                isPlaying = false,
-                hasAudioFocus = false,
-                mediaSessionActive = true,
-                isForeground = true,
-                anchorPlaying = false,
-                isDeviceInteractive = true,
-                isDeviceLocked = false,
-                appInBackground = false,
-            ),
-        )
-
-        assertTrue(clues.contains("loaded-item-without-focus"))
-    }
-
-    @Test
     fun `heartbeat emits only after interval`() {
         assertTrue(shouldEmitAuditHeartbeat(nowMs = 10_000, lastHeartbeatMs = null, intervalMs = 1_000))
         assertFalse(shouldEmitAuditHeartbeat(nowMs = 10_200, lastHeartbeatMs = 10_000, intervalMs = 1_000))

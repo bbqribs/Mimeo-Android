@@ -23,7 +23,6 @@ internal fun detectPlaybackDriftClues(state: PlaybackAuditState): List<String> {
     if (state.itemId == null && state.mediaSessionActive) clues += "session-active-without-item"
     if (state.itemId == null && state.hasAudioFocus) clues += "focus-without-item"
     if (state.itemId == null && state.isForeground) clues += "foreground-without-item"
-    if (state.itemId != null && !state.hasAudioFocus) clues += "loaded-item-without-focus"
     if (state.itemId != null && state.isPlaying && !state.mediaSessionActive) clues += "playing-with-inactive-session"
     if (state.itemId != null && state.isPlaying && !state.isForeground) clues += "playing-without-foreground-service"
     if (state.anchorPlaying && !state.hasAudioFocus) clues += "anchor-playing-without-focus"
