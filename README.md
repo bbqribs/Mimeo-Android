@@ -56,6 +56,11 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 
 ## Share-sheet save behavior
 - Share-save runs through an off-screen receiver (`ACTION_SEND`) and reports results via notifications.
+- Excerpt/plain-text shares emit structured source metadata (`source_type`, `source_label`, `source_url`, `capture_kind`, optional `source_app_package`) so source rendering is metadata-driven.
+- Share handling separates provenance/origin/content:
+  - inline links in selected text remain content,
+  - provenance URL is used only for trusted browser-marked selection patterns,
+  - source display precedence is `provenance -> origin app -> Android selection`.
 - Save destination follows Settings `Default playlist`:
   - `null` -> Smart queue
   - playlist id -> that named playlist
