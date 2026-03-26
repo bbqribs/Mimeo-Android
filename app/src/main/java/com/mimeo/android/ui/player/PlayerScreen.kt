@@ -270,14 +270,6 @@ internal fun shouldAcceptDoneEventChunk(eventChunkIndex: Int, currentChunkIndex:
     return eventChunkIndex == TITLE_INTRO_CHUNK_INDEX || eventChunkIndex == currentChunkIndex
 }
 
-internal fun normalizeTopBarTitleForDisplay(title: String): String {
-    val trimmed = title.trim()
-    if (trimmed.isBlank()) return ""
-    val withoutLeadingQuotes = trimmed.trimStart('"', '\'', '“', '”')
-    val candidate = withoutLeadingQuotes.ifBlank { trimmed }
-    return if (candidate.all { !it.isLetterOrDigit() }) "" else candidate
-}
-
 internal fun shouldPlayEndOfArticleCompletionCue(enabled: Boolean): Boolean {
     return enabled
 }
@@ -1752,20 +1744,12 @@ private fun ExpandedPlayerTopBar(
     onOverflowExpandedChange: (Boolean) -> Unit,
     overflowMenuContent: @Composable () -> Unit,
 ) {
-    val displayTitle = remember(title) { normalizeTopBarTitleForDisplay(title) }
     Column(modifier = Modifier.fillMaxWidth()) {
         AnimatedVisibility(visible = showTopBar) {
             TopAppBar(
                 modifier = Modifier.height(48.dp),
                 windowInsets = WindowInsets(0, 0, 0, 0),
-                title = {
-                    Text(
-                        text = displayTitle,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                },
+                title = {},
                 actions = {
                     ActionHintTooltip(label = if (isDone) "Mark as not done" else "Mark as done") {
                         IconToggleButton(
