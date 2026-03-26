@@ -46,6 +46,7 @@ import kotlin.math.roundToInt
 
 private val READER_SCROLL_TOP_PADDING = 0.dp
 private val READER_SCROLL_BOTTOM_PADDING = 0.dp
+private val READER_SEARCH_FOCUS_EXTRA_TOP_PADDING = 56.dp
 private const val MANUAL_SCROLL_SUPPRESS_MS = 1200L
 
 @Composable
@@ -114,6 +115,7 @@ fun ReaderBody(
     val density = androidx.compose.ui.platform.LocalDensity.current
     val topComfortPx = with(density) { READER_SCROLL_TOP_PADDING.roundToPx().toFloat() }
     val bottomComfortPx = with(density) { READER_SCROLL_BOTTOM_PADDING.roundToPx().toFloat() }
+    val searchFocusExtraTopPx = with(density) { READER_SEARCH_FOCUS_EXTRA_TOP_PADDING.roundToPx().toFloat() }
     val anchorRange = resolveReaderHighlightRange(
         textLength = chunks.getOrNull(safeChunkIndex)?.text?.length ?: 0,
         activeRange = activeRangeInChunk,
@@ -290,7 +292,7 @@ fun ReaderBody(
 
         val startBox = layout.getCursorRect(range.first)
         val startTopInRoot = chunkTopInRoot + startBox.top
-        val desiredAnchorInRoot = viewportTopInRoot + topComfortPx
+        val desiredAnchorInRoot = viewportTopInRoot + topComfortPx + searchFocusExtraTopPx
         val delta = startTopInRoot - desiredAnchorInRoot
         val target = (scrollState.value + delta).roundToInt().coerceIn(0, scrollState.maxValue)
         isProgrammaticScroll = true

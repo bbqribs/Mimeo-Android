@@ -48,6 +48,7 @@ import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -171,6 +172,24 @@ internal fun collectLocusSearchMatches(
         }
     }
     return matches
+}
+
+internal fun buildLocusSearchPreview(
+    chunks: List<PlaybackChunk>,
+    match: LocusSearchMatch?,
+): String? {
+    val activeMatch = match ?: return null
+    val chunk = chunks.getOrNull(activeMatch.chunkIndex) ?: return null
+    val text = chunk.text
+    if (text.isBlank()) return null
+    val start = activeMatch.rangeInChunk.first.coerceIn(0, text.length)
+    val endExclusive = (activeMatch.rangeInChunk.last + 1).coerceIn(start, text.length)
+    if (start >= endExclusive) return null
+    val contextStart = (start - 24).coerceAtLeast(0)
+    val contextEnd = (endExclusive + 36).coerceAtMost(text.length)
+    val prefix = if (contextStart > 0) "..." else ""
+    val suffix = if (contextEnd < text.length) "..." else ""
+    return prefix + text.substring(contextStart, contextEnd).replace('\n', ' ') + suffix
 }
 
 enum class PlaybackOpenIntent {
@@ -931,6 +950,9 @@ fun PlayerScreen(
         collectLocusSearchMatches(displayChunks, locusSearchQuery)
     }
     val activeLocusSearchMatch = locusSearchMatches.getOrNull(locusSearchMatchIndex)
+    val locusSearchPreview = remember(displayChunks, activeLocusSearchMatch) {
+        buildLocusSearchPreview(displayChunks, activeLocusSearchMatch)
+    }
     val locusSearchSummary = when {
         locusSearchQuery.isBlank() -> null
         locusSearchMatches.isEmpty() -> "No matches"
@@ -1357,6 +1379,7 @@ fun PlayerScreen(
                             searchActive = locusSearchActive,
                             searchQuery = locusSearchQuery,
                             searchSummary = locusSearchSummary,
+                            searchPreview = locusSearchPreview,
                             onSearchToggle = { locusSearchActive = !locusSearchActive },
                             onSearchQueryChange = { locusSearchQuery = it },
                             onSearchNext = { moveLocusSearchMatch(1) },
@@ -1546,6 +1569,7 @@ fun PlayerScreen(
                                     searchActive = locusSearchActive,
                                     searchQuery = locusSearchQuery,
                                     searchSummary = locusSearchSummary,
+                                    searchPreview = locusSearchPreview,
                                     onSearchToggle = { locusSearchActive = !locusSearchActive },
                                     onSearchQueryChange = { locusSearchQuery = it },
                                     onSearchNext = { moveLocusSearchMatch(1) },
@@ -1726,6 +1750,7 @@ private fun ExpandedPlayerTopBar(
     searchActive: Boolean,
     searchQuery: String,
     searchSummary: String?,
+    searchPreview: String?,
     onSearchToggle: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSearchNext: () -> Unit,
@@ -1807,27 +1832,48 @@ private fun ExpandedPlayerTopBar(
             },
         )
         AnimatedVisibility(visible = searchActive) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 2.dp,
+                shadowElevation = 2.dp,
             ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = onSearchQueryChange,
-                    singleLine = true,
-                    placeholder = { Text("Search this item") },
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = onSearchPrevious, enabled = searchQuery.isNotBlank()) { Text("Prev") }
-                TextButton(onClick = onSearchNext, enabled = searchQuery.isNotBlank()) { Text("Next") }
-                Text(
-                    text = searchSummary ?: "",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = onSearchQueryChange,
+                            singleLine = true,
+                            placeholder = { Text("Search this item") },
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = onSearchPrevious, enabled = searchQuery.isNotBlank()) { Text("Prev") }
+                        TextButton(onClick = onSearchNext, enabled = searchQuery.isNotBlank()) { Text("Next") }
+                    }
+                    Text(
+                        text = searchSummary ?: "",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (!searchPreview.isNullOrBlank()) {
+                        Text(
+                            text = searchPreview,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
         }
     }
