@@ -1833,7 +1833,9 @@ private fun ExpandedPlayerTopBar(
                         singleLine = true,
                         placeholder = { Text("Search this item") },
                         textStyle = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
                     )
                     IconButton(
                         onClick = onSearchPrevious,
