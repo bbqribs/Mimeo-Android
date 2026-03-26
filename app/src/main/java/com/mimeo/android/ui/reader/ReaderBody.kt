@@ -35,6 +35,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -52,6 +53,7 @@ private val READER_SCROLL_BOTTOM_PADDING = 0.dp
 private val READER_SEARCH_FOCUS_EXTRA_TOP_PADDING = 120.dp
 private const val MANUAL_SCROLL_SUPPRESS_MS = 1200L
 private const val URL_ANNOTATION_TAG = "reader-url"
+private val READER_LINK_BLUE = Color(0xFF64B5F6)
 
 @Composable
 fun ReaderBody(
@@ -117,6 +119,7 @@ fun ReaderBody(
             fontFamily = readingFontOption.toFontFamily(),
             fontSize = readingFontSizeSp.sp,
             lineHeight = (readingFontSizeSp * (readingLineHeightPercent / 100f)).sp,
+            color = MaterialTheme.colorScheme.onSurface,
         ),
     )
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -182,7 +185,7 @@ fun ReaderBody(
                                         )
                                         addStyle(
                                             style = SpanStyle(
-                                                color = MaterialTheme.colorScheme.primary,
+                                                color = READER_LINK_BLUE,
                                                 textDecoration = TextDecoration.Underline,
                                             ),
                                             start = start,
