@@ -46,6 +46,7 @@ import kotlin.math.roundToInt
 
 private val READER_SCROLL_TOP_PADDING = 0.dp
 private val READER_SCROLL_BOTTOM_PADDING = 0.dp
+private val READER_SEARCH_FOCUS_EXTRA_TOP_PADDING = 120.dp
 private const val MANUAL_SCROLL_SUPPRESS_MS = 1200L
 
 @Composable
@@ -55,6 +56,10 @@ fun ReaderBody(
     currentChunkIndex: Int,
     currentChunkOffsetInChars: Int,
     activeRangeInChunk: IntRange?,
+    searchHighlightRangesByChunk: Map<Int, List<IntRange>>,
+    searchFocusChunkIndex: Int?,
+    searchFocusRangeInChunk: IntRange?,
+    searchFocusTriggerSignal: Int,
     scrollTriggerSignal: Int,
     autoScrollWhileListening: Boolean,
     readingFontSizeSp: Int,
@@ -74,6 +79,8 @@ fun ReaderBody(
     }
     val safeChunkIndex = currentChunkIndex.coerceIn(0, (chunks.lastIndex).coerceAtLeast(0))
     val highlightBg = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+    val searchHighlightBg = MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
+    val searchActiveHighlightBg = MaterialTheme.colorScheme.secondary.copy(alpha = 0.40f)
     val sentenceRangesByChunk = remember(chunks) {
         chunks.map { segmentSentences(it.text) }
     }
@@ -81,6 +88,9 @@ fun ReaderBody(
     var viewportTopInRootPx by remember { mutableStateOf<Float?>(null) }
     var activeTextLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
     var activeChunkTopInRootPx by remember { mutableStateOf<Float?>(null) }
+    var searchTextLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    var searchChunkTopInRootPx by remember { mutableStateOf<Float?>(null) }
+    var lastHandledSearchTrigger by remember { mutableIntStateOf(searchFocusTriggerSignal) }
     var lastAnchorRange by remember { mutableStateOf<IntRange?>(null) }
     var lastAnchorWasFullyVisible by remember { mutableStateOf<Boolean?>(null) }
     var lastHandledScrollTrigger by remember { mutableIntStateOf(scrollTriggerSignal) }
@@ -107,6 +117,7 @@ fun ReaderBody(
     val density = androidx.compose.ui.platform.LocalDensity.current
     val topComfortPx = with(density) { READER_SCROLL_TOP_PADDING.roundToPx().toFloat() }
     val bottomComfortPx = with(density) { READER_SCROLL_BOTTOM_PADDING.roundToPx().toFloat() }
+    val searchFocusExtraTopPx = with(density) { READER_SEARCH_FOCUS_EXTRA_TOP_PADDING.roundToPx().toFloat() }
     val anchorRange = resolveReaderHighlightRange(
         textLength = chunks.getOrNull(safeChunkIndex)?.text?.length ?: 0,
         activeRange = activeRangeInChunk,
@@ -132,6 +143,8 @@ fun ReaderBody(
                     ) {
                         chunks.forEachIndexed { index, chunk ->
                             val isHighlighted = index == safeChunkIndex
+                            val isSearchFocused = searchFocusChunkIndex == index
+                            val passiveSearchRanges = searchHighlightRangesByChunk[index].orEmpty()
                             val effectiveHighlightRange = if (isHighlighted) {
                                 resolveReaderHighlightRange(
                                     textLength = chunk.text.length,
@@ -141,16 +154,49 @@ fun ReaderBody(
                             } else {
                                 null
                             }
-                            val chunkText = if (effectiveHighlightRange != null) {
+                            val effectiveSearchRange = if (isSearchFocused) {
+                                resolveReaderHighlightRange(
+                                    textLength = chunk.text.length,
+                                    activeRange = searchFocusRangeInChunk,
+                                    sentenceRange = null,
+                                )
+                            } else {
+                                null
+                            }
+                            val chunkText = if (effectiveHighlightRange != null || effectiveSearchRange != null || passiveSearchRanges.isNotEmpty()) {
                                 buildAnnotatedString {
                                     append(chunk.text)
-                                    addStyle(
-                                        style = SpanStyle(
-                                            background = highlightBg,
-                                        ),
-                                        start = effectiveHighlightRange.first,
-                                        end = (effectiveHighlightRange.last + 1).coerceAtMost(chunk.text.length),
-                                    )
+                                    passiveSearchRanges.forEach { range ->
+                                        val start = range.first.coerceIn(0, chunk.text.length)
+                                        val endExclusive = (range.last + 1).coerceIn(start, chunk.text.length)
+                                        if (start < endExclusive) {
+                                            addStyle(
+                                                style = SpanStyle(
+                                                    background = searchHighlightBg,
+                                                ),
+                                                start = start,
+                                                end = endExclusive,
+                                            )
+                                        }
+                                    }
+                                    if (effectiveHighlightRange != null) {
+                                        addStyle(
+                                            style = SpanStyle(
+                                                background = highlightBg,
+                                            ),
+                                            start = effectiveHighlightRange.first,
+                                            end = (effectiveHighlightRange.last + 1).coerceAtMost(chunk.text.length),
+                                        )
+                                    }
+                                    if (effectiveSearchRange != null) {
+                                        addStyle(
+                                            style = SpanStyle(
+                                                background = searchActiveHighlightBg,
+                                            ),
+                                            start = effectiveSearchRange.first,
+                                            end = (effectiveSearchRange.last + 1).coerceAtMost(chunk.text.length),
+                                        )
+                                    }
                                 }
                             } else {
                                 buildAnnotatedString { append(chunk.text) }
@@ -160,9 +206,14 @@ fun ReaderBody(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .let { base ->
-                                        if (isHighlighted) {
+                                        if (isHighlighted || isSearchFocused) {
                                             base.onGloballyPositioned { coordinates ->
-                                                activeChunkTopInRootPx = coordinates.positionInRoot().y
+                                                if (isHighlighted) {
+                                                    activeChunkTopInRootPx = coordinates.positionInRoot().y
+                                                }
+                                                if (isSearchFocused) {
+                                                    searchChunkTopInRootPx = coordinates.positionInRoot().y
+                                                }
                                             }
                                         } else {
                                             base
@@ -177,6 +228,9 @@ fun ReaderBody(
                                 onTextLayout = { layout ->
                                     if (isHighlighted) {
                                         activeTextLayout = layout
+                                    }
+                                    if (isSearchFocused) {
+                                        searchTextLayout = layout
                                     }
                                 },
                             )
@@ -233,6 +287,34 @@ fun ReaderBody(
                     endBottomInRoot <= (visibleBottomInRoot - bottomComfortPx)
                 lastAnchorWasFullyVisible = fullyVisible
             }
+    }
+
+    LaunchedEffect(
+        searchFocusTriggerSignal,
+        searchFocusChunkIndex,
+        searchFocusRangeInChunk,
+        searchTextLayout,
+        searchChunkTopInRootPx,
+        viewportTopInRootPx,
+        viewportSize,
+        scrollState.maxValue,
+    ) {
+        if (searchFocusTriggerSignal == lastHandledSearchTrigger) return@LaunchedEffect
+        val range = searchFocusRangeInChunk ?: return@LaunchedEffect
+        val layout = searchTextLayout ?: return@LaunchedEffect
+        val chunkTopInRoot = searchChunkTopInRootPx ?: return@LaunchedEffect
+        val viewportTopInRoot = viewportTopInRootPx ?: return@LaunchedEffect
+        if (viewportSize.height <= 0) return@LaunchedEffect
+
+        val startBox = layout.getCursorRect(range.first)
+        val startTopInRoot = chunkTopInRoot + startBox.top
+        val desiredAnchorInRoot = viewportTopInRoot + topComfortPx + searchFocusExtraTopPx
+        val delta = startTopInRoot - desiredAnchorInRoot
+        val target = (scrollState.value + delta).roundToInt().coerceIn(0, scrollState.maxValue)
+        isProgrammaticScroll = true
+        scrollState.scrollTo(target)
+        isProgrammaticScroll = false
+        lastHandledSearchTrigger = searchFocusTriggerSignal
     }
 
     LaunchedEffect(
