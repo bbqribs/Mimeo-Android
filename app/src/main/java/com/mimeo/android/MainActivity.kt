@@ -3782,6 +3782,8 @@ private fun MimeoApp(vm: AppViewModel) {
     var playerOpenRequestSignal by rememberSaveable { mutableIntStateOf(0) }
     val presentingLocus = isOnLocusRoute
     val compactControlsOnly = !isOnLocusRoute
+    val bottomNavVisible = !requiresSignIn && !(presentingLocus && readerChromeHidden)
+    val bottomNavClearance = if (bottomNavVisible) 68.dp else 0.dp
     var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
     val nowPlayingPresentation = nowPlayingCapturePresentation(nowPlayingSession?.currentItem)
     val nowPlayingStripTitle = nowPlayingPresentation.title.ifBlank { "No active playback" }
@@ -4107,9 +4109,12 @@ private fun MimeoApp(vm: AppViewModel) {
                             modifier = if (compactControlsOnly) {
                                 Modifier
                                     .align(Alignment.BottomCenter)
+                                    .padding(bottom = bottomNavClearance)
                                     .fillMaxWidth()
                             } else {
-                                Modifier.fillMaxSize()
+                                Modifier
+                                    .fillMaxSize()
+                                    .padding(bottom = bottomNavClearance)
                             },
                         )
                     }
@@ -4125,7 +4130,7 @@ private fun MimeoApp(vm: AppViewModel) {
             )
 
             AnimatedVisibility(
-                visible = !requiresSignIn && !(presentingLocus && readerChromeHidden),
+                visible = bottomNavVisible,
                 enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(150)),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
                 modifier = Modifier.align(Alignment.BottomCenter),
