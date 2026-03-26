@@ -3856,7 +3856,7 @@ private fun MimeoApp(vm: AppViewModel) {
                         }
                     }
 
-                    if (!requiresSignIn && requestedPlayerItemId != null && !(pendingLocusOpen && !isOnLocusRoute)) {
+                    if (!requiresSignIn && requestedPlayerItemId != null) {
                         PlayerScreen(
                             vm = vm,
                             onShowSnackbar = { message, actionLabel, actionKey ->
