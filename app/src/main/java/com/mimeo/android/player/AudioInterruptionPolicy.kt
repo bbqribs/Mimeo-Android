@@ -30,10 +30,10 @@ internal class AudioInterruptionPolicy {
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                 // Navigation prompts commonly come through this path. For TTS we pause
-                // and release focus so the other speaker path can run immediately.
-                // Auto-resume on gain only if we were actively playing at interruption.
+                // (no ducking) and keep focus lifecycle intact so transient gain can
+                // reliably auto-resume when appropriate.
                 resumeAfterTransientGain = isCurrentlyPlaying
-                AudioInterruptionAction.PauseReleaseFocus
+                AudioInterruptionAction.PauseKeepFocus
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
                 val shouldResume = resumeAfterTransientGain && hasLoadedItem && !isCurrentlyPlaying

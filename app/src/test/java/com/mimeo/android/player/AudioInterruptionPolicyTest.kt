@@ -77,7 +77,7 @@ class AudioInterruptionPolicyTest {
     }
 
     @Test
-    fun `ducking interruption is treated as pause instead of duck`() {
+    fun `ducking interruption is treated as pause keep focus instead of duck`() {
         val policy = AudioInterruptionPolicy()
 
         val action = policy.onAudioFocusChange(
@@ -86,7 +86,7 @@ class AudioInterruptionPolicyTest {
             hasLoadedItem = true,
         )
 
-        assertEquals(AudioInterruptionAction.PauseReleaseFocus, action)
+        assertEquals(AudioInterruptionAction.PauseKeepFocus, action)
     }
 
     @Test
