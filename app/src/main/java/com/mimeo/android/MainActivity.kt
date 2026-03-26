@@ -3908,41 +3908,6 @@ private fun MimeoApp(vm: AppViewModel) {
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        bottomBar = {
-            AnimatedVisibility(
-                visible = !requiresSignIn && !(presentingLocus && readerChromeHidden),
-                enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(150)),
-                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
-            ) {
-                NavigationBar(
-                    modifier = Modifier.height(68.dp),
-                    tonalElevation = 0.dp,
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                ) {
-                    navItems.forEach { destination ->
-                        NavigationBarItem(
-                            selected = selectedTab == destination.route,
-                            onClick = {
-                                if (destination.route == ROUTE_LOCUS) {
-                                    locusTabTapSignal += 1
-                                }
-                                nav.navigate(destination.route) { launchSingleTop = true }
-                            },
-                            label = { Text(destination.label) },
-                            icon = {},
-                            alwaysShowLabel = true,
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.36f),
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            ),
-                        )
-                    }
-                }
-            }
-        },
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -4158,6 +4123,41 @@ private fun MimeoApp(vm: AppViewModel) {
                     .windowInsetsPadding(WindowInsets.ime)
                     .padding(bottom = if (presentingLocus && readerChromeHidden) 12.dp else 76.dp),
             )
+
+            AnimatedVisibility(
+                visible = !requiresSignIn && !(presentingLocus && readerChromeHidden),
+                enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(150)),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
+                modifier = Modifier.align(Alignment.BottomCenter),
+            ) {
+                NavigationBar(
+                    modifier = Modifier.height(68.dp),
+                    tonalElevation = 0.dp,
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                ) {
+                    navItems.forEach { destination ->
+                        NavigationBarItem(
+                            selected = selectedTab == destination.route,
+                            onClick = {
+                                if (destination.route == ROUTE_LOCUS) {
+                                    locusTabTapSignal += 1
+                                }
+                                nav.navigate(destination.route) { launchSingleTop = true }
+                            },
+                            label = { Text(destination.label) },
+                            icon = {},
+                            alwaysShowLabel = true,
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.36f),
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                        )
+                    }
+                }
+            }
         }
     }
 }
