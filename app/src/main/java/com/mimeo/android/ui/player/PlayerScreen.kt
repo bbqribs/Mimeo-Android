@@ -1615,6 +1615,13 @@ fun PlayerScreen(
                                 selectionResetSignal = readerSelectionResetSignal,
                                 scrollState = readerScrollState,
                                 showEmptyPlaceholder = transitionSettled && !isLoading,
+                                onNonLinkTap = {
+                                    if (textToolbar.status == TextToolbarStatus.Shown || selectionClearArmed) {
+                                        clearActiveSelection()
+                                    } else {
+                                        toggleReaderMode()
+                                    }
+                                },
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .graphicsLayer { alpha = bodyContentAlpha },

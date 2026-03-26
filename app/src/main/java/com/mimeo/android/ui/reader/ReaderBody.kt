@@ -76,6 +76,7 @@ fun ReaderBody(
     selectionResetSignal: Int,
     scrollState: ScrollState,
     showEmptyPlaceholder: Boolean = true,
+    onNonLinkTap: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val uriHandler = LocalUriHandler.current
@@ -265,6 +266,8 @@ fun ReaderBody(
                                     ).firstOrNull()?.item
                                     if (!url.isNullOrBlank()) {
                                         runCatching { uriHandler.openUri(url) }
+                                    } else {
+                                        onNonLinkTap?.invoke()
                                     }
                                 },
                             )
