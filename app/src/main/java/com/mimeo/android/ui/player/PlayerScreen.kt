@@ -434,6 +434,7 @@ fun PlayerScreen(
     var textPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
     var viewerOverrideItemId by rememberSaveable { mutableIntStateOf(-1) }
     var viewerPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
+    var viewerPayloadItemId by rememberSaveable { mutableIntStateOf(-1) }
     var viewerChunks by remember { mutableStateOf<List<PlaybackChunk>>(emptyList()) }
     var usingCachedText by remember { mutableStateOf(false) }
     var chunks by remember { mutableStateOf<List<PlaybackChunk>>(emptyList()) }
@@ -466,6 +467,7 @@ fun PlayerScreen(
     val queueOffline by vm.queueOffline.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val settings by vm.settings.collectAsState()
+    val queueItems by vm.queueItems.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val hasLockedPlaybackOwner =
@@ -475,7 +477,10 @@ fun PlayerScreen(
                     isSpeaking ||
                     isAutoPlaying
                 )
-    val previewModeActive = viewerOverrideItemId > 0
+    val previewRouteItemId =
+        requestedItemId?.takeIf { hasLockedPlaybackOwner && it != currentItemId }
+    val previewItemId = previewRouteItemId ?: viewerOverrideItemId.takeIf { it > 0 }
+    val previewModeActive = previewItemId != null
     val waitingForRequestedItem =
         requestedItemId != null &&
             requestedItemId != currentItemId &&
@@ -638,6 +643,7 @@ fun PlayerScreen(
             if (viewerOverrideItemId <= 0 || viewerOverrideItemId == currentItemId) {
                 viewerOverrideItemId = -1
                 viewerPayload = null
+                viewerPayloadItemId = -1
                 viewerChunks = emptyList()
             }
             return@LaunchedEffect
@@ -648,12 +654,14 @@ fun PlayerScreen(
             )
             viewerOverrideItemId = target
             viewerPayload = null
+            viewerPayloadItemId = -1
             viewerChunks = emptyList()
             isLoading = true
             bodyRevealReady = false
             vm.fetchItemText(target)
                 .onSuccess { loaded ->
                     viewerPayload = loaded.payload
+                    viewerPayloadItemId = target
                     viewerChunks = buildPlaybackChunks(loaded.payload)
                 }
                 .onFailure { err ->
@@ -669,6 +677,7 @@ fun PlayerScreen(
         )
         viewerOverrideItemId = -1
         viewerPayload = null
+        viewerPayloadItemId = -1
         viewerChunks = emptyList()
         stopSpeaking(forceSync = true)
         // Clear current body immediately so the previously viewed article cannot flash
@@ -709,6 +718,7 @@ fun PlayerScreen(
         if (viewerOverrideItemId > 0 && currentItemId > 0) {
             viewerOverrideItemId = -1
             viewerPayload = null
+            viewerPayloadItemId = -1
             viewerChunks = emptyList()
             onOpenItem(currentItemId)
             return@LaunchedEffect
@@ -865,10 +875,25 @@ fun PlayerScreen(
     val safePosition = normalizedPosition(currentPosition)
     val totalChars = totalCharsForPercent()
     val currentPercent = calculateCanonicalPercent(totalChars, chunks, safePosition)
-    val displayPayload = viewerPayload ?: textPayload
-    val displayChunks = if (previewModeActive) viewerChunks else chunks
+    val locusItemId = previewItemId ?: requestedItemId ?: currentItemId
+    val previewPayloadForItem = viewerPayload.takeIf { viewerPayloadItemId == previewItemId }
+    val displayPayload = if (previewModeActive) previewPayloadForItem else textPayload
+    val displayChunks = when {
+        previewModeActive && viewerPayloadItemId == previewItemId -> viewerChunks
+        previewModeActive -> emptyList()
+        else -> chunks
+    }
     val capturePresentation = locusCapturePresentation(displayPayload)
-    val currentTitle = capturePresentation.title.ifBlank { displayPayload?.url.orEmpty() }
+    val queuedPreviewTitle = queueItems.firstOrNull { it.itemId == locusItemId }?.title.orEmpty()
+    val currentTitle = when {
+        previewModeActive -> {
+            queuedPreviewTitle
+                .ifBlank { capturePresentation.title }
+                .ifBlank { displayPayload?.url.orEmpty() }
+                .ifBlank { "Item $locusItemId" }
+        }
+        else -> capturePresentation.title.ifBlank { displayPayload?.url.orEmpty() }
+    }
     val currentSourceLabel = capturePresentation.sourceLabel
     val chunkLabel = if (previewModeActive) {
         "Previewing item while playback continues"
@@ -974,19 +999,19 @@ fun PlayerScreen(
         val nextIndex = currentIndex + 1
         return session.items.getOrNull(nextIndex)?.itemId
     }
-    val locusItemId = viewerOverrideItemId.takeIf { it > 0 } ?: requestedItemId ?: currentItemId
     fun playLocusItem() {
         if (locusItemId <= 0) return
         if (locusItemId != currentItemId) {
             val previewPayload = viewerPayload
             val previewChunks = viewerChunks
-            if (previewPayload != null && viewerOverrideItemId == locusItemId) {
+            if (previewPayload != null && viewerPayloadItemId == locusItemId) {
                 textPayload = previewPayload
                 chunks = previewChunks
                 preserveVisibleContentOnReload = true
             }
             viewerOverrideItemId = -1
             viewerPayload = null
+            viewerPayloadItemId = -1
             viewerChunks = emptyList()
             vm.playbackOpenItem(
                 itemId = locusItemId,
