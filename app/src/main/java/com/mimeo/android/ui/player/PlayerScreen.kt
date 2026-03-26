@@ -105,6 +105,7 @@ import com.mimeo.android.player.TtsChunkDoneEvent
 import com.mimeo.android.player.TtsChunkProgressEvent
 import com.mimeo.android.player.TITLE_INTRO_CHUNK_INDEX
 import com.mimeo.android.player.TtsController
+import com.mimeo.android.ui.common.locusCapturePresentation
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
@@ -431,6 +432,11 @@ fun PlayerScreen(
     var resolvedInitial by rememberSaveable(initialItemId) { mutableStateOf(false) }
     val reloadNonce = engineState.reloadNonce
     var textPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
+    var viewerOverrideItemId by rememberSaveable { mutableIntStateOf(-1) }
+    var viewerOverrideTitle by rememberSaveable { mutableStateOf("") }
+    var viewerPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
+    var viewerPayloadItemId by rememberSaveable { mutableIntStateOf(-1) }
+    var viewerChunks by remember { mutableStateOf<List<PlaybackChunk>>(emptyList()) }
     var usingCachedText by remember { mutableStateOf(false) }
     var chunks by remember { mutableStateOf<List<PlaybackChunk>>(emptyList()) }
     var uiMessage by remember { mutableStateOf<String?>(null) }
@@ -462,11 +468,25 @@ fun PlayerScreen(
     val queueOffline by vm.queueOffline.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val settings by vm.settings.collectAsState()
+    val queueItems by vm.queueItems.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
+    val hasLockedPlaybackOwner =
+        currentItemId > 0 &&
+            (
+                engineState.hasStartedPlaybackForCurrentItem ||
+                    isSpeaking ||
+                    isAutoPlaying
+                )
+    val previewRouteItemId =
+        requestedItemId?.takeIf { hasLockedPlaybackOwner && it != currentItemId }
+    val previewItemId = previewRouteItemId ?: viewerOverrideItemId.takeIf { it > 0 }
+    val previewModeActive = previewItemId != null
     val waitingForRequestedItem =
         requestedItemId != null &&
-            requestedItemId != currentItemId
+            requestedItemId != currentItemId &&
+            !previewModeActive &&
+            previewRouteItemId == null
     val hasStalePayloadForCurrentItem =
         textPayload?.itemId?.let { it != currentItemId } == true
     val transitionSettled = !waitingForRequestedItem && !hasStalePayloadForCurrentItem && bodyRevealReady
@@ -579,6 +599,14 @@ fun PlayerScreen(
     LaunchedEffect(initialItemId, requestedItemId) {
         if (resolvedInitial) return@LaunchedEffect
         val resolvedId = requestedItemId ?: vm.resolveInitialPlayerItemId(initialItemId)
+        if (hasLockedPlaybackOwner && resolvedId != currentItemId) {
+            continuationLog(
+                "initialResolve previewOnly resolved=$resolvedId current=$currentItemId " +
+                    "speaking=$isSpeaking auto=$isAutoPlaying",
+            )
+            resolvedInitial = true
+            return@LaunchedEffect
+        }
         val attachToActiveSession = shouldSkipInitialReopen(
             resolvedItemId = resolvedId,
             currentItemId = currentItemId,
@@ -613,10 +641,43 @@ fun PlayerScreen(
     LaunchedEffect(requestedItemId, resolvedInitial) {
         if (!resolvedInitial) return@LaunchedEffect
         val target = requestedItemId ?: return@LaunchedEffect
-        if (target == currentItemId) return@LaunchedEffect
+        if (target == currentItemId) {
+            viewerOverrideItemId = -1
+            viewerOverrideTitle = ""
+            viewerPayload = null
+            viewerPayloadItemId = -1
+            viewerChunks = emptyList()
+            return@LaunchedEffect
+        }
+        if (hasLockedPlaybackOwner) {
+            continuationLog(
+                "requestedItemEffect previewOnly target=$target current=$currentItemId speaking=$isSpeaking auto=$isAutoPlaying",
+            )
+            viewerOverrideItemId = target
+            viewerOverrideTitle = queueItems.firstOrNull { it.itemId == target }?.title.orEmpty()
+            viewerPayload = null
+            viewerPayloadItemId = -1
+            viewerChunks = emptyList()
+            vm.fetchItemText(target)
+                .onSuccess { loaded ->
+                    viewerPayload = loaded.payload
+                    viewerPayloadItemId = target
+                    viewerChunks = buildPlaybackChunks(loaded.payload)
+                }
+                .onFailure { err ->
+                    if (err is CancellationException) return@onFailure
+                    uiMessage = err.message ?: "Failed to load item"
+                }
+            return@LaunchedEffect
+        }
         continuationLog(
             "requestedItemEffect target=$target current=$currentItemId autoPlayAfterLoad=$autoPlayAfterLoad",
         )
+        viewerOverrideItemId = -1
+        viewerOverrideTitle = ""
+        viewerPayload = null
+        viewerPayloadItemId = -1
+        viewerChunks = emptyList()
         stopSpeaking(forceSync = true)
         // Clear current body immediately so the previously viewed article cannot flash
         // while the newly requested item is loading.
@@ -653,6 +714,15 @@ fun PlayerScreen(
     LaunchedEffect(locusTapSignal) {
         if (locusTapSignal == lastHandledLocusTapSignal) return@LaunchedEffect
         lastHandledLocusTapSignal = locusTapSignal
+        if (viewerOverrideItemId > 0 && currentItemId > 0) {
+            viewerOverrideItemId = -1
+            viewerOverrideTitle = ""
+            viewerPayload = null
+            viewerPayloadItemId = -1
+            viewerChunks = emptyList()
+            onOpenItem(currentItemId)
+            return@LaunchedEffect
+        }
         readerScrollTriggerSignal += 1
     }
 
@@ -692,8 +762,14 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(currentItemId, resolvedInitial, reloadNonce, waitingForRequestedItem) {
+    LaunchedEffect(currentItemId, resolvedInitial, reloadNonce, waitingForRequestedItem, previewModeActive) {
         if (!resolvedInitial) return@LaunchedEffect
+        if (previewModeActive) {
+            continuationLog(
+                "loadItem skip previewModeActive currentItemId=$currentItemId requestedItemId=$requestedItemId reloadNonce=$reloadNonce",
+            )
+            return@LaunchedEffect
+        }
         if (waitingForRequestedItem) {
             continuationLog(
                 "loadItem skip waitingForRequestedItem currentItemId=$currentItemId requestedItemId=$requestedItemId reloadNonce=$reloadNonce",
@@ -805,8 +881,31 @@ fun PlayerScreen(
     val safePosition = normalizedPosition(currentPosition)
     val totalChars = totalCharsForPercent()
     val currentPercent = calculateCanonicalPercent(totalChars, chunks, safePosition)
-    val currentTitle = textPayload?.title?.ifBlank { null } ?: textPayload?.url.orEmpty()
-    val chunkLabel = if (chunks.isEmpty()) {
+    val locusItemId = previewItemId ?: requestedItemId ?: currentItemId
+    val previewPayloadForItem = viewerPayload.takeIf { viewerPayloadItemId == previewItemId }
+    val displayPayload = if (previewModeActive) previewPayloadForItem else textPayload
+    val displayChunks = when {
+        previewModeActive && viewerPayloadItemId == previewItemId -> viewerChunks
+        previewModeActive -> emptyList()
+        else -> chunks
+    }
+    val capturePresentation = locusCapturePresentation(displayPayload)
+    val queuedPreviewTitle = queueItems.firstOrNull { it.itemId == locusItemId }?.title.orEmpty()
+    val currentTitle = when {
+        previewModeActive -> {
+            viewerOverrideTitle
+                .ifBlank { queuedPreviewTitle }
+                .ifBlank { capturePresentation.title }
+                .ifBlank { displayPayload?.url.orEmpty() }
+                .ifBlank { "Item $locusItemId" }
+        }
+        else -> capturePresentation.title.ifBlank { displayPayload?.url.orEmpty() }
+    }
+    val locusActionBarTitle = if (previewModeActive) "" else if (currentTitle.isNotBlank()) currentTitle else "Item $locusItemId"
+    val currentSourceLabel = capturePresentation.sourceLabel
+    val chunkLabel = if (previewModeActive) {
+        "Previewing item while playback continues"
+    } else if (chunks.isEmpty()) {
         "Chunk 0 / 0"
     } else {
         "Chunk ${safePosition.chunkIndex + 1} / ${chunks.size}"
@@ -908,6 +1007,34 @@ fun PlayerScreen(
         val nextIndex = currentIndex + 1
         return session.items.getOrNull(nextIndex)?.itemId
     }
+    fun playLocusItem() {
+        if (locusItemId <= 0) return
+        if (locusItemId != currentItemId) {
+            val previewPayload = viewerPayload
+            val previewChunks = viewerChunks
+            if (previewPayload != null && viewerPayloadItemId == locusItemId) {
+                textPayload = previewPayload
+                chunks = previewChunks
+                preserveVisibleContentOnReload = true
+            }
+            viewerOverrideItemId = -1
+            viewerOverrideTitle = ""
+            viewerPayload = null
+            viewerPayloadItemId = -1
+            viewerChunks = emptyList()
+            vm.playbackOpenItem(
+                itemId = locusItemId,
+                intent = PlaybackOpenIntent.ManualOpen,
+                autoPlayAfterLoad = true,
+            )
+            onOpenItem(locusItemId)
+            onShowSnackbar("Playing item shown in Locus", null, null)
+            return
+        }
+        if (!(isSpeaking || isAutoPlaying) && chunks.isNotEmpty()) {
+            vm.playbackPlay()
+        }
+    }
 
     val renderPlayerControlBar: @Composable () -> Unit = {
         PlayerControlBar(
@@ -965,6 +1092,7 @@ fun PlayerScreen(
                     vm.playbackPlay()
                 }
             },
+            onPlayButtonLongPress = { playLocusItem() },
             onNextSegment = {
                 if (chunks.isNotEmpty() && safePosition.chunkIndex < chunks.lastIndex) {
                     val target = safePosition.chunkIndex + 1
@@ -1093,9 +1221,10 @@ fun PlayerScreen(
                         exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(animationSpec = tween(120)),
                     ) {
                         ExpandedPlayerTopBar(
+                            title = locusActionBarTitle,
                             playbackSpeed = settings.playbackSpeed,
                             overflowExpanded = overflowExpanded,
-                            canMarkDone = textPayload != null,
+                            canMarkDone = displayPayload != null,
                             isDone = showCompleted,
                             refreshState = refreshActionState,
                             showConnectivityIssue = queueOffline || hasRefreshProblem,
@@ -1187,6 +1316,10 @@ fun PlayerScreen(
                             onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
                             overflowMenuContent = {
                                 LocusOverflowMenuItems(
+                                    onPlayCurrentItem = {
+                                        overflowExpanded = false
+                                        playLocusItem()
+                                    },
                                     onOpenPlaylists = {
                                         overflowExpanded = false
                                         vm.refreshPlaylists()
@@ -1201,9 +1334,14 @@ fun PlayerScreen(
                             },
                         )
                     }
+                    val locusStatusLine = listOfNotNull(
+                        currentSourceLabel?.takeIf { it.isNotBlank() },
+                        "Sync $syncBadgeText",
+                        chunkLabel,
+                    ).joinToString("  -  ")
                     LocusPeekCard(
-                        title = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
-                        statusLine = "Sync $syncBadgeText  -  $chunkLabel",
+                        title = locusActionBarTitle,
+                        statusLine = locusStatusLine,
                         overflowExpanded = overflowExpanded,
                         overflowMenuContent = {
                             Spacer(modifier = Modifier)
@@ -1229,13 +1367,15 @@ fun PlayerScreen(
                                 },
                         ) {
                             ReaderBody(
-                                fullText = textPayload?.text,
-                                chunks = chunks,
-                                currentChunkIndex = safePosition.chunkIndex,
-                                currentChunkOffsetInChars = safePosition.offsetInChunkChars,
-                                activeRangeInChunk = activeChunkRange,
+                                fullText = displayPayload?.text,
+                                chunks = displayChunks,
+                                currentChunkIndex = if (previewModeActive) 0 else safePosition.chunkIndex,
+                                currentChunkOffsetInChars = if (previewModeActive) 0 else safePosition.offsetInChunkChars,
+                                activeRangeInChunk = if (previewModeActive) null else activeChunkRange,
                                 scrollTriggerSignal = readerScrollTriggerSignal,
-                                autoScrollWhileListening = settings.autoScrollWhileListening && (isSpeaking || isAutoPlaying),
+                                autoScrollWhileListening = !previewModeActive &&
+                                    settings.autoScrollWhileListening &&
+                                    (isSpeaking || isAutoPlaying),
                                 readingFontSizeSp = settings.readingFontSizeSp,
                                 readingFontOption = settings.readingFontOption,
                                 readingLineHeightPercent = settings.readingLineHeightPercent,
@@ -1260,9 +1400,10 @@ fun PlayerScreen(
                                     .fillMaxWidth(),
                             ) {
                                 ExpandedPlayerTopBar(
+                                    title = locusActionBarTitle,
                                     playbackSpeed = settings.playbackSpeed,
                                     overflowExpanded = overflowExpanded,
-                                    canMarkDone = textPayload != null,
+                                    canMarkDone = displayPayload != null,
                                     isDone = showCompleted,
                                     refreshState = refreshActionState,
                                     showConnectivityIssue = queueOffline || hasRefreshProblem,
@@ -1354,6 +1495,10 @@ fun PlayerScreen(
                                     onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
                                     overflowMenuContent = {
                                         LocusOverflowMenuItems(
+                                            onPlayCurrentItem = {
+                                                overflowExpanded = false
+                                                playLocusItem()
+                                            },
                                             onOpenPlaylists = {
                                                 overflowExpanded = false
                                                 vm.refreshPlaylists()
@@ -1408,7 +1553,7 @@ fun PlayerScreen(
 
     if (showPlaylistPicker) {
         PlaylistPickerDialog(
-            itemTitle = if (currentTitle.isNotBlank()) currentTitle else "Item $currentItemId",
+            itemTitle = if (currentTitle.isNotBlank()) currentTitle else "Item $locusItemId",
             playlistChoices = playlistChoices,
             isLoading = false,
             onDismiss = { showPlaylistPicker = false },
@@ -1483,6 +1628,7 @@ private fun PlaybackObservabilityStrip(
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun ExpandedPlayerTopBar(
+    title: String,
     playbackSpeed: Float,
     overflowExpanded: Boolean,
     canMarkDone: Boolean,
@@ -1499,7 +1645,14 @@ private fun ExpandedPlayerTopBar(
     TopAppBar(
         modifier = Modifier.height(48.dp),
         windowInsets = WindowInsets(0, 0, 0, 0),
-        title = {},
+        title = {
+            Text(
+                text = title,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.titleSmall,
+            )
+        },
         actions = {
             ActionHintTooltip(label = if (isDone) "Mark as not done" else "Mark as done") {
                 IconToggleButton(
@@ -1940,10 +2093,15 @@ private fun LocusOverflowMenu(
 
 @Composable
 private fun LocusOverflowMenuItems(
+    onPlayCurrentItem: () -> Unit,
     onOpenPlaylists: () -> Unit,
     isExpanded: Boolean,
     onToggleExpanded: () -> Unit,
 ) {
+    DropdownMenuItem(
+        text = { Text("Play this item") },
+        onClick = onPlayCurrentItem,
+    )
     DropdownMenuItem(
         text = { Text("Playlists...") },
         onClick = onOpenPlaylists,
@@ -2155,6 +2313,7 @@ private fun PlayerChromeChevron(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun PlayerControlBar(
     progressPercent: Int,
     minimal: Boolean,
@@ -2166,6 +2325,7 @@ private fun PlayerControlBar(
     onSeekToPercent: (Int) -> Unit,
     onPreviousSegment: () -> Unit,
     onPlayPause: () -> Unit,
+    onPlayButtonLongPress: () -> Unit,
     onNextSegment: () -> Unit,
     onPreviousItem: () -> Unit,
     onNextItem: () -> Unit,
@@ -2231,7 +2391,16 @@ private fun PlayerControlBar(
                 )
             }
             Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
-            IconButton(onClick = onPlayPause, enabled = canPlay, modifier = Modifier.size(CONTROL_SLOT_SIZE)) {
+            Box(
+                modifier = Modifier
+                    .size(CONTROL_SLOT_SIZE)
+                    .combinedClickable(
+                        enabled = canPlay,
+                        onClick = onPlayPause,
+                        onLongClick = onPlayButtonLongPress,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(
                     painter = painterResource(
                         id = if (isPlaying) R.drawable.msr_pause_24 else R.drawable.msr_play_arrow_24,

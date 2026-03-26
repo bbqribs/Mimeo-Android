@@ -425,6 +425,11 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     private fun handleMediaButtonIntent(intent: Intent?): Boolean {
         val keyEvent = intent?.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT) ?: return false
         if (keyEvent.action != KeyEvent.ACTION_DOWN) return true
+        val staleBeforeRefresh = snapshot.isPlaying
+        PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
+        if (staleBeforeRefresh != snapshot.isPlaying) {
+            emitAudit("mediaButtonRefresh:playing:$staleBeforeRefresh->${snapshot.isPlaying}")
+        }
         Log.d(mediaButtonLogTag, "handleMediaButtonIntent key=${keyEvent.keyCode}")
         when (resolveMediaButtonDispatchAction(keyCode = keyEvent.keyCode, isCurrentlyPlaying = snapshot.isPlaying)) {
             MediaButtonDispatchAction.Play -> dispatchPlay()

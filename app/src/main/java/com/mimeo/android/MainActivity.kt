@@ -154,6 +154,7 @@ import com.mimeo.android.ui.player.PlaybackEngineSettings
 import com.mimeo.android.ui.player.PlaybackEngineState
 import com.mimeo.android.ui.player.PlaybackOpenIntent
 import com.mimeo.android.ui.player.buildPlaybackChunks
+import com.mimeo.android.ui.common.nowPlayingCapturePresentation
 import com.mimeo.android.ui.playlists.PlaylistsScreen
 import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.ui.signin.SignInScreen
@@ -3470,10 +3471,18 @@ private fun MimeoApp(vm: AppViewModel) {
     val queueOffline by vm.queueOffline.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val pendingNavigationRoute by vm.pendingNavigationRoute.collectAsState()
+    val playbackEngineState by vm.playbackEngineState.collectAsState()
     val requiresSignIn = settings.apiToken.isBlank()
     var pendingLocusOpen by rememberSaveable { mutableStateOf(false) }
     var pendingLocusItemId by rememberSaveable { mutableIntStateOf(-1) }
     val sessionNowPlayingItemId = vm.currentNowPlayingItemId()
+    val hasPlaybackItemInProgress =
+        (sessionNowPlayingItemId ?: -1) > 0 &&
+            (
+                playbackEngineState.hasStartedPlaybackForCurrentItem ||
+                    playbackEngineState.isSpeaking ||
+                    playbackEngineState.isAutoPlaying
+                )
     val routeItemId = navBackStack?.arguments?.let { args ->
         if (args.containsKey("itemId")) args.getInt("itemId").takeIf { it > 0 } else null
     }
@@ -3536,21 +3545,10 @@ private fun MimeoApp(vm: AppViewModel) {
     val presentingLocus = isOnLocusRoute
     val compactControlsOnly = !isOnLocusRoute
     var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
-    val nowPlayingStripTitle = nowPlayingSession
-        ?.currentItem
-        ?.let { current ->
-            current.title?.takeIf { it.isNotBlank() }
-                ?: current.url.takeIf { it.isNotBlank() }
-                ?: "Item ${current.itemId}"
-        } ?: "No active playback"
-    val nowPlayingStripDomain = nowPlayingSession
-        ?.currentItem
-        ?.host
-        ?.takeIf { it.isNotBlank() }
-    val nowPlayingStripSourceUrl = nowPlayingSession
-        ?.currentItem
-        ?.url
-        ?.takeIf { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
+    val nowPlayingPresentation = nowPlayingCapturePresentation(nowPlayingSession?.currentItem)
+    val nowPlayingStripTitle = nowPlayingPresentation.title.ifBlank { "No active playback" }
+    val nowPlayingStripDomain = nowPlayingPresentation.sourceLabel
+    val nowPlayingStripSourceUrl = nowPlayingPresentation.sourceUrl
     val canExpandNowPlayingTitle = nowPlayingSession?.currentItem != null
     val baseUrlHint = vm.baseUrlHintForDevice(isLikelyPhysicalDevice())
     val baseAddress = settings.baseUrl.trim().removePrefix("http://").removePrefix("https://")
@@ -3827,6 +3825,20 @@ private fun MimeoApp(vm: AppViewModel) {
                                 },
                                 focusItemId = focusItemId,
                                 onOpenPlayer = { itemId ->
+                                    val activeNowPlayingItemId = sessionNowPlayingItemId?.takeIf { it > 0 }
+                                    if (hasPlaybackItemInProgress && activeNowPlayingItemId != null && activeNowPlayingItemId != itemId) {
+                                        pendingLocusOpen = true
+                                        pendingLocusItemId = itemId
+                                        vm.showSnackbar(
+                                            "Viewing item while playback continues. Use long-press Play or 'Play this item' to switch.",
+                                            null,
+                                            null,
+                                        )
+                                        nav.navigate("$ROUTE_LOCUS/$itemId") {
+                                            launchSingleTop = true
+                                        }
+                                        return@QueueScreen
+                                    }
                                     pendingLocusOpen = true
                                     pendingLocusItemId = itemId
                                     nav.navigate("$ROUTE_LOCUS/$itemId") {
@@ -3844,7 +3856,7 @@ private fun MimeoApp(vm: AppViewModel) {
                         }
                     }
 
-                    if (!requiresSignIn && requestedPlayerItemId != null && !(pendingLocusOpen && !isOnLocusRoute)) {
+                    if (!requiresSignIn && requestedPlayerItemId != null) {
                         PlayerScreen(
                             vm = vm,
                             onShowSnackbar = { message, actionLabel, actionKey ->
