@@ -10,6 +10,7 @@ import com.mimeo.android.data.QueueFetchResult
 import com.mimeo.android.data.entities.NowPlayingEntity
 import com.mimeo.android.data.entities.CachedItemEntity
 import com.mimeo.android.data.entities.PendingProgressEntity
+import com.mimeo.android.model.ArticleSummary
 import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.PlaylistSummary
@@ -175,6 +176,10 @@ class PlaybackRepository(
         return apiClient.getPlaylists(baseUrl, token)
     }
 
+    suspend fun listTrashedItems(baseUrl: String, token: String): List<ArticleSummary> {
+        return apiClient.getTrashedItems(baseUrl, token)
+    }
+
     suspend fun createPlaylist(baseUrl: String, token: String, name: String): PlaylistSummary {
         return apiClient.createPlaylist(baseUrl, token, name)
     }
@@ -253,6 +258,31 @@ class PlaybackRepository(
 
     suspend fun archiveItem(baseUrl: String, token: String, itemId: Int): ProgressPostResult {
         apiClient.markItemDone(baseUrl, token, itemId, autoArchive = true)
+        return ProgressPostResult(queued = false)
+    }
+
+    suspend fun moveItemToBin(baseUrl: String, token: String, itemId: Int): ProgressPostResult {
+        apiClient.moveItemToBin(baseUrl, token, itemId)
+        return ProgressPostResult(queued = false)
+    }
+
+    suspend fun restoreItemFromBin(baseUrl: String, token: String, itemId: Int): ProgressPostResult {
+        apiClient.restoreItemFromBin(baseUrl, token, itemId)
+        return ProgressPostResult(queued = false)
+    }
+
+    suspend fun purgeItemFromBin(baseUrl: String, token: String, itemId: Int): ProgressPostResult {
+        apiClient.purgeItemFromBin(baseUrl, token, itemId)
+        return ProgressPostResult(queued = false)
+    }
+
+    suspend fun setFavoriteState(
+        baseUrl: String,
+        token: String,
+        itemId: Int,
+        favorited: Boolean,
+    ): ProgressPostResult {
+        apiClient.setFavoriteState(baseUrl, token, itemId, favorited)
         return ProgressPostResult(queued = false)
     }
 

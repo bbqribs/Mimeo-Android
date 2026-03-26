@@ -48,6 +48,9 @@
 - [x] Pending/offline outcome polish shipped: clearer non-cached failure presentation, reduced stale-row confusion, and tighter pending/offline state copy.
 - [x] Offline/no-active-content copy + behavior cleanup shipped: unavailable-offline/no-active-content messaging and row-state behavior tightened for daily use.
 - [x] Plain-text share behavior shipped: dedicated text-share save path, mixed text+URL handling, and original-source footer flow.
+- [x] Structured source metadata emission shipped for Android capture flows (`source_type`, `source_label`, `source_url`, `capture_kind`, optional `source_app_package`) with backward-compatible behavior when server ignores fields.
+- [x] Provenance/origin/content separation shipped for Android share handling: content links are preserved as content, provenance is inferred only for trusted browser-marked selection patterns, and URL-only vs excerpt capture routing is deterministic.
+- [x] Source/title rendering shipped in Up Next + Locus + now-playing strip using metadata-first precedence (`provenance -> origin -> Android selection`) with excerpt title normalization.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
@@ -72,11 +75,11 @@
 - [x] Username/password sign-in flow — shipped per `docs/ANDROID_AUTH_PHASE3_SPEC.md` slice plan (gate, recovery, sign-out, settings coexistence).
 
 ### Next tickets
-1. [ ] Source metadata unification for excerpts: add first-class source label/type/url across Android + backend + extension/web so excerpt saves render consistent source context (not host-only inference).
-2. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
-3. [ ] Keep-screen-on/session UX follow-up: refine “active session” heuristics and user copy for reader-only vs speaking states without changing playback ownership.
-4. [ ] Offline/no-active-content follow-up from lived use: tighten retry affordances and recovery messaging for the remaining edge cases that are hard to reproduce on demand.
-5. [ ] Queue/player daily-use polish: small interaction consistency pass (status icon parity, action discoverability, transition smoothing) with no semantics changes.
+1. [ ] Cross-repo source metadata unification: align backend + extension/web on the same provenance/origin contract and rendering precedence shipped on Android (no body-link source inference).
+2. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.
+3. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
+4. [ ] Keep-screen-on/session UX follow-up: refine “active session” heuristics and user copy for reader-only vs speaking states without changing playback ownership.
+5. [ ] Offline/no-active-content follow-up from lived use: tighten retry affordances and recovery messaging for the remaining edge cases that are hard to reproduce on demand.
 
 ## Reader/Player UX fidelity + state persistence backlog
 

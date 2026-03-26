@@ -80,6 +80,11 @@ private data class ChangePasswordPayload(
     @kotlinx.serialization.SerialName("new_password") val newPassword: String,
 )
 
+@Serializable
+private data class FavoriteUpdatePayload(
+    val favorited: Boolean,
+)
+
 class ApiClient(
     private val okHttpClient: OkHttpClient = OkHttpClient(),
     private val json: Json = Json { ignoreUnknownKeys = true },
@@ -448,6 +453,75 @@ class ApiClient(
             .url(resolveUrl(baseUrl, "/items/$itemId/reset"))
             .header("Authorization", "Bearer $token")
             .post(ByteArray(0).toRequestBody())
+            .build()
+        executeNoBody(request)
+    }
+
+    suspend fun getTrashedItems(baseUrl: String, token: String, limit: Int = 100): List<ArticleSummary> = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/items?trashed=true&limit=$limit"))
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        executeJson(request) { payload ->
+            json.decodeFromString(ListSerializer(ArticleSummary.serializer()), payload)
+        }
+    }
+
+    suspend fun moveItemToBin(
+        baseUrl: String,
+        token: String,
+        itemId: Int,
+    ) = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/items/$itemId"))
+            .header("Authorization", "Bearer $token")
+            .delete()
+            .build()
+        executeNoBody(request)
+    }
+
+    suspend fun restoreItemFromBin(
+        baseUrl: String,
+        token: String,
+        itemId: Int,
+    ) = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/items/$itemId/restore"))
+            .header("Authorization", "Bearer $token")
+            .post(ByteArray(0).toRequestBody(null, 0, 0))
+            .build()
+        executeNoBody(request)
+    }
+
+    suspend fun purgeItemFromBin(
+        baseUrl: String,
+        token: String,
+        itemId: Int,
+    ) = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/items/$itemId/purge"))
+            .header("Authorization", "Bearer $token")
+            .post(ByteArray(0).toRequestBody(null, 0, 0))
+            .build()
+        executeNoBody(request)
+    }
+
+    suspend fun setFavoriteState(
+        baseUrl: String,
+        token: String,
+        itemId: Int,
+        favorited: Boolean,
+    ) = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(
+            FavoriteUpdatePayload(
+                favorited = favorited,
+            ),
+        ).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/items/$itemId/favorite"))
+            .header("Authorization", "Bearer $token")
+            .put(body)
             .build()
         executeNoBody(request)
     }

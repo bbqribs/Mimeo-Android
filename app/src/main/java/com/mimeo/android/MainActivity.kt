@@ -407,6 +407,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _queueItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
     val queueItems: StateFlow<List<PlaybackQueueItem>> = _queueItems.asStateFlow()
+    private val _binItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
+    val binItems: StateFlow<List<PlaybackQueueItem>> = _binItems.asStateFlow()
     private val _pendingManualSaves = MutableStateFlow<List<PendingManualSaveItem>>(emptyList())
     val pendingManualSaves: StateFlow<List<PendingManualSaveItem>> = _pendingManualSaves.asStateFlow()
     private val pendingManualRetryMutex = Mutex()
@@ -537,6 +539,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val authFailureMutex = Mutex()
     private var authFailureHandledThisSession = false
     private var lastArchiveUndoSnapshot: ArchiveUndoSnapshot? = null
+    private val favoriteOverridesByItemId = mutableMapOf<Int, Boolean>()
     private var lastPendingAutoRetryAtMs: Long = 0L
     private var pendingInitialPostSignInHydration = false
     private var initialPostSignInHydrationJob: Job? = null
@@ -613,6 +616,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     initialPostSignInHydrationJob?.cancel()
                     initialPostSignInHydrationJob = null
                     _queueItems.value = emptyList()
+                    _binItems.value = emptyList()
                     _cachedItemIds.value = emptySet()
                     _noActiveContentItemIds.value = emptySet()
                     noActiveContentStore.clear()
@@ -1607,26 +1611,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 prefetchCount = 0,
             )
             val queue = queueResult.payload
-            var offlineReadyIds = resolveOfflineReadyIds(queue.items)
+            val queueItems = applyFavoriteOverrides(queue.items)
+            var offlineReadyIds = resolveOfflineReadyIds(queueItems)
             offlineReadyIds = runInitialPostSignInHydrationIfNeeded(
                 current = current,
-                queueItems = queue.items,
+                queueItems = queueItems,
                 cachedItemIds = offlineReadyIds,
             )
             offlineReadyIds = ensurePendingItemsOfflineReady(
-                queueItems = queue.items,
+                queueItems = queueItems,
                 selectedPlaylistId = current.selectedPlaylistId,
                 offlineReadyIds = offlineReadyIds,
                 current = current,
             )
             offlineReadyIds = autoDownloadNewlySurfacedQueueItems(
                 current = current,
-                queueItems = queue.items,
+                queueItems = queueItems,
                 previousVisibleItemIds = previousVisibleItemIds,
                 offlineReadyIds = offlineReadyIds,
                 includeAllVisibleUncached = forceAutoDownloadAllVisibleUncached,
             )
-            _queueItems.value = queue.items
+            _queueItems.value = queueItems
             val appliedSnapshot = queueResult.debugSnapshot.copy(
                 appliedItemCount = _queueItems.value.size,
                 appliedContains409 = _queueItems.value.any { it.itemId == DEBUG_TARGET_ITEM_ID },
@@ -1641,24 +1646,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             _cachedItemIds.value = offlineReadyIds
             _noActiveContentItemIds.value = retainKnownNoActiveContentIds(
-                queueItems = queue.items,
+                queueItems = queueItems,
                 existing = _noActiveContentItemIds.value,
             )
             updateAutoDownloadQueueSnapshotDiagnostics(
                 current = current,
-                queueItems = queue.items,
+                queueItems = queueItems,
                 offlineReadyIds = offlineReadyIds,
                 knownNoActiveIds = _noActiveContentItemIds.value,
             )
-            settingsStore.saveQueueSnapshot(current.selectedPlaylistId, queue)
+            settingsStore.saveQueueSnapshot(current.selectedPlaylistId, queue.copy(items = queueItems))
             syncPendingSaveProcessingFailures(
-                queueItems = queue.items,
+                queueItems = queueItems,
                 selectedPlaylistId = current.selectedPlaylistId,
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
             )
             reconcilePendingSavesWithQueue(
-                queueItems = queue.items,
+                queueItems = queueItems,
                 selectedPlaylistId = current.selectedPlaylistId,
             )
             _queueOffline.value = false
@@ -1684,21 +1689,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     prefetchCount = 0,
                 )
                 val refreshedQueue = refreshedQueueResult.payload
-                var refreshedOfflineReadyIds = resolveOfflineReadyIds(refreshedQueue.items)
+                val refreshedQueueItems = applyFavoriteOverrides(refreshedQueue.items)
+                var refreshedOfflineReadyIds = resolveOfflineReadyIds(refreshedQueueItems)
                 refreshedOfflineReadyIds = ensurePendingItemsOfflineReady(
-                    queueItems = refreshedQueue.items,
+                    queueItems = refreshedQueueItems,
                     selectedPlaylistId = current.selectedPlaylistId,
                     offlineReadyIds = refreshedOfflineReadyIds,
                     current = current,
                 )
                 refreshedOfflineReadyIds = autoDownloadNewlySurfacedQueueItems(
                     current = current,
-                    queueItems = refreshedQueue.items,
+                    queueItems = refreshedQueueItems,
                     previousVisibleItemIds = previousVisibleAfterAutoRetryIds,
                     offlineReadyIds = refreshedOfflineReadyIds,
                     includeAllVisibleUncached = forceAutoDownloadAllVisibleUncached,
                 )
-                _queueItems.value = refreshedQueue.items
+                _queueItems.value = refreshedQueueItems
                 val refreshedSnapshot = refreshedQueueResult.debugSnapshot.copy(
                     appliedItemCount = _queueItems.value.size,
                     appliedContains409 = _queueItems.value.any { it.itemId == DEBUG_TARGET_ITEM_ID },
@@ -1713,24 +1719,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 _cachedItemIds.value = refreshedOfflineReadyIds
                 _noActiveContentItemIds.value = retainKnownNoActiveContentIds(
-                    queueItems = refreshedQueue.items,
+                    queueItems = refreshedQueueItems,
                     existing = _noActiveContentItemIds.value,
                 )
                 updateAutoDownloadQueueSnapshotDiagnostics(
                     current = current,
-                    queueItems = refreshedQueue.items,
+                    queueItems = refreshedQueueItems,
                     offlineReadyIds = refreshedOfflineReadyIds,
                     knownNoActiveIds = _noActiveContentItemIds.value,
                 )
-                settingsStore.saveQueueSnapshot(current.selectedPlaylistId, refreshedQueue)
+                settingsStore.saveQueueSnapshot(current.selectedPlaylistId, refreshedQueue.copy(items = refreshedQueueItems))
                 syncPendingSaveProcessingFailures(
-                    queueItems = refreshedQueue.items,
+                    queueItems = refreshedQueueItems,
                     selectedPlaylistId = current.selectedPlaylistId,
                     baseUrl = current.baseUrl,
                     token = current.apiToken,
                 )
                 reconcilePendingSavesWithQueue(
-                    queueItems = refreshedQueue.items,
+                    queueItems = refreshedQueueItems,
                     selectedPlaylistId = current.selectedPlaylistId,
                 )
                 _statusMessage.value = "Queue loaded (${refreshedQueue.count})"
@@ -2575,16 +2581,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 prefetchCount = 0,
             )
             val queue = queueResult.payload
-            _queueItems.value = queue.items
+            val queueItems = applyFavoriteOverrides(queue.items)
+            _queueItems.value = queueItems
             val appliedSnapshot = queueResult.debugSnapshot.copy(
                 appliedItemCount = _queueItems.value.size,
                 appliedContains409 = _queueItems.value.any { it.itemId == DEBUG_TARGET_ITEM_ID },
                 lastFetchAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()),
             )
             _lastQueueFetchDebug.value = appliedSnapshot
-            _cachedItemIds.value = resolveOfflineReadyIds(queue.items)
-            settingsStore.saveQueueSnapshot(current.selectedPlaylistId, queue)
-            repository.reconcileSessionWithQueue(queue.items)?.let { updated ->
+            _cachedItemIds.value = resolveOfflineReadyIds(queueItems)
+            settingsStore.saveQueueSnapshot(current.selectedPlaylistId, queue.copy(items = queueItems))
+            repository.reconcileSessionWithQueue(queueItems)?.let { updated ->
                 _nowPlayingSession.value = updated
             }
             _queueOffline.value = false
@@ -2686,7 +2693,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 lastArchiveUndoSnapshot = null
             }
-            val archivedCurrentSessionItem = currentNowPlayingItemId() == itemId
+            val archivedCurrentSessionItem = currentPlaybackOwnerItemId() == itemId
             if (archivedCurrentSessionItem) {
                 playbackPause(forceSync = true)
                 clearNowPlayingSessionNow()
@@ -2703,6 +2710,162 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 removeArchivedItemLocally(itemId)
                 _statusMessage.value = "Archived"
             }
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun moveItemToBin(
+        itemId: Int,
+        refreshQueue: Boolean = true,
+    ): Result<Unit> {
+        val current = settings.value
+        return try {
+            repository.moveItemToBin(current.baseUrl, current.apiToken, itemId)
+            val binnedCurrentSessionItem = currentPlaybackOwnerItemId() == itemId
+            if (binnedCurrentSessionItem) {
+                playbackPause(forceSync = true)
+                clearNowPlayingSessionNow()
+            }
+            if (refreshQueue) {
+                val refreshResult = loadQueueOnce(autoRetryPendingSaves = false)
+                if (refreshResult.isFailure) {
+                    removeArchivedItemLocally(itemId)
+                    _statusMessage.value = "Moved to Bin (14 days); queue refresh failed"
+                } else {
+                    _statusMessage.value = "Moved to Bin (14 days)"
+                }
+            } else {
+                removeArchivedItemLocally(itemId)
+                _statusMessage.value = "Moved to Bin (14 days)"
+            }
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun loadBinItems(): Result<Unit> {
+        val current = settings.value
+        return try {
+            val trashed = repository.listTrashedItems(current.baseUrl, current.apiToken)
+            _binItems.value = trashed.map { item ->
+                PlaybackQueueItem(
+                    itemId = item.id,
+                    title = item.title,
+                    url = item.url,
+                    host = item.siteName,
+                    status = item.status,
+                    lastReadPercent = item.lastReadPercent,
+                    resumeReadPercent = item.resumeReadPercent,
+                    apiProgressPercent = item.progressPercent,
+                    apiFurthestPercent = item.furthestPercent,
+                    lastOpenedAt = item.lastOpenedAt,
+                    createdAt = item.createdAt,
+                    isFavorited = item.isFavorited,
+                )
+            }
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun restoreItemFromBin(itemId: Int): Result<Unit> {
+        val current = settings.value
+        return try {
+            repository.restoreItemFromBin(current.baseUrl, current.apiToken, itemId)
+            _binItems.update { existing -> existing.filterNot { it.itemId == itemId } }
+            loadQueueOnce(autoRetryPendingSaves = false)
+            _statusMessage.value = "Restored from Bin"
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun purgeItemFromBin(itemId: Int): Result<Unit> {
+        val current = settings.value
+        return try {
+            repository.purgeItemFromBin(current.baseUrl, current.apiToken, itemId)
+            _binItems.update { existing -> existing.filterNot { it.itemId == itemId } }
+            _statusMessage.value = "Permanently deleted from Bin"
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun setItemFavorited(
+        itemId: Int,
+        favorited: Boolean,
+    ): Result<Unit> {
+        val current = settings.value
+        return try {
+            repository.setFavoriteState(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                itemId = itemId,
+                favorited = favorited,
+            )
+            favoriteOverridesByItemId[itemId] = favorited
+            applyLocalFavoriteState(itemId, favorited)
             _queueOffline.value = false
             updateSyncBadgeState()
             Result.success(Unit)
@@ -2779,15 +2942,46 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _queueItems.update { previous -> previous.filterNot { it.itemId == itemId } }
         _cachedItemIds.update { previous -> previous - itemId }
         _noActiveContentItemIds.update { previous -> previous - itemId }
+        favoriteOverridesByItemId.remove(itemId)
         updateAutoDownloadQueueSnapshotDiagnostics(
             current = settings.value,
             queueItems = _queueItems.value,
             offlineReadyIds = _cachedItemIds.value,
             knownNoActiveIds = _noActiveContentItemIds.value,
         )
-        if (currentNowPlayingItemId() == itemId) {
+        if (currentPlaybackOwnerItemId() == itemId) {
             clearNowPlayingSessionNow()
         }
+    }
+
+    private fun applyLocalFavoriteState(itemId: Int, favorited: Boolean) {
+        _queueItems.update { existing ->
+            existing.map { item ->
+                if (item.itemId != itemId) {
+                    item
+                } else {
+                    item.copy(isFavorited = favorited)
+                }
+            }
+        }
+    }
+
+    private fun applyFavoriteOverrides(items: List<PlaybackQueueItem>): List<PlaybackQueueItem> {
+        if (items.isEmpty()) {
+            favoriteOverridesByItemId.clear()
+            return items
+        }
+        val visibleIds = items.mapTo(hashSetOf()) { it.itemId }
+        favoriteOverridesByItemId.keys.retainAll(visibleIds)
+        return items.map { item ->
+            val override = favoriteOverridesByItemId[item.itemId] ?: return@map item
+            if (item.isFavorited == override) item else item.copy(isFavorited = override)
+        }
+    }
+
+    private fun currentPlaybackOwnerItemId(): Int? {
+        val engineItemId = playbackEngineState.value.currentItemId
+        return if (engineItemId > 0) engineItemId else currentNowPlayingItemId()
     }
 
     suspend fun resolveInitialPlayerItemId(fallbackItemId: Int): Int {

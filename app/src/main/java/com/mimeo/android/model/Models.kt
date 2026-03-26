@@ -109,6 +109,7 @@ data class PlaybackQueueItem(
     @SerialName("furthest_percent") val apiFurthestPercent: Int? = null,
     @SerialName("last_opened_at") val lastOpenedAt: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("is_favorited") val isFavorited: Boolean = false,
 ) {
     val progressPercent: Int
         get() {
