@@ -635,9 +635,11 @@ fun PlayerScreen(
         if (!resolvedInitial) return@LaunchedEffect
         val target = requestedItemId ?: return@LaunchedEffect
         if (target == currentItemId) {
-            viewerOverrideItemId = -1
-            viewerPayload = null
-            viewerChunks = emptyList()
+            if (viewerOverrideItemId <= 0 || viewerOverrideItemId == currentItemId) {
+                viewerOverrideItemId = -1
+                viewerPayload = null
+                viewerChunks = emptyList()
+            }
             return@LaunchedEffect
         }
         if (hasLockedPlaybackOwner) {
@@ -976,6 +978,13 @@ fun PlayerScreen(
     fun playLocusItem() {
         if (locusItemId <= 0) return
         if (locusItemId != currentItemId) {
+            val previewPayload = viewerPayload
+            val previewChunks = viewerChunks
+            if (previewPayload != null && viewerOverrideItemId == locusItemId) {
+                textPayload = previewPayload
+                chunks = previewChunks
+                preserveVisibleContentOnReload = true
+            }
             viewerOverrideItemId = -1
             viewerPayload = null
             viewerChunks = emptyList()
