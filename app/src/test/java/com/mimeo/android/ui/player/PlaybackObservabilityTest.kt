@@ -123,4 +123,35 @@ class PlaybackObservabilityTest {
 
         assertTrue(preserve)
     }
+
+    @Test
+    fun updateReaderScrollOffsetsAddsAndUpdatesPerItemOffset() {
+        val initial = mapOf(100 to 24)
+        val updated = updateReaderScrollOffsets(
+            offsets = initial,
+            itemId = 101,
+            offset = 88,
+        )
+        val replaced = updateReaderScrollOffsets(
+            offsets = updated,
+            itemId = 100,
+            offset = 12,
+        )
+
+        assertEquals(24, initial[100])
+        assertEquals(88, updated[101])
+        assertEquals(12, replaced[100])
+    }
+
+    @Test
+    fun resetReaderScrollOffsetRemovesOnlyTargetItem() {
+        val initial = mapOf(100 to 24, 101 to 88)
+        val cleared = resetReaderScrollOffset(
+            offsets = initial,
+            itemId = 100,
+        )
+
+        assertEquals(false, cleared.containsKey(100))
+        assertEquals(88, cleared[101])
+    }
 }

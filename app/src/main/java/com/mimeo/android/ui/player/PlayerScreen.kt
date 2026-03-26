@@ -274,6 +274,27 @@ internal fun shouldPlayEndOfArticleCompletionCue(enabled: Boolean): Boolean {
     return enabled
 }
 
+internal fun updateReaderScrollOffsets(
+    offsets: Map<Int, Int>,
+    itemId: Int,
+    offset: Int,
+): Map<Int, Int> {
+    if (itemId <= 0) return offsets
+    val safeOffset = offset.coerceAtLeast(0)
+    val current = offsets[itemId]
+    if (current == safeOffset) return offsets
+    return offsets + (itemId to safeOffset)
+}
+
+internal fun resetReaderScrollOffset(
+    offsets: Map<Int, Int>,
+    itemId: Int,
+): Map<Int, Int> {
+    if (itemId <= 0) return offsets
+    if (!offsets.containsKey(itemId)) return offsets
+    return offsets - itemId
+}
+
 internal fun shouldSpeakTitleBeforeBody(
     enabled: Boolean,
     title: String?,
@@ -485,10 +506,6 @@ fun PlayerScreen(
     var preserveVisibleContentOnReload by remember { mutableStateOf(false) }
     var bodyRevealReady by remember { mutableStateOf(false) }
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
-    var readerViewportSessionNonce by rememberSaveable { mutableIntStateOf(0) }
-    val readerScrollState = rememberSaveable(currentItemId, readerViewportSessionNonce, saver = ScrollState.Saver) {
-        ScrollState(0)
-    }
     val activeChunkRange = engineState.activeChunkRange
     var readerScrollTriggerSignal by rememberSaveable { mutableIntStateOf(0) }
     var readerSelectionResetSignal by rememberSaveable { mutableIntStateOf(0) }
@@ -517,6 +534,17 @@ fun PlayerScreen(
         requestedItemId?.takeIf { hasLockedPlaybackOwner && it != currentItemId }
     val previewItemId = previewRouteItemId ?: viewerOverrideItemId.takeIf { it > 0 }
     val previewModeActive = previewItemId != null
+    val readerScrollItemId = previewItemId ?: requestedItemId ?: currentItemId
+    // Locus scroll persistence rules:
+    // - Persist per displayed item (including preview mode) so tab/surface returns feel stable.
+    // - Reset for explicit same-item reopen requests, which should behave like a fresh open.
+    // - Playback/search driven scroll events can still override via existing trigger signals.
+    var readerViewportSessionNonce by rememberSaveable { mutableIntStateOf(0) }
+    var readerScrollOffsets by rememberSaveable { mutableStateOf<Map<Int, Int>>(emptyMap()) }
+    val readerInitialOffset = readerScrollOffsets[readerScrollItemId]?.coerceAtLeast(0) ?: 0
+    val readerScrollState = rememberSaveable(readerScrollItemId, readerViewportSessionNonce, saver = ScrollState.Saver) {
+        ScrollState(readerInitialOffset)
+    }
     val waitingForRequestedItem =
         requestedItemId != null &&
             requestedItemId != currentItemId &&
@@ -781,6 +809,7 @@ fun PlayerScreen(
         vm.playbackReloadCurrentItem(reloadIntent)
         preserveVisibleContentOnReload = false
         bodyRevealReady = false
+        readerScrollOffsets = resetReaderScrollOffset(readerScrollOffsets, target)
         isLoading = true
         continuationLog(
             "openRequest sameItemReload target=$target reloadNonce=$reloadNonce autoPlayAfterLoad=false",
@@ -899,6 +928,17 @@ fun PlayerScreen(
         isLoading = false
     }
 
+    LaunchedEffect(readerScrollItemId, readerScrollState) {
+        snapshotFlow { readerScrollState.value }
+            .collect { offset ->
+                readerScrollOffsets = updateReaderScrollOffsets(
+                    offsets = readerScrollOffsets,
+                    itemId = readerScrollItemId,
+                    offset = offset,
+                )
+            }
+    }
+
     LaunchedEffect(Unit) {
         vm.playbackEngineEvents.collect { event ->
             when (event) {
@@ -916,7 +956,7 @@ fun PlayerScreen(
     val safePosition = normalizedPosition(currentPosition)
     val totalChars = totalCharsForPercent()
     val currentPercent = calculateCanonicalPercent(totalChars, chunks, safePosition)
-    val locusItemId = previewItemId ?: requestedItemId ?: currentItemId
+    val locusItemId = readerScrollItemId
     val previewPayloadForItem = viewerPayload.takeIf { viewerPayloadItemId == previewItemId }
     val displayPayload = if (previewModeActive) previewPayloadForItem else textPayload
     val displayChunks = when {
