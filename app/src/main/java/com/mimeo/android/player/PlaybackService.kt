@@ -205,9 +205,10 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     private fun updateSnapshot(next: PlaybackServiceSnapshot) {
         snapshot = next
         mediaSession.isActive = next.itemId != null
-        // Keep media-button ownership stable for active playback.
-        // Avoid reclaiming focus while paused; that can interfere with system routing.
-        if (next.itemId != null && next.isPlaying) {
+        // Keep media-button ownership stable for the currently loaded item.
+        // Relying only on per-utterance speaking state allows focus/ownership drift,
+        // where first headset play/pause may route to another app after long sessions.
+        if (next.itemId != null) {
             requestAudioFocus()
         } else {
             interruptionPolicy.clearResumeExpectation()
