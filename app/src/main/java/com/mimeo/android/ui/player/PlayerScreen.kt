@@ -931,6 +931,11 @@ fun PlayerScreen(
         collectLocusSearchMatches(displayChunks, locusSearchQuery)
     }
     val activeLocusSearchMatch = locusSearchMatches.getOrNull(locusSearchMatchIndex)
+    val locusSearchRangesByChunk = remember(locusSearchMatches) {
+        locusSearchMatches
+            .groupBy(keySelector = { it.chunkIndex }, valueTransform = { it.rangeInChunk })
+            .mapValues { (_, ranges) -> ranges.sortedBy { it.first } }
+    }
     val locusSearchSummary = when {
         locusSearchQuery.isBlank() -> null
         locusSearchMatches.isEmpty() -> "No matches"
@@ -1447,6 +1452,7 @@ fun PlayerScreen(
                                 currentChunkIndex = if (previewModeActive) 0 else safePosition.chunkIndex,
                                 currentChunkOffsetInChars = if (previewModeActive) 0 else safePosition.offsetInChunkChars,
                                 activeRangeInChunk = if (previewModeActive) null else activeChunkRange,
+                                searchHighlightRangesByChunk = locusSearchRangesByChunk,
                                 searchFocusChunkIndex = activeLocusSearchMatch?.chunkIndex,
                                 searchFocusRangeInChunk = activeLocusSearchMatch?.rangeInChunk,
                                 searchFocusTriggerSignal = locusSearchScrollTriggerSignal,
@@ -1466,8 +1472,9 @@ fun PlayerScreen(
                                     .fillMaxSize()
                                     .graphicsLayer { alpha = bodyContentAlpha },
                             )
+                            val showLocusTopBar = (!readerChromeHidden || locusSearchActive) && transitionSettled
                             androidx.compose.animation.AnimatedVisibility(
-                                visible = !readerChromeHidden && transitionSettled,
+                                visible = showLocusTopBar,
                                 enter = slideInVertically(
                                     initialOffsetY = { -it / 2 },
                                     animationSpec = tween(durationMillis = 140, delayMillis = 40),
@@ -1825,10 +1832,8 @@ private fun ExpandedPlayerTopBar(
                         onValueChange = onSearchQueryChange,
                         singleLine = true,
                         placeholder = { Text("Search this item") },
-                        textStyle = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp),
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
                     )
                     IconButton(
                         onClick = onSearchPrevious,

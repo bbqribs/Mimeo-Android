@@ -46,7 +46,7 @@ import kotlin.math.roundToInt
 
 private val READER_SCROLL_TOP_PADDING = 0.dp
 private val READER_SCROLL_BOTTOM_PADDING = 0.dp
-private val READER_SEARCH_FOCUS_EXTRA_TOP_PADDING = 56.dp
+private val READER_SEARCH_FOCUS_EXTRA_TOP_PADDING = 96.dp
 private const val MANUAL_SCROLL_SUPPRESS_MS = 1200L
 
 @Composable
@@ -56,6 +56,7 @@ fun ReaderBody(
     currentChunkIndex: Int,
     currentChunkOffsetInChars: Int,
     activeRangeInChunk: IntRange?,
+    searchHighlightRangesByChunk: Map<Int, List<IntRange>>,
     searchFocusChunkIndex: Int?,
     searchFocusRangeInChunk: IntRange?,
     searchFocusTriggerSignal: Int,
@@ -78,7 +79,8 @@ fun ReaderBody(
     }
     val safeChunkIndex = currentChunkIndex.coerceIn(0, (chunks.lastIndex).coerceAtLeast(0))
     val highlightBg = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
-    val searchHighlightBg = MaterialTheme.colorScheme.secondary.copy(alpha = 0.30f)
+    val searchHighlightBg = MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
+    val searchActiveHighlightBg = MaterialTheme.colorScheme.secondary.copy(alpha = 0.40f)
     val sentenceRangesByChunk = remember(chunks) {
         chunks.map { segmentSentences(it.text) }
     }
@@ -142,6 +144,7 @@ fun ReaderBody(
                         chunks.forEachIndexed { index, chunk ->
                             val isHighlighted = index == safeChunkIndex
                             val isSearchFocused = searchFocusChunkIndex == index
+                            val passiveSearchRanges = searchHighlightRangesByChunk[index].orEmpty()
                             val effectiveHighlightRange = if (isHighlighted) {
                                 resolveReaderHighlightRange(
                                     textLength = chunk.text.length,
@@ -160,9 +163,22 @@ fun ReaderBody(
                             } else {
                                 null
                             }
-                            val chunkText = if (effectiveHighlightRange != null || effectiveSearchRange != null) {
+                            val chunkText = if (effectiveHighlightRange != null || effectiveSearchRange != null || passiveSearchRanges.isNotEmpty()) {
                                 buildAnnotatedString {
                                     append(chunk.text)
+                                    passiveSearchRanges.forEach { range ->
+                                        val start = range.first.coerceIn(0, chunk.text.length)
+                                        val endExclusive = (range.last + 1).coerceIn(start, chunk.text.length)
+                                        if (start < endExclusive) {
+                                            addStyle(
+                                                style = SpanStyle(
+                                                    background = searchHighlightBg,
+                                                ),
+                                                start = start,
+                                                end = endExclusive,
+                                            )
+                                        }
+                                    }
                                     if (effectiveHighlightRange != null) {
                                         addStyle(
                                             style = SpanStyle(
@@ -175,7 +191,7 @@ fun ReaderBody(
                                     if (effectiveSearchRange != null) {
                                         addStyle(
                                             style = SpanStyle(
-                                                background = searchHighlightBg,
+                                                background = searchActiveHighlightBg,
                                             ),
                                             start = effectiveSearchRange.first,
                                             end = (effectiveSearchRange.last + 1).coerceAtMost(chunk.text.length),
