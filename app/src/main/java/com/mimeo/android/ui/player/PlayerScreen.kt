@@ -433,6 +433,7 @@ fun PlayerScreen(
     val reloadNonce = engineState.reloadNonce
     var textPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
     var viewerOverrideItemId by rememberSaveable { mutableIntStateOf(-1) }
+    var viewerOverrideTitle by rememberSaveable { mutableStateOf("") }
     var viewerPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
     var viewerPayloadItemId by rememberSaveable { mutableIntStateOf(-1) }
     var viewerChunks by remember { mutableStateOf<List<PlaybackChunk>>(emptyList()) }
@@ -642,6 +643,7 @@ fun PlayerScreen(
         if (target == currentItemId) {
             if (viewerOverrideItemId <= 0 || viewerOverrideItemId == currentItemId) {
                 viewerOverrideItemId = -1
+                viewerOverrideTitle = ""
                 viewerPayload = null
                 viewerPayloadItemId = -1
                 viewerChunks = emptyList()
@@ -653,6 +655,7 @@ fun PlayerScreen(
                 "requestedItemEffect previewOnly target=$target current=$currentItemId speaking=$isSpeaking auto=$isAutoPlaying",
             )
             viewerOverrideItemId = target
+            viewerOverrideTitle = queueItems.firstOrNull { it.itemId == target }?.title.orEmpty()
             viewerPayload = null
             viewerPayloadItemId = -1
             viewerChunks = emptyList()
@@ -676,6 +679,7 @@ fun PlayerScreen(
             "requestedItemEffect target=$target current=$currentItemId autoPlayAfterLoad=$autoPlayAfterLoad",
         )
         viewerOverrideItemId = -1
+        viewerOverrideTitle = ""
         viewerPayload = null
         viewerPayloadItemId = -1
         viewerChunks = emptyList()
@@ -717,6 +721,7 @@ fun PlayerScreen(
         lastHandledLocusTapSignal = locusTapSignal
         if (viewerOverrideItemId > 0 && currentItemId > 0) {
             viewerOverrideItemId = -1
+            viewerOverrideTitle = ""
             viewerPayload = null
             viewerPayloadItemId = -1
             viewerChunks = emptyList()
@@ -887,7 +892,8 @@ fun PlayerScreen(
     val queuedPreviewTitle = queueItems.firstOrNull { it.itemId == locusItemId }?.title.orEmpty()
     val currentTitle = when {
         previewModeActive -> {
-            queuedPreviewTitle
+            viewerOverrideTitle
+                .ifBlank { queuedPreviewTitle }
                 .ifBlank { capturePresentation.title }
                 .ifBlank { displayPayload?.url.orEmpty() }
                 .ifBlank { "Item $locusItemId" }
@@ -1010,6 +1016,7 @@ fun PlayerScreen(
                 preserveVisibleContentOnReload = true
             }
             viewerOverrideItemId = -1
+            viewerOverrideTitle = ""
             viewerPayload = null
             viewerPayloadItemId = -1
             viewerChunks = emptyList()
