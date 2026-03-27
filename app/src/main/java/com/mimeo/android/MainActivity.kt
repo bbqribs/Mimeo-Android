@@ -282,10 +282,17 @@ private data class ArchiveUndoSnapshot(
     val wasCached: Boolean,
     val wasNoActiveContent: Boolean,
     val source: ArchiveActionSource,
+    val actionType: UndoableActionType,
 )
+
+enum class UndoableActionType {
+    ARCHIVE,
+    BIN,
+}
 
 data class ArchiveUndoOutcome(
     val reopenItemId: Int? = null,
+    val actionType: UndoableActionType = UndoableActionType.ARCHIVE,
 )
 
 internal fun selectInitialQueueHydrationTargets(
@@ -407,6 +414,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _queueItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
     val queueItems: StateFlow<List<PlaybackQueueItem>> = _queueItems.asStateFlow()
+    private val _archivedItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
+    val archivedItems: StateFlow<List<PlaybackQueueItem>> = _archivedItems.asStateFlow()
     private val _binItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
     val binItems: StateFlow<List<PlaybackQueueItem>> = _binItems.asStateFlow()
     private val _pendingManualSaves = MutableStateFlow<List<PendingManualSaveItem>>(emptyList())
@@ -620,6 +629,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     initialPostSignInHydrationJob?.cancel()
                     initialPostSignInHydrationJob = null
                     _queueItems.value = emptyList()
+                    _archivedItems.value = emptyList()
                     _binItems.value = emptyList()
                     _cachedItemIds.value = emptySet()
                     _noActiveContentItemIds.value = emptySet()
@@ -2767,6 +2777,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     wasCached = wasCached,
                     wasNoActiveContent = wasNoActiveContent,
                     source = source,
+                    actionType = UndoableActionType.ARCHIVE,
                 )
             } else {
                 lastArchiveUndoSnapshot = null
@@ -2808,10 +2819,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun moveItemToBin(
         itemId: Int,
         refreshQueue: Boolean = true,
+        source: ArchiveActionSource = ArchiveActionSource.UP_NEXT,
     ): Result<Unit> {
         val current = settings.value
+        val queueBeforeMove = _queueItems.value
+        val queueIndex = queueBeforeMove.indexOfFirst { it.itemId == itemId }
+        val queueItemSnapshot = queueBeforeMove.getOrNull(queueIndex)
+        val wasCached = _cachedItemIds.value.contains(itemId)
+        val wasNoActiveContent = _noActiveContentItemIds.value.contains(itemId)
         return try {
             repository.moveItemToBin(current.baseUrl, current.apiToken, itemId)
+            if (queueItemSnapshot != null && queueIndex >= 0) {
+                lastArchiveUndoSnapshot = ArchiveUndoSnapshot(
+                    item = queueItemSnapshot,
+                    originalIndex = queueIndex,
+                    wasCached = wasCached,
+                    wasNoActiveContent = wasNoActiveContent,
+                    source = source,
+                    actionType = UndoableActionType.BIN,
+                )
+            } else {
+                lastArchiveUndoSnapshot = null
+            }
             val binnedCurrentSessionItem = currentPlaybackOwnerItemId() == itemId
             if (binnedCurrentSessionItem) {
                 playbackPause(forceSync = true)
@@ -2866,6 +2895,68 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     isFavorited = item.isFavorited,
                 )
             }
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun loadArchivedItems(): Result<Unit> {
+        val current = settings.value
+        return try {
+            val archived = repository.listArchivedItems(current.baseUrl, current.apiToken)
+            _archivedItems.value = archived.map { item ->
+                PlaybackQueueItem(
+                    itemId = item.id,
+                    title = item.title,
+                    url = item.url,
+                    host = item.siteName,
+                    status = item.status,
+                    lastReadPercent = item.lastReadPercent,
+                    resumeReadPercent = item.resumeReadPercent,
+                    apiProgressPercent = item.progressPercent,
+                    apiFurthestPercent = item.furthestPercent,
+                    lastOpenedAt = item.lastOpenedAt,
+                    createdAt = item.createdAt,
+                    isFavorited = item.isFavorited,
+                )
+            }
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun unarchiveItem(itemId: Int): Result<Unit> {
+        val current = settings.value
+        return try {
+            repository.unarchiveItem(current.baseUrl, current.apiToken, itemId)
+            repository.toggleCompletion(current.baseUrl, current.apiToken, itemId, markDone = false)
+            _archivedItems.update { existing -> existing.filterNot { it.itemId == itemId } }
+            loadQueueOnce(autoRetryPendingSaves = false)
+            _statusMessage.value = "Unarchived"
             _queueOffline.value = false
             updateSyncBadgeState()
             Result.success(Unit)
@@ -2965,7 +3056,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val current = settings.value
         val snapshot = lastArchiveUndoSnapshot ?: return Result.failure(IllegalStateException("Nothing to undo"))
         return try {
-            repository.toggleCompletion(current.baseUrl, current.apiToken, snapshot.item.itemId, markDone = false)
+            when (snapshot.actionType) {
+                UndoableActionType.ARCHIVE -> {
+                    repository.unarchiveItem(current.baseUrl, current.apiToken, snapshot.item.itemId)
+                    repository.toggleCompletion(current.baseUrl, current.apiToken, snapshot.item.itemId, markDone = false)
+                }
+                UndoableActionType.BIN -> {
+                    repository.restoreItemFromBin(current.baseUrl, current.apiToken, snapshot.item.itemId)
+                }
+            }
             _queueItems.update { previous ->
                 val withoutItem = previous.filterNot { it.itemId == snapshot.item.itemId }
                 val insertAt = snapshot.originalIndex.coerceIn(0, withoutItem.size)
@@ -2997,11 +3096,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     autoPlayAfterLoad = false,
                 )
             }
-            _statusMessage.value = "Archive undone"
+            _statusMessage.value = if (snapshot.actionType == UndoableActionType.BIN) {
+                "Bin move undone"
+            } else {
+                "Archive undone"
+            }
             _queueOffline.value = false
             updateSyncBadgeState()
             lastArchiveUndoSnapshot = null
-            Result.success(ArchiveUndoOutcome(reopenItemId = reopenItemId))
+            Result.success(
+                ArchiveUndoOutcome(
+                    reopenItemId = reopenItemId,
+                    actionType = snapshot.actionType,
+                ),
+            )
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -3882,13 +3990,18 @@ private fun MimeoApp(vm: AppViewModel) {
                     ACTION_KEY_UNDO_ARCHIVE -> {
                         vm.undoLastArchive()
                             .onSuccess { outcome ->
-                                vm.showSnackbar("Archive undone", null, null)
+                                val message = if (outcome.actionType == UndoableActionType.BIN) {
+                                    "Bin move undone"
+                                } else {
+                                    "Archive undone"
+                                }
+                                vm.showSnackbar(message, null, null)
                                 outcome.reopenItemId?.let { itemId ->
                                     nav.navigate("$ROUTE_LOCUS/$itemId") { launchSingleTop = true }
                                 }
                             }
                             .onFailure {
-                                vm.showSnackbar("Couldn't undo archive", "Diagnostics", ACTION_KEY_OPEN_DIAGNOSTICS)
+                                vm.showSnackbar("Couldn't undo last action", "Diagnostics", ACTION_KEY_OPEN_DIAGNOSTICS)
                             }
                     }
                 }

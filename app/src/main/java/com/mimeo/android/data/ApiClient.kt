@@ -482,9 +482,33 @@ class ApiClient(
         executeNoBody(request)
     }
 
+    suspend fun unarchiveItem(
+        baseUrl: String,
+        token: String,
+        itemId: Int,
+    ) = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/items/$itemId/unarchive"))
+            .header("Authorization", "Bearer $token")
+            .post(ByteArray(0).toRequestBody(null, 0, 0))
+            .build()
+        executeNoBody(request)
+    }
+
     suspend fun getTrashedItems(baseUrl: String, token: String, limit: Int = 100): List<ArticleSummary> = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(resolveUrl(baseUrl, "/items?trashed=true&limit=$limit"))
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        executeJson(request) { payload ->
+            json.decodeFromString(ListSerializer(ArticleSummary.serializer()), payload)
+        }
+    }
+
+    suspend fun getArchivedItems(baseUrl: String, token: String, limit: Int = 100): List<ArticleSummary> = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/items?archived=true&limit=$limit"))
             .header("Authorization", "Bearer $token")
             .get()
             .build()

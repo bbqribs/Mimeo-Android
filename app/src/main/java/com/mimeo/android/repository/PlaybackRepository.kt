@@ -182,6 +182,10 @@ class PlaybackRepository(
         return apiClient.getTrashedItems(baseUrl, token)
     }
 
+    suspend fun listArchivedItems(baseUrl: String, token: String): List<ArticleSummary> {
+        return apiClient.getArchivedItems(baseUrl, token)
+    }
+
     suspend fun createPlaylist(baseUrl: String, token: String, name: String): PlaylistSummary {
         return apiClient.createPlaylist(baseUrl, token, name)
     }
@@ -277,6 +281,11 @@ class PlaybackRepository(
 
     suspend fun archiveItem(baseUrl: String, token: String, itemId: Int): ProgressPostResult {
         apiClient.markItemDone(baseUrl, token, itemId, autoArchive = true)
+        return ProgressPostResult(queued = false)
+    }
+
+    suspend fun unarchiveItem(baseUrl: String, token: String, itemId: Int): ProgressPostResult {
+        apiClient.unarchiveItem(baseUrl, token, itemId)
         return ProgressPostResult(queued = false)
     }
 
