@@ -180,13 +180,13 @@ private data class ManualSavePayload(
 
 private enum class QueueFilterChip(val label: String, val enabled: Boolean = true) {
     ALL("All"),
-    PENDING("Pending"),
     FAVORITES("Favourites"),
+    ARCHIVE("Archive"),
+    BIN("Bin"),
     UNREAD("Unread"),
     IN_PROGRESS("In progress"),
     DONE("Done"),
-    ARCHIVE("Archive"),
-    BIN("Bin"),
+    PENDING("Pending"),
 }
 
 private enum class QueueSortOption(val label: String) {
@@ -381,15 +381,8 @@ fun QueueScreen(
         QueueSortOption.PROGRESS_LOW -> filteredItems.sortedBy { it.furthestPercent }
         QueueSortOption.TITLE_AZ -> filteredItems.sortedBy { (it.title ?: it.url).lowercase() }
     }
-    val projectedPendingItems = projectPendingItemsForDestination(
-        pendingItems = pendingManualSaves,
-        selectedPlaylistId = settings.selectedPlaylistId,
-        queueItems = items,
-        cachedItemIds = cachedItemIds,
-        noActiveContentItemIds = noActiveContentItemIds,
-    )
     val visibleProjectedPendingItems = when (selectedFilter) {
-        QueueFilterChip.PENDING -> projectedPendingItems.filter { pending ->
+        QueueFilterChip.PENDING -> pendingManualSaves.filter { pending ->
             pendingMatchesSearch(pending, searchQuery)
         }
         else -> emptyList()
@@ -410,9 +403,7 @@ fun QueueScreen(
             "Archive is empty."
         displayedItems.isEmpty() && selectedFilter == QueueFilterChip.BIN ->
             "Bin is empty. Items stay in Bin for 14 days unless purged earlier."
-        displayedItems.isEmpty() && selectedFilter == QueueFilterChip.PENDING ->
-            "No pending saves."
-        displayedItems.isEmpty() && selectedFilter != QueueFilterChip.ALL ->
+        displayedItems.isEmpty() && selectedFilter != QueueFilterChip.ALL && selectedFilter != QueueFilterChip.PENDING ->
             "No items match the ${selectedFilter.label.lowercase()} filter."
         displayedItems.isEmpty() -> "No items match the current search/filter."
         else -> null

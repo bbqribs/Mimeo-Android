@@ -76,6 +76,8 @@ class SettingsStore(private val context: Context) {
         booleanPreferencesKey("keep_share_result_notifications")
     private val autoDownloadSavedArticlesKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("auto_download_saved_articles")
+    private val autoCacheFavoritedItemsKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("auto_cache_favorited_items")
     private val playbackSpeedKey: Preferences.Key<Float> =
         floatPreferencesKey("playback_speed")
     private val selectedPlaylistIdKey: Preferences.Key<Int> =
@@ -148,6 +150,7 @@ class SettingsStore(private val context: Context) {
             ttsVoiceName = prefs[ttsVoiceNameKey] ?: "",
             keepShareResultNotifications = prefs[keepShareResultNotificationsKey] ?: false,
             autoDownloadSavedArticles = prefs[autoDownloadSavedArticlesKey] ?: true,
+            autoCacheFavoritedItems = prefs[autoCacheFavoritedItemsKey] ?: true,
             playbackSpeed = prefs[playbackSpeedKey] ?: 1.0f,
             selectedPlaylistId = decodeSelectedPlaylistId(prefs[selectedPlaylistIdKey]),
             defaultSavePlaylistId = decodeSelectedPlaylistId(prefs[defaultSavePlaylistIdKey]),
@@ -208,6 +211,7 @@ class SettingsStore(private val context: Context) {
         ttsVoiceName: String,
         keepShareResultNotifications: Boolean,
         autoDownloadSavedArticles: Boolean,
+        autoCacheFavoritedItems: Boolean,
         playbackSpeed: Float,
         selectedPlaylistId: Int?,
         defaultSavePlaylistId: Int?,
@@ -248,6 +252,7 @@ class SettingsStore(private val context: Context) {
             prefs[ttsVoiceNameKey] = ttsVoiceName.trim()
             prefs[keepShareResultNotificationsKey] = keepShareResultNotifications
             prefs[autoDownloadSavedArticlesKey] = autoDownloadSavedArticles
+            prefs[autoCacheFavoritedItemsKey] = autoCacheFavoritedItems
             prefs[playbackSpeedKey] = playbackSpeed
             prefs[selectedPlaylistIdKey] = encodeSelectedPlaylistId(selectedPlaylistId)
             prefs[defaultSavePlaylistIdKey] = encodeSelectedPlaylistId(defaultSavePlaylistId)
@@ -393,6 +398,12 @@ class SettingsStore(private val context: Context) {
     suspend fun saveAutoDownloadSavedArticles(autoDownloadSavedArticles: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[autoDownloadSavedArticlesKey] = autoDownloadSavedArticles
+        }
+    }
+
+    suspend fun saveAutoCacheFavoritedItems(autoCacheFavoritedItems: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[autoCacheFavoritedItemsKey] = autoCacheFavoritedItems
         }
     }
 

@@ -553,6 +553,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var authFailureHandledThisSession = false
     private var lastArchiveUndoSnapshot: ArchiveUndoSnapshot? = null
     private val favoriteOverridesByItemId = mutableMapOf<Int, Boolean>()
+    private val binnedFavoriteStateByItemId = mutableMapOf<Int, Boolean>()
     private var lastPendingAutoRetryAtMs: Long = 0L
     private var pendingInitialPostSignInHydration = false
     private var initialPostSignInHydrationJob: Job? = null
@@ -945,6 +946,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         ttsVoiceName: String,
         keepShareResultNotifications: Boolean,
         autoDownloadSavedArticles: Boolean,
+        autoCacheFavoritedItems: Boolean,
     ) {
         viewModelScope.launch {
             settingsStore.save(
@@ -972,6 +974,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 ttsVoiceName = ttsVoiceName,
                 keepShareResultNotifications = keepShareResultNotifications,
                 autoDownloadSavedArticles = autoDownloadSavedArticles,
+                autoCacheFavoritedItems = autoCacheFavoritedItems,
                 playbackSpeed = settings.value.playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
                 defaultSavePlaylistId = settings.value.defaultSavePlaylistId,
@@ -1022,6 +1025,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 ttsVoiceName = settings.value.ttsVoiceName,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 autoDownloadSavedArticles = settings.value.autoDownloadSavedArticles,
+                autoCacheFavoritedItems = settings.value.autoCacheFavoritedItems,
                 playbackSpeed = settings.value.playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
                 defaultSavePlaylistId = settings.value.defaultSavePlaylistId,
@@ -1065,6 +1069,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 ttsVoiceName = settings.value.ttsVoiceName,
                 keepShareResultNotifications = settings.value.keepShareResultNotifications,
                 autoDownloadSavedArticles = settings.value.autoDownloadSavedArticles,
+                autoCacheFavoritedItems = settings.value.autoCacheFavoritedItems,
                 playbackSpeed = playbackSpeed,
                 selectedPlaylistId = settings.value.selectedPlaylistId,
                 defaultSavePlaylistId = settings.value.defaultSavePlaylistId,
@@ -1158,6 +1163,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _settings.value = current.copy(autoDownloadSavedArticles = enabled)
         viewModelScope.launch {
             settingsStore.saveAutoDownloadSavedArticles(enabled)
+        }
+    }
+
+    fun saveAutoCacheFavoritedItems(enabled: Boolean) {
+        val current = settings.value
+        _settings.value = current.copy(autoCacheFavoritedItems = enabled)
+        viewModelScope.launch {
+            settingsStore.saveAutoCacheFavoritedItems(enabled)
         }
     }
 
@@ -1686,6 +1699,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             _cachedItemIds.value = offlineReadyIds
+            autoCacheFavoritedItemsIfEnabled(current = current, queueItems = queueItems)
             _noActiveContentItemIds.value = retainKnownNoActiveContentIds(
                 queueItems = queueItems,
                 existing = _noActiveContentItemIds.value,
@@ -1759,6 +1773,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
                 _cachedItemIds.value = refreshedOfflineReadyIds
+                autoCacheFavoritedItemsIfEnabled(current = current, queueItems = refreshedQueueItems)
                 _noActiveContentItemIds.value = retainKnownNoActiveContentIds(
                     queueItems = refreshedQueueItems,
                     existing = _noActiveContentItemIds.value,
@@ -1932,6 +1947,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         return updated
+    }
+
+    private suspend fun autoCacheFavoritedItemsIfEnabled(
+        current: AppSettings,
+        queueItems: List<PlaybackQueueItem>,
+    ) {
+        if (!current.autoCacheFavoritedItems) return
+        if (current.apiToken.isBlank()) return
+        val uncachedFavorites = queueItems
+            .asSequence()
+            .filter { it.isFavorited }
+            .map { it.itemId }
+            .distinct()
+            .filterNot { _cachedItemIds.value.contains(it) }
+            .filterNot { _noActiveContentItemIds.value.contains(it) }
+            .take(8)
+            .toList()
+        uncachedFavorites.forEach { itemId ->
+            runCatching { fetchItemText(itemId) }
+        }
     }
 
     private suspend fun autoDownloadNewlySurfacedQueueItems(
@@ -2835,8 +2870,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val archivedItemSnapshot = _archivedItems.value.firstOrNull { it.itemId == itemId }
         val wasCached = _cachedItemIds.value.contains(itemId)
         val wasNoActiveContent = _noActiveContentItemIds.value.contains(itemId)
+        val favoritedSnapshot = queueItemSnapshot?.isFavorited ?: archivedItemSnapshot?.isFavorited
         return try {
             repository.moveItemToBin(current.baseUrl, current.apiToken, itemId)
+            if (favoritedSnapshot != null) {
+                binnedFavoriteStateByItemId[itemId] = favoritedSnapshot
+            }
             if (queueItemSnapshot != null && queueIndex >= 0) {
                 lastArchiveUndoSnapshot = ArchiveUndoSnapshot(
                     item = queueItemSnapshot,
@@ -2857,13 +2896,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (refreshQueue) {
                 val refreshResult = loadQueueOnce(autoRetryPendingSaves = false)
                 if (refreshResult.isFailure) {
-                    removeArchivedItemLocally(itemId)
+                    removeArchivedItemLocally(itemId, preserveFavoriteState = true)
                     _statusMessage.value = "Moved to Bin (14 days); queue refresh failed"
                 } else {
                     _statusMessage.value = "Moved to Bin (14 days)"
                 }
             } else {
-                removeArchivedItemLocally(itemId)
+                removeArchivedItemLocally(itemId, preserveFavoriteState = true)
                 val binSeed = queueItemSnapshot ?: archivedItemSnapshot
                 if (binSeed != null) {
                     _binItems.update { existing ->
@@ -2946,6 +2985,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     isFavorited = item.isFavorited,
                 )
             }
+            autoCacheFavoritedItemsIfEnabled(
+                current = current,
+                queueItems = _archivedItems.value,
+            )
             _queueOffline.value = false
             updateSyncBadgeState()
             Result.success(Unit)
@@ -2994,6 +3037,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             repository.restoreItemFromBin(current.baseUrl, current.apiToken, itemId)
             _binItems.update { existing -> existing.filterNot { it.itemId == itemId } }
             loadQueueOnce(autoRetryPendingSaves = false)
+            val shouldRestoreFavorite = binnedFavoriteStateByItemId[itemId] == true
+            if (shouldRestoreFavorite) {
+                runCatching {
+                    repository.setFavoriteState(
+                        baseUrl = current.baseUrl,
+                        token = current.apiToken,
+                        itemId = itemId,
+                        favorited = true,
+                    )
+                    favoriteOverridesByItemId[itemId] = true
+                    applyLocalFavoriteState(itemId, favorited = true)
+                }
+            }
+            binnedFavoriteStateByItemId.remove(itemId)
             _statusMessage.value = "Restored from Bin"
             _queueOffline.value = false
             updateSyncBadgeState()
@@ -3017,6 +3074,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return try {
             repository.purgeItemFromBin(current.baseUrl, current.apiToken, itemId)
             _binItems.update { existing -> existing.filterNot { it.itemId == itemId } }
+            binnedFavoriteStateByItemId.remove(itemId)
+            favoriteOverridesByItemId.remove(itemId)
             _statusMessage.value = "Permanently deleted from Bin"
             _queueOffline.value = false
             updateSyncBadgeState()
@@ -3049,6 +3108,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
             favoriteOverridesByItemId[itemId] = favorited
             applyLocalFavoriteState(itemId, favorited)
+            if (favorited && current.autoCacheFavoritedItems && _binItems.value.none { it.itemId == itemId }) {
+                fetchItemText(itemId)
+            }
             _queueOffline.value = false
             updateSyncBadgeState()
             Result.success(Unit)
@@ -3140,13 +3202,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun removeArchivedItemLocally(itemId: Int) {
+    private suspend fun removeArchivedItemLocally(itemId: Int, preserveFavoriteState: Boolean = false) {
         _queueItems.update { previous -> previous.filterNot { it.itemId == itemId } }
         _archivedItems.update { previous -> previous.filterNot { it.itemId == itemId } }
         _binItems.update { previous -> previous.filterNot { it.itemId == itemId } }
         _cachedItemIds.update { previous -> previous - itemId }
         _noActiveContentItemIds.update { previous -> previous - itemId }
-        favoriteOverridesByItemId.remove(itemId)
+        if (!preserveFavoriteState) {
+            favoriteOverridesByItemId.remove(itemId)
+        }
         updateAutoDownloadQueueSnapshotDiagnostics(
             current = settings.value,
             queueItems = _queueItems.value,

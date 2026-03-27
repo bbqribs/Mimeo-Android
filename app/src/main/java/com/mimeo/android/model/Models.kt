@@ -270,6 +270,7 @@ data class AppSettings(
     val ttsVoiceName: String = "",
     val keepShareResultNotifications: Boolean = false,
     val autoDownloadSavedArticles: Boolean = true,
+    val autoCacheFavoritedItems: Boolean = true,
     val playbackSpeed: Float = 1.0f,
     val selectedPlaylistId: Int? = null,
     val defaultSavePlaylistId: Int? = null,
