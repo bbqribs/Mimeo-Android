@@ -347,6 +347,7 @@ fun QueueScreen(
         QueueFilterChip.BIN -> binItems
         else -> items
     }
+    val archivedItemIds = archivedItems.mapTo(hashSetOf()) { it.itemId }
     val filteredItems = activeItems.filter { item ->
         val matchesSearch = if (searchQuery.isBlank()) {
             true
@@ -1025,6 +1026,7 @@ fun QueueScreen(
                                 item = item,
                                 isBinView = selectedFilter == QueueFilterChip.BIN,
                                 isArchiveView = selectedFilter == QueueFilterChip.ARCHIVE,
+                                isArchivedItem = archivedItemIds.contains(item.itemId),
                                 cached = cachedItemIds.contains(item.itemId),
                                 noActiveContent = noActiveContentItemIds.contains(item.itemId),
                                 failedProcessing = hasFailedPendingProjectionStatus(item),
@@ -2160,6 +2162,7 @@ private fun QueueItemCard(
     item: PlaybackQueueItem,
     isBinView: Boolean,
     isArchiveView: Boolean,
+    isArchivedItem: Boolean,
     cached: Boolean,
     noActiveContent: Boolean,
     failedProcessing: Boolean,
@@ -2362,7 +2365,7 @@ private fun QueueItemCard(
                         style = MaterialTheme.typography.labelSmall,
                         color = secondaryTextColor,
                     )
-                    if (isArchiveView) {
+                    if (isArchivedItem) {
                         Icon(
                             painter = painterResource(id = R.drawable.ic_archive_box_24),
                             contentDescription = "Archived",
