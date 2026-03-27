@@ -180,6 +180,7 @@ private data class ManualSavePayload(
 
 private enum class QueueFilterChip(val label: String, val enabled: Boolean = true) {
     ALL("All"),
+    PENDING("Pending"),
     FAVORITES("Favourites"),
     UNREAD("Unread"),
     IN_PROGRESS("In progress"),
@@ -336,7 +337,12 @@ fun QueueScreen(
         }
     }
 
+    val favoritesSourceItems = (items + archivedItems)
+        .distinctBy { it.itemId }
+
     val activeItems = when (selectedFilter) {
+        QueueFilterChip.PENDING -> emptyList()
+        QueueFilterChip.FAVORITES -> favoritesSourceItems
         QueueFilterChip.ARCHIVE -> archivedItems
         QueueFilterChip.BIN -> binItems
         else -> items
@@ -358,6 +364,7 @@ fun QueueScreen(
         }
         val matchesFilter = when (selectedFilter) {
             QueueFilterChip.ALL -> true
+            QueueFilterChip.PENDING -> false
             QueueFilterChip.FAVORITES -> item.isFavorited
             QueueFilterChip.UNREAD -> item.furthestPercent <= 0
             QueueFilterChip.IN_PROGRESS -> item.furthestPercent in 1 until DONE_PERCENT_THRESHOLD
@@ -377,14 +384,15 @@ fun QueueScreen(
     val projectedPendingItems = projectPendingItemsForDestination(
         pendingItems = pendingManualSaves,
         selectedPlaylistId = settings.selectedPlaylistId,
-        queueItems = activeItems,
+        queueItems = items,
         cachedItemIds = cachedItemIds,
         noActiveContentItemIds = noActiveContentItemIds,
     )
-    val visibleProjectedPendingItems = if (selectedFilter == QueueFilterChip.ALL && searchQuery.isBlank()) {
-        projectedPendingItems
-    } else {
-        emptyList()
+    val visibleProjectedPendingItems = when (selectedFilter) {
+        QueueFilterChip.PENDING -> projectedPendingItems.filter { pending ->
+            pendingMatchesSearch(pending, searchQuery)
+        }
+        else -> emptyList()
     }
     val hasVisibleQueueContent = displayedItems.isNotEmpty() || visibleProjectedPendingItems.isNotEmpty()
     val pullRefreshProgress = (pullRefreshDistancePx / pullRefreshThresholdPx).coerceIn(0f, 1f)
@@ -402,6 +410,8 @@ fun QueueScreen(
             "Archive is empty."
         displayedItems.isEmpty() && selectedFilter == QueueFilterChip.BIN ->
             "Bin is empty. Items stay in Bin for 14 days unless purged earlier."
+        displayedItems.isEmpty() && selectedFilter == QueueFilterChip.PENDING ->
+            "No pending saves."
         displayedItems.isEmpty() && selectedFilter != QueueFilterChip.ALL ->
             "No items match the ${selectedFilter.label.lowercase()} filter."
         displayedItems.isEmpty() -> "No items match the current search/filter."
@@ -413,6 +423,7 @@ fun QueueScreen(
         val result = when (selectedFilter) {
             QueueFilterChip.ARCHIVE -> vm.loadArchivedItems()
             QueueFilterChip.BIN -> vm.loadBinItems()
+            QueueFilterChip.PENDING -> vm.loadQueueOnce(forceAutoDownloadAllVisibleUncached = true)
             else -> vm.loadQueueOnce(forceAutoDownloadAllVisibleUncached = true)
         }
         hasRefreshProblem = result.isFailure
@@ -1637,6 +1648,19 @@ private fun ThinQueueDivider() {
 
 private fun normalizeSearchText(value: String): String {
     return value.filter { it.isLetterOrDigit() }
+}
+
+private fun pendingMatchesSearch(item: PendingManualSaveItem, query: String): Boolean {
+    if (query.isBlank()) return true
+    val needle = query.trim().lowercase()
+    val normalizedNeedle = normalizeSearchText(needle)
+    val title = item.titleInput.orEmpty()
+    val body = item.bodyInput.orEmpty()
+    val url = item.urlInput
+    return listOf(title, body, url).any { candidate ->
+        val lowered = candidate.lowercase()
+        lowered.contains(needle) || normalizeSearchText(lowered).contains(normalizedNeedle)
+    }
 }
 
 internal fun resolveManualSaveUrl(input: String): String? {
