@@ -674,6 +674,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     if (combined.isNotEmpty()) {
                         val offlineReadyIds = resolveOfflineReadyIds(combined)
                         _cachedItemIds.update { previous -> previous + offlineReadyIds }
+                        reconcileCachedItemVisibility()
                         updateAutoDownloadQueueSnapshotDiagnostics(
                             current = settings.value,
                             queueItems = currentQueue,
@@ -1702,6 +1703,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             _cachedItemIds.update { previous -> previous + offlineReadyIds }
             autoCacheFavoritedItemsIfEnabled(current = current, queueItems = queueItems)
+            reconcileCachedItemVisibility()
             _noActiveContentItemIds.value = retainKnownNoActiveContentIds(
                 queueItems = queueItems,
                 existing = _noActiveContentItemIds.value,
@@ -1776,6 +1778,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 _cachedItemIds.update { previous -> previous + refreshedOfflineReadyIds }
                 autoCacheFavoritedItemsIfEnabled(current = current, queueItems = refreshedQueueItems)
+                reconcileCachedItemVisibility()
                 _noActiveContentItemIds.value = retainKnownNoActiveContentIds(
                     queueItems = refreshedQueueItems,
                     existing = _noActiveContentItemIds.value,
@@ -1873,6 +1876,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         _queueItems.value = snapshot.items
         _cachedItemIds.value = resolveOfflineReadyIds(snapshot.items)
+        reconcileCachedItemVisibility()
         _noActiveContentItemIds.value = retainKnownNoActiveContentIds(
             queueItems = snapshot.items,
             existing = _noActiveContentItemIds.value,
@@ -2669,6 +2673,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _lastQueueFetchDebug.value = appliedSnapshot
             val resolvedOfflineReadyIds = resolveOfflineReadyIds(queueItems)
             _cachedItemIds.update { previous -> previous + resolvedOfflineReadyIds }
+            reconcileCachedItemVisibility()
             settingsStore.saveQueueSnapshot(current.selectedPlaylistId, queue.copy(items = queueItems))
             repository.reconcileSessionWithQueue(queueItems)?.let { updated ->
                 _nowPlayingSession.value = updated
@@ -2995,6 +3000,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 current = current,
                 queueItems = _archivedItems.value,
             )
+            reconcileCachedItemVisibility()
             _queueOffline.value = false
             updateSyncBadgeState()
             Result.success(Unit)
@@ -3232,6 +3238,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _queueItems.update { existing -> updateFavoriteStateInList(existing, itemId, favorited) }
         _archivedItems.update { existing -> updateFavoriteStateInList(existing, itemId, favorited) }
         _binItems.update { existing -> updateFavoriteStateInList(existing, itemId, favorited) }
+        reconcileCachedItemVisibility()
     }
 
     private fun updateFavoriteStateInList(
@@ -3259,6 +3266,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             withoutItem + item
         }
+    }
+
+    private fun reconcileCachedItemVisibility() {
+        val allowedQueueIds = _queueItems.value.mapTo(mutableSetOf()) { it.itemId }
+        val allowedArchivedFavoritedIds = _archivedItems.value
+            .asSequence()
+            .filter { it.isFavorited }
+            .map { it.itemId }
+            .toSet()
+        val allowedIds = allowedQueueIds + allowedArchivedFavoritedIds
+        _cachedItemIds.update { existing -> existing.filterTo(mutableSetOf()) { it in allowedIds } }
     }
 
     private fun applyFavoriteOverrides(items: List<PlaybackQueueItem>): List<PlaybackQueueItem> {
@@ -3667,6 +3685,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val cachedTargetIds = repository.getCachedItemIds(remainingTargets)
             if (cachedTargetIds.isNotEmpty()) {
                 _cachedItemIds.value = resolveOfflineReadyIds(_queueItems.value)
+                reconcileCachedItemVisibility()
             }
             if (noActiveContentIds.isNotEmpty()) {
                 _noActiveContentItemIds.update { previous ->
