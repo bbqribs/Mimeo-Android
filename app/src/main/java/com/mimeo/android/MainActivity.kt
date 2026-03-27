@@ -669,13 +669,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 .drop(1) // skip the initial emission — queue load handles the first resolve
                 .collect {
                     val currentQueue = _queueItems.value
-                    if (currentQueue.isNotEmpty()) {
-                        val offlineReadyIds = resolveOfflineReadyIds(currentQueue)
-                        _cachedItemIds.value = offlineReadyIds
+                    val currentArchive = _archivedItems.value
+                    val combined = (currentQueue + currentArchive).distinctBy { item -> item.itemId }
+                    if (combined.isNotEmpty()) {
+                        val offlineReadyIds = resolveOfflineReadyIds(combined)
+                        _cachedItemIds.update { previous -> previous + offlineReadyIds }
                         updateAutoDownloadQueueSnapshotDiagnostics(
                             current = settings.value,
                             queueItems = currentQueue,
-                            offlineReadyIds = offlineReadyIds,
+                            offlineReadyIds = _cachedItemIds.value,
                             knownNoActiveIds = _noActiveContentItemIds.value,
                         )
                     }
@@ -1698,7 +1700,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     "viewModelApply playlistId=${appliedSnapshot.selectedPlaylistId} uiCount=${appliedSnapshot.appliedItemCount} uiContains409=${appliedSnapshot.appliedContains409} requestUrl=${appliedSnapshot.requestUrl}",
                 )
             }
-            _cachedItemIds.value = offlineReadyIds
+            _cachedItemIds.update { previous -> previous + offlineReadyIds }
             autoCacheFavoritedItemsIfEnabled(current = current, queueItems = queueItems)
             _noActiveContentItemIds.value = retainKnownNoActiveContentIds(
                 queueItems = queueItems,
@@ -1772,7 +1774,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         "viewModelApply playlistId=${refreshedSnapshot.selectedPlaylistId} uiCount=${refreshedSnapshot.appliedItemCount} uiContains409=${refreshedSnapshot.appliedContains409} requestUrl=${refreshedSnapshot.requestUrl}",
                     )
                 }
-                _cachedItemIds.value = refreshedOfflineReadyIds
+                _cachedItemIds.update { previous -> previous + refreshedOfflineReadyIds }
                 autoCacheFavoritedItemsIfEnabled(current = current, queueItems = refreshedQueueItems)
                 _noActiveContentItemIds.value = retainKnownNoActiveContentIds(
                     queueItems = refreshedQueueItems,
@@ -2665,7 +2667,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 lastFetchAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()),
             )
             _lastQueueFetchDebug.value = appliedSnapshot
-            _cachedItemIds.value = resolveOfflineReadyIds(queueItems)
+            val resolvedOfflineReadyIds = resolveOfflineReadyIds(queueItems)
+            _cachedItemIds.update { previous -> previous + resolvedOfflineReadyIds }
             settingsStore.saveQueueSnapshot(current.selectedPlaylistId, queue.copy(items = queueItems))
             repository.reconcileSessionWithQueue(queueItems)?.let { updated ->
                 _nowPlayingSession.value = updated
@@ -2985,6 +2988,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     isFavorited = item.isFavorited,
                 )
             }
+            val combined = (_queueItems.value + _archivedItems.value).distinctBy { item -> item.itemId }
+            val offlineReadyIds = resolveOfflineReadyIds(combined)
+            _cachedItemIds.update { previous -> previous + offlineReadyIds }
             autoCacheFavoritedItemsIfEnabled(
                 current = current,
                 queueItems = _archivedItems.value,

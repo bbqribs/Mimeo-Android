@@ -390,6 +390,7 @@ fun QueueScreen(
     val hasVisibleQueueContent = displayedItems.isNotEmpty() || visibleProjectedPendingItems.isNotEmpty()
     val pullRefreshProgress = (pullRefreshDistancePx / pullRefreshThresholdPx).coerceIn(0f, 1f)
     val emptyStateMessage = when {
+        selectedFilter == QueueFilterChip.PENDING -> null
         loading -> null
         !hasVisibleQueueContent && offline && settings.selectedPlaylistId != null ->
             "Offline. Can't refresh \"$selectedPlaylistName\" right now."
@@ -2217,7 +2218,7 @@ private fun QueueItemCard(
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = !isBinView && !isArchiveView) { onOpenPlayer() },
+            .clickable(enabled = !isBinView) { onOpenPlayer() },
         colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
     ) {
