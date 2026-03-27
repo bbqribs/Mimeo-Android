@@ -51,6 +51,7 @@ data class PlaybackEngineSettings(
     val skipDuplicateOpeningAfterTitleIntro: Boolean,
     val playCompletionCueAtArticleEnd: Boolean,
     val autoAdvanceOnCompletion: Boolean,
+    val autoArchiveAtArticleEnd: Boolean,
     val playbackSpeed: Float,
 )
 
@@ -65,6 +66,7 @@ interface PlaybackEngineHost {
     fun currentPlaybackSettings(): PlaybackEngineSettings
     suspend fun nextSessionItemId(currentId: Int): Int?
     suspend fun nextPlaylistScopedSessionItemId(currentId: Int): Int?
+    suspend fun onPlaybackArticleEnded(itemId: Int, autoArchiveAtArticleEnd: Boolean)
 }
 
 class PlaybackEngine(
@@ -288,6 +290,7 @@ class PlaybackEngine(
                 setPlaybackPosition(next, 0)
                 playChunk(next, 0)
             } else if (transition.reachedEnd) {
+                val completedItemId = current.currentItemId
                 val settings = host.currentPlaybackSettings()
                 val playlistScoped = host.isCurrentSessionPlaylistScoped()
                 val shouldAutoAdvance = settings.autoAdvanceOnCompletion
@@ -346,6 +349,10 @@ class PlaybackEngine(
                     }
                     _events.tryEmit(PlaybackEngineEvent.UiMessage("Completed"))
                 }
+                host.onPlaybackArticleEnded(
+                    itemId = completedItemId,
+                    autoArchiveAtArticleEnd = settings.autoArchiveAtArticleEnd,
+                )
             }
         }
     }

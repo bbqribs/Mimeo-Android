@@ -42,6 +42,8 @@ class SettingsStore(private val context: Context) {
     private val authTokenVersionKey: Preferences.Key<Int> = intPreferencesKey("auth_token_version")
     private val autoAdvanceOnCompletionKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("auto_advance_on_completion")
+    private val autoArchiveAtArticleEndKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("auto_archive_at_article_end")
     private val speakTitleBeforeArticleKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("speak_title_before_article")
     private val skipDuplicateOpeningAfterTitleIntroKey: Preferences.Key<Boolean> =
@@ -129,6 +131,7 @@ class SettingsStore(private val context: Context) {
             remoteBaseUrl = remoteBaseUrl,
             apiToken = persistedToken,
             autoAdvanceOnCompletion = prefs[autoAdvanceOnCompletionKey] ?: false,
+            autoArchiveAtArticleEnd = prefs[autoArchiveAtArticleEndKey] ?: false,
             speakTitleBeforeArticle = prefs[speakTitleBeforeArticleKey] ?: false,
             skipDuplicateOpeningAfterTitleIntro = prefs[skipDuplicateOpeningAfterTitleIntroKey] ?: true,
             playCompletionCueAtArticleEnd = prefs[playCompletionCueAtArticleEndKey] ?: false,
@@ -188,6 +191,7 @@ class SettingsStore(private val context: Context) {
         remoteBaseUrl: String,
         apiToken: String,
         autoAdvanceOnCompletion: Boolean,
+        autoArchiveAtArticleEnd: Boolean,
         speakTitleBeforeArticle: Boolean,
         skipDuplicateOpeningAfterTitleIntro: Boolean,
         playCompletionCueAtArticleEnd: Boolean,
@@ -227,6 +231,7 @@ class SettingsStore(private val context: Context) {
             prefs[tokenKey] = if (tokenWriteResult.usedLegacyFallback) apiToken.trim() else ""
             prefs[authTokenVersionKey] = (prefs[authTokenVersionKey] ?: 0) + 1
             prefs[autoAdvanceOnCompletionKey] = autoAdvanceOnCompletion
+            prefs[autoArchiveAtArticleEndKey] = autoArchiveAtArticleEnd
             prefs[speakTitleBeforeArticleKey] = speakTitleBeforeArticle
             prefs[skipDuplicateOpeningAfterTitleIntroKey] = skipDuplicateOpeningAfterTitleIntro
             prefs[playCompletionCueAtArticleEndKey] = playCompletionCueAtArticleEnd
@@ -340,6 +345,12 @@ class SettingsStore(private val context: Context) {
     suspend fun saveAutoAdvanceOnCompletion(autoAdvanceOnCompletion: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[autoAdvanceOnCompletionKey] = autoAdvanceOnCompletion
+        }
+    }
+
+    suspend fun saveAutoArchiveAtArticleEnd(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[autoArchiveAtArticleEndKey] = enabled
         }
     }
 

@@ -253,6 +253,7 @@ data class AppSettings(
     val remoteBaseUrl: String = "",
     val apiToken: String = "",
     val autoAdvanceOnCompletion: Boolean = false,
+    val autoArchiveAtArticleEnd: Boolean = false,
     val speakTitleBeforeArticle: Boolean = false,
     val skipDuplicateOpeningAfterTitleIntro: Boolean = true,
     val playCompletionCueAtArticleEnd: Boolean = false,

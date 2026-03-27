@@ -493,12 +493,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
                     playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
                     autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
+                    autoArchiveAtArticleEnd = settings.value.autoArchiveAtArticleEnd,
                     playbackSpeed = settings.value.playbackSpeed,
                 )
             }
             override suspend fun nextSessionItemId(currentId: Int): Int? = this@AppViewModel.nextSessionItemId(currentId)
             override suspend fun nextPlaylistScopedSessionItemId(currentId: Int): Int? =
                 this@AppViewModel.nextPlaylistScopedSessionItemId(currentId)
+            override suspend fun onPlaybackArticleEnded(itemId: Int, autoArchiveAtArticleEnd: Boolean) {
+                this@AppViewModel.onPlaybackArticleEnded(itemId, autoArchiveAtArticleEnd)
+            }
         },
     )
     val playbackEngineState: StateFlow<PlaybackEngineState> = playbackEngine.state
@@ -724,6 +728,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
                 playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
+                autoArchiveAtArticleEnd = settings.value.autoArchiveAtArticleEnd,
                 playbackSpeed = settings.value.playbackSpeed,
             ),
         )
@@ -808,6 +813,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
                 playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
+                autoArchiveAtArticleEnd = settings.value.autoArchiveAtArticleEnd,
                 playbackSpeed = settings.value.playbackSpeed,
             ),
         )
@@ -820,6 +826,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
                 playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
+                autoArchiveAtArticleEnd = settings.value.autoArchiveAtArticleEnd,
                 playbackSpeed = settings.value.playbackSpeed,
             ),
         )
@@ -911,6 +918,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         remoteBaseUrl: String,
         token: String,
         autoAdvanceOnCompletion: Boolean,
+        autoArchiveAtArticleEnd: Boolean,
         speakTitleBeforeArticle: Boolean,
         skipDuplicateOpeningAfterTitleIntro: Boolean,
         playCompletionCueAtArticleEnd: Boolean,
@@ -937,6 +945,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 remoteBaseUrl = remoteBaseUrl,
                 apiToken = token,
                 autoAdvanceOnCompletion = autoAdvanceOnCompletion,
+                autoArchiveAtArticleEnd = autoArchiveAtArticleEnd,
                 speakTitleBeforeArticle = speakTitleBeforeArticle,
                 skipDuplicateOpeningAfterTitleIntro = skipDuplicateOpeningAfterTitleIntro,
                 playCompletionCueAtArticleEnd = playCompletionCueAtArticleEnd,
@@ -986,6 +995,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 remoteBaseUrl = settings.value.remoteBaseUrl,
                 apiToken = settings.value.apiToken,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
+                autoArchiveAtArticleEnd = settings.value.autoArchiveAtArticleEnd,
                 speakTitleBeforeArticle = settings.value.speakTitleBeforeArticle,
                 skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
                 playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
@@ -1028,6 +1038,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 remoteBaseUrl = settings.value.remoteBaseUrl,
                 apiToken = settings.value.apiToken,
                 autoAdvanceOnCompletion = settings.value.autoAdvanceOnCompletion,
+                autoArchiveAtArticleEnd = settings.value.autoArchiveAtArticleEnd,
                 speakTitleBeforeArticle = settings.value.speakTitleBeforeArticle,
                 skipDuplicateOpeningAfterTitleIntro = settings.value.skipDuplicateOpeningAfterTitleIntro,
                 playCompletionCueAtArticleEnd = settings.value.playCompletionCueAtArticleEnd,
@@ -1073,6 +1084,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _settings.value = current.copy(autoAdvanceOnCompletion = enabled)
         viewModelScope.launch {
             settingsStore.saveAutoAdvanceOnCompletion(enabled)
+        }
+    }
+
+    fun saveAutoArchiveAtArticleEnd(enabled: Boolean) {
+        val current = settings.value
+        _settings.value = current.copy(autoArchiveAtArticleEnd = enabled)
+        viewModelScope.launch {
+            settingsStore.saveAutoArchiveAtArticleEnd(enabled)
         }
     }
 
@@ -2697,6 +2716,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
             }
             Result.failure(error)
+        }
+    }
+
+    suspend fun onPlaybackArticleEnded(itemId: Int, autoArchiveAtArticleEnd: Boolean) {
+        if (!autoArchiveAtArticleEnd || itemId <= 0) return
+        val current = settings.value
+        try {
+            repository.archiveItem(current.baseUrl, current.apiToken, itemId)
+            removeArchivedItemLocally(itemId)
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Log.d(
+                LOCUS_CONTINUATION_DEBUG_TAG,
+                "autoArchiveAtEnd archived item=$itemId ${continuationAuditContext()}",
+            )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) return
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+            }
+            Log.w(
+                LOCUS_CONTINUATION_DEBUG_TAG,
+                "autoArchiveAtEnd failed item=$itemId err=${error.message}",
+                error,
+            )
         }
     }
 
