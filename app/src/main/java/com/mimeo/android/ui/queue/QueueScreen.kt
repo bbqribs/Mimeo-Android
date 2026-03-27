@@ -33,6 +33,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
@@ -72,6 +73,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -182,7 +184,8 @@ private enum class QueueFilterChip(val label: String, val enabled: Boolean = tru
     UNREAD("Unread"),
     IN_PROGRESS("In progress"),
     DONE("Done"),
-    ARCHIVED("Bin"),
+    ARCHIVE("Archive"),
+    BIN("Bin"),
 }
 
 private enum class QueueSortOption(val label: String) {
@@ -248,6 +251,7 @@ fun QueueScreen(
 ) {
     val context = LocalContext.current
     val items by vm.queueItems.collectAsState()
+    val archivedItems by vm.archivedItems.collectAsState()
     val binItems by vm.binItems.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val settings by vm.settings.collectAsState()
@@ -325,12 +329,18 @@ fun QueueScreen(
         }
     }.orEmpty()
     LaunchedEffect(selectedFilter) {
-        if (selectedFilter == QueueFilterChip.ARCHIVED) {
-            vm.loadBinItems()
+        when (selectedFilter) {
+            QueueFilterChip.ARCHIVE -> vm.loadArchivedItems()
+            QueueFilterChip.BIN -> vm.loadBinItems()
+            else -> Unit
         }
     }
 
-    val activeItems = if (selectedFilter == QueueFilterChip.ARCHIVED) binItems else items
+    val activeItems = when (selectedFilter) {
+        QueueFilterChip.ARCHIVE -> archivedItems
+        QueueFilterChip.BIN -> binItems
+        else -> items
+    }
     val filteredItems = activeItems.filter { item ->
         val matchesSearch = if (searchQuery.isBlank()) {
             true
@@ -352,7 +362,8 @@ fun QueueScreen(
             QueueFilterChip.UNREAD -> item.furthestPercent <= 0
             QueueFilterChip.IN_PROGRESS -> item.furthestPercent in 1 until DONE_PERCENT_THRESHOLD
             QueueFilterChip.DONE -> item.furthestPercent >= DONE_PERCENT_THRESHOLD
-            QueueFilterChip.ARCHIVED -> true
+            QueueFilterChip.ARCHIVE -> true
+            QueueFilterChip.BIN -> true
         }
         matchesSearch && matchesFilter
     }
@@ -387,7 +398,9 @@ fun QueueScreen(
         !hasVisibleQueueContent -> "No items in Smart queue yet. Share a link to add one."
         displayedItems.isEmpty() && searchQuery.isNotBlank() ->
             "No results for \"$searchQuery\" in $selectedPlaylistName."
-        displayedItems.isEmpty() && selectedFilter == QueueFilterChip.ARCHIVED ->
+        displayedItems.isEmpty() && selectedFilter == QueueFilterChip.ARCHIVE ->
+            "Archive is empty."
+        displayedItems.isEmpty() && selectedFilter == QueueFilterChip.BIN ->
             "Bin is empty. Items stay in Bin for 14 days unless purged earlier."
         displayedItems.isEmpty() && selectedFilter != QueueFilterChip.ALL ->
             "No items match the ${selectedFilter.label.lowercase()} filter."
@@ -397,10 +410,10 @@ fun QueueScreen(
     suspend fun refreshQueueContent() {
         if (refreshActionState == RefreshActionVisualState.Refreshing) return
         refreshActionState = RefreshActionVisualState.Refreshing
-        val result = if (selectedFilter == QueueFilterChip.ARCHIVED) {
-            vm.loadBinItems()
-        } else {
-            vm.loadQueueOnce(forceAutoDownloadAllVisibleUncached = true)
+        val result = when (selectedFilter) {
+            QueueFilterChip.ARCHIVE -> vm.loadArchivedItems()
+            QueueFilterChip.BIN -> vm.loadBinItems()
+            else -> vm.loadQueueOnce(forceAutoDownloadAllVisibleUncached = true)
         }
         hasRefreshProblem = result.isFailure
         refreshActionState = if (result.isSuccess) {
@@ -539,7 +552,11 @@ fun QueueScreen(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -561,6 +578,15 @@ fun QueueScreen(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
+                        ActionHintTooltip(label = "Archive") {
+                            IconButton(onClick = { selectedFilter = QueueFilterChip.ARCHIVE }) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_archive_box_24),
+                                    contentDescription = "Show Archive",
+                                    modifier = Modifier.size(24.dp),
+                                )
+                            }
+                        }
                         ActionHintTooltip(label = if (searchExpanded) "Close search" else "Search") {
                             IconButton(onClick = { searchExpanded = !searchExpanded }) {
                                 Icon(
@@ -713,7 +739,11 @@ fun QueueScreen(
             }
         }
         if (settings.showAutoDownloadDiagnostics) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -734,7 +764,11 @@ fun QueueScreen(
             }
         }
         if (BuildConfig.DEBUG && settings.showPendingOutcomeSimulator) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -841,7 +875,11 @@ fun QueueScreen(
             }
         }
         if (BuildConfig.DEBUG && showQueueFetchDebug && lastQueueFetchDebug.statusCode != null) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -930,7 +968,11 @@ fun QueueScreen(
                 )
             }
             emptyStateMessage?.let { message ->
-                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
+                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+                ) {
                     Text(
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                         text = message,
@@ -978,7 +1020,8 @@ fun QueueScreen(
                         ) {
                             QueueItemCard(
                                 item = item,
-                                isBinView = selectedFilter == QueueFilterChip.ARCHIVED,
+                                isBinView = selectedFilter == QueueFilterChip.BIN,
+                                isArchiveView = selectedFilter == QueueFilterChip.ARCHIVE,
                                 cached = cachedItemIds.contains(item.itemId),
                                 noActiveContent = noActiveContentItemIds.contains(item.itemId),
                                 failedProcessing = hasFailedPendingProjectionStatus(item),
@@ -1082,6 +1125,17 @@ fun QueueScreen(
                                             }
                                             .onFailure {
                                                 onShowSnackbar("Couldn't restore from Bin", "Diagnostics", "open_diagnostics")
+                                            }
+                                    }
+                                },
+                                onUnarchive = {
+                                    actionScope.launch {
+                                        vm.unarchiveItem(item.itemId)
+                                            .onSuccess {
+                                                onShowSnackbar("Unarchived", null, null)
+                                            }
+                                            .onFailure {
+                                                onShowSnackbar("Couldn't unarchive item", "Diagnostics", "open_diagnostics")
                                             }
                                     }
                                 },
@@ -1707,7 +1761,11 @@ private fun PendingManualRetryCard(
     onClearAll: () -> Unit,
 ) {
     var menuExpandedItemId by remember { mutableStateOf<Long?>(null) }
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1894,6 +1952,8 @@ private fun PendingProjectedQueueItemCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = failedProcessing, onClick = onTap),
+        colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier
@@ -2083,6 +2143,7 @@ internal fun queueDownloadMenuLabel(
 private fun QueueItemCard(
     item: PlaybackQueueItem,
     isBinView: Boolean,
+    isArchiveView: Boolean,
     cached: Boolean,
     noActiveContent: Boolean,
     failedProcessing: Boolean,
@@ -2093,6 +2154,7 @@ private fun QueueItemCard(
     onArchive: () -> Unit,
     onMoveToBin: () -> Unit,
     onRestoreFromBin: () -> Unit,
+    onUnarchive: () -> Unit,
     onPurgeFromBin: () -> Unit,
     onToggleFavorite: () -> Unit,
     isMenuExpanded: Boolean,
@@ -2140,7 +2202,9 @@ private fun QueueItemCard(
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = !isBinView) { onOpenPlayer() },
+            .clickable(enabled = !isBinView && !isArchiveView) { onOpenPlayer() },
+        colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier
@@ -2189,6 +2253,21 @@ private fun QueueItemCard(
                                 onClick = {
                                     onDismissMenu()
                                     onPurgeFromBin()
+                                },
+                            )
+                        } else if (isArchiveView) {
+                            DropdownMenuItem(
+                                text = { Text("Unarchive") },
+                                onClick = {
+                                    onDismissMenu()
+                                    onUnarchive()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Move to Bin (14 days)") },
+                                onClick = {
+                                    onDismissMenu()
+                                    onMoveToBin()
                                 },
                             )
                         } else {

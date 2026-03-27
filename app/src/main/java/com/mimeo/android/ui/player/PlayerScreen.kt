@@ -39,10 +39,12 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
@@ -55,6 +57,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.TooltipBox
@@ -1361,7 +1364,7 @@ fun PlayerScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+                .background(Color.Black)
                 .then(modifier),
             contentAlignment = Alignment.Center,
         ) {
@@ -1383,7 +1386,7 @@ fun PlayerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+                .background(Color.Black)
                 .then(modifier),
             verticalArrangement = Arrangement.Top,
         ) {
@@ -1949,6 +1952,7 @@ private fun ExpandedPlayerTopBar(
             TopAppBar(
                 modifier = Modifier.height(48.dp),
                 windowInsets = WindowInsets(0, 0, 0, 0),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black),
                 title = {},
                 actions = {
                     ActionHintTooltip(label = if (isDone) "Mark as not done" else "Mark as done") {
@@ -2030,7 +2034,7 @@ private fun ExpandedPlayerTopBar(
         AnimatedVisibility(visible = searchActive) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surface,
+                color = Color.Black,
                 tonalElevation = 1.dp,
                 shadowElevation = 1.dp,
             ) {
@@ -2454,6 +2458,8 @@ private fun LocusPeekCard(
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -2543,7 +2549,7 @@ private fun FullPlayerDock(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+            .background(Color.Black),
     ) {
         content()
         if (showChevron) {
@@ -2581,7 +2587,7 @@ private fun MinimalPlayerDock(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+            .background(Color.Black),
     ) {
         content()
         if (showChevron) {

@@ -506,6 +506,17 @@ class ApiClient(
         }
     }
 
+    suspend fun getArchivedItems(baseUrl: String, token: String, limit: Int = 100): List<ArticleSummary> = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/items?archived=true&limit=$limit"))
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        executeJson(request) { payload ->
+            json.decodeFromString(ListSerializer(ArticleSummary.serializer()), payload)
+        }
+    }
+
     suspend fun moveItemToBin(
         baseUrl: String,
         token: String,

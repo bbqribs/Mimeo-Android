@@ -414,6 +414,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _queueItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
     val queueItems: StateFlow<List<PlaybackQueueItem>> = _queueItems.asStateFlow()
+    private val _archivedItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
+    val archivedItems: StateFlow<List<PlaybackQueueItem>> = _archivedItems.asStateFlow()
     private val _binItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
     val binItems: StateFlow<List<PlaybackQueueItem>> = _binItems.asStateFlow()
     private val _pendingManualSaves = MutableStateFlow<List<PendingManualSaveItem>>(emptyList())
@@ -627,6 +629,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     initialPostSignInHydrationJob?.cancel()
                     initialPostSignInHydrationJob = null
                     _queueItems.value = emptyList()
+                    _archivedItems.value = emptyList()
                     _binItems.value = emptyList()
                     _cachedItemIds.value = emptySet()
                     _noActiveContentItemIds.value = emptySet()
@@ -2892,6 +2895,68 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     isFavorited = item.isFavorited,
                 )
             }
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun loadArchivedItems(): Result<Unit> {
+        val current = settings.value
+        return try {
+            val archived = repository.listArchivedItems(current.baseUrl, current.apiToken)
+            _archivedItems.value = archived.map { item ->
+                PlaybackQueueItem(
+                    itemId = item.id,
+                    title = item.title,
+                    url = item.url,
+                    host = item.siteName,
+                    status = item.status,
+                    lastReadPercent = item.lastReadPercent,
+                    resumeReadPercent = item.resumeReadPercent,
+                    apiProgressPercent = item.progressPercent,
+                    apiFurthestPercent = item.furthestPercent,
+                    lastOpenedAt = item.lastOpenedAt,
+                    createdAt = item.createdAt,
+                    isFavorited = item.isFavorited,
+                )
+            }
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun unarchiveItem(itemId: Int): Result<Unit> {
+        val current = settings.value
+        return try {
+            repository.unarchiveItem(current.baseUrl, current.apiToken, itemId)
+            repository.toggleCompletion(current.baseUrl, current.apiToken, itemId, markDone = false)
+            _archivedItems.update { existing -> existing.filterNot { it.itemId == itemId } }
+            loadQueueOnce(autoRetryPendingSaves = false)
+            _statusMessage.value = "Unarchived"
             _queueOffline.value = false
             updateSyncBadgeState()
             Result.success(Unit)

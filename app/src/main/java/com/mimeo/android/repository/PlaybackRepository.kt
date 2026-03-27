@@ -182,6 +182,10 @@ class PlaybackRepository(
         return apiClient.getTrashedItems(baseUrl, token)
     }
 
+    suspend fun listArchivedItems(baseUrl: String, token: String): List<ArticleSummary> {
+        return apiClient.getArchivedItems(baseUrl, token)
+    }
+
     suspend fun createPlaylist(baseUrl: String, token: String, name: String): PlaylistSummary {
         return apiClient.createPlaylist(baseUrl, token, name)
     }

@@ -245,7 +245,7 @@ fun ReaderBody(
                                         }
                                     }
                                     .background(
-                                        color = MaterialTheme.colorScheme.surface,
+                                        color = Color.Black,
                                         shape = MaterialTheme.shapes.medium,
                                     )
                                     .padding(horizontal = 12.dp, vertical = 10.dp),
