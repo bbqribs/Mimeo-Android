@@ -3967,9 +3967,12 @@ internal fun shouldKeepScreenOnForSession(
     requiresSignIn: Boolean,
     isOnLocusRoute: Boolean,
     requestedPlayerItemId: Int?,
+    playbackActive: Boolean,
+    manualReadingActive: Boolean,
 ): Boolean {
     if (!keepScreenOnEnabled || requiresSignIn || !isOnLocusRoute) return false
-    return (requestedPlayerItemId ?: -1) > 0
+    if ((requestedPlayerItemId ?: -1) <= 0) return false
+    return playbackActive || manualReadingActive
 }
 
 @Composable
@@ -4011,11 +4014,15 @@ private fun MimeoApp(vm: AppViewModel) {
         routeItemId
             ?: pendingLocusItemId.takeIf { pendingLocusOpen && it > 0 }
             ?: sessionNowPlayingItemId
+    var playbackActive by rememberSaveable { mutableStateOf(false) }
+    var manualReadingActive by rememberSaveable { mutableStateOf(false) }
     val keepScreenOnForSession = shouldKeepScreenOnForSession(
         keepScreenOnEnabled = settings.keepScreenOnDuringSession,
         requiresSignIn = requiresSignIn,
         isOnLocusRoute = currentRoute.startsWith(ROUTE_LOCUS),
         requestedPlayerItemId = requestedPlayerItemId,
+        playbackActive = playbackActive || hasPlaybackItemInProgress,
+        manualReadingActive = manualReadingActive,
     )
     SideEffect {
         val window = hostActivity?.window ?: return@SideEffect
@@ -4044,7 +4051,6 @@ private fun MimeoApp(vm: AppViewModel) {
         else -> ROUTE_UP_NEXT
     }
     val isOnLocusRoute = currentRoute.startsWith(ROUTE_LOCUS)
-    var playbackActive by rememberSaveable { mutableStateOf(false) }
     var readerChromeHidden by rememberSaveable { mutableStateOf(false) }
     val controlsMode = settings.playerControlsMode
     val storedLastNonNubMode = settings.playerLastNonNubMode
@@ -4387,6 +4393,9 @@ private fun MimeoApp(vm: AppViewModel) {
                             },
                             onPlaybackActiveChange = { active ->
                                 playbackActive = active
+                            },
+                            onManualReadingActiveChange = { active ->
+                                manualReadingActive = active
                             },
                             onReaderChromeVisibilityChange = { hidden ->
                                 readerChromeHidden = hidden

@@ -508,6 +508,7 @@ fun PlayerScreen(
     chevronSnapEdge: PlayerChevronSnapEdge = PlayerChevronSnapEdge.RIGHT,
     onControlsModeChange: (PlayerControlsMode, PlayerControlsMode) -> Unit = { _, _ -> },
     onPlaybackActiveChange: (Boolean) -> Unit = {},
+    onManualReadingActiveChange: (Boolean) -> Unit = {},
     onPlaybackProgressPercentChange: (Int) -> Unit = {},
     onReaderChromeVisibilityChange: (Boolean) -> Unit = {},
     onChevronSnapChange: (PlayerChevronSnapEdge) -> Unit = {},
@@ -1104,6 +1105,13 @@ fun PlayerScreen(
 
     LaunchedEffect(isSpeaking, isAutoPlaying) {
         onPlaybackActiveChange(isSpeaking || isAutoPlaying)
+    }
+    LaunchedEffect(readerModeEnabled, currentItemId, isSpeaking, isAutoPlaying, autoPlayAfterLoad) {
+        val manualReadingActive =
+            readerModeEnabled &&
+                currentItemId > 0 &&
+                !(isSpeaking || isAutoPlaying || autoPlayAfterLoad)
+        onManualReadingActiveChange(manualReadingActive)
     }
 
     LaunchedEffect(currentPercent) {
