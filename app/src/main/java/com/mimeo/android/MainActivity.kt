@@ -2766,6 +2766,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val queueBeforeArchive = _queueItems.value
         val queueIndex = queueBeforeArchive.indexOfFirst { it.itemId == itemId }
         val queueItemSnapshot = queueBeforeArchive.getOrNull(queueIndex)
+        val archivedItemSnapshot = _archivedItems.value.firstOrNull { it.itemId == itemId }
         val wasCached = _cachedItemIds.value.contains(itemId)
         val wasNoActiveContent = _noActiveContentItemIds.value.contains(itemId)
         return try {
@@ -2797,6 +2798,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } else {
                 removeArchivedItemLocally(itemId)
+                val archiveSeed = queueItemSnapshot ?: archivedItemSnapshot
+                if (archiveSeed != null) {
+                    _archivedItems.update { existing ->
+                        mergeItemIntoList(existing, archiveSeed, addToFront = true)
+                    }
+                }
                 _statusMessage.value = "Archived"
             }
             _queueOffline.value = false
@@ -2825,6 +2832,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val queueBeforeMove = _queueItems.value
         val queueIndex = queueBeforeMove.indexOfFirst { it.itemId == itemId }
         val queueItemSnapshot = queueBeforeMove.getOrNull(queueIndex)
+        val archivedItemSnapshot = _archivedItems.value.firstOrNull { it.itemId == itemId }
         val wasCached = _cachedItemIds.value.contains(itemId)
         val wasNoActiveContent = _noActiveContentItemIds.value.contains(itemId)
         return try {
@@ -2856,6 +2864,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } else {
                 removeArchivedItemLocally(itemId)
+                val binSeed = queueItemSnapshot ?: archivedItemSnapshot
+                if (binSeed != null) {
+                    _binItems.update { existing ->
+                        mergeItemIntoList(existing, binSeed, addToFront = true)
+                    }
+                }
                 _statusMessage.value = "Moved to Bin (14 days)"
             }
             _queueOffline.value = false
@@ -3065,6 +3079,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     repository.restoreItemFromBin(current.baseUrl, current.apiToken, snapshot.item.itemId)
                 }
             }
+            _archivedItems.update { previous -> previous.filterNot { it.itemId == snapshot.item.itemId } }
+            _binItems.update { previous -> previous.filterNot { it.itemId == snapshot.item.itemId } }
             _queueItems.update { previous ->
                 val withoutItem = previous.filterNot { it.itemId == snapshot.item.itemId }
                 val insertAt = snapshot.originalIndex.coerceIn(0, withoutItem.size)
@@ -3126,6 +3142,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun removeArchivedItemLocally(itemId: Int) {
         _queueItems.update { previous -> previous.filterNot { it.itemId == itemId } }
+        _archivedItems.update { previous -> previous.filterNot { it.itemId == itemId } }
+        _binItems.update { previous -> previous.filterNot { it.itemId == itemId } }
         _cachedItemIds.update { previous -> previous - itemId }
         _noActiveContentItemIds.update { previous -> previous - itemId }
         favoriteOverridesByItemId.remove(itemId)
@@ -3141,14 +3159,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun applyLocalFavoriteState(itemId: Int, favorited: Boolean) {
-        _queueItems.update { existing ->
-            existing.map { item ->
-                if (item.itemId != itemId) {
-                    item
-                } else {
-                    item.copy(isFavorited = favorited)
-                }
+        _queueItems.update { existing -> updateFavoriteStateInList(existing, itemId, favorited) }
+        _archivedItems.update { existing -> updateFavoriteStateInList(existing, itemId, favorited) }
+        _binItems.update { existing -> updateFavoriteStateInList(existing, itemId, favorited) }
+    }
+
+    private fun updateFavoriteStateInList(
+        existing: List<PlaybackQueueItem>,
+        itemId: Int,
+        favorited: Boolean,
+    ): List<PlaybackQueueItem> {
+        return existing.map { item ->
+            if (item.itemId != itemId) {
+                item
+            } else {
+                item.copy(isFavorited = favorited)
             }
+        }
+    }
+
+    private fun mergeItemIntoList(
+        existing: List<PlaybackQueueItem>,
+        item: PlaybackQueueItem,
+        addToFront: Boolean,
+    ): List<PlaybackQueueItem> {
+        val withoutItem = existing.filterNot { it.itemId == item.itemId }
+        return if (addToFront) {
+            listOf(item) + withoutItem
+        } else {
+            withoutItem + item
         }
     }
 

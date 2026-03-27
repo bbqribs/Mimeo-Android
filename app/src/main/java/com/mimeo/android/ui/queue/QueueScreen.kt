@@ -2257,6 +2257,13 @@ private fun QueueItemCard(
                             )
                         } else if (isArchiveView) {
                             DropdownMenuItem(
+                                text = { Text(if (item.isFavorited) "Unfavourite" else "Favourite") },
+                                onClick = {
+                                    onDismissMenu()
+                                    onToggleFavorite()
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Unarchive") },
                                 onClick = {
                                     onDismissMenu()
