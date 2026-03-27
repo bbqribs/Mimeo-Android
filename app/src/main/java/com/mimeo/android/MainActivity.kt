@@ -2993,11 +2993,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return try {
             when (snapshot.actionType) {
                 UndoableActionType.ARCHIVE -> {
-                    // Some backend modes place archived items behind restore semantics.
-                    // Best-effort restore first keeps undo resilient across archive/bin implementations.
-                    runCatching {
-                        repository.restoreItemFromBin(current.baseUrl, current.apiToken, snapshot.item.itemId)
-                    }
+                    repository.unarchiveItem(current.baseUrl, current.apiToken, snapshot.item.itemId)
                     repository.toggleCompletion(current.baseUrl, current.apiToken, snapshot.item.itemId, markDone = false)
                 }
                 UndoableActionType.BIN -> {

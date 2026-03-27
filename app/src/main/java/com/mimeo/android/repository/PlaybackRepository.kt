@@ -280,6 +280,11 @@ class PlaybackRepository(
         return ProgressPostResult(queued = false)
     }
 
+    suspend fun unarchiveItem(baseUrl: String, token: String, itemId: Int): ProgressPostResult {
+        apiClient.unarchiveItem(baseUrl, token, itemId)
+        return ProgressPostResult(queued = false)
+    }
+
     suspend fun moveItemToBin(baseUrl: String, token: String, itemId: Int): ProgressPostResult {
         apiClient.moveItemToBin(baseUrl, token, itemId)
         return ProgressPostResult(queued = false)
