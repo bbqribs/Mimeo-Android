@@ -1049,10 +1049,11 @@ fun QueueScreen(
                                         vm.moveItemToBin(
                                             item.itemId,
                                             refreshQueue = false,
+                                            source = ArchiveActionSource.UP_NEXT,
                                         )
                                             .onSuccess {
                                                 collapsingArchivedItemIds = collapsingArchivedItemIds - item.itemId
-                                                onShowSnackbar("Moved to Bin (14 days)", null, null)
+                                                onShowSnackbar("Moved to Bin (14 days)", "Undo", ACTION_KEY_UNDO_ARCHIVE)
                                             }
                                             .onFailure {
                                                 collapsingArchivedItemIds = collapsingArchivedItemIds - item.itemId

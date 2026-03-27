@@ -1527,9 +1527,10 @@ fun PlayerScreen(
                                             vm.moveItemToBin(
                                                 currentItemId,
                                                 refreshQueue = false,
+                                                source = ArchiveActionSource.LOCUS,
                                             )
                                                 .onSuccess {
-                                                    onShowSnackbar("Moved to Bin (14 days)", null, null)
+                                                    onShowSnackbar("Moved to Bin (14 days)", "Undo", ACTION_KEY_UNDO_ARCHIVE)
                                                     if (nextItemId != null) {
                                                         vm.startNowPlayingSession(startItemId = nextItemId)
                                                         vm.playbackOpenItem(
@@ -1768,9 +1769,10 @@ fun PlayerScreen(
                                                     vm.moveItemToBin(
                                                         currentItemId,
                                                         refreshQueue = false,
+                                                        source = ArchiveActionSource.LOCUS,
                                                     )
                                                         .onSuccess {
-                                                            onShowSnackbar("Moved to Bin (14 days)", null, null)
+                                                            onShowSnackbar("Moved to Bin (14 days)", "Undo", ACTION_KEY_UNDO_ARCHIVE)
                                                             if (nextItemId != null) {
                                                                 vm.startNowPlayingSession(startItemId = nextItemId)
                                                                 vm.playbackOpenItem(
