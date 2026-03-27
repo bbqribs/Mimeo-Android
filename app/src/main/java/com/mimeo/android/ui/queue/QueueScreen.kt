@@ -2362,6 +2362,14 @@ private fun QueueItemCard(
                         style = MaterialTheme.typography.labelSmall,
                         color = secondaryTextColor,
                     )
+                    if (isArchiveView) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_archive_box_24),
+                            contentDescription = "Archived",
+                            tint = secondaryTextColor,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                     Icon(
                         painter = painterResource(id = progressIconRes),
                         contentDescription = progressIconDescription,
