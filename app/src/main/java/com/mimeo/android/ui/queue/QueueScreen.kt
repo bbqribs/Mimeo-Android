@@ -181,11 +181,12 @@ private data class ManualSavePayload(
 private enum class QueueFilterChip(val label: String, val enabled: Boolean = true) {
     ALL("All"),
     FAVORITES("Favourites"),
+    ARCHIVE("Archive"),
+    BIN("Bin"),
     UNREAD("Unread"),
     IN_PROGRESS("In progress"),
     DONE("Done"),
-    ARCHIVE("Archive"),
-    BIN("Bin"),
+    PENDING("Pending"),
 }
 
 private enum class QueueSortOption(val label: String) {
@@ -336,11 +337,17 @@ fun QueueScreen(
         }
     }
 
+    val favoritesSourceItems = (items + archivedItems)
+        .distinctBy { it.itemId }
+
     val activeItems = when (selectedFilter) {
+        QueueFilterChip.PENDING -> emptyList()
+        QueueFilterChip.FAVORITES -> favoritesSourceItems
         QueueFilterChip.ARCHIVE -> archivedItems
         QueueFilterChip.BIN -> binItems
         else -> items
     }
+    val archivedItemIds = archivedItems.mapTo(hashSetOf()) { it.itemId }
     val filteredItems = activeItems.filter { item ->
         val matchesSearch = if (searchQuery.isBlank()) {
             true
@@ -358,6 +365,7 @@ fun QueueScreen(
         }
         val matchesFilter = when (selectedFilter) {
             QueueFilterChip.ALL -> true
+            QueueFilterChip.PENDING -> false
             QueueFilterChip.FAVORITES -> item.isFavorited
             QueueFilterChip.UNREAD -> item.furthestPercent <= 0
             QueueFilterChip.IN_PROGRESS -> item.furthestPercent in 1 until DONE_PERCENT_THRESHOLD
@@ -374,21 +382,16 @@ fun QueueScreen(
         QueueSortOption.PROGRESS_LOW -> filteredItems.sortedBy { it.furthestPercent }
         QueueSortOption.TITLE_AZ -> filteredItems.sortedBy { (it.title ?: it.url).lowercase() }
     }
-    val projectedPendingItems = projectPendingItemsForDestination(
-        pendingItems = pendingManualSaves,
-        selectedPlaylistId = settings.selectedPlaylistId,
-        queueItems = activeItems,
-        cachedItemIds = cachedItemIds,
-        noActiveContentItemIds = noActiveContentItemIds,
-    )
-    val visibleProjectedPendingItems = if (selectedFilter == QueueFilterChip.ALL && searchQuery.isBlank()) {
-        projectedPendingItems
-    } else {
-        emptyList()
+    val visibleProjectedPendingItems = when (selectedFilter) {
+        QueueFilterChip.PENDING -> pendingManualSaves.filter { pending ->
+            pendingMatchesSearch(pending, searchQuery)
+        }
+        else -> emptyList()
     }
     val hasVisibleQueueContent = displayedItems.isNotEmpty() || visibleProjectedPendingItems.isNotEmpty()
     val pullRefreshProgress = (pullRefreshDistancePx / pullRefreshThresholdPx).coerceIn(0f, 1f)
     val emptyStateMessage = when {
+        selectedFilter == QueueFilterChip.PENDING -> null
         loading -> null
         !hasVisibleQueueContent && offline && settings.selectedPlaylistId != null ->
             "Offline. Can't refresh \"$selectedPlaylistName\" right now."
@@ -402,7 +405,7 @@ fun QueueScreen(
             "Archive is empty."
         displayedItems.isEmpty() && selectedFilter == QueueFilterChip.BIN ->
             "Bin is empty. Items stay in Bin for 14 days unless purged earlier."
-        displayedItems.isEmpty() && selectedFilter != QueueFilterChip.ALL ->
+        displayedItems.isEmpty() && selectedFilter != QueueFilterChip.ALL && selectedFilter != QueueFilterChip.PENDING ->
             "No items match the ${selectedFilter.label.lowercase()} filter."
         displayedItems.isEmpty() -> "No items match the current search/filter."
         else -> null
@@ -413,6 +416,7 @@ fun QueueScreen(
         val result = when (selectedFilter) {
             QueueFilterChip.ARCHIVE -> vm.loadArchivedItems()
             QueueFilterChip.BIN -> vm.loadBinItems()
+            QueueFilterChip.PENDING -> vm.loadQueueOnce(forceAutoDownloadAllVisibleUncached = true)
             else -> vm.loadQueueOnce(forceAutoDownloadAllVisibleUncached = true)
         }
         hasRefreshProblem = result.isFailure
@@ -1022,6 +1026,7 @@ fun QueueScreen(
                                 item = item,
                                 isBinView = selectedFilter == QueueFilterChip.BIN,
                                 isArchiveView = selectedFilter == QueueFilterChip.ARCHIVE,
+                                isArchivedItem = archivedItemIds.contains(item.itemId),
                                 cached = cachedItemIds.contains(item.itemId),
                                 noActiveContent = noActiveContentItemIds.contains(item.itemId),
                                 failedProcessing = hasFailedPendingProjectionStatus(item),
@@ -1639,6 +1644,19 @@ private fun normalizeSearchText(value: String): String {
     return value.filter { it.isLetterOrDigit() }
 }
 
+private fun pendingMatchesSearch(item: PendingManualSaveItem, query: String): Boolean {
+    if (query.isBlank()) return true
+    val needle = query.trim().lowercase()
+    val normalizedNeedle = normalizeSearchText(needle)
+    val title = item.titleInput.orEmpty()
+    val body = item.bodyInput.orEmpty()
+    val url = item.urlInput
+    return listOf(title, body, url).any { candidate ->
+        val lowered = candidate.lowercase()
+        lowered.contains(needle) || normalizeSearchText(lowered).contains(normalizedNeedle)
+    }
+}
+
 internal fun resolveManualSaveUrl(input: String): String? {
     return extractFirstHttpUrl(input.trim())
 }
@@ -2144,6 +2162,7 @@ private fun QueueItemCard(
     item: PlaybackQueueItem,
     isBinView: Boolean,
     isArchiveView: Boolean,
+    isArchivedItem: Boolean,
     cached: Boolean,
     noActiveContent: Boolean,
     failedProcessing: Boolean,
@@ -2202,7 +2221,7 @@ private fun QueueItemCard(
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = !isBinView && !isArchiveView) { onOpenPlayer() },
+            .clickable(enabled = !isBinView) { onOpenPlayer() },
         colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
     ) {
@@ -2256,6 +2275,13 @@ private fun QueueItemCard(
                                 },
                             )
                         } else if (isArchiveView) {
+                            DropdownMenuItem(
+                                text = { Text(if (item.isFavorited) "Unfavourite" else "Favourite") },
+                                onClick = {
+                                    onDismissMenu()
+                                    onToggleFavorite()
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text("Unarchive") },
                                 onClick = {
@@ -2339,6 +2365,14 @@ private fun QueueItemCard(
                         style = MaterialTheme.typography.labelSmall,
                         color = secondaryTextColor,
                     )
+                    if (isArchivedItem) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_archive_box_24),
+                            contentDescription = "Archived",
+                            tint = secondaryTextColor,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                     Icon(
                         painter = painterResource(id = progressIconRes),
                         contentDescription = progressIconDescription,

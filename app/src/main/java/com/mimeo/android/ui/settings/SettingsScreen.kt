@@ -150,6 +150,9 @@ fun SettingsScreen(
     var autoDownloadSavedArticles by remember(settings.autoDownloadSavedArticles) {
         mutableStateOf(settings.autoDownloadSavedArticles)
     }
+    var autoCacheFavoritedItems by remember(settings.autoCacheFavoritedItems) {
+        mutableStateOf(settings.autoCacheFavoritedItems)
+    }
     var readingFontSizeSp by remember(settings.readingFontSizeSp) {
         mutableIntStateOf(settings.readingFontSizeSp)
     }
@@ -216,6 +219,7 @@ fun SettingsScreen(
             ttsVoiceName = ttsVoiceName,
             keepShareResultNotifications = keepShareResultNotifications,
             autoDownloadSavedArticles = autoDownloadSavedArticles,
+            autoCacheFavoritedItems = autoCacheFavoritedItems,
         )
     }
 
@@ -662,6 +666,30 @@ fun SettingsScreen(
                         onCheckedChange = {
                             autoDownloadSavedArticles = it
                             vm.saveAutoDownloadSavedArticles(it)
+                        },
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text("Auto-cache favourited items")
+                        Text(
+                            text = "When on, favourited items (including in Archive) are cached for offline reading. Bin items stay excluded.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = autoCacheFavoritedItems,
+                        onCheckedChange = {
+                            autoCacheFavoritedItems = it
+                            vm.saveAutoCacheFavoritedItems(it)
                         },
                     )
                 }
