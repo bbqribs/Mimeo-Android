@@ -806,7 +806,7 @@ fun SettingsScreen(
                     ) {
                         Text("Keep screen on during active session")
                         Text(
-                            text = "Keeps screen awake while Locus is open with an active reading/listening item.",
+                            text = "Keeps screen awake while speaking, or while manually reading in Reader mode on Locus.",
                             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                             color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                         )
