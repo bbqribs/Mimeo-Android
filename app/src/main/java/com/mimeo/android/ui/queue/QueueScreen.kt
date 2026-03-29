@@ -281,6 +281,7 @@ fun QueueScreen(
     vm: AppViewModel,
     onShowSnackbar: (String, String?, String?) -> Unit,
     focusItemId: Int? = null,
+    upNextTabTapSignal: Int = 0,
     onOpenPlayer: (Int) -> Unit,
     onOpenDiagnostics: () -> Unit,
 ) {
@@ -330,6 +331,8 @@ fun QueueScreen(
     var hasRefreshProblem by rememberSaveable { mutableStateOf(false) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
     var simulatedPendingOutcome by remember { mutableStateOf<PendingOutcomeSimulation?>(null) }
+    var lastHandledUpNextTapSignal by rememberSaveable { mutableIntStateOf(upNextTabTapSignal) }
+    var nextUpNextTapScrollTargetTop by rememberSaveable { mutableStateOf(false) }
     var showSaveEntryDialog by remember { mutableStateOf(false) }
     var manualSaveMode by rememberSaveable { mutableStateOf(ManualSaveMode.URL) }
     var manualUrlInput by rememberSaveable { mutableStateOf("") }
@@ -656,6 +659,27 @@ fun QueueScreen(
             listState.animateScrollToItem(0)
         }
         previousDisplayedItemIds = currentIds
+    }
+
+    LaunchedEffect(upNextTabTapSignal, displayedItems, activePlayingItemId) {
+        if (upNextTabTapSignal == lastHandledUpNextTapSignal) return@LaunchedEffect
+        lastHandledUpNextTapSignal = upNextTabTapSignal
+        if (displayedItems.isEmpty()) return@LaunchedEffect
+        if (nextUpNextTapScrollTargetTop) {
+            listState.animateScrollToItem(0)
+            nextUpNextTapScrollTargetTop = false
+            return@LaunchedEffect
+        }
+        val activeIndex = activePlayingItemId?.let { id ->
+            displayedItems.indexOfFirst { item -> item.itemId == id }.takeIf { it >= 0 }
+        }
+        if (activeIndex != null) {
+            listState.animateScrollToItem(activeIndex)
+            nextUpNextTapScrollTargetTop = true
+        } else {
+            listState.animateScrollToItem(0)
+            nextUpNextTapScrollTargetTop = false
+        }
     }
 
     Column(

@@ -4088,6 +4088,7 @@ private fun MimeoApp(vm: AppViewModel) {
     }
     val showCompactControls = settings.persistentPlayerEnabled
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
+    var upNextTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var playerOpenRequestSignal by rememberSaveable { mutableIntStateOf(0) }
     val presentingLocus = isOnLocusRoute
     val compactControlsOnly = !isOnLocusRoute
@@ -4344,6 +4345,7 @@ private fun MimeoApp(vm: AppViewModel) {
                                     vm.showSnackbar(message, actionLabel, actionKey)
                                 },
                                 focusItemId = focusItemId,
+                                upNextTabTapSignal = upNextTabTapSignal,
                                 onOpenPlayer = { itemId ->
                                     val activeNowPlayingItemId = sessionNowPlayingItemId?.takeIf { it > 0 }
                                     if (hasPlaybackItemInProgress && activeNowPlayingItemId != null && activeNowPlayingItemId != itemId) {
@@ -4388,7 +4390,7 @@ private fun MimeoApp(vm: AppViewModel) {
                             locusTapSignal = locusTabTapSignal,
                             openRequestSignal = playerOpenRequestSignal,
                             onOpenItem = { nextId ->
-                                if (currentRoute.startsWith(ROUTE_LOCUS)) {
+                                if (selectedTab == ROUTE_LOCUS && currentRoute.startsWith(ROUTE_LOCUS)) {
                                     nav.navigate("$ROUTE_LOCUS/$nextId") {
                                         launchSingleTop = true
                                     }
@@ -4465,6 +4467,8 @@ private fun MimeoApp(vm: AppViewModel) {
                             onClick = {
                                 if (destination.route == ROUTE_LOCUS) {
                                     locusTabTapSignal += 1
+                                } else if (destination.route == ROUTE_UP_NEXT && selectedTab == ROUTE_UP_NEXT) {
+                                    upNextTabTapSignal += 1
                                 }
                                 nav.navigate(destination.route) { launchSingleTop = true }
                             },
