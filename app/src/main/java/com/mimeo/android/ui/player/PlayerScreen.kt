@@ -898,7 +898,9 @@ fun PlayerScreen(
         continuationLog(
             "loadItem start currentItemId=$currentItemId reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
         )
-        val preservingVisibleContent = preserveVisibleContentOnReload
+        // During auto-continue handoff we keep the existing reader/control surface visible
+        // until the next item's payload is ready, avoiding a transient blank+spinner flash.
+        val preservingVisibleContent = preserveVisibleContentOnReload || autoPlayAfterLoad
         val preserveActivePlayback = shouldPreserveActivePlaybackDuringLoad(
             autoPlayAfterLoad = autoPlayAfterLoad,
             isSpeaking = isSpeaking,
