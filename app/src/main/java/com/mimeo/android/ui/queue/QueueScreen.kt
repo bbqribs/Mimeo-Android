@@ -313,7 +313,7 @@ fun QueueScreen(
     var previousProjectedPendingIds by remember { mutableStateOf<List<Long>>(emptyList()) }
     var previousDisplayedItemIds by remember { mutableStateOf<List<Int>>(emptyList()) }
     var suppressAutoScrollToTopOnce by remember { mutableStateOf(false) }
-    var initialUpNextRestoreHandled by rememberSaveable { mutableStateOf(false) }
+    var initialUpNextRestoreHandled by remember { mutableStateOf(false) }
     var collapsingArchivedItemIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var playlistMenuExpanded by remember { mutableStateOf(false) }
     var rowMenuItemId by remember { mutableIntStateOf(-1) }
@@ -420,11 +420,9 @@ fun QueueScreen(
         QueueSortOption.PROGRESS_LOW -> filteredItems.sortedBy { it.furthestPercent }
         QueueSortOption.TITLE_AZ -> filteredItems.sortedBy { (it.title ?: it.url).lowercase() }
     }
-    val activePlayingItemId = when {
-        playbackState.isSpeaking || playbackState.isAutoPlaying ->
-            playbackState.currentItemId.takeIf { it > 0 } ?: nowPlayingSession?.currentItem?.itemId
-        else -> null
-    }
+    val activePlayingItemId =
+        nowPlayingSession?.currentItem?.itemId
+            ?: playbackState.currentItemId.takeIf { it > 0 }
     val visibleProjectedPendingItems = when (selectedFilter) {
         QueueFilterChip.PENDING -> pendingManualSaves.filter { pending ->
             pendingMatchesSearch(pending, searchQuery)

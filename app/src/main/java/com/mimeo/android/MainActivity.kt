@@ -4388,8 +4388,10 @@ private fun MimeoApp(vm: AppViewModel) {
                             locusTapSignal = locusTabTapSignal,
                             openRequestSignal = playerOpenRequestSignal,
                             onOpenItem = { nextId ->
-                                nav.navigate("$ROUTE_LOCUS/$nextId") {
-                                    launchSingleTop = true
+                                if (currentRoute.startsWith(ROUTE_LOCUS)) {
+                                    nav.navigate("$ROUTE_LOCUS/$nextId") {
+                                        launchSingleTop = true
+                                    }
                                 }
                             },
                             onRequestBack = {
