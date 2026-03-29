@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -59,6 +60,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
@@ -77,6 +79,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.ArchiveActionSource
 import com.mimeo.android.BuildConfig
@@ -106,6 +109,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import java.net.URI
 import java.util.UUID
@@ -160,6 +164,36 @@ internal fun shouldAutoScrollToTopForNewItems(
     val previousSet = previousDisplayedItemIds.toHashSet()
     return currentDisplayedItemIds.any { it !in previousSet }
 }
+
+internal data class UpNextRestorePosition(
+    val index: Int,
+    val offset: Int,
+)
+
+internal fun resolveUpNextRestorePosition(
+    currentDisplayedItemIds: List<Int>,
+    savedIndex: Int,
+    savedOffset: Int,
+    savedAnchorItemId: Int?,
+): UpNextRestorePosition? {
+    if (currentDisplayedItemIds.isEmpty()) return null
+    val resolvedIndex = when {
+        savedAnchorItemId != null -> {
+            val anchorIndex = currentDisplayedItemIds.indexOf(savedAnchorItemId)
+            if (anchorIndex < 0) return null
+            anchorIndex
+        }
+        savedIndex <= 0 -> 0
+        else -> savedIndex.coerceAtMost(currentDisplayedItemIds.lastIndex)
+    }
+    val resolvedOffset = if (resolvedIndex == savedIndex) {
+        savedOffset.coerceAtLeast(0)
+    } else {
+        0
+    }
+    return UpNextRestorePosition(index = resolvedIndex, offset = resolvedOffset)
+}
+
 internal enum class ManualSaveMode {
     URL,
     TEXT,
@@ -247,6 +281,7 @@ fun QueueScreen(
     vm: AppViewModel,
     onShowSnackbar: (String, String?, String?) -> Unit,
     focusItemId: Int? = null,
+    upNextTabTapSignal: Int = 0,
     onOpenPlayer: (Int) -> Unit,
     onOpenDiagnostics: () -> Unit,
 ) {
@@ -265,6 +300,9 @@ fun QueueScreen(
     val pendingManualRetryInProgress by vm.pendingManualRetryInProgress.collectAsState()
     val pendingShareFocusItemId by vm.pendingQueueFocusItemId.collectAsState()
     val lastQueueFetchDebug by vm.lastQueueFetchDebug.collectAsState()
+    val queueScrollState by vm.queueScrollState.collectAsState()
+    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
+    val playbackState by vm.playbackEngineState.collectAsState()
     val actionScope = rememberCoroutineScope()
     val density = LocalDensity.current
 
@@ -276,6 +314,7 @@ fun QueueScreen(
     var previousProjectedPendingIds by remember { mutableStateOf<List<Long>>(emptyList()) }
     var previousDisplayedItemIds by remember { mutableStateOf<List<Int>>(emptyList()) }
     var suppressAutoScrollToTopOnce by remember { mutableStateOf(false) }
+    var initialUpNextRestoreHandled by remember { mutableStateOf(false) }
     var collapsingArchivedItemIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var playlistMenuExpanded by remember { mutableStateOf(false) }
     var rowMenuItemId by remember { mutableIntStateOf(-1) }
@@ -292,6 +331,8 @@ fun QueueScreen(
     var hasRefreshProblem by rememberSaveable { mutableStateOf(false) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
     var simulatedPendingOutcome by remember { mutableStateOf<PendingOutcomeSimulation?>(null) }
+    var lastHandledUpNextTapSignal by rememberSaveable { mutableIntStateOf(upNextTabTapSignal) }
+    var nextUpNextTapScrollTargetTop by rememberSaveable { mutableStateOf(false) }
     var showSaveEntryDialog by remember { mutableStateOf(false) }
     var manualSaveMode by rememberSaveable { mutableStateOf(ManualSaveMode.URL) }
     var manualUrlInput by rememberSaveable { mutableStateOf("") }
@@ -382,6 +423,9 @@ fun QueueScreen(
         QueueSortOption.PROGRESS_LOW -> filteredItems.sortedBy { it.furthestPercent }
         QueueSortOption.TITLE_AZ -> filteredItems.sortedBy { (it.title ?: it.url).lowercase() }
     }
+    val activePlayingItemId =
+        nowPlayingSession?.currentItem?.itemId
+            ?: playbackState.currentItemId.takeIf { it > 0 }
     val visibleProjectedPendingItems = when (selectedFilter) {
         QueueFilterChip.PENDING -> pendingManualSaves.filter { pending ->
             pendingMatchesSearch(pending, searchQuery)
@@ -522,8 +566,69 @@ fun QueueScreen(
         }
     }
 
+    LaunchedEffect(
+        displayedItems,
+        visibleProjectedPendingItems,
+        pendingFocusId,
+        selectedFilter,
+        selectedSort,
+        searchQuery,
+        queueScrollState,
+    ) {
+        if (initialUpNextRestoreHandled) return@LaunchedEffect
+        val currentIds = displayedItems.map { it.itemId }
+        if (currentIds.isEmpty()) return@LaunchedEffect
+        if (pendingFocusId > 0) return@LaunchedEffect
+        val isNormalUpNextView = selectedFilter == QueueFilterChip.ALL &&
+            selectedSort == QueueSortOption.NEWEST &&
+            searchQuery.isBlank()
+        if (!isNormalUpNextView) {
+            previousDisplayedItemIds = currentIds
+            previousProjectedPendingIds = visibleProjectedPendingItems.map { it.id }
+            initialUpNextRestoreHandled = true
+            return@LaunchedEffect
+        }
+        val restore = resolveUpNextRestorePosition(
+            currentDisplayedItemIds = currentIds,
+            savedIndex = queueScrollState.index,
+            savedOffset = queueScrollState.offset,
+            savedAnchorItemId = queueScrollState.anchorItemId,
+        )
+        previousDisplayedItemIds = currentIds
+        previousProjectedPendingIds = visibleProjectedPendingItems.map { it.id }
+        initialUpNextRestoreHandled = true
+        if (restore == null) {
+            vm.clearQueueScrollState()
+            return@LaunchedEffect
+        }
+        if (restore.index == 0 && restore.offset == 0) return@LaunchedEffect
+        suppressAutoScrollToTopOnce = true
+        listState.scrollToItem(restore.index, restore.offset)
+    }
+
+    LaunchedEffect(listState, displayedItems, selectedFilter, selectedSort, searchQuery) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .distinctUntilChanged()
+            .collect { (index, offset) ->
+                val isNormalUpNextView = selectedFilter == QueueFilterChip.ALL &&
+                    selectedSort == QueueSortOption.NEWEST &&
+                    searchQuery.isBlank()
+                if (!isNormalUpNextView || displayedItems.isEmpty()) return@collect
+                val safeIndex = index.coerceIn(0, displayedItems.lastIndex)
+                vm.setQueueScrollState(
+                    index = safeIndex,
+                    offset = offset,
+                    anchorItemId = displayedItems.getOrNull(safeIndex)?.itemId,
+                )
+            }
+    }
+
     LaunchedEffect(visibleProjectedPendingItems) {
         val currentIds = visibleProjectedPendingItems.map { it.id }
+        if (!initialUpNextRestoreHandled) {
+            previousProjectedPendingIds = currentIds
+            return@LaunchedEffect
+        }
         val previousIds = previousProjectedPendingIds.toHashSet()
         val hasNewProjectedPending = currentIds.any { it !in previousIds }
         if (hasNewProjectedPending && currentIds.isNotEmpty()) {
@@ -534,6 +639,10 @@ fun QueueScreen(
 
     LaunchedEffect(displayedItems, pendingFocusId, searchQuery, selectedFilter, selectedSort) {
         val currentIds = displayedItems.map { it.itemId }
+        if (!initialUpNextRestoreHandled) {
+            previousDisplayedItemIds = currentIds
+            return@LaunchedEffect
+        }
         if (suppressAutoScrollToTopOnce) {
             suppressAutoScrollToTopOnce = false
             previousDisplayedItemIds = currentIds
@@ -550,6 +659,27 @@ fun QueueScreen(
             listState.animateScrollToItem(0)
         }
         previousDisplayedItemIds = currentIds
+    }
+
+    LaunchedEffect(upNextTabTapSignal, displayedItems, activePlayingItemId) {
+        if (upNextTabTapSignal == lastHandledUpNextTapSignal) return@LaunchedEffect
+        lastHandledUpNextTapSignal = upNextTabTapSignal
+        if (displayedItems.isEmpty()) return@LaunchedEffect
+        if (nextUpNextTapScrollTargetTop) {
+            listState.animateScrollToItem(0)
+            nextUpNextTapScrollTargetTop = false
+            return@LaunchedEffect
+        }
+        val activeIndex = activePlayingItemId?.let { id ->
+            displayedItems.indexOfFirst { item -> item.itemId == id }.takeIf { it >= 0 }
+        }
+        if (activeIndex != null) {
+            listState.animateScrollToItem(activeIndex)
+            nextUpNextTapScrollTargetTop = true
+        } else {
+            listState.animateScrollToItem(0)
+            nextUpNextTapScrollTargetTop = false
+        }
     }
 
     Column(
@@ -1030,6 +1160,7 @@ fun QueueScreen(
                                 cached = cachedItemIds.contains(item.itemId),
                                 noActiveContent = noActiveContentItemIds.contains(item.itemId),
                                 failedProcessing = hasFailedPendingProjectionStatus(item),
+                                isActivePlayingItem = item.itemId == activePlayingItemId,
                                 showQueueCaptureMetadata = settings.showQueueCaptureMetadata,
                                 onOpenPlayer = {
                                     Log.d(
@@ -2166,6 +2297,7 @@ private fun QueueItemCard(
     cached: Boolean,
     noActiveContent: Boolean,
     failedProcessing: Boolean,
+    isActivePlayingItem: Boolean,
     showQueueCaptureMetadata: Boolean,
     onOpenPlayer: () -> Unit,
     onDownload: () -> Unit,
@@ -2217,10 +2349,22 @@ private fun QueueItemCard(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
     }
+    val activeIndicatorColor = MaterialTheme.colorScheme.primary
 
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
+            .then(
+                if (isActivePlayingItem) {
+                    Modifier.border(
+                        width = 1.dp,
+                        color = activeIndicatorColor.copy(alpha = 0.82f),
+                        shape = RoundedCornerShape(10.dp),
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .clickable(enabled = !isBinView) { onOpenPlayer() },
         colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
@@ -2360,6 +2504,14 @@ private fun QueueItemCard(
                     modifier = Modifier.padding(start = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
+                    if (isActivePlayingItem) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.msr_play_arrow_24),
+                            contentDescription = "Currently playing",
+                            tint = activeIndicatorColor,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                     Text(
                         text = queueOfflineStateLabel(progress, cached, noActiveContent, failedProcessing),
                         style = MaterialTheme.typography.labelSmall,

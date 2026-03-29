@@ -1,6 +1,7 @@
 package com.mimeo.android.ui.queue
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -64,5 +65,41 @@ class QueueAutoScrollBehaviorTest {
 
         assertFalse(filtered)
         assertFalse(searched)
+    }
+
+    @Test
+    fun `restore uses anchor item when available`() {
+        val restore = resolveUpNextRestorePosition(
+            currentDisplayedItemIds = listOf(42, 41, 40, 39),
+            savedIndex = 2,
+            savedOffset = 96,
+            savedAnchorItemId = 40,
+        )
+
+        assertTrue(restore == UpNextRestorePosition(index = 2, offset = 96))
+    }
+
+    @Test
+    fun `restore resets offset when anchor moves`() {
+        val restore = resolveUpNextRestorePosition(
+            currentDisplayedItemIds = listOf(99, 42, 41, 40, 39),
+            savedIndex = 2,
+            savedOffset = 120,
+            savedAnchorItemId = 40,
+        )
+
+        assertTrue(restore == UpNextRestorePosition(index = 3, offset = 0))
+    }
+
+    @Test
+    fun `restore returns null when anchor no longer exists`() {
+        val restore = resolveUpNextRestorePosition(
+            currentDisplayedItemIds = listOf(11, 10, 9),
+            savedIndex = 1,
+            savedOffset = 24,
+            savedAnchorItemId = 42,
+        )
+
+        assertNull(restore)
     }
 }
