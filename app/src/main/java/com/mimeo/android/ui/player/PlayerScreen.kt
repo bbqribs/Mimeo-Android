@@ -779,6 +779,12 @@ fun PlayerScreen(
                 }
             return@LaunchedEffect
         }
+        if (autoPlayAfterLoad) {
+            continuationLog(
+                "requestedItemEffect skipManualDuringAutoContinue target=$target current=$currentItemId",
+            )
+            return@LaunchedEffect
+        }
         continuationLog(
             "requestedItemEffect target=$target current=$currentItemId autoPlayAfterLoad=$autoPlayAfterLoad",
         )
@@ -810,6 +816,12 @@ fun PlayerScreen(
 
     LaunchedEffect(waitingForRequestedItem) {
         if (!waitingForRequestedItem) return@LaunchedEffect
+        if (autoPlayAfterLoad) {
+            continuationLog(
+                "loadItem wait preserveDuringAutoContinue currentItemId=$currentItemId requestedItemId=$requestedItemId",
+            )
+            return@LaunchedEffect
+        }
         // During cross-item handoff, hide stale content immediately and wait for
         // the requested item to become current before any load/reveal work.
         preserveVisibleContentOnReload = false
