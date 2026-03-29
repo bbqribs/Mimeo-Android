@@ -924,7 +924,7 @@ fun PlayerScreen(
         lastObservedPercent = -1
         nearEndForcedForItemId = -1
 
-        vm.fetchItemText(currentItemId)
+        vm.fetchItemText(currentItemId, preferLocal = autoPlayAfterLoad)
             .onSuccess { loaded ->
                 val payload = loaded.payload
                 textPayload = payload

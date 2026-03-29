@@ -214,7 +214,18 @@ class PlaybackRepository(
         return PlaylistMembershipToggleResult(added = true)
     }
 
-    suspend fun getItemText(baseUrl: String, token: String, itemId: Int, expectedActiveVersionId: Int?): ItemTextResult {
+    suspend fun getItemText(
+        baseUrl: String,
+        token: String,
+        itemId: Int,
+        expectedActiveVersionId: Int?,
+        preferLocal: Boolean = false,
+    ): ItemTextResult {
+        if (preferLocal) {
+            getCachedItemText(itemId = itemId, expectedActiveVersionId = expectedActiveVersionId)?.let { cached ->
+                return cached
+            }
+        }
         return try {
             val payload = apiClient.getItemText(baseUrl, token, itemId)
             cacheItem(payload)
@@ -222,17 +233,16 @@ class PlaybackRepository(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            val cached = database.cachedItemDao().findByItemId(itemId)
-            if (cached == null) {
-                throw error
-            }
-
-            if (expectedActiveVersionId != null && cached.activeContentVersionId != expectedActiveVersionId) {
-                throw IllegalStateException("Offline and not cached for current active version")
-            }
-
-            ItemTextResult(payload = cached.toPayload(), usingCache = true)
+            getCachedItemText(itemId = itemId, expectedActiveVersionId = expectedActiveVersionId) ?: throw error
         }
+    }
+
+    private suspend fun getCachedItemText(itemId: Int, expectedActiveVersionId: Int?): ItemTextResult? {
+        val cached = database.cachedItemDao().findByItemId(itemId) ?: return null
+        if (expectedActiveVersionId != null && cached.activeContentVersionId != expectedActiveVersionId) {
+            return null
+        }
+        return ItemTextResult(payload = cached.toPayload(), usingCache = true)
     }
 
     suspend fun postProgress(

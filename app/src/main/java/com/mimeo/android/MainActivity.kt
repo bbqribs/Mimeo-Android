@@ -769,7 +769,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 LOCUS_CONTINUATION_DEBUG_TAG,
                 "bgAutoContinue load start item=$itemId reloadNonce=$reloadNonce ${continuationAuditContext()}",
             )
-            fetchItemText(itemId)
+            fetchItemText(itemId, preferLocal = true)
                 .onSuccess { loaded ->
                     val current = playbackEngineState.value
                     if (
@@ -787,7 +787,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     playbackMaybeAutoPlayAfterLoad()
                     Log.d(
                         LOCUS_CONTINUATION_DEBUG_TAG,
-                        "bgAutoContinue load success item=$itemId reloadNonce=$reloadNonce ${continuationAuditContext()}",
+                        "bgAutoContinue load success item=$itemId reloadNonce=$reloadNonce usingCache=${loaded.usingCache} ${continuationAuditContext()}",
                     )
                     if (!playbackEngineState.value.autoPlayAfterLoad) {
                         lastAutoContinueLoadKey = key
@@ -2614,11 +2614,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    suspend fun fetchItemText(itemId: Int): Result<ItemTextResult> {
+    suspend fun fetchItemText(itemId: Int, preferLocal: Boolean = false): Result<ItemTextResult> {
         val current = settings.value
         val expectedVersion = expectedActiveVersionFor(itemId)
         return try {
-            val loaded = repository.getItemText(current.baseUrl, current.apiToken, itemId, expectedVersion)
+            val loaded = repository.getItemText(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                itemId = itemId,
+                expectedActiveVersionId = expectedVersion,
+                preferLocal = preferLocal,
+            )
             if (loaded.usingCache) {
                 _queueOffline.value = true
             } else {
