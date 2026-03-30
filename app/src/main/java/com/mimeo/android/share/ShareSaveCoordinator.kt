@@ -34,6 +34,8 @@ private const val SHARE_POST_FAILURE_RESOLUTION_ATTEMPTS = 2
 private const val SHARE_POST_FAILURE_RESOLUTION_DELAY_MS = 1_200L
 private const val AUTO_DOWNLOAD_MAX_ATTEMPTS = 4
 private const val AUTO_DOWNLOAD_RETRY_DELAY_MS = 1200L
+private const val SAVED_ITEM_STATUS_POLL_MAX_ATTEMPTS = 20
+private const val SAVED_ITEM_STATUS_POLL_DELAY_MS = 3_000L
 
 data class ShareRefreshEvent(
     val playlistId: Int?,
@@ -50,6 +52,16 @@ internal fun shouldAttemptLateShareSaveResolution(result: ShareSaveResult): Bool
     ShareSaveResult.SaveFailed,
     -> true
     else -> false
+}
+
+internal fun isProcessingItemStatus(status: String?): Boolean {
+    val normalized = status.orEmpty().trim().lowercase()
+    if (normalized.isBlank()) return false
+    return normalized.contains("pending") ||
+        normalized.contains("processing") ||
+        normalized.contains("queued") ||
+        normalized.contains("fetch") ||
+        normalized.contains("extract")
 }
 
 sealed interface ShareSaveResult {
@@ -604,6 +616,12 @@ class ShareSaveCoordinator(
                 itemId = itemId,
             ),
         )
+        startSavedItemStatusWatcher(
+            itemId = itemId,
+            current = current,
+            destinationPlaylistId = destinationPlaylistId,
+            attemptId = attemptId,
+        )
         return ShareSaveResult.Saved(
             itemId = itemId,
             destinationName = resolveDestinationName(
@@ -738,6 +756,49 @@ class ShareSaveCoordinator(
                     itemId = itemId,
                 ),
             )
+        }
+    }
+
+    private fun startSavedItemStatusWatcher(
+        itemId: Int,
+        current: AppSettings,
+        destinationPlaylistId: Int?,
+        attemptId: Int,
+    ) {
+        backgroundScope.launch {
+            var lastStatus: String? = null
+            repeat(SAVED_ITEM_STATUS_POLL_MAX_ATTEMPTS) { pollIndex ->
+                val summary = runCatching {
+                    apiClient.getItemSummary(
+                        baseUrl = current.baseUrl,
+                        token = current.apiToken,
+                        itemId = itemId,
+                    )
+                }.getOrNull() ?: return@launch
+                val status = summary.status
+                val statusChanged = status != lastStatus
+                if (statusChanged) {
+                    lastStatus = status
+                    ShareSaveRefreshBus.events.tryEmit(
+                        ShareRefreshEvent(
+                            playlistId = destinationPlaylistId,
+                            itemId = itemId,
+                        ),
+                    )
+                }
+                if (!isProcessingItemStatus(status)) {
+                    return@launch
+                }
+                if (pollIndex < SAVED_ITEM_STATUS_POLL_MAX_ATTEMPTS - 1) {
+                    delay(SAVED_ITEM_STATUS_POLL_DELAY_MS)
+                }
+            }
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    "MimeoShareSave",
+                    "attempt=$attemptId statusWatcherTimeout itemId=$itemId lastStatus=${lastStatus ?: "unknown"}",
+                )
+            }
         }
     }
 
