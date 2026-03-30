@@ -92,7 +92,7 @@ class ApiClient(
     companion object {
         private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
         private const val DEBUG_TARGET_ITEM_ID = 409
-        private const val QUEUE_FETCH_LIMIT = 200
+        private const val QUEUE_FETCH_LIMIT = 100
     }
 
     suspend fun getDebugVersion(baseUrl: String, token: String): DebugVersionResponse = withContext(Dispatchers.IO) {
