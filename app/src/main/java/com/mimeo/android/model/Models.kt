@@ -212,6 +212,12 @@ enum class ConnectionMode {
     REMOTE,
 }
 
+@Serializable
+enum class LocusContentMode {
+    FULL_TEXT,
+    PLAYBACK_FOCUSED,
+}
+
 enum class AutoDownloadWorkerState {
     IDLE,
     QUEUED,
@@ -261,6 +267,7 @@ data class AppSettings(
     val persistentPlayerEnabled: Boolean = true,
     val autoScrollWhileListening: Boolean = true,
     val locusTabReturnsToPlaybackPosition: Boolean = false,
+    val locusContentMode: LocusContentMode = LocusContentMode.FULL_TEXT,
     val continuousNowPlayingMarquee: Boolean = true,
     val forceSentenceHighlightFallback: Boolean = false,
     val showPlaybackDiagnostics: Boolean = false,
