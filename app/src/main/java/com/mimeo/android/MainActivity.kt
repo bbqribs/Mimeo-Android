@@ -3104,11 +3104,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 lastArchiveUndoSnapshot = null
             }
             val archivedCurrentSessionItem = currentPlaybackOwnerItemId() == itemId
-            if (archivedCurrentSessionItem) {
+            val deferPlaybackCleanup = archivedCurrentSessionItem && isItemActivelyPlaying(itemId)
+            if (archivedCurrentSessionItem && !deferPlaybackCleanup) {
                 playbackPause(forceSync = true)
                 clearNowPlayingSessionNow()
             }
-            removeArchivedItemLocally(itemId)
+            removeArchivedItemLocally(
+                itemId = itemId,
+                preservePlaybackContext = deferPlaybackCleanup,
+            )
             if (archiveSeed != null) {
                 _archivedItems.update { existing ->
                     mergeItemIntoList(existing, archiveSeed, addToFront = true)
@@ -3537,7 +3541,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun removeArchivedItemLocally(itemId: Int, preserveFavoriteState: Boolean = false) {
+    private suspend fun removeArchivedItemLocally(
+        itemId: Int,
+        preserveFavoriteState: Boolean = false,
+        preservePlaybackContext: Boolean = false,
+    ) {
         _queueItems.update { previous -> previous.filterNot { it.itemId == itemId } }
         _archivedItems.update { previous -> previous.filterNot { it.itemId == itemId } }
         _binItems.update { previous -> previous.filterNot { it.itemId == itemId } }
@@ -3552,7 +3560,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             offlineReadyIds = _cachedItemIds.value,
             knownNoActiveIds = _noActiveContentItemIds.value,
         )
-        if (currentPlaybackOwnerItemId() == itemId) {
+        if (!preservePlaybackContext && currentPlaybackOwnerItemId() == itemId) {
             clearNowPlayingSessionNow()
         }
     }
@@ -3618,6 +3626,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun currentPlaybackOwnerItemId(): Int? {
         val engineItemId = playbackEngineState.value.currentItemId
         return if (engineItemId > 0) engineItemId else currentNowPlayingItemId()
+    }
+
+    private fun isItemActivelyPlaying(itemId: Int): Boolean {
+        val engine = playbackEngineState.value
+        if (engine.currentItemId != itemId || itemId <= 0) return false
+        return engine.isSpeaking || engine.isAutoPlaying || engine.autoPlayAfterLoad
     }
 
     suspend fun resolveInitialPlayerItemId(fallbackItemId: Int): Int {

@@ -1610,7 +1610,13 @@ fun PlayerScreen(
                                     )
                                         .onSuccess {
                                             onShowSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
-                                            if (locusActionItemId != currentItemId && currentItemId > 0) {
+                                            val archivedActivePlaybackItem =
+                                                locusActionItemId == currentItemId &&
+                                                    (isSpeaking || isAutoPlaying || autoPlayAfterLoad)
+                                            if (archivedActivePlaybackItem) {
+                                                // Keep playback continuity for the currently playing item.
+                                                Unit
+                                            } else if (locusActionItemId != currentItemId && currentItemId > 0) {
                                                 onOpenItem(currentItemId)
                                             } else if (nextItemId != null) {
                                                 vm.startNowPlayingSession(startItemId = nextItemId)
@@ -1856,7 +1862,13 @@ fun PlayerScreen(
                                             )
                                                 .onSuccess {
                                                     onShowSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
-                                                    if (locusActionItemId != currentItemId && currentItemId > 0) {
+                                                    val archivedActivePlaybackItem =
+                                                        locusActionItemId == currentItemId &&
+                                                            (isSpeaking || isAutoPlaying || autoPlayAfterLoad)
+                                                    if (archivedActivePlaybackItem) {
+                                                        // Keep playback continuity for the currently playing item.
+                                                        Unit
+                                                    } else if (locusActionItemId != currentItemId && currentItemId > 0) {
                                                         onOpenItem(currentItemId)
                                                     } else if (nextItemId != null) {
                                                         vm.startNowPlayingSession(startItemId = nextItemId)

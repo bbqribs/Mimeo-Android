@@ -57,6 +57,7 @@
 - [x] PR #170 shipped: offline queued favourite/archive sync, Locus action-target correctness while previewing, playback-owner notification title correctness, and saved-item extraction reconciliation hardening.
 - [x] Locus full-text/default-open behavior shipped per `docs/ANDROID_LOCUS_FULLTEXT_DEFAULT_OPEN_SPEC.md`: default manual-open uses Full-text, explicit mode choice is remembered, autoplay preserves mode, and preview-vs-playing ownership rules remain intact.
 - [x] Locus source/publication cue shipped: when title-intro is active and a meaningful source label is available, TTS now speaks a brief “From {source}.” cue between title and body; skipped for missing/unhelpful provenance and unchanged for resume/replay rules.
+- [x] Archive-while-playing continuity shipped: archiving the currently playing item now marks it archived immediately for UI/list state while preserving active playback; cleanup/removal from playback context is deferred to natural playback/session boundaries.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
