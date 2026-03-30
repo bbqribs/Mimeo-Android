@@ -557,6 +557,7 @@ fun PlayerScreen(
     var nearEndForcedForItemId by remember { mutableIntStateOf(-1) }
     var isExpanded by rememberSaveable { mutableStateOf(true) }
     var readerModeEnabled by rememberSaveable { mutableStateOf(false) }
+    var lastCompactControlsOnly by rememberSaveable { mutableStateOf(compactControlsOnly) }
     val queueOffline by vm.queueOffline.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val settings by vm.settings.collectAsState()
@@ -909,9 +910,24 @@ fun PlayerScreen(
         )
     }
 
-    LaunchedEffect(compactControlsOnly) {
-        if (compactControlsOnly && readerModeEnabled) {
-            readerModeEnabled = false
+    LaunchedEffect(compactControlsOnly, previewModeActive, lastOpenDiagnostics?.openIntent, settings.locusContentMode) {
+        val enteringLocus = lastCompactControlsOnly && !compactControlsOnly
+        lastCompactControlsOnly = compactControlsOnly
+        if (compactControlsOnly) {
+            if (readerModeEnabled) {
+                readerModeEnabled = false
+            }
+            return@LaunchedEffect
+        }
+        if (previewModeActive) return@LaunchedEffect
+        val shouldApplyRememberedMode =
+            (settings.locusContentMode !=
+                if (readerModeEnabled) LocusContentMode.FULL_TEXT else LocusContentMode.PLAYBACK_FOCUSED) ||
+                enteringLocus
+        if (!shouldApplyRememberedMode) return@LaunchedEffect
+        val openIntent = lastOpenDiagnostics?.openIntent
+        if (openIntent != PlaybackOpenIntent.AutoContinue) {
+            readerModeEnabled = settings.locusContentMode == LocusContentMode.FULL_TEXT
         }
     }
 
@@ -1487,7 +1503,7 @@ fun PlayerScreen(
                             canMarkDone = displayPayload != null,
                             isDone = showCompleted,
                             refreshState = refreshActionState,
-                            showConnectivityIssue = queueOffline || hasRefreshProblem,
+                            showConnectivityIssue = hasRefreshProblem,
                             isFavorited = isLocusItemFavorited,
                             onRefresh = {
                                 if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
@@ -1746,7 +1762,7 @@ fun PlayerScreen(
                                     canMarkDone = displayPayload != null,
                                     isDone = showCompleted,
                                     refreshState = refreshActionState,
-                                    showConnectivityIssue = queueOffline || hasRefreshProblem,
+                                    showConnectivityIssue = hasRefreshProblem,
                                     isFavorited = isLocusItemFavorited,
                                     onRefresh = {
                                         if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
