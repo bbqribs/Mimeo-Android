@@ -48,6 +48,7 @@ import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
+import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.ui.queue.autoDownloadStatusLines
@@ -112,6 +113,10 @@ fun SettingsScreen(
     var locusTabReturnsToPlaybackPosition by remember(settings.locusTabReturnsToPlaybackPosition) {
         mutableStateOf(settings.locusTabReturnsToPlaybackPosition)
     }
+    var locusContentMode by remember(settings.locusContentMode) {
+        mutableStateOf(settings.locusContentMode)
+    }
+    var showLocusContentModeMenu by remember { mutableStateOf(false) }
     var continuousNowPlayingMarquee by remember(settings.continuousNowPlayingMarquee) {
         mutableStateOf(settings.continuousNowPlayingMarquee)
     }
@@ -668,6 +673,43 @@ fun SettingsScreen(
                             vm.saveAutoDownloadSavedArticles(it)
                         },
                     )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text("Default Locus view")
+                        Text(
+                            text = "Sets how Locus opens by default. You can still cycle views by tapping article text.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        TextButton(onClick = { showLocusContentModeMenu = true }) {
+                            Text("${locusContentMode.displayName()} ▼")
+                        }
+                        DropdownMenu(
+                            expanded = showLocusContentModeMenu,
+                            onDismissRequest = { showLocusContentModeMenu = false },
+                        ) {
+                            LocusContentMode.entries.forEach { mode ->
+                                DropdownMenuItem(
+                                    text = { Text(mode.displayName()) },
+                                    onClick = {
+                                        showLocusContentModeMenu = false
+                                        locusContentMode = mode
+                                        vm.saveLocusContentMode(mode)
+                                    },
+                                )
+                            }
+                        }
+                    }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1555,6 +1597,12 @@ private fun ReaderFontOption.displayName(): String = when (this) {
     ReaderFontOption.SERIF -> "Serif"
     ReaderFontOption.SANS_SERIF -> "Sans Serif"
     ReaderFontOption.MONOSPACE -> "Monospace"
+}
+
+private fun LocusContentMode.displayName(): String = when (this) {
+    LocusContentMode.FULL_TEXT -> "Full text"
+    LocusContentMode.FULL_TEXT_WITH_PLAYER -> "Full text + player"
+    LocusContentMode.PLAYBACK_FOCUSED -> "Playback focused"
 }
 
 private fun ConnectionMode.displayName(): String = when (this) {

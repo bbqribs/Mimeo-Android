@@ -15,7 +15,7 @@ class LocusContentModeTest {
     @Test
     fun toggleMode_switchesBothWays() {
         assertEquals(
-            LocusContentMode.PLAYBACK_FOCUSED,
+            LocusContentMode.FULL_TEXT_WITH_PLAYER,
             toggledLocusContentMode(LocusContentMode.FULL_TEXT),
         )
         assertEquals(
