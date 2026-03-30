@@ -779,12 +779,6 @@ fun PlayerScreen(
                 }
             return@LaunchedEffect
         }
-        if (autoPlayAfterLoad) {
-            continuationLog(
-                "requestedItemEffect skipManualDuringAutoContinue target=$target current=$currentItemId",
-            )
-            return@LaunchedEffect
-        }
         continuationLog(
             "requestedItemEffect target=$target current=$currentItemId autoPlayAfterLoad=$autoPlayAfterLoad",
         )
