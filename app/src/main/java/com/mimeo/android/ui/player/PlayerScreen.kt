@@ -562,11 +562,11 @@ fun PlayerScreen(
                     isSpeaking ||
                     isAutoPlaying
                 )
-    val previewRouteItemId =
-        requestedItemId?.takeIf { hasLockedPlaybackOwner && it != currentItemId }
-    val previewItemId = previewRouteItemId ?: viewerOverrideItemId.takeIf { it > 0 }
+    // Route item IDs can temporarily lag behind session ownership during auto-continue.
+    // Preview mode should only be driven by an explicit viewer override, not raw route mismatch.
+    val previewItemId = viewerOverrideItemId.takeIf { it > 0 }
     val previewModeActive = previewItemId != null
-    val readerScrollItemId = previewItemId ?: requestedItemId ?: currentItemId
+    val readerScrollItemId = previewItemId ?: currentItemId
     // Locus scroll persistence rules:
     // - Persist per displayed item (including preview mode) so tab/surface returns feel stable.
     // - Reset for explicit same-item reopen requests, which should behave like a fresh open.
@@ -591,7 +591,6 @@ fun PlayerScreen(
         requestedItemId != null &&
             requestedItemId != currentItemId &&
             !previewModeActive &&
-            previewRouteItemId == null &&
             !autoPlayAfterLoad &&
             !hasLockedPlaybackOwner
     val hasStalePayloadForCurrentItem =
