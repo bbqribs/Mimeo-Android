@@ -767,6 +767,10 @@ fun PlayerScreen(
             continuationLog(
                 "requestedItemEffect previewOnly target=$target current=$currentItemId speaking=$isSpeaking auto=$isAutoPlaying",
             )
+            // Keep the currently playing reader surface stable while preview content loads.
+            preserveVisibleContentOnReload = true
+            bodyRevealReady = true
+            isLoading = false
             viewerOverrideItemId = target
             viewerOverrideTitle = queueItems.firstOrNull { it.itemId == target }?.title.orEmpty()
             viewerPayload = null
@@ -895,10 +899,25 @@ fun PlayerScreen(
 
     LaunchedEffect(currentItemId, resolvedInitial, reloadNonce, waitingForRequestedItem, previewModeActive) {
         if (!resolvedInitial) return@LaunchedEffect
+        val previewOnlyHandoffActive =
+            hasLockedPlaybackOwner &&
+                requestedItemId != null &&
+                requestedItemId != currentItemId
+        if (previewOnlyHandoffActive) {
+            continuationLog(
+                "loadItem skip previewOnlyHandoff currentItemId=$currentItemId requestedItemId=$requestedItemId reloadNonce=$reloadNonce",
+            )
+            isLoading = false
+            bodyRevealReady = true
+            preserveVisibleContentOnReload = true
+            return@LaunchedEffect
+        }
         if (previewModeActive) {
             continuationLog(
                 "loadItem skip previewModeActive currentItemId=$currentItemId requestedItemId=$requestedItemId reloadNonce=$reloadNonce",
             )
+            isLoading = false
+            bodyRevealReady = true
             return@LaunchedEffect
         }
         if (waitingForRequestedItem) {
