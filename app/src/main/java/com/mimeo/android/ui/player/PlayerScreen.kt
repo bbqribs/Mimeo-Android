@@ -772,7 +772,8 @@ fun PlayerScreen(
             viewerPayload = null
             viewerPayloadItemId = -1
             viewerChunks = emptyList()
-            vm.fetchItemText(target)
+            val preferLocalPreviewLoad = queueOffline || vm.isItemCached(target)
+            vm.fetchItemText(target, preferLocal = preferLocalPreviewLoad)
                 .onSuccess { loaded ->
                     viewerPayload = loaded.payload
                     viewerPayloadItemId = target
