@@ -1934,11 +1934,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         actionType: PendingItemActionType,
         favorited: Boolean? = null,
     ) {
-        settingsStore.enqueuePendingItemAction(
+        val persisted = settingsStore.enqueuePendingItemAction(
             itemId = itemId,
             actionType = actionType,
             favorited = favorited,
         )
+        val family = pendingItemActionFamily(actionType)
+        _pendingItemActions.update { existing ->
+            val withoutSameFamily = existing.filterNot { pending ->
+                pending.itemId == itemId && pendingItemActionFamily(pending.actionType) == family
+            }
+            listOf(persisted) + withoutSameFamily
+        }
     }
 
     private suspend fun flushPendingItemActions(): Int {

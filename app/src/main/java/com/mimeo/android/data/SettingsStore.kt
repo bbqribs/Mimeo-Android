@@ -668,7 +668,8 @@ class SettingsStore(private val context: Context) {
         itemId: Int,
         actionType: PendingItemActionType,
         favorited: Boolean? = null,
-    ) {
+    ): PendingItemAction {
+        lateinit var next: PendingItemAction
         context.dataStore.edit { prefs ->
             val existing = decodePendingItemActions(prefs[pendingItemActionsJsonKey])
             val family = pendingItemActionFamily(actionType)
@@ -676,7 +677,7 @@ class SettingsStore(private val context: Context) {
                 pending.itemId == itemId && pendingItemActionFamily(pending.actionType) == family
             }
             val nextId = (existing.maxOfOrNull { it.id } ?: 0L) + 1L
-            val next = PendingItemAction(
+            next = PendingItemAction(
                 id = nextId,
                 itemId = itemId,
                 actionType = actionType,
@@ -684,6 +685,7 @@ class SettingsStore(private val context: Context) {
             )
             prefs[pendingItemActionsJsonKey] = encodePendingItemActions(listOf(next) + withoutSameFamily)
         }
+        return next
     }
 
     suspend fun removePendingItemAction(itemId: Long) {
