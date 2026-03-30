@@ -2222,9 +2222,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         token: String,
     ) {
         val confirmedPendingIds = linkedSetOf<Long>()
+        val summaryCache = mutableMapOf<Int, com.mimeo.android.model.ArticleSummary?>()
         _pendingManualSaves.value
-            .filter { it.destinationPlaylistId == selectedPlaylistId || it.destinationPlaylistId == null }
             .forEach { pending ->
+                pending.resolvedItemId?.let { resolvedItemId ->
+                    val summary = summaryCache.getOrPut(resolvedItemId) {
+                        runCatching {
+                            apiClient.getItemSummary(baseUrl, token, resolvedItemId)
+                        }.getOrNull()
+                    }
+                    if (summary != null) {
+                        val summaryHasFailure =
+                            isTerminalPendingProcessingStatus(summary.status) ||
+                                !summary.failureReason.isNullOrBlank()
+                        val summaryStillProcessing = isProcessingQueueStatus(summary.status)
+                        if (!summaryHasFailure && !summaryStillProcessing) {
+                            confirmedPendingIds += pending.id
+                            return@forEach
+                        }
+                    }
+                }
+                if (pending.destinationPlaylistId != selectedPlaylistId && pending.destinationPlaylistId != null) {
+                    return@forEach
+                }
                 val matchedQueueItem = queueItems.firstOrNull { queueItem ->
                     pendingMatchesQueueItem(pending, queueItem)
                 }
@@ -2234,17 +2254,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 if (queueConfirmed) {
                     confirmedPendingIds += pending.id
                     return@forEach
-                }
-                val resolvedItemId = pending.resolvedItemId ?: return@forEach
-                val summary = runCatching {
-                    apiClient.getItemSummary(baseUrl, token, resolvedItemId)
-                }.getOrNull() ?: return@forEach
-                val summaryHasFailure =
-                    isTerminalPendingProcessingStatus(summary.status) ||
-                        !summary.failureReason.isNullOrBlank()
-                val summaryStillProcessing = isProcessingQueueStatus(summary.status)
-                if (!summaryHasFailure && !summaryStillProcessing) {
-                    confirmedPendingIds += pending.id
                 }
             }
 
@@ -2303,7 +2312,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return normalized.contains("pending") ||
             normalized.contains("processing") ||
             normalized.contains("queued") ||
-            normalized.contains("fetch")
+            normalized.contains("fetch") ||
+            normalized.contains("extract")
     }
 
     private suspend fun resolveProcessingFailureMessage(
