@@ -346,31 +346,24 @@ internal fun buildSourceCueSpeechText(
     host: String?,
     url: String?,
 ): String? {
-    val normalizedLabel = sourceLabel
-        ?.trim()
-        ?.removePrefix("www.")
-        ?.takeIf { it.isNotEmpty() }
-    val normalizedHost = host
-        ?.trim()
-        ?.removePrefix("www.")
-        ?.takeIf { it.isNotEmpty() }
+    val normalizedLabel = sourceLabel?.trim()?.removePrefix("www.")?.takeIf { it.isNotEmpty() }
+    val normalizedHost = host?.trim()?.removePrefix("www.")?.takeIf { it.isNotEmpty() }
     val urlHost = runCatching { java.net.URI(url).host }.getOrNull()
         ?.trim()
         ?.removePrefix("www.")
         ?.takeIf { it.isNotEmpty() }
-    val candidate = normalizedLabel ?: normalizedHost ?: urlHost ?: return null
-    val lowered = candidate.lowercase(Locale.US)
-    if (lowered in setOf("unknown source", "android selection", "app share", "shared-text.mimeo.local")) {
-        return null
-    }
-    if (candidate.length > 64) return null
-    val punctuated = candidate.trimEnd('.', '!', '?')
+    val candidates = listOfNotNull(normalizedLabel, normalizedHost, urlHost)
+    val genericLabels = setOf("unknown source", "android selection", "app share", "shared-text.mimeo.local")
+    val packageLikePattern = Regex("^[a-z0-9_]+(\\.[a-z0-9_]+){2,}$")
+    val chosen = candidates.firstOrNull { candidate ->
+        val lowered = candidate.lowercase(Locale.US)
+        lowered !in genericLabels &&
+            candidate.length <= 64 &&
+            !packageLikePattern.matches(lowered)
+    } ?: return null
+    val punctuated = chosen.trimEnd('.', '!', '?')
     if (punctuated.isBlank()) return null
-    return if (sourceType.equals("app", ignoreCase = true) && !punctuated.contains('.')) {
-        "From $punctuated."
-    } else {
-        "From $punctuated."
-    }
+    return "From $punctuated."
 }
 
 internal fun shouldSkipInitialReopen(

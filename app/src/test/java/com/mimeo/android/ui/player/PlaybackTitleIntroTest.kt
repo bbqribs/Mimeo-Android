@@ -97,6 +97,30 @@ class PlaybackTitleIntroTest {
     }
 
     @Test
+    fun `source cue falls back to host when source label is generic`() {
+        val cue = buildSourceCueSpeechText(
+            sourceLabel = "Unknown source",
+            sourceType = "web",
+            host = "www.ft.com",
+            url = "https://www.ft.com/content/abc",
+        )
+
+        assertEquals("From ft.com.", cue)
+    }
+
+    @Test
+    fun `source cue skips package-like app identifiers`() {
+        val cue = buildSourceCueSpeechText(
+            sourceLabel = "com.example.reader",
+            sourceType = "app",
+            host = null,
+            url = null,
+        )
+
+        assertEquals(null, cue)
+    }
+
+    @Test
     fun `prefix skip requires at least three matched words`() {
         val skipTwoWords = computeTitlePrefixSkipChars(
             title = "Tories only",
