@@ -112,6 +112,8 @@ import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
+import com.mimeo.android.model.PendingItemAction
+import com.mimeo.android.model.PendingItemActionType
 import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.PlayerControlsMode
@@ -278,6 +280,43 @@ data class QueueScrollState(
     val anchorItemId: Int? = null,
 )
 
+internal data class PendingItemActionFlushEntry(
+    val action: PendingItemAction,
+    val sourceIds: List<Long>,
+)
+
+private enum class PendingItemActionFamily {
+    FAVORITE,
+    ARCHIVE,
+}
+
+private fun pendingItemActionFamily(actionType: PendingItemActionType): PendingItemActionFamily {
+    return when (actionType) {
+        PendingItemActionType.SET_FAVORITE -> PendingItemActionFamily.FAVORITE
+        PendingItemActionType.ARCHIVE,
+        PendingItemActionType.UNARCHIVE,
+        -> PendingItemActionFamily.ARCHIVE
+    }
+}
+
+internal fun coalescePendingItemActions(actions: List<PendingItemAction>): List<PendingItemActionFlushEntry> {
+    if (actions.isEmpty()) return emptyList()
+    val sorted = actions.sortedBy { it.id }
+    val latestByKey = linkedMapOf<Pair<Int, PendingItemActionFamily>, PendingItemActionFlushEntry>()
+    sorted.forEach { action ->
+        val key = action.itemId to pendingItemActionFamily(action.actionType)
+        val existing = latestByKey[key]
+        latestByKey[key] = if (existing == null) {
+            PendingItemActionFlushEntry(action = action, sourceIds = listOf(action.id))
+        } else {
+            existing.copy(action = action, sourceIds = existing.sourceIds + action.id)
+        }
+    }
+    return latestByKey
+        .values
+        .sortedBy { it.action.id }
+}
+
 enum class ArchiveActionSource {
     UP_NEXT,
     LOCUS,
@@ -427,7 +466,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val binItems: StateFlow<List<PlaybackQueueItem>> = _binItems.asStateFlow()
     private val _pendingManualSaves = MutableStateFlow<List<PendingManualSaveItem>>(emptyList())
     val pendingManualSaves: StateFlow<List<PendingManualSaveItem>> = _pendingManualSaves.asStateFlow()
+    private val _pendingItemActions = MutableStateFlow<List<PendingItemAction>>(emptyList())
+    val pendingItemActions: StateFlow<List<PendingItemAction>> = _pendingItemActions.asStateFlow()
     private val pendingManualRetryMutex = Mutex()
+    private val pendingItemActionFlushMutex = Mutex()
     private val _pendingManualRetryInProgress = MutableStateFlow(false)
     val pendingManualRetryInProgress: StateFlow<Boolean> = _pendingManualRetryInProgress.asStateFlow()
     private val _playlists = MutableStateFlow<List<PlaylistSummary>>(emptyList())
@@ -656,6 +698,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 } else if (previous.apiToken.isNotBlank() && next.apiToken.isBlank()) {
                     pendingInitialPostSignInHydration = false
                     settingsStore.clearQueueSnapshots()
+                    settingsStore.clearPendingItemActions()
                 }
                 previous = next
             }
@@ -663,6 +706,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsStore.pendingManualSavesFlow.collect { pending ->
                 _pendingManualSaves.value = pending
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.pendingItemActionsFlow.collect { pending ->
+                _pendingItemActions.value = pending
             }
         }
         viewModelScope.launch {
@@ -1663,6 +1711,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _statusMessage.value = "Token required"
             return@withLock Result.failure(IllegalStateException("Token required"))
         }
+        val flushedPendingActions = flushPendingItemActions()
         _queueLoading.value = true
         return@withLock try {
             runCatching {
@@ -1814,6 +1863,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     token = current.apiToken,
                 )
                 _statusMessage.value = "Queue loaded (${refreshedQueue.count})"
+            } else if (flushedPendingActions > 0) {
+                _statusMessage.value = "Synced offline actions"
             }
             Result.success(Unit)
         } catch (e: ApiException) {
@@ -1876,6 +1927,87 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         return successCount
+    }
+
+    private suspend fun enqueuePendingItemAction(
+        itemId: Int,
+        actionType: PendingItemActionType,
+        favorited: Boolean? = null,
+    ) {
+        settingsStore.enqueuePendingItemAction(
+            itemId = itemId,
+            actionType = actionType,
+            favorited = favorited,
+        )
+    }
+
+    private suspend fun flushPendingItemActions(): Int {
+        if (!pendingItemActionFlushMutex.tryLock()) return 0
+        try {
+            val current = settings.value
+            if (current.apiToken.isBlank()) return 0
+            val pending = _pendingItemActions.value
+            if (pending.isEmpty()) return 0
+            val coalesced = coalescePendingItemActions(pending)
+            var successCount = 0
+            coalesced.forEach { entry ->
+                val action = entry.action
+                val result = runCatching {
+                    when (action.actionType) {
+                        PendingItemActionType.SET_FAVORITE -> {
+                            repository.setFavoriteState(
+                                baseUrl = current.baseUrl,
+                                token = current.apiToken,
+                                itemId = action.itemId,
+                                favorited = action.favorited == true,
+                            )
+                        }
+                        PendingItemActionType.ARCHIVE -> {
+                            repository.archiveItem(
+                                baseUrl = current.baseUrl,
+                                token = current.apiToken,
+                                itemId = action.itemId,
+                            )
+                        }
+                        PendingItemActionType.UNARCHIVE -> {
+                            repository.unarchiveItem(
+                                baseUrl = current.baseUrl,
+                                token = current.apiToken,
+                                itemId = action.itemId,
+                            )
+                            repository.toggleCompletion(
+                                baseUrl = current.baseUrl,
+                                token = current.apiToken,
+                                itemId = action.itemId,
+                                markDone = false,
+                            )
+                        }
+                    }
+                }
+                if (result.isSuccess) {
+                    entry.sourceIds.forEach { sourceId ->
+                        settingsStore.removePendingItemAction(sourceId)
+                    }
+                    successCount += 1
+                    _queueOffline.value = false
+                    updateSyncBadgeState()
+                } else {
+                    val error = result.exceptionOrNull()
+                    if (error != null) {
+                        if (handleAuthFailureIfNeeded(error)) return successCount
+                        if (isNetworkError(error)) {
+                            _queueOffline.value = true
+                            updateSyncBadgeState()
+                            return successCount
+                        }
+                    }
+                    return successCount
+                }
+            }
+            return successCount
+        } finally {
+            pendingItemActionFlushMutex.unlock()
+        }
     }
 
     private suspend fun applySavedQueueSnapshot(
@@ -2203,7 +2335,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun maybeRefreshAfterConnectivityRestored() {
-        if (!_queueOffline.value && _pendingManualSaves.value.isEmpty()) return
+        if (!_queueOffline.value && _pendingManualSaves.value.isEmpty() && _pendingItemActions.value.isEmpty()) return
         val now = System.currentTimeMillis()
         if (now - lastConnectivityRefreshAtMs < 2_000L) return
         lastConnectivityRefreshAtMs = now
@@ -2895,8 +3027,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val archivedItemSnapshot = _archivedItems.value.firstOrNull { it.itemId == itemId }
         val wasCached = _cachedItemIds.value.contains(itemId)
         val wasNoActiveContent = _noActiveContentItemIds.value.contains(itemId)
+        val archiveSeed = queueItemSnapshot ?: archivedItemSnapshot
         return try {
-            repository.archiveItem(current.baseUrl, current.apiToken, itemId)
             if (queueItemSnapshot != null && queueIndex >= 0) {
                 lastArchiveUndoSnapshot = ArchiveUndoSnapshot(
                     item = queueItemSnapshot,
@@ -2914,22 +3046,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 playbackPause(forceSync = true)
                 clearNowPlayingSessionNow()
             }
+            removeArchivedItemLocally(itemId)
+            if (archiveSeed != null) {
+                _archivedItems.update { existing ->
+                    mergeItemIntoList(existing, archiveSeed, addToFront = true)
+                }
+            }
+            updateAutoDownloadQueueSnapshotDiagnostics(
+                current = settings.value,
+                queueItems = _queueItems.value,
+                offlineReadyIds = _cachedItemIds.value,
+                knownNoActiveIds = _noActiveContentItemIds.value,
+            )
+            repository.archiveItem(current.baseUrl, current.apiToken, itemId)
             if (refreshQueue) {
                 val refreshResult = loadQueueOnce(autoRetryPendingSaves = false)
                 if (refreshResult.isFailure) {
-                    removeArchivedItemLocally(itemId)
                     _statusMessage.value = "Archived; queue refresh failed"
                 } else {
                     _statusMessage.value = "Archived"
                 }
             } else {
-                removeArchivedItemLocally(itemId)
-                val archiveSeed = queueItemSnapshot ?: archivedItemSnapshot
-                if (archiveSeed != null) {
-                    _archivedItems.update { existing ->
-                        mergeItemIntoList(existing, archiveSeed, addToFront = true)
-                    }
-                }
                 _statusMessage.value = "Archived"
             }
             _queueOffline.value = false
@@ -2942,9 +3079,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return Result.failure(error)
             }
             if (isNetworkError(error)) {
+                enqueuePendingItemAction(
+                    itemId = itemId,
+                    actionType = PendingItemActionType.ARCHIVE,
+                )
                 _queueOffline.value = true
                 _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+                _statusMessage.value = "Archived offline; will sync"
+                return Result.success(Unit)
             }
+            runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
+            runCatching { loadArchivedItems() }
             Result.failure(error)
         }
     }
@@ -3103,10 +3248,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun unarchiveItem(itemId: Int): Result<Unit> {
         val current = settings.value
+        val archivedSnapshot = _archivedItems.value.firstOrNull { it.itemId == itemId }
         return try {
+            _archivedItems.update { existing -> existing.filterNot { it.itemId == itemId } }
+            if (archivedSnapshot != null && _queueItems.value.none { it.itemId == itemId }) {
+                _queueItems.update { existing ->
+                    mergeItemIntoList(existing, archivedSnapshot, addToFront = true)
+                }
+            }
+            updateAutoDownloadQueueSnapshotDiagnostics(
+                current = settings.value,
+                queueItems = _queueItems.value,
+                offlineReadyIds = _cachedItemIds.value,
+                knownNoActiveIds = _noActiveContentItemIds.value,
+            )
             repository.unarchiveItem(current.baseUrl, current.apiToken, itemId)
             repository.toggleCompletion(current.baseUrl, current.apiToken, itemId, markDone = false)
-            _archivedItems.update { existing -> existing.filterNot { it.itemId == itemId } }
             loadQueueOnce(autoRetryPendingSaves = false)
             _statusMessage.value = "Unarchived"
             _queueOffline.value = false
@@ -3119,9 +3276,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return Result.failure(error)
             }
             if (isNetworkError(error)) {
+                enqueuePendingItemAction(
+                    itemId = itemId,
+                    actionType = PendingItemActionType.UNARCHIVE,
+                )
                 _queueOffline.value = true
                 _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+                _statusMessage.value = "Unarchived offline; will sync"
+                return Result.success(Unit)
             }
+            runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
+            runCatching { loadArchivedItems() }
             Result.failure(error)
         }
     }
@@ -3194,6 +3359,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         favorited: Boolean,
     ): Result<Unit> {
         val current = settings.value
+        favoriteOverridesByItemId[itemId] = favorited
+        applyLocalFavoriteState(itemId, favorited)
+        if (favorited && current.autoCacheFavoritedItems && _binItems.value.none { it.itemId == itemId }) {
+            runCatching { fetchItemText(itemId) }
+        }
         return try {
             repository.setFavoriteState(
                 baseUrl = current.baseUrl,
@@ -3201,11 +3371,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 itemId = itemId,
                 favorited = favorited,
             )
-            favoriteOverridesByItemId[itemId] = favorited
-            applyLocalFavoriteState(itemId, favorited)
-            if (favorited && current.autoCacheFavoritedItems && _binItems.value.none { it.itemId == itemId }) {
-                fetchItemText(itemId)
-            }
             _queueOffline.value = false
             updateSyncBadgeState()
             Result.success(Unit)
@@ -3216,9 +3381,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return Result.failure(error)
             }
             if (isNetworkError(error)) {
+                enqueuePendingItemAction(
+                    itemId = itemId,
+                    actionType = PendingItemActionType.SET_FAVORITE,
+                    favorited = favorited,
+                )
                 _queueOffline.value = true
                 _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+                _statusMessage.value = if (favorited) {
+                    "Favourited offline; will sync"
+                } else {
+                    "Unfavourited offline; will sync"
+                }
+                return Result.success(Unit)
             }
+            runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
+            runCatching { loadArchivedItems() }
             Result.failure(error)
         }
     }

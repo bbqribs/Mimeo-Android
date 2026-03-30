@@ -53,6 +53,7 @@
 - [x] Source/title rendering shipped in Up Next + Locus + now-playing strip using metadata-first precedence (`provenance -> origin -> Android selection`) with excerpt title normalization.
 - [x] Up Next orientation pass shipped: active-item indicator for current/resumable session item, normal-flow list-position restore, stale-position guardrails, and Up Next tab tap cycle (active item <-> top).
 - [x] Locus next-article handoff polish shipped: auto-continue now prefers cached/local content for faster continuation and offline/unreachable fallback without waiting on network-first timeouts.
+- [x] Offline action queueing (slice 1) shipped for favourite/archive flows on Locus and list surfaces: local optimistic apply while offline with bounded deferred sync on reconnect (favorite/unfavorite + archive/unarchive).
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
@@ -81,7 +82,7 @@
 2. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.
 3. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
 4. [ ] Keep-screen-on/session UX follow-up: refine “active session” heuristics and user copy for reader-only vs speaking states without changing playback ownership.
-5. [ ] Offline/no-active-content follow-up from lived use: tighten retry affordances and recovery messaging for the remaining edge cases that are hard to reproduce on demand.
+5. [ ] Offline action queueing follow-up: expand deferred-sync coverage beyond favourite/archive to remaining item lifecycle actions where local-first behavior is valuable.
 
 ## Reader/Player UX fidelity + state persistence backlog
 
