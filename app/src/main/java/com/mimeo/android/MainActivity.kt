@@ -499,6 +499,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val autoDownloadDiagnostics: StateFlow<AutoDownloadDiagnostics> = _autoDownloadDiagnostics.asStateFlow()
     private val _pendingQueueFocusItemId = MutableStateFlow<Int?>(null)
     val pendingQueueFocusItemId: StateFlow<Int?> = _pendingQueueFocusItemId.asStateFlow()
+    private val queueExplainLoggedItemIds = mutableSetOf<Int>()
 
     private val _progressSyncBadgeState = MutableStateFlow(ProgressSyncBadgeState.SYNCED)
     val progressSyncBadgeState: StateFlow<ProgressSyncBadgeState> = _progressSyncBadgeState.asStateFlow()
@@ -2237,6 +2238,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                                 !summary.failureReason.isNullOrBlank()
                         val summaryStillProcessing = isProcessingQueueStatus(summary.status)
                         if (!summaryHasFailure && !summaryStillProcessing) {
+                            if (
+                                BuildConfig.DEBUG &&
+                                queueItems.none { it.itemId == resolvedItemId } &&
+                                queueExplainLoggedItemIds.add(resolvedItemId)
+                            ) {
+                                val explain = runCatching {
+                                    apiClient.getQueueExplain(baseUrl, token, resolvedItemId)
+                                }.getOrNull()
+                                Log.d(
+                                    QUEUE_DEBUG_TAG,
+                                    "queueExplain itemId=$resolvedItemId eligible=${explain?.eligible} exclusionReasons=${explain?.exclusionReasons?.joinToString("|").orEmpty()} sortNote=${explain?.sortNote.orEmpty()}",
+                                )
+                            }
                             confirmedPendingIds += pending.id
                             return@forEach
                         }

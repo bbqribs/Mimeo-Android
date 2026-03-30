@@ -34,7 +34,7 @@ private const val SHARE_POST_FAILURE_RESOLUTION_ATTEMPTS = 2
 private const val SHARE_POST_FAILURE_RESOLUTION_DELAY_MS = 1_200L
 private const val AUTO_DOWNLOAD_MAX_ATTEMPTS = 4
 private const val AUTO_DOWNLOAD_RETRY_DELAY_MS = 1200L
-private const val SAVED_ITEM_STATUS_POLL_MAX_ATTEMPTS = 20
+private const val SAVED_ITEM_STATUS_POLL_MAX_ATTEMPTS = 10
 private const val SAVED_ITEM_STATUS_POLL_DELAY_MS = 3_000L
 
 data class ShareRefreshEvent(
@@ -774,7 +774,13 @@ class ShareSaveCoordinator(
                         token = current.apiToken,
                         itemId = itemId,
                     )
-                }.getOrNull() ?: return@launch
+                }.getOrNull()
+                if (summary == null) {
+                    if (pollIndex < SAVED_ITEM_STATUS_POLL_MAX_ATTEMPTS - 1) {
+                        delay(SAVED_ITEM_STATUS_POLL_DELAY_MS)
+                    }
+                    return@repeat
+                }
                 val status = summary.status
                 val statusChanged = status != lastStatus
                 if (statusChanged) {
@@ -785,6 +791,16 @@ class ShareSaveCoordinator(
                             itemId = itemId,
                         ),
                     )
+                    if (!isProcessingItemStatus(status)) {
+                        // Run one extra refresh shortly after ready to reduce race windows.
+                        delay(400L)
+                        ShareSaveRefreshBus.events.tryEmit(
+                            ShareRefreshEvent(
+                                playlistId = destinationPlaylistId,
+                                itemId = itemId,
+                            ),
+                        )
+                    }
                 }
                 if (!isProcessingItemStatus(status)) {
                     return@launch

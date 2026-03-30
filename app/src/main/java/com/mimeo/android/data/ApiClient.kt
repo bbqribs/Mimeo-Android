@@ -34,6 +34,15 @@ data class QueueFetchResult(
 )
 
 @Serializable
+data class QueueExplainResponse(
+    val eligible: Boolean? = null,
+    @kotlinx.serialization.SerialName("exclusion_reasons")
+    val exclusionReasons: List<String> = emptyList(),
+    @kotlinx.serialization.SerialName("sort_note")
+    val sortNote: String? = null,
+)
+
+@Serializable
 private data class PlaylistNamePayload(val name: String)
 
 @Serializable
@@ -229,6 +238,15 @@ class ApiClient(
             .get()
             .build()
         executeJson(request) { payload -> json.decodeFromString<ArticleSummary>(payload) }
+    }
+
+    suspend fun getQueueExplain(baseUrl: String, token: String, itemId: Int): QueueExplainResponse = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/playback/queue/explain?item_id=$itemId"))
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<QueueExplainResponse>(payload) }
     }
 
     suspend fun getPlaylists(baseUrl: String, token: String): List<PlaylistSummary> = withContext(Dispatchers.IO) {
