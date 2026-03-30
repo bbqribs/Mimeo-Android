@@ -323,6 +323,22 @@ enum class PendingSaveSource {
 }
 
 @Serializable
+enum class PendingItemActionType {
+    SET_FAVORITE,
+    ARCHIVE,
+    UNARCHIVE,
+}
+
+@Serializable
+data class PendingItemAction(
+    val id: Long,
+    val itemId: Int,
+    val actionType: PendingItemActionType,
+    val favorited: Boolean? = null,
+    val createdAtMs: Long = System.currentTimeMillis(),
+)
+
+@Serializable
 data class PendingManualSaveItem(
     val id: Long,
     val source: PendingSaveSource = PendingSaveSource.MANUAL,

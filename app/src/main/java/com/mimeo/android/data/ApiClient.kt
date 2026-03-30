@@ -34,6 +34,15 @@ data class QueueFetchResult(
 )
 
 @Serializable
+data class QueueExplainResponse(
+    val eligible: Boolean? = null,
+    @kotlinx.serialization.SerialName("exclusion_reasons")
+    val exclusionReasons: List<String> = emptyList(),
+    @kotlinx.serialization.SerialName("sort_note")
+    val sortNote: String? = null,
+)
+
+@Serializable
 private data class PlaylistNamePayload(val name: String)
 
 @Serializable
@@ -92,6 +101,7 @@ class ApiClient(
     companion object {
         private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
         private const val DEBUG_TARGET_ITEM_ID = 409
+        private const val QUEUE_FETCH_LIMIT = 100
     }
 
     suspend fun getDebugVersion(baseUrl: String, token: String): DebugVersionResponse = withContext(Dispatchers.IO) {
@@ -190,7 +200,7 @@ class ApiClient(
 
     suspend fun getQueue(baseUrl: String, token: String, playlistId: Int? = null): QueueFetchResult = withContext(Dispatchers.IO) {
         val playlistParam = playlistId?.let { "&playlist_id=$it" } ?: ""
-        val requestUrl = resolveUrl(baseUrl, "/playback/queue?include_done=true&limit=50$playlistParam")
+        val requestUrl = resolveUrl(baseUrl, "/playback/queue?include_done=true&limit=$QUEUE_FETCH_LIMIT$playlistParam")
         val request = Request.Builder()
             .url(requestUrl)
             .header("Authorization", "Bearer $token")
@@ -228,6 +238,15 @@ class ApiClient(
             .get()
             .build()
         executeJson(request) { payload -> json.decodeFromString<ArticleSummary>(payload) }
+    }
+
+    suspend fun getQueueExplain(baseUrl: String, token: String, itemId: Int): QueueExplainResponse = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/playback/queue/explain?item_id=$itemId"))
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<QueueExplainResponse>(payload) }
     }
 
     suspend fun getPlaylists(baseUrl: String, token: String): List<PlaylistSummary> = withContext(Dispatchers.IO) {

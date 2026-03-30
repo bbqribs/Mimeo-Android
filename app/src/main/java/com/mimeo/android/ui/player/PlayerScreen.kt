@@ -1085,6 +1085,7 @@ fun PlayerScreen(
     val totalChars = totalCharsForPercent()
     val currentPercent = calculateCanonicalPercent(totalChars, chunks, safePosition)
     val locusItemId = readerScrollItemId
+    val locusActionItemId = locusItemId.takeIf { it > 0 } ?: currentItemId
     val previewPayloadForItem = viewerPayload.takeIf { viewerPayloadItemId == previewItemId }
     val displayPayload = if (previewModeActive) previewPayloadForItem else textPayload
     val displayChunks = when {
@@ -1221,7 +1222,7 @@ fun PlayerScreen(
         PlaylistPickerChoice(
             playlistId = playlist.id,
             playlistName = playlist.name,
-            isMember = vm.isItemInPlaylist(currentItemId, playlist.id),
+            isMember = vm.isItemInPlaylist(locusActionItemId, playlist.id),
         )
     }
     val showDockChevron = true
@@ -1483,7 +1484,7 @@ fun PlayerScreen(
                                 if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
                                 actionScope.launch {
                                     refreshActionState = RefreshActionVisualState.Refreshing
-                                    val refreshResult = vm.refreshCurrentPlayerItem(currentItemId)
+                                    val refreshResult = vm.refreshCurrentPlayerItem(locusActionItemId)
                                         .onSuccess {
                                             localDonePercentOverride = -1
                                             preserveVisibleContentOnReload = true
@@ -1516,7 +1517,7 @@ fun PlayerScreen(
                                     val markDone = !showCompleted
                                     val targetPercent = if (markDone) 100 else 97
                                     val resumePercent = if (markDone) currentPercent else undoDonePercent
-                                    vm.toggleCompletion(currentItemId, markDone = markDone, resumePercent = resumePercent)
+                                    vm.toggleCompletion(locusActionItemId, markDone = markDone, resumePercent = resumePercent)
                                         .onSuccess {
                                             localDonePercentOverride = targetPercent
                                             val toggleMessage = when {
@@ -1559,14 +1560,16 @@ fun PlayerScreen(
                             },
                             onArchive = {
                                 actionScope.launch {
-                                    val nextItemId = nextSessionItemIdForArchive(currentItemId)
+                                    val nextItemId = nextSessionItemIdForArchive(locusActionItemId)
                                     vm.archiveItem(
-                                        currentItemId,
+                                        locusActionItemId,
                                         source = ArchiveActionSource.LOCUS,
                                     )
                                         .onSuccess {
                                             onShowSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
-                                            if (nextItemId != null) {
+                                            if (locusActionItemId != currentItemId && currentItemId > 0) {
+                                                onOpenItem(currentItemId)
+                                            } else if (nextItemId != null) {
                                                 vm.startNowPlayingSession(startItemId = nextItemId)
                                                 vm.playbackOpenItem(
                                                     itemId = nextItemId,
@@ -1594,15 +1597,17 @@ fun PlayerScreen(
                                     onMoveToBin = {
                                         overflowExpanded = false
                                         actionScope.launch {
-                                            val nextItemId = nextSessionItemIdForArchive(currentItemId)
+                                            val nextItemId = nextSessionItemIdForArchive(locusActionItemId)
                                             vm.moveItemToBin(
-                                                currentItemId,
+                                                locusActionItemId,
                                                 refreshQueue = false,
                                                 source = ArchiveActionSource.LOCUS,
                                             )
                                                 .onSuccess {
                                                     onShowSnackbar("Moved to Bin (14 days)", "Undo", ACTION_KEY_UNDO_ARCHIVE)
-                                                    if (nextItemId != null) {
+                                                    if (locusActionItemId != currentItemId && currentItemId > 0) {
+                                                        onOpenItem(currentItemId)
+                                                    } else if (nextItemId != null) {
                                                         vm.startNowPlayingSession(startItemId = nextItemId)
                                                         vm.playbackOpenItem(
                                                             itemId = nextItemId,
@@ -1725,7 +1730,7 @@ fun PlayerScreen(
                                         if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
                                         actionScope.launch {
                                             refreshActionState = RefreshActionVisualState.Refreshing
-                                            val refreshResult = vm.refreshCurrentPlayerItem(currentItemId)
+                                            val refreshResult = vm.refreshCurrentPlayerItem(locusActionItemId)
                                                 .onSuccess {
                                                     localDonePercentOverride = -1
                                                     preserveVisibleContentOnReload = true
@@ -1758,7 +1763,7 @@ fun PlayerScreen(
                                             val markDone = !showCompleted
                                             val targetPercent = if (markDone) 100 else 97
                                             val resumePercent = if (markDone) currentPercent else undoDonePercent
-                                            vm.toggleCompletion(currentItemId, markDone = markDone, resumePercent = resumePercent)
+                                            vm.toggleCompletion(locusActionItemId, markDone = markDone, resumePercent = resumePercent)
                                                 .onSuccess {
                                                     localDonePercentOverride = targetPercent
                                                     val toggleMessage = when {
@@ -1801,14 +1806,16 @@ fun PlayerScreen(
                                     },
                                     onArchive = {
                                         actionScope.launch {
-                                            val nextItemId = nextSessionItemIdForArchive(currentItemId)
+                                            val nextItemId = nextSessionItemIdForArchive(locusActionItemId)
                                             vm.archiveItem(
-                                                currentItemId,
+                                                locusActionItemId,
                                                 source = ArchiveActionSource.LOCUS,
                                             )
                                                 .onSuccess {
                                                     onShowSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
-                                                    if (nextItemId != null) {
+                                                    if (locusActionItemId != currentItemId && currentItemId > 0) {
+                                                        onOpenItem(currentItemId)
+                                                    } else if (nextItemId != null) {
                                                         vm.startNowPlayingSession(startItemId = nextItemId)
                                                         vm.playbackOpenItem(
                                                             itemId = nextItemId,
@@ -1836,15 +1843,17 @@ fun PlayerScreen(
                                             onMoveToBin = {
                                                 overflowExpanded = false
                                                 actionScope.launch {
-                                                    val nextItemId = nextSessionItemIdForArchive(currentItemId)
+                                                    val nextItemId = nextSessionItemIdForArchive(locusActionItemId)
                                                     vm.moveItemToBin(
-                                                        currentItemId,
+                                                        locusActionItemId,
                                                         refreshQueue = false,
                                                         source = ArchiveActionSource.LOCUS,
                                                     )
                                                         .onSuccess {
                                                             onShowSnackbar("Moved to Bin (14 days)", "Undo", ACTION_KEY_UNDO_ARCHIVE)
-                                                            if (nextItemId != null) {
+                                                            if (locusActionItemId != currentItemId && currentItemId > 0) {
+                                                                onOpenItem(currentItemId)
+                                                            } else if (nextItemId != null) {
                                                                 vm.startNowPlayingSession(startItemId = nextItemId)
                                                                 vm.playbackOpenItem(
                                                                     itemId = nextItemId,
@@ -1922,7 +1931,7 @@ fun PlayerScreen(
             onDismiss = { showPlaylistPicker = false },
             onTogglePlaylist = { choice ->
                 actionScope.launch {
-                    vm.togglePlaylistMembership(currentItemId, choice.playlistId)
+                    vm.togglePlaylistMembership(locusActionItemId, choice.playlistId)
                         .onSuccess { result ->
                             val verb = if (result.added) "Added to" else "Removed from"
                             showPlaylistPicker = false

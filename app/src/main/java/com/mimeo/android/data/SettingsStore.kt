@@ -12,6 +12,8 @@ import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.ParagraphSpacingOption
+import com.mimeo.android.model.PendingItemAction
+import com.mimeo.android.model.PendingItemActionType
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PendingSaveSource
@@ -106,6 +108,8 @@ class SettingsStore(private val context: Context) {
         stringPreferencesKey("queue_snapshots_json")
     private val pendingManualSavesJsonKey: Preferences.Key<String> =
         stringPreferencesKey("pending_manual_saves_json")
+    private val pendingItemActionsJsonKey: Preferences.Key<String> =
+        stringPreferencesKey("pending_item_actions_json")
     private val connectionTestSuccessJsonKey: Preferences.Key<String> =
         stringPreferencesKey("connection_test_success_json")
     private val json = Json { ignoreUnknownKeys = true }
@@ -179,6 +183,10 @@ class SettingsStore(private val context: Context) {
 
     val pendingManualSavesFlow: Flow<List<PendingManualSaveItem>> = context.dataStore.data.map { prefs ->
         decodePendingManualSaves(prefs[pendingManualSavesJsonKey])
+    }
+
+    val pendingItemActionsFlow: Flow<List<PendingItemAction>> = context.dataStore.data.map { prefs ->
+        decodePendingItemActions(prefs[pendingItemActionsJsonKey])
     }
 
     val connectionTestSuccessFlow: Flow<Map<ConnectionMode, ConnectionTestSuccessSnapshot>> = context.dataStore.data.map { prefs ->
@@ -656,6 +664,44 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun enqueuePendingItemAction(
+        itemId: Int,
+        actionType: PendingItemActionType,
+        favorited: Boolean? = null,
+    ): PendingItemAction {
+        lateinit var next: PendingItemAction
+        context.dataStore.edit { prefs ->
+            val existing = decodePendingItemActions(prefs[pendingItemActionsJsonKey])
+            val family = pendingItemActionFamily(actionType)
+            val withoutSameFamily = existing.filterNot { pending ->
+                pending.itemId == itemId && pendingItemActionFamily(pending.actionType) == family
+            }
+            val nextId = (existing.maxOfOrNull { it.id } ?: 0L) + 1L
+            next = PendingItemAction(
+                id = nextId,
+                itemId = itemId,
+                actionType = actionType,
+                favorited = favorited,
+            )
+            prefs[pendingItemActionsJsonKey] = encodePendingItemActions(listOf(next) + withoutSameFamily)
+        }
+        return next
+    }
+
+    suspend fun removePendingItemAction(itemId: Long) {
+        context.dataStore.edit { prefs ->
+            val existing = decodePendingItemActions(prefs[pendingItemActionsJsonKey])
+            val updated = existing.filterNot { it.id == itemId }
+            prefs[pendingItemActionsJsonKey] = encodePendingItemActions(updated)
+        }
+    }
+
+    suspend fun clearPendingItemActions() {
+        context.dataStore.edit { prefs ->
+            prefs[pendingItemActionsJsonKey] = encodePendingItemActions(emptyList())
+        }
+    }
+
     suspend fun markPendingManualSaveRetryFailure(
         itemId: Long,
         failureMessage: String,
@@ -742,6 +788,26 @@ class SettingsStore(private val context: Context) {
         }.getOrDefault(emptyList())
     }
 
+    private fun encodePendingItemActions(items: List<PendingItemAction>): String {
+        return json.encodeToString(PendingItemActionState(records = items))
+    }
+
+    private fun decodePendingItemActions(raw: String?): List<PendingItemAction> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return runCatching {
+            json.decodeFromString<PendingItemActionState>(raw).records
+        }.getOrDefault(emptyList())
+    }
+
+    private fun pendingItemActionFamily(actionType: PendingItemActionType): String {
+        return when (actionType) {
+            PendingItemActionType.SET_FAVORITE -> "favorite"
+            PendingItemActionType.ARCHIVE,
+            PendingItemActionType.UNARCHIVE,
+            -> "archive"
+        }
+    }
+
     private fun decodeConnectionTestSuccesses(raw: String?): List<ConnectionTestSuccessSnapshot> {
         if (raw.isNullOrBlank()) return emptyList()
         return runCatching {
@@ -757,6 +823,11 @@ class SettingsStore(private val context: Context) {
 @Serializable
 private data class QueueSnapshotState(
     val records: List<QueueSnapshotRecord> = emptyList(),
+)
+
+@Serializable
+private data class PendingItemActionState(
+    val records: List<PendingItemAction> = emptyList(),
 )
 
 @Serializable
