@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectionMode
+import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PendingItemAction
@@ -60,6 +61,8 @@ class SettingsStore(private val context: Context) {
         booleanPreferencesKey("auto_scroll_while_listening")
     private val locusTabReturnsToPlaybackPositionKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("locus_tab_returns_to_playback_position")
+    private val locusContentModeKey: Preferences.Key<String> =
+        stringPreferencesKey("locus_content_mode")
     private val continuousNowPlayingMarqueeKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("continuous_now_playing_marquee")
     private val forceSentenceHighlightFallbackKey: Preferences.Key<Boolean> =
@@ -145,6 +148,9 @@ class SettingsStore(private val context: Context) {
             persistentPlayerEnabled = prefs[persistentPlayerEnabledKey] ?: true,
             autoScrollWhileListening = prefs[autoScrollWhileListeningKey] ?: true,
             locusTabReturnsToPlaybackPosition = prefs[locusTabReturnsToPlaybackPositionKey] ?: false,
+            locusContentMode = prefs[locusContentModeKey]
+                ?.let { runCatching { LocusContentMode.valueOf(it) }.getOrNull() }
+                ?: LocusContentMode.FULL_TEXT,
             continuousNowPlayingMarquee = prefs[continuousNowPlayingMarqueeKey] ?: true,
             forceSentenceHighlightFallback = prefs[forceSentenceHighlightFallbackKey] ?: false,
             showPlaybackDiagnostics = prefs[showPlaybackDiagnosticsKey] ?: false,
@@ -210,6 +216,7 @@ class SettingsStore(private val context: Context) {
         persistentPlayerEnabled: Boolean,
         autoScrollWhileListening: Boolean,
         locusTabReturnsToPlaybackPosition: Boolean,
+        locusContentMode: LocusContentMode? = null,
         continuousNowPlayingMarquee: Boolean,
         forceSentenceHighlightFallback: Boolean,
         showPlaybackDiagnostics: Boolean,
@@ -251,6 +258,9 @@ class SettingsStore(private val context: Context) {
             prefs[persistentPlayerEnabledKey] = persistentPlayerEnabled
             prefs[autoScrollWhileListeningKey] = autoScrollWhileListening
             prefs[locusTabReturnsToPlaybackPositionKey] = locusTabReturnsToPlaybackPosition
+            if (locusContentMode != null) {
+                prefs[locusContentModeKey] = locusContentMode.name
+            }
             prefs[continuousNowPlayingMarqueeKey] = continuousNowPlayingMarquee
             prefs[forceSentenceHighlightFallbackKey] = forceSentenceHighlightFallback
             prefs[showPlaybackDiagnosticsKey] = showPlaybackDiagnostics
@@ -394,6 +404,12 @@ class SettingsStore(private val context: Context) {
     suspend fun saveLocusTabReturnsToPlaybackPosition(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[locusTabReturnsToPlaybackPositionKey] = enabled
+        }
+    }
+
+    suspend fun saveLocusContentMode(mode: LocusContentMode) {
+        context.dataStore.edit { prefs ->
+            prefs[locusContentModeKey] = mode.name
         }
     }
 

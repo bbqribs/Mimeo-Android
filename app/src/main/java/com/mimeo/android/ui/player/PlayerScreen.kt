@@ -100,6 +100,7 @@ import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.ItemTextResponse
+import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlayerChevronSnapEdge
@@ -488,6 +489,13 @@ private fun playableChunkLength(chunk: PlaybackChunk): Int {
     return chunk.text.length.coerceAtLeast(0)
 }
 
+internal fun toggledLocusContentMode(current: LocusContentMode): LocusContentMode {
+    return when (current) {
+        LocusContentMode.FULL_TEXT -> LocusContentMode.PLAYBACK_FOCUSED
+        LocusContentMode.PLAYBACK_FOCUSED -> LocusContentMode.FULL_TEXT
+    }
+}
+
 @Composable
 fun PlayerScreen(
     vm: AppViewModel,
@@ -552,6 +560,7 @@ fun PlayerScreen(
     val queueOffline by vm.queueOffline.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val settings by vm.settings.collectAsState()
+    val locusContentMode = settings.locusContentMode
     val queueItems by vm.queueItems.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
@@ -1635,6 +1644,18 @@ fun PlayerScreen(
                                         overflowExpanded = false
                                         isExpanded = !isExpanded
                                     },
+                                    locusContentMode = locusContentMode,
+                                    onToggleContentMode = {
+                                        overflowExpanded = false
+                                        val next = toggledLocusContentMode(locusContentMode)
+                                        vm.saveLocusContentMode(next)
+                                        val message = if (next == LocusContentMode.FULL_TEXT) {
+                                            "Locus view: Full text"
+                                        } else {
+                                            "Locus view: Playback focused"
+                                        }
+                                        onShowSnackbar(message, null, null)
+                                    },
                                 )
                             },
                         )
@@ -1674,6 +1695,7 @@ fun PlayerScreen(
                             ReaderBody(
                                 fullText = displayPayload?.text,
                                 chunks = displayChunks,
+                                locusContentMode = locusContentMode,
                                 currentChunkIndex = if (previewModeActive) 0 else safePosition.chunkIndex,
                                 currentChunkOffsetInChars = if (previewModeActive) 0 else safePosition.offsetInChunkChars,
                                 activeRangeInChunk = if (previewModeActive) null else activeChunkRange,
@@ -1880,6 +1902,18 @@ fun PlayerScreen(
                                             onToggleExpanded = {
                                                 overflowExpanded = false
                                                 isExpanded = !isExpanded
+                                            },
+                                            locusContentMode = locusContentMode,
+                                            onToggleContentMode = {
+                                                overflowExpanded = false
+                                                val next = toggledLocusContentMode(locusContentMode)
+                                                vm.saveLocusContentMode(next)
+                                                val message = if (next == LocusContentMode.FULL_TEXT) {
+                                                    "Locus view: Full text"
+                                                } else {
+                                                    "Locus view: Playback focused"
+                                                }
+                                                onShowSnackbar(message, null, null)
                                             },
                                         )
                                     },
@@ -2586,6 +2620,8 @@ private fun LocusOverflowMenuItems(
     onOpenPlaylists: () -> Unit,
     isExpanded: Boolean,
     onToggleExpanded: () -> Unit,
+    locusContentMode: LocusContentMode,
+    onToggleContentMode: () -> Unit,
 ) {
     DropdownMenuItem(
         text = { Text("Play this item") },
@@ -2598,6 +2634,18 @@ private fun LocusOverflowMenuItems(
     DropdownMenuItem(
         text = { Text("Move to Bin (14 days)") },
         onClick = onMoveToBin,
+    )
+    DropdownMenuItem(
+        text = {
+            Text(
+                if (locusContentMode == LocusContentMode.FULL_TEXT) {
+                    "Switch to playback view"
+                } else {
+                    "Switch to full text"
+                },
+            )
+        },
+        onClick = onToggleContentMode,
     )
     DropdownMenuItem(
         text = { Text(if (isExpanded) "Collapse player" else "Expand player") },

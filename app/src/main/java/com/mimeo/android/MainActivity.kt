@@ -104,6 +104,7 @@ import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.FolderSummary
 import com.mimeo.android.model.ItemTextResponse
+import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaylistEntrySummary
@@ -1230,6 +1231,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _settings.value = current.copy(locusTabReturnsToPlaybackPosition = enabled)
         viewModelScope.launch {
             settingsStore.saveLocusTabReturnsToPlaybackPosition(enabled)
+        }
+    }
+
+    fun saveLocusContentMode(mode: LocusContentMode) {
+        val current = settings.value
+        _settings.value = current.copy(locusContentMode = mode)
+        viewModelScope.launch {
+            settingsStore.saveLocusContentMode(mode)
         }
     }
 

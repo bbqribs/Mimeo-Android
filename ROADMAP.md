@@ -55,6 +55,7 @@
 - [x] Locus next-article handoff polish shipped: auto-continue now prefers cached/local content for faster continuation and offline/unreachable fallback without waiting on network-first timeouts.
 - [x] Offline action queueing (slice 1) shipped for favourite/archive flows on Locus and list surfaces: local optimistic apply while offline with bounded deferred sync on reconnect (favorite/unfavorite + archive/unarchive).
 - [x] PR #170 shipped: offline queued favourite/archive sync, Locus action-target correctness while previewing, playback-owner notification title correctness, and saved-item extraction reconciliation hardening.
+- [x] Locus full-text/default-open behavior shipped per `docs/ANDROID_LOCUS_FULLTEXT_DEFAULT_OPEN_SPEC.md`: default manual-open uses Full-text, explicit mode choice is remembered, autoplay preserves mode, and preview-vs-playing ownership rules remain intact.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
