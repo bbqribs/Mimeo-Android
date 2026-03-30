@@ -42,7 +42,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalUriHandler
 import com.mimeo.android.model.ParagraphSpacingOption
-import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.ui.theme.toFontFamily
@@ -60,7 +59,6 @@ private val READER_LINK_BLUE = Color(0xFF64B5F6)
 fun ReaderBody(
     fullText: String?,
     chunks: List<PlaybackChunk>,
-    locusContentMode: LocusContentMode,
     currentChunkIndex: Int,
     currentChunkOffsetInChars: Int,
     activeRangeInChunk: IntRange?,
@@ -91,7 +89,7 @@ fun ReaderBody(
     val highlightBg = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
     val searchHighlightBg = MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
     val searchActiveHighlightBg = MaterialTheme.colorScheme.secondary.copy(alpha = 0.40f)
-    val useFullTextLayout = locusContentMode == LocusContentMode.FULL_TEXT
+    val useFullTextLayout = true
     val sentenceRangesByChunk = remember(chunks) {
         chunks.map { segmentSentences(it.text) }
     }
