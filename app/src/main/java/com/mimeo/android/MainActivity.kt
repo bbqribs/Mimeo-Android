@@ -751,8 +751,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 refreshPlaylists()
                 if (settings.value.selectedPlaylistId == event.playlistId) {
                     _pendingQueueFocusItemId.value = event.itemId
-                    loadQueue()
                 }
+                loadQueue()
             }
         }
         viewModelScope.launch {
