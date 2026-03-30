@@ -313,8 +313,12 @@ fun ReaderBody(
                 if (viewportSize.height <= 0) return@collect
                 if (lastAnchorRange != anchor) return@collect
 
-                val startBox = layout.getCursorRect(anchor.first)
-                val endIndex = anchor.last.coerceAtLeast(anchor.first)
+                val maxOffset = layout.layoutInput.text.length.coerceAtLeast(0)
+                val startIndex = anchor.first.coerceIn(0, maxOffset)
+                val endIndex = anchor.last
+                    .coerceAtLeast(anchor.first)
+                    .coerceIn(startIndex, maxOffset)
+                val startBox = layout.getCursorRect(startIndex)
                 val endBox = layout.getCursorRect(endIndex)
                 val startTopInRoot = chunkTopInRoot + startBox.top
                 val endBottomInRoot = chunkTopInRoot + endBox.bottom
@@ -343,7 +347,9 @@ fun ReaderBody(
         val viewportTopInRoot = viewportTopInRootPx ?: return@LaunchedEffect
         if (viewportSize.height <= 0) return@LaunchedEffect
 
-        val startBox = layout.getCursorRect(range.first)
+        val maxOffset = layout.layoutInput.text.length.coerceAtLeast(0)
+        val safeStart = range.first.coerceIn(0, maxOffset)
+        val startBox = layout.getCursorRect(safeStart)
         val startTopInRoot = chunkTopInRoot + startBox.top
         val desiredAnchorInRoot = viewportTopInRoot + topComfortPx + searchFocusExtraTopPx
         val delta = startTopInRoot - desiredAnchorInRoot

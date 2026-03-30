@@ -562,11 +562,11 @@ fun PlayerScreen(
                     isSpeaking ||
                     isAutoPlaying
                 )
-    val previewRouteItemId =
-        requestedItemId?.takeIf { hasLockedPlaybackOwner && it != currentItemId }
-    val previewItemId = previewRouteItemId ?: viewerOverrideItemId.takeIf { it > 0 }
+    // Route item IDs can temporarily lag behind session ownership during auto-continue.
+    // Preview mode should only be driven by an explicit viewer override, not raw route mismatch.
+    val previewItemId = viewerOverrideItemId.takeIf { it > 0 }
     val previewModeActive = previewItemId != null
-    val readerScrollItemId = previewItemId ?: requestedItemId ?: currentItemId
+    val readerScrollItemId = previewItemId ?: currentItemId
     // Locus scroll persistence rules:
     // - Persist per displayed item (including preview mode) so tab/surface returns feel stable.
     // - Reset for explicit same-item reopen requests, which should behave like a fresh open.
@@ -591,10 +591,15 @@ fun PlayerScreen(
         requestedItemId != null &&
             requestedItemId != currentItemId &&
             !previewModeActive &&
-            previewRouteItemId == null
+            !autoPlayAfterLoad &&
+            !hasLockedPlaybackOwner
     val hasStalePayloadForCurrentItem =
         textPayload?.itemId?.let { it != currentItemId } == true
-    val transitionSettled = !waitingForRequestedItem && !hasStalePayloadForCurrentItem && bodyRevealReady
+    val shouldHideForStalePayload =
+        hasStalePayloadForCurrentItem &&
+            !autoPlayAfterLoad &&
+            !hasLockedPlaybackOwner
+    val transitionSettled = !waitingForRequestedItem && !shouldHideForStalePayload && bodyRevealReady
     val bodyContentAlpha by animateFloatAsState(
         targetValue = if (transitionSettled) 1f else 0f,
         animationSpec = tween(durationMillis = 140),
@@ -762,12 +767,26 @@ fun PlayerScreen(
             continuationLog(
                 "requestedItemEffect previewOnly target=$target current=$currentItemId speaking=$isSpeaking auto=$isAutoPlaying",
             )
+            // Keep the currently playing reader surface stable while preview content loads.
+            preserveVisibleContentOnReload = true
+            bodyRevealReady = true
+            isLoading = false
             viewerOverrideItemId = target
             viewerOverrideTitle = queueItems.firstOrNull { it.itemId == target }?.title.orEmpty()
             viewerPayload = null
             viewerPayloadItemId = -1
             viewerChunks = emptyList()
-            vm.fetchItemText(target)
+            val preferLocalPreviewLoad = queueOffline || vm.isItemCached(target)
+            val previewLoadTag = if (preferLocalPreviewLoad) {
+                "locus_preview_cache_first"
+            } else {
+                "locus_preview_network_first"
+            }
+            vm.fetchItemText(
+                target,
+                preferLocal = preferLocalPreviewLoad,
+                loadPolicyTag = previewLoadTag,
+            )
                 .onSuccess { loaded ->
                     viewerPayload = loaded.payload
                     viewerPayloadItemId = target
@@ -810,6 +829,12 @@ fun PlayerScreen(
 
     LaunchedEffect(waitingForRequestedItem) {
         if (!waitingForRequestedItem) return@LaunchedEffect
+        if (autoPlayAfterLoad) {
+            continuationLog(
+                "loadItem wait preserveDuringAutoContinue currentItemId=$currentItemId requestedItemId=$requestedItemId",
+            )
+            return@LaunchedEffect
+        }
         // During cross-item handoff, hide stale content immediately and wait for
         // the requested item to become current before any load/reveal work.
         preserveVisibleContentOnReload = false
@@ -883,10 +908,25 @@ fun PlayerScreen(
 
     LaunchedEffect(currentItemId, resolvedInitial, reloadNonce, waitingForRequestedItem, previewModeActive) {
         if (!resolvedInitial) return@LaunchedEffect
+        val previewOnlyHandoffActive =
+            hasLockedPlaybackOwner &&
+                requestedItemId != null &&
+                requestedItemId != currentItemId
+        if (previewOnlyHandoffActive) {
+            continuationLog(
+                "loadItem skip previewOnlyHandoff currentItemId=$currentItemId requestedItemId=$requestedItemId reloadNonce=$reloadNonce",
+            )
+            isLoading = false
+            bodyRevealReady = true
+            preserveVisibleContentOnReload = true
+            return@LaunchedEffect
+        }
         if (previewModeActive) {
             continuationLog(
                 "loadItem skip previewModeActive currentItemId=$currentItemId requestedItemId=$requestedItemId reloadNonce=$reloadNonce",
             )
+            isLoading = false
+            bodyRevealReady = true
             return@LaunchedEffect
         }
         if (waitingForRequestedItem) {
@@ -898,7 +938,9 @@ fun PlayerScreen(
         continuationLog(
             "loadItem start currentItemId=$currentItemId reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
         )
-        val preservingVisibleContent = preserveVisibleContentOnReload
+        // During auto-continue handoff we keep the existing reader/control surface visible
+        // until the next item's payload is ready, avoiding a transient blank+spinner flash.
+        val preservingVisibleContent = preserveVisibleContentOnReload || autoPlayAfterLoad
         val preserveActivePlayback = shouldPreserveActivePlaybackDuringLoad(
             autoPlayAfterLoad = autoPlayAfterLoad,
             isSpeaking = isSpeaking,
@@ -924,7 +966,19 @@ fun PlayerScreen(
         lastObservedPercent = -1
         nearEndForcedForItemId = -1
 
-        vm.fetchItemText(currentItemId)
+        val currentItemCached = vm.isItemCached(currentItemId)
+        val preferLocalTextLoad = autoPlayAfterLoad || queueOffline || currentItemCached
+        val textLoadTag = when {
+            autoPlayAfterLoad -> "locus_auto_continue_cache_first"
+            queueOffline -> "locus_offline_cache_first"
+            currentItemCached -> "locus_cached_open_cache_first"
+            else -> "locus_manual_open_network_first"
+        }
+        vm.fetchItemText(
+            currentItemId,
+            preferLocal = preferLocalTextLoad,
+            loadPolicyTag = textLoadTag,
+        )
             .onSuccess { loaded ->
                 val payload = loaded.payload
                 textPayload = payload
@@ -966,6 +1020,12 @@ fun PlayerScreen(
                 if (err is CancellationException) {
                     return@onFailure
                 }
+                if (textPayload?.itemId != currentItemId) {
+                    textPayload = null
+                    usingCachedText = false
+                    chunks = emptyList()
+                }
+                bodyRevealReady = true
                 uiMessage = if (err is ApiException && err.statusCode == 401) {
                     "Unauthorized-check token"
                 } else if (isNetworkError(err)) {
@@ -1357,13 +1417,13 @@ fun PlayerScreen(
         knownProgress = lastOpenDiagnostics?.knownProgress,
         seededChunk = lastOpenDiagnostics?.seededPosition?.chunkIndex,
         seededOffset = lastOpenDiagnostics?.seededPosition?.offsetInChunkChars,
-        handoffPending = waitingForRequestedItem || hasStalePayloadForCurrentItem,
+        handoffPending = waitingForRequestedItem || shouldHideForStalePayload,
         handoffSettled = transitionSettled,
         autoPath = isAutoPlaying,
     )
     val showReaderLoadingPlaceholder = shouldShowReaderLoadingPlaceholder(
         waitingForRequestedItem = waitingForRequestedItem,
-        hasStalePayloadForCurrentItem = hasStalePayloadForCurrentItem,
+        hasStalePayloadForCurrentItem = shouldHideForStalePayload,
         isLoading = isLoading,
         transitionSettled = transitionSettled,
     )

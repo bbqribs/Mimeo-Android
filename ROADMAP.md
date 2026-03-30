@@ -51,6 +51,8 @@
 - [x] Structured source metadata emission shipped for Android capture flows (`source_type`, `source_label`, `source_url`, `capture_kind`, optional `source_app_package`) with backward-compatible behavior when server ignores fields.
 - [x] Provenance/origin/content separation shipped for Android share handling: content links are preserved as content, provenance is inferred only for trusted browser-marked selection patterns, and URL-only vs excerpt capture routing is deterministic.
 - [x] Source/title rendering shipped in Up Next + Locus + now-playing strip using metadata-first precedence (`provenance -> origin -> Android selection`) with excerpt title normalization.
+- [x] Up Next orientation pass shipped: active-item indicator for current/resumable session item, normal-flow list-position restore, stale-position guardrails, and Up Next tab tap cycle (active item <-> top).
+- [x] Locus next-article handoff polish shipped: auto-continue now prefers cached/local content for faster continuation and offline/unreachable fallback without waiting on network-first timeouts.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.

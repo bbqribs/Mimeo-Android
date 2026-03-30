@@ -208,6 +208,7 @@ private const val ACTION_KEY_UNDO_ARCHIVE = "undo_archive"
 private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
 private const val DEBUG_TARGET_ITEM_ID = 409
 private const val INITIAL_SIGN_IN_HYDRATION_DEBUG_TAG = "MimeoSignInHydration"
+private const val TEXT_LOAD_POLICY_DEBUG_TAG = "MimeoTextLoadPolicy"
 private const val INITIAL_SIGN_IN_AUTO_DOWNLOAD_LIMIT = 2_147_483_647
 private const val INITIAL_SIGN_IN_HYDRATION_ATTEMPTS = 3
 private const val INITIAL_SIGN_IN_HYDRATION_RETRY_DELAY_MS = 300L
@@ -769,7 +770,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 LOCUS_CONTINUATION_DEBUG_TAG,
                 "bgAutoContinue load start item=$itemId reloadNonce=$reloadNonce ${continuationAuditContext()}",
             )
-            fetchItemText(itemId)
+            fetchItemText(itemId, preferLocal = true, loadPolicyTag = "engine_auto_continue")
                 .onSuccess { loaded ->
                     val current = playbackEngineState.value
                     if (
@@ -787,7 +788,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     playbackMaybeAutoPlayAfterLoad()
                     Log.d(
                         LOCUS_CONTINUATION_DEBUG_TAG,
-                        "bgAutoContinue load success item=$itemId reloadNonce=$reloadNonce ${continuationAuditContext()}",
+                        "bgAutoContinue load success item=$itemId reloadNonce=$reloadNonce usingCache=${loaded.usingCache} ${continuationAuditContext()}",
                     )
                     if (!playbackEngineState.value.autoPlayAfterLoad) {
                         lastAutoContinueLoadKey = key
@@ -1732,6 +1733,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             reconcilePendingSavesWithQueue(
                 queueItems = queueItems,
                 selectedPlaylistId = current.selectedPlaylistId,
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
             )
             _queueOffline.value = false
             _statusMessage.value = "Queue loaded (${queue.count})"
@@ -1807,6 +1810,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 reconcilePendingSavesWithQueue(
                     queueItems = refreshedQueueItems,
                     selectedPlaylistId = current.selectedPlaylistId,
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
                 )
                 _statusMessage.value = "Queue loaded (${refreshedQueue.count})"
             }
@@ -2052,15 +2057,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun reconcilePendingSavesWithQueue(
         queueItems: List<PlaybackQueueItem>,
         selectedPlaylistId: Int?,
+        baseUrl: String,
+        token: String,
     ) {
-        val confirmedPendingIds = _pendingManualSaves.value
-            .filter { it.destinationPlaylistId == selectedPlaylistId }
-            .filter { pending ->
-                queueItems.any { queueItem ->
-                    pendingMatchesQueueItem(pending, queueItem) && !hasFailedQueueStatus(queueItem)
+        val confirmedPendingIds = linkedSetOf<Long>()
+        _pendingManualSaves.value
+            .filter { it.destinationPlaylistId == selectedPlaylistId || it.destinationPlaylistId == null }
+            .forEach { pending ->
+                val matchedQueueItem = queueItems.firstOrNull { queueItem ->
+                    pendingMatchesQueueItem(pending, queueItem)
+                }
+                val queueConfirmed = matchedQueueItem != null &&
+                    !hasFailedQueueStatus(matchedQueueItem) &&
+                    !isProcessingQueueStatus(matchedQueueItem.status)
+                if (queueConfirmed) {
+                    confirmedPendingIds += pending.id
+                    return@forEach
+                }
+                val resolvedItemId = pending.resolvedItemId ?: return@forEach
+                val summary = runCatching {
+                    apiClient.getItemSummary(baseUrl, token, resolvedItemId)
+                }.getOrNull() ?: return@forEach
+                val summaryHasFailure =
+                    isTerminalPendingProcessingStatus(summary.status) ||
+                        !summary.failureReason.isNullOrBlank()
+                val summaryStillProcessing = isProcessingQueueStatus(summary.status)
+                if (!summaryHasFailure && !summaryStillProcessing) {
+                    confirmedPendingIds += pending.id
                 }
             }
-            .map { it.id }
 
         confirmedPendingIds.forEach { itemId ->
             settingsStore.removePendingManualSave(itemId)
@@ -2109,6 +2134,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun hasFailedQueueStatus(queueItem: PlaybackQueueItem): Boolean {
         return isTerminalPendingProcessingStatus(queueItem.status)
+    }
+
+    private fun isProcessingQueueStatus(status: String?): Boolean {
+        val normalized = status.orEmpty().trim().lowercase(Locale.US)
+        if (normalized.isBlank()) return false
+        return normalized.contains("pending") ||
+            normalized.contains("processing") ||
+            normalized.contains("queued") ||
+            normalized.contains("fetch")
     }
 
     private suspend fun resolveProcessingFailureMessage(
@@ -2614,11 +2648,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    suspend fun fetchItemText(itemId: Int): Result<ItemTextResult> {
+    suspend fun fetchItemText(
+        itemId: Int,
+        preferLocal: Boolean = false,
+        loadPolicyTag: String = "unspecified",
+    ): Result<ItemTextResult> {
         val current = settings.value
         val expectedVersion = expectedActiveVersionFor(itemId)
+        if (BuildConfig.DEBUG) {
+            val policy = if (preferLocal) "cache_first" else "network_first"
+            Log.d(
+                TEXT_LOAD_POLICY_DEBUG_TAG,
+                "trigger=$loadPolicyTag item=$itemId requested_policy=$policy queueOffline=${_queueOffline.value}",
+            )
+        }
         return try {
-            val loaded = repository.getItemText(current.baseUrl, current.apiToken, itemId, expectedVersion)
+            val loaded = repository.getItemText(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                itemId = itemId,
+                expectedActiveVersionId = expectedVersion,
+                preferLocal = preferLocal,
+            )
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    TEXT_LOAD_POLICY_DEBUG_TAG,
+                    "trigger=$loadPolicyTag item=$itemId resolved_source=${if (loaded.usingCache) "cache" else "network"}",
+                )
+            }
             if (loaded.usingCache) {
                 _queueOffline.value = true
             } else {
@@ -2640,6 +2697,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    TEXT_LOAD_POLICY_DEBUG_TAG,
+                    "trigger=$loadPolicyTag item=$itemId failed=${error::class.simpleName}:${error.message.orEmpty()}",
+                )
+            }
             if (handleAuthFailureIfNeeded(error)) {
                 return Result.failure(error)
             }
@@ -2655,12 +2718,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun downloadItemForOffline(itemId: Int): Result<Unit> {
-        return fetchItemText(itemId).map { Unit }
+        return fetchItemText(itemId, loadPolicyTag = "manual_download_offline").map { Unit }
     }
 
     fun warmItemTextForPlayer(itemId: Int) {
         viewModelScope.launch {
-            fetchItemText(itemId)
+            fetchItemText(itemId, loadPolicyTag = "queue_row_warm_open")
         }
     }
 
