@@ -54,6 +54,7 @@
 - [x] Up Next orientation pass shipped: active-item indicator for current/resumable session item, normal-flow list-position restore, stale-position guardrails, and Up Next tab tap cycle (active item <-> top).
 - [x] Locus next-article handoff polish shipped: auto-continue now prefers cached/local content for faster continuation and offline/unreachable fallback without waiting on network-first timeouts.
 - [x] Offline action queueing (slice 1) shipped for favourite/archive flows on Locus and list surfaces: local optimistic apply while offline with bounded deferred sync on reconnect (favorite/unfavorite + archive/unarchive).
+- [x] PR #170 shipped: offline queued favourite/archive sync, Locus action-target correctness while previewing, playback-owner notification title correctness, and saved-item extraction reconciliation hardening.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
@@ -99,7 +100,7 @@
 1. [ ] Auto-archive toggle at end of article: define exact interaction between completion cue, continue-to-next, and archive/bin semantics (including playlist-scoped sessions).
 2. [ ] Undo last article archive/delete: define one-step undo scope, timeout, and cross-surface behavior for archive/bin actions (including active-item actions in Locus).
 3. [ ] Start-in-full-screen toggle for Locus: define launch rules vs remembered player mode and explicit user overrides.
-4. [ ] Full-text view in Locus: specify when/how to present full unchunked text mode vs current chunk-driven reading, including performance constraints and highlight behavior.
+4. [x] Full-text/default-open behavior spec finalized: see `docs/ANDROID_LOCUS_FULLTEXT_DEFAULT_OPEN_SPEC.md` (decision-only; implementation remains a follow-up ticket).
 
 ### Later / exploratory
 1. [ ] Soft fast-forward/rewind (time/character based, not chunk-based): evaluate interaction model and accessibility impacts relative to existing chunk controls.
