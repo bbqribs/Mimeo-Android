@@ -111,6 +111,7 @@ import com.mimeo.android.model.calculateCanonicalPercent
 import com.mimeo.android.model.positionFromAbsoluteOffset
 import com.mimeo.android.player.TtsChunkDoneEvent
 import com.mimeo.android.player.TtsChunkProgressEvent
+import com.mimeo.android.player.SOURCE_CUE_CHUNK_INDEX
 import com.mimeo.android.player.TITLE_INTRO_CHUNK_INDEX
 import com.mimeo.android.player.TtsController
 import com.mimeo.android.ui.common.locusCapturePresentation
@@ -273,7 +274,9 @@ internal fun resolveSeededPlaybackPosition(
 }
 
 internal fun shouldAcceptDoneEventChunk(eventChunkIndex: Int, currentChunkIndex: Int): Boolean {
-    return eventChunkIndex == TITLE_INTRO_CHUNK_INDEX || eventChunkIndex == currentChunkIndex
+    return eventChunkIndex == TITLE_INTRO_CHUNK_INDEX ||
+        eventChunkIndex == SOURCE_CUE_CHUNK_INDEX ||
+        eventChunkIndex == currentChunkIndex
 }
 
 internal fun shouldPlayEndOfArticleCompletionCue(enabled: Boolean): Boolean {
@@ -335,6 +338,32 @@ internal fun shouldSpeakTitleBeforeBody(
     val cleanTitle = title?.trim().orEmpty()
     if (cleanTitle.isBlank()) return false
     return chunks.firstOrNull()?.text.orEmpty().isNotBlank()
+}
+
+internal fun buildSourceCueSpeechText(
+    sourceLabel: String?,
+    sourceType: String?,
+    host: String?,
+    url: String?,
+): String? {
+    val normalizedLabel = sourceLabel?.trim()?.removePrefix("www.")?.takeIf { it.isNotEmpty() }
+    val normalizedHost = host?.trim()?.removePrefix("www.")?.takeIf { it.isNotEmpty() }
+    val urlHost = runCatching { java.net.URI(url).host }.getOrNull()
+        ?.trim()
+        ?.removePrefix("www.")
+        ?.takeIf { it.isNotEmpty() }
+    val candidates = listOfNotNull(normalizedLabel, normalizedHost, urlHost)
+    val genericLabels = setOf("unknown source", "android selection", "app share", "shared-text.mimeo.local")
+    val packageLikePattern = Regex("^[a-z0-9_]+(\\.[a-z0-9_]+){2,}$")
+    val chosen = candidates.firstOrNull { candidate ->
+        val lowered = candidate.lowercase(Locale.US)
+        lowered !in genericLabels &&
+            candidate.length <= 64 &&
+            !packageLikePattern.matches(lowered)
+    } ?: return null
+    val punctuated = chosen.trimEnd('.', '!', '?')
+    if (punctuated.isBlank()) return null
+    return "From $punctuated."
 }
 
 internal fun shouldSkipInitialReopen(

@@ -67,8 +67,57 @@ class PlaybackTitleIntroTest {
     @Test
     fun `title intro done event is accepted regardless of current chunk`() {
         assertTrue(shouldAcceptDoneEventChunk(eventChunkIndex = -1, currentChunkIndex = 7))
+        assertTrue(shouldAcceptDoneEventChunk(eventChunkIndex = -2, currentChunkIndex = 7))
         assertTrue(shouldAcceptDoneEventChunk(eventChunkIndex = 7, currentChunkIndex = 7))
         assertFalse(shouldAcceptDoneEventChunk(eventChunkIndex = 3, currentChunkIndex = 7))
+    }
+
+    @Test
+    fun `source cue uses meaningful source label`() {
+        val cue = buildSourceCueSpeechText(
+            sourceLabel = "theguardian.com",
+            sourceType = "web",
+            host = null,
+            url = "https://www.theguardian.com/world",
+        )
+
+        assertEquals("From theguardian.com.", cue)
+    }
+
+    @Test
+    fun `source cue skips unhelpful labels`() {
+        val cue = buildSourceCueSpeechText(
+            sourceLabel = "Android selection",
+            sourceType = "app",
+            host = null,
+            url = null,
+        )
+
+        assertEquals(null, cue)
+    }
+
+    @Test
+    fun `source cue falls back to host when source label is generic`() {
+        val cue = buildSourceCueSpeechText(
+            sourceLabel = "Unknown source",
+            sourceType = "web",
+            host = "www.ft.com",
+            url = "https://www.ft.com/content/abc",
+        )
+
+        assertEquals("From ft.com.", cue)
+    }
+
+    @Test
+    fun `source cue skips package-like app identifiers`() {
+        val cue = buildSourceCueSpeechText(
+            sourceLabel = "com.example.reader",
+            sourceType = "app",
+            host = null,
+            url = null,
+        )
+
+        assertEquals(null, cue)
     }
 
     @Test
