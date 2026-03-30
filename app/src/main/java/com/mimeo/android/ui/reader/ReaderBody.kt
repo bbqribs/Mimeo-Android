@@ -91,7 +91,7 @@ fun ReaderBody(
     val highlightBg = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
     val searchHighlightBg = MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
     val searchActiveHighlightBg = MaterialTheme.colorScheme.secondary.copy(alpha = 0.40f)
-    val useFullTextLayout = locusContentMode == LocusContentMode.FULL_TEXT
+    val useFullTextLayout = locusContentMode != LocusContentMode.PLAYBACK_FOCUSED
     val sentenceRangesByChunk = remember(chunks) {
         chunks.map { segmentSentences(it.text) }
     }

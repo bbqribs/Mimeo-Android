@@ -19,6 +19,10 @@ class LocusContentModeTest {
             toggledLocusContentMode(LocusContentMode.FULL_TEXT),
         )
         assertEquals(
+            LocusContentMode.PLAYBACK_FOCUSED,
+            toggledLocusContentMode(LocusContentMode.FULL_TEXT_WITH_PLAYER),
+        )
+        assertEquals(
             LocusContentMode.FULL_TEXT,
             toggledLocusContentMode(LocusContentMode.PLAYBACK_FOCUSED),
         )

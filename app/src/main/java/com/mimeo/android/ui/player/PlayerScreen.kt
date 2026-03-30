@@ -492,6 +492,7 @@ private fun playableChunkLength(chunk: PlaybackChunk): Int {
 internal fun toggledLocusContentMode(current: LocusContentMode): LocusContentMode {
     return when (current) {
         LocusContentMode.FULL_TEXT -> LocusContentMode.PLAYBACK_FOCUSED
+        LocusContentMode.FULL_TEXT_WITH_PLAYER -> LocusContentMode.PLAYBACK_FOCUSED
         LocusContentMode.PLAYBACK_FOCUSED -> LocusContentMode.FULL_TEXT
     }
 }
@@ -556,12 +557,14 @@ fun PlayerScreen(
     var lastObservedPercent by remember { mutableIntStateOf(-1) }
     var nearEndForcedForItemId by remember { mutableIntStateOf(-1) }
     var isExpanded by rememberSaveable { mutableStateOf(true) }
-    var readerModeEnabled by rememberSaveable { mutableStateOf(false) }
-    var lastCompactControlsOnly by rememberSaveable { mutableStateOf(compactControlsOnly) }
     val queueOffline by vm.queueOffline.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val settings by vm.settings.collectAsState()
     val locusContentMode = settings.locusContentMode
+    val readerModeEnabled = locusContentMode != LocusContentMode.PLAYBACK_FOCUSED
+    val immersiveReaderMode = locusContentMode == LocusContentMode.FULL_TEXT
+    val actionBarHiddenByMode = readerModeEnabled
+    val playerDockHiddenByMode = immersiveReaderMode
     val queueItems by vm.queueItems.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
@@ -631,7 +634,7 @@ fun PlayerScreen(
         PlayerControlsMode.MINIMAL -> "Expand player controls. Long press to hide player controls"
         PlayerControlsMode.NUB -> "Restore player controls"
     }
-    val readerChromeHidden = !compactControlsOnly && isExpanded && readerModeEnabled
+    val readerChromeHidden = !compactControlsOnly && isExpanded && immersiveReaderMode
     LaunchedEffect(textToolbar) {
         snapshotFlow { textToolbar.status }.collect { status ->
             if (status == TextToolbarStatus.Shown) {
@@ -908,27 +911,6 @@ fun PlayerScreen(
             MANUAL_OPEN_DEBUG_TAG,
             "openRequest sameItemReload item=$target intent=$reloadIntent reloadNonce=$reloadNonce",
         )
-    }
-
-    LaunchedEffect(compactControlsOnly, previewModeActive, lastOpenDiagnostics?.openIntent, settings.locusContentMode) {
-        val enteringLocus = lastCompactControlsOnly && !compactControlsOnly
-        lastCompactControlsOnly = compactControlsOnly
-        if (compactControlsOnly) {
-            if (readerModeEnabled) {
-                readerModeEnabled = false
-            }
-            return@LaunchedEffect
-        }
-        if (previewModeActive) return@LaunchedEffect
-        val shouldApplyRememberedMode =
-            (settings.locusContentMode !=
-                if (readerModeEnabled) LocusContentMode.FULL_TEXT else LocusContentMode.PLAYBACK_FOCUSED) ||
-                enteringLocus
-        if (!shouldApplyRememberedMode) return@LaunchedEffect
-        val openIntent = lastOpenDiagnostics?.openIntent
-        if (openIntent != PlaybackOpenIntent.AutoContinue) {
-            readerModeEnabled = settings.locusContentMode == LocusContentMode.FULL_TEXT
-        }
     }
 
     LaunchedEffect(currentItemId, resolvedInitial, reloadNonce, waitingForRequestedItem, previewModeActive) {
@@ -1275,7 +1257,14 @@ fun PlayerScreen(
             }
         }
     }
-    val toggleReaderMode = { readerModeEnabled = !readerModeEnabled }
+    val toggleReaderMode = {
+        if (previewModeActive) {
+            Unit
+        } else {
+            val nextMode = toggledLocusContentMode(locusContentMode)
+            vm.saveLocusContentMode(nextMode)
+        }
+    }
     fun nextSessionItemIdForArchive(currentId: Int): Int? {
         val session = nowPlayingSession ?: return null
         val currentIndex = session.items.indexOfFirst { it.itemId == currentId }
@@ -1492,7 +1481,7 @@ fun PlayerScreen(
             ) {
                 if (!isExpanded) {
                     AnimatedVisibility(
-                        visible = !readerChromeHidden,
+                        visible = !actionBarHiddenByMode,
                         enter = slideInVertically(initialOffsetY = { -it / 2 }) + fadeIn(animationSpec = tween(150)),
                         exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(animationSpec = tween(120)),
                     ) {
@@ -1661,14 +1650,13 @@ fun PlayerScreen(
                                         isExpanded = !isExpanded
                                     },
                                     locusContentMode = locusContentMode,
-                                    onToggleContentMode = {
+                                    onSetContentMode = { next ->
                                         overflowExpanded = false
-                                        val next = toggledLocusContentMode(locusContentMode)
                                         vm.saveLocusContentMode(next)
-                                        val message = if (next == LocusContentMode.FULL_TEXT) {
-                                            "Locus view: Full text"
-                                        } else {
-                                            "Locus view: Playback focused"
+                                        val message = when (next) {
+                                            LocusContentMode.FULL_TEXT -> "Locus view: Full text"
+                                            LocusContentMode.FULL_TEXT_WITH_PLAYER -> "Locus view: Full text + player"
+                                            LocusContentMode.PLAYBACK_FOCUSED -> "Locus view: Playback focused"
                                         }
                                         onShowSnackbar(message, null, null)
                                     },
@@ -1742,7 +1730,7 @@ fun PlayerScreen(
                                     .fillMaxSize()
                                     .graphicsLayer { alpha = bodyContentAlpha },
                             )
-                            val showLocusTopBar = (!readerChromeHidden || locusSearchActive) && transitionSettled
+                            val showLocusTopBar = (!actionBarHiddenByMode || locusSearchActive) && transitionSettled
                             androidx.compose.animation.AnimatedVisibility(
                                 visible = showLocusTopBar,
                                 enter = slideInVertically(
@@ -1920,14 +1908,13 @@ fun PlayerScreen(
                                                 isExpanded = !isExpanded
                                             },
                                             locusContentMode = locusContentMode,
-                                            onToggleContentMode = {
+                                            onSetContentMode = { next ->
                                                 overflowExpanded = false
-                                                val next = toggledLocusContentMode(locusContentMode)
                                                 vm.saveLocusContentMode(next)
-                                                val message = if (next == LocusContentMode.FULL_TEXT) {
-                                                    "Locus view: Full text"
-                                                } else {
-                                                    "Locus view: Playback focused"
+                                                val message = when (next) {
+                                                    LocusContentMode.FULL_TEXT -> "Locus view: Full text"
+                                                    LocusContentMode.FULL_TEXT_WITH_PLAYER -> "Locus view: Full text + player"
+                                                    LocusContentMode.PLAYBACK_FOCUSED -> "Locus view: Playback focused"
                                                 }
                                                 onShowSnackbar(message, null, null)
                                             },
@@ -1936,7 +1923,7 @@ fun PlayerScreen(
                                 )
                             }
                             androidx.compose.animation.AnimatedVisibility(
-                                visible = !readerChromeHidden && transitionSettled,
+                                visible = !playerDockHiddenByMode && transitionSettled,
                                 enter = slideInVertically(
                                     initialOffsetY = { it / 2 },
                                     animationSpec = tween(durationMillis = 140, delayMillis = 40),
@@ -1953,7 +1940,7 @@ fun PlayerScreen(
                 }
                 if (!isExpanded) {
                     AnimatedVisibility(
-                        visible = !readerChromeHidden && transitionSettled,
+                        visible = !playerDockHiddenByMode && transitionSettled,
                         enter = slideInVertically(
                             initialOffsetY = { it / 2 },
                             animationSpec = tween(durationMillis = 140, delayMillis = 40),
@@ -2637,7 +2624,7 @@ private fun LocusOverflowMenuItems(
     isExpanded: Boolean,
     onToggleExpanded: () -> Unit,
     locusContentMode: LocusContentMode,
-    onToggleContentMode: () -> Unit,
+    onSetContentMode: (LocusContentMode) -> Unit,
 ) {
     DropdownMenuItem(
         text = { Text("Play this item") },
@@ -2652,16 +2639,24 @@ private fun LocusOverflowMenuItems(
         onClick = onMoveToBin,
     )
     DropdownMenuItem(
+        text = { Text(if (locusContentMode == LocusContentMode.PLAYBACK_FOCUSED) "View: Playback focused ✓" else "View: Playback focused") },
+        onClick = { onSetContentMode(LocusContentMode.PLAYBACK_FOCUSED) },
+    )
+    DropdownMenuItem(
+        text = { Text(if (locusContentMode == LocusContentMode.FULL_TEXT) "View: Full text ✓" else "View: Full text") },
+        onClick = { onSetContentMode(LocusContentMode.FULL_TEXT) },
+    )
+    DropdownMenuItem(
         text = {
             Text(
-                if (locusContentMode == LocusContentMode.FULL_TEXT) {
-                    "Switch to playback view"
+                if (locusContentMode == LocusContentMode.FULL_TEXT_WITH_PLAYER) {
+                    "View: Full text + player ✓"
                 } else {
-                    "Switch to full text"
+                    "View: Full text + player"
                 },
             )
         },
-        onClick = onToggleContentMode,
+        onClick = { onSetContentMode(LocusContentMode.FULL_TEXT_WITH_PLAYER) },
     )
     DropdownMenuItem(
         text = { Text(if (isExpanded) "Collapse player" else "Expand player") },

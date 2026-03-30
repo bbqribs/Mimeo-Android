@@ -215,6 +215,7 @@ enum class ConnectionMode {
 @Serializable
 enum class LocusContentMode {
     FULL_TEXT,
+    FULL_TEXT_WITH_PLAYER,
     PLAYBACK_FOCUSED,
 }
 
