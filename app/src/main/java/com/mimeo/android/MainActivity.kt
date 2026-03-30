@@ -946,13 +946,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun buildPlaybackServiceSnapshot(): PlaybackServiceSnapshot {
         val engine = playbackEngineState.value
         val sessionItem = nowPlayingSession.value?.currentItem
-        val title = sessionItem?.title?.takeIf { it.isNotBlank() }
+        val itemId = if (engine.currentItemId > 0) engine.currentItemId else sessionItem?.itemId
+        val resolvedTitle = itemId?.let { playbackItemId ->
+            nowPlayingSession.value
+                ?.items
+                ?.firstOrNull { it.itemId == playbackItemId }
+                ?.let { item ->
+                    item.title?.takeIf { it.isNotBlank() } ?: item.url.takeIf { it.isNotBlank() }
+                }
+                ?: _queueItems.value
+                    .firstOrNull { it.itemId == playbackItemId }
+                    ?.let { item ->
+                        item.title?.takeIf { it.isNotBlank() } ?: item.url.takeIf { it.isNotBlank() }
+                    }
+                ?: _archivedItems.value
+                    .firstOrNull { it.itemId == playbackItemId }
+                    ?.let { item ->
+                        item.title?.takeIf { it.isNotBlank() } ?: item.url.takeIf { it.isNotBlank() }
+                    }
+                ?: _binItems.value
+                    .firstOrNull { it.itemId == playbackItemId }
+                    ?.let { item ->
+                        item.title?.takeIf { it.isNotBlank() } ?: item.url.takeIf { it.isNotBlank() }
+                    }
+        } ?: sessionItem?.title?.takeIf { it.isNotBlank() }
             ?: sessionItem?.url?.takeIf { it.isNotBlank() }
             ?: "Mimeo playback"
-        val itemId = if (engine.currentItemId > 0) engine.currentItemId else sessionItem?.itemId
         return PlaybackServiceSnapshot(
             itemId = itemId,
-            title = title,
+            title = resolvedTitle,
             isPlaying = engine.isSpeaking || engine.isAutoPlaying,
         )
     }
