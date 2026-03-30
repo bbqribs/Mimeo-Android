@@ -92,6 +92,7 @@ class ApiClient(
     companion object {
         private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
         private const val DEBUG_TARGET_ITEM_ID = 409
+        private const val QUEUE_FETCH_LIMIT = 200
     }
 
     suspend fun getDebugVersion(baseUrl: String, token: String): DebugVersionResponse = withContext(Dispatchers.IO) {
@@ -190,7 +191,7 @@ class ApiClient(
 
     suspend fun getQueue(baseUrl: String, token: String, playlistId: Int? = null): QueueFetchResult = withContext(Dispatchers.IO) {
         val playlistParam = playlistId?.let { "&playlist_id=$it" } ?: ""
-        val requestUrl = resolveUrl(baseUrl, "/playback/queue?include_done=true&limit=50$playlistParam")
+        val requestUrl = resolveUrl(baseUrl, "/playback/queue?include_done=true&limit=$QUEUE_FETCH_LIMIT$playlistParam")
         val request = Request.Builder()
             .url(requestUrl)
             .header("Authorization", "Bearer $token")
