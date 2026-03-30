@@ -777,7 +777,16 @@ fun PlayerScreen(
             viewerPayloadItemId = -1
             viewerChunks = emptyList()
             val preferLocalPreviewLoad = queueOffline || vm.isItemCached(target)
-            vm.fetchItemText(target, preferLocal = preferLocalPreviewLoad)
+            val previewLoadTag = if (preferLocalPreviewLoad) {
+                "locus_preview_cache_first"
+            } else {
+                "locus_preview_network_first"
+            }
+            vm.fetchItemText(
+                target,
+                preferLocal = preferLocalPreviewLoad,
+                loadPolicyTag = previewLoadTag,
+            )
                 .onSuccess { loaded ->
                     viewerPayload = loaded.payload
                     viewerPayloadItemId = target
@@ -957,8 +966,19 @@ fun PlayerScreen(
         lastObservedPercent = -1
         nearEndForcedForItemId = -1
 
-        val preferLocalTextLoad = autoPlayAfterLoad || queueOffline || vm.isItemCached(currentItemId)
-        vm.fetchItemText(currentItemId, preferLocal = preferLocalTextLoad)
+        val currentItemCached = vm.isItemCached(currentItemId)
+        val preferLocalTextLoad = autoPlayAfterLoad || queueOffline || currentItemCached
+        val textLoadTag = when {
+            autoPlayAfterLoad -> "locus_auto_continue_cache_first"
+            queueOffline -> "locus_offline_cache_first"
+            currentItemCached -> "locus_cached_open_cache_first"
+            else -> "locus_manual_open_network_first"
+        }
+        vm.fetchItemText(
+            currentItemId,
+            preferLocal = preferLocalTextLoad,
+            loadPolicyTag = textLoadTag,
+        )
             .onSuccess { loaded ->
                 val payload = loaded.payload
                 textPayload = payload

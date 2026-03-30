@@ -114,6 +114,7 @@ class PlaybackRepository(
         private const val MAX_ATTEMPTS = 10
         private const val MAX_ERROR_CHARS = 240
         private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
+        private const val TEXT_LOAD_POLICY_DEBUG_TAG = "MimeoTextLoadPolicy"
         private const val DEBUG_TARGET_ITEM_ID = 409
     }
 
@@ -131,6 +132,12 @@ class PlaybackRepository(
             queue.items.take(prefetchCount.coerceAtMost(PREFETCH_MAX))
         }
         for (item in targets) {
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    TEXT_LOAD_POLICY_DEBUG_TAG,
+                    "trigger=queue_prefetch item=${item.itemId} requested_policy=network_first",
+                )
+            }
             runCatching { apiClient.getItemText(baseUrl, token, item.itemId) }
                 .onSuccess { payload -> cacheItem(payload) }
         }
@@ -154,6 +161,12 @@ class PlaybackRepository(
     ): List<ItemTextPrefetchAttempt> {
         return itemIds.distinct().map { itemId ->
             try {
+                if (BuildConfig.DEBUG) {
+                    Log.d(
+                        TEXT_LOAD_POLICY_DEBUG_TAG,
+                        "trigger=prefetch_batch item=$itemId requested_policy=network_first",
+                    )
+                }
                 val payload = apiClient.getItemText(baseUrl, token, itemId)
                 cacheItem(payload)
                 ItemTextPrefetchAttempt(itemId = itemId, success = true)
@@ -221,19 +234,48 @@ class PlaybackRepository(
         expectedActiveVersionId: Int?,
         preferLocal: Boolean = false,
     ): ItemTextResult {
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                TEXT_LOAD_POLICY_DEBUG_TAG,
+                "trigger=repository_get_item_text item=$itemId requested_policy=${if (preferLocal) "cache_first" else "network_first"}",
+            )
+        }
         if (preferLocal) {
             getCachedItemText(itemId = itemId, expectedActiveVersionId = expectedActiveVersionId)?.let { cached ->
+                if (BuildConfig.DEBUG) {
+                    Log.d(
+                        TEXT_LOAD_POLICY_DEBUG_TAG,
+                        "trigger=repository_get_item_text item=$itemId resolved_source=cache",
+                    )
+                }
                 return cached
             }
         }
         return try {
             val payload = apiClient.getItemText(baseUrl, token, itemId)
             cacheItem(payload)
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    TEXT_LOAD_POLICY_DEBUG_TAG,
+                    "trigger=repository_get_item_text item=$itemId resolved_source=network",
+                )
+            }
             ItemTextResult(payload = payload, usingCache = false)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            getCachedItemText(itemId = itemId, expectedActiveVersionId = expectedActiveVersionId) ?: throw error
+            val fallback = getCachedItemText(itemId = itemId, expectedActiveVersionId = expectedActiveVersionId)
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    TEXT_LOAD_POLICY_DEBUG_TAG,
+                    if (fallback != null) {
+                        "trigger=repository_get_item_text item=$itemId resolved_source=cache_fallback"
+                    } else {
+                        "trigger=repository_get_item_text item=$itemId failed=${error::class.simpleName}:${error.message.orEmpty()}"
+                    },
+                )
+            }
+            fallback ?: throw error
         }
     }
 
