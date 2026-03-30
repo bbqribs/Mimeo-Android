@@ -111,6 +111,7 @@ import com.mimeo.android.model.calculateCanonicalPercent
 import com.mimeo.android.model.positionFromAbsoluteOffset
 import com.mimeo.android.player.TtsChunkDoneEvent
 import com.mimeo.android.player.TtsChunkProgressEvent
+import com.mimeo.android.player.SOURCE_CUE_CHUNK_INDEX
 import com.mimeo.android.player.TITLE_INTRO_CHUNK_INDEX
 import com.mimeo.android.player.TtsController
 import com.mimeo.android.ui.common.locusCapturePresentation
@@ -273,7 +274,9 @@ internal fun resolveSeededPlaybackPosition(
 }
 
 internal fun shouldAcceptDoneEventChunk(eventChunkIndex: Int, currentChunkIndex: Int): Boolean {
-    return eventChunkIndex == TITLE_INTRO_CHUNK_INDEX || eventChunkIndex == currentChunkIndex
+    return eventChunkIndex == TITLE_INTRO_CHUNK_INDEX ||
+        eventChunkIndex == SOURCE_CUE_CHUNK_INDEX ||
+        eventChunkIndex == currentChunkIndex
 }
 
 internal fun shouldPlayEndOfArticleCompletionCue(enabled: Boolean): Boolean {
@@ -335,6 +338,39 @@ internal fun shouldSpeakTitleBeforeBody(
     val cleanTitle = title?.trim().orEmpty()
     if (cleanTitle.isBlank()) return false
     return chunks.firstOrNull()?.text.orEmpty().isNotBlank()
+}
+
+internal fun buildSourceCueSpeechText(
+    sourceLabel: String?,
+    sourceType: String?,
+    host: String?,
+    url: String?,
+): String? {
+    val normalizedLabel = sourceLabel
+        ?.trim()
+        ?.removePrefix("www.")
+        ?.takeIf { it.isNotEmpty() }
+    val normalizedHost = host
+        ?.trim()
+        ?.removePrefix("www.")
+        ?.takeIf { it.isNotEmpty() }
+    val urlHost = runCatching { java.net.URI(url).host }.getOrNull()
+        ?.trim()
+        ?.removePrefix("www.")
+        ?.takeIf { it.isNotEmpty() }
+    val candidate = normalizedLabel ?: normalizedHost ?: urlHost ?: return null
+    val lowered = candidate.lowercase(Locale.US)
+    if (lowered in setOf("unknown source", "android selection", "app share", "shared-text.mimeo.local")) {
+        return null
+    }
+    if (candidate.length > 64) return null
+    val punctuated = candidate.trimEnd('.', '!', '?')
+    if (punctuated.isBlank()) return null
+    return if (sourceType.equals("app", ignoreCase = true) && !punctuated.contains('.')) {
+        "From $punctuated."
+    } else {
+        "From $punctuated."
+    }
 }
 
 internal fun shouldSkipInitialReopen(

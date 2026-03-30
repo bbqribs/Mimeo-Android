@@ -9,6 +9,7 @@ import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.absoluteCharOffset
 import com.mimeo.android.model.calculateCanonicalPercent
+import com.mimeo.android.player.SOURCE_CUE_CHUNK_INDEX
 import com.mimeo.android.player.TITLE_INTRO_CHUNK_INDEX
 import com.mimeo.android.player.TtsChunkDoneEvent
 import com.mimeo.android.player.TtsChunkProgressEvent
@@ -88,6 +89,7 @@ class PlaybackEngine(
     private var textPayload: ItemTextResponse? = null
     private var chunks: List<PlaybackChunk> = emptyList()
     private var pendingBodyStartAfterTitleIntro: PlaybackPosition? = null
+    private var pendingSourceCueAfterTitleIntro: String? = null
     private var lastHandledDoneUtteranceId: String? = null
     private var lastProgressSyncAtMs: Long = 0L
     private var lastSyncedPercent: Int = -1
@@ -114,6 +116,7 @@ class PlaybackEngine(
         textPayload = null
         chunks = emptyList()
         pendingBodyStartAfterTitleIntro = null
+        pendingSourceCueAfterTitleIntro = null
         lastHandledDoneUtteranceId = null
         lastProgressSyncAtMs = 0L
         lastSyncedPercent = -1
@@ -126,6 +129,7 @@ class PlaybackEngine(
         stopInternal(forceSync = false)
         _state.value = reduceReloadItemState(current, intent)
         pendingBodyStartAfterTitleIntro = null
+        pendingSourceCueAfterTitleIntro = null
         lastHandledDoneUtteranceId = null
         lastProgressSyncAtMs = 0L
         lastSyncedPercent = -1
@@ -265,7 +269,23 @@ class PlaybackEngine(
             if (event.itemId != current.currentItemId) return@launch
             if (event.chunkIndex == TITLE_INTRO_CHUNK_INDEX) {
                 val pendingStart = pendingBodyStartAfterTitleIntro ?: return@launch
+                val pendingSourceCue = pendingSourceCueAfterTitleIntro
+                if (!pendingSourceCue.isNullOrBlank()) {
+                    val spokeCue = ttsController.speakSourceCue(current.currentItemId, pendingSourceCue)
+                    if (spokeCue) {
+                        pendingSourceCueAfterTitleIntro = null
+                        return@launch
+                    }
+                }
                 pendingBodyStartAfterTitleIntro = null
+                pendingSourceCueAfterTitleIntro = null
+                playChunk(pendingStart.chunkIndex, pendingStart.offsetInChunkChars)
+                return@launch
+            }
+            if (event.chunkIndex == SOURCE_CUE_CHUNK_INDEX) {
+                val pendingStart = pendingBodyStartAfterTitleIntro ?: return@launch
+                pendingBodyStartAfterTitleIntro = null
+                pendingSourceCueAfterTitleIntro = null
                 playChunk(pendingStart.chunkIndex, pendingStart.offsetInChunkChars)
                 return@launch
             }
@@ -376,6 +396,12 @@ class PlaybackEngine(
         if (shouldSpeakTitleFirst) {
             val title = textPayload?.title?.trim().orEmpty()
             val openingText = chunks.firstOrNull()?.text.orEmpty()
+            val sourceCue = buildSourceCueSpeechText(
+                sourceLabel = textPayload?.sourceLabel,
+                sourceType = textPayload?.sourceType,
+                host = textPayload?.host,
+                url = textPayload?.url,
+            )
             val prefixSkipChars = if (settings.skipDuplicateOpeningAfterTitleIntro) {
                 computeTitlePrefixSkipChars(title = title, openingText = openingText, minMatchedWords = 3)
             } else {
@@ -386,6 +412,7 @@ class PlaybackEngine(
                 chunks = chunks,
                 skipCharsFromOpening = prefixSkipChars,
             )
+            pendingSourceCueAfterTitleIntro = sourceCue
             _state.value = _state.value.copy(
                 isAutoPlaying = true,
                 isSpeaking = true,
@@ -393,6 +420,7 @@ class PlaybackEngine(
             ttsController.speakTitleIntro(current.currentItemId, title)
         } else {
             pendingBodyStartAfterTitleIntro = null
+            pendingSourceCueAfterTitleIntro = null
             _state.value = _state.value.copy(isAutoPlaying = true)
             playChunk(safe.chunkIndex, safe.offsetInChunkChars)
         }
@@ -474,6 +502,7 @@ class PlaybackEngine(
             activeChunkRange = null,
         )
         pendingBodyStartAfterTitleIntro = null
+        pendingSourceCueAfterTitleIntro = null
         if (forceSync) {
             scope.launch { syncProgress(force = true) }
         }

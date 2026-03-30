@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 private const val DEBUG_PLAYBACK = false
 const val TITLE_INTRO_CHUNK_INDEX = -1
+const val SOURCE_CUE_CHUNK_INDEX = -2
 
 data class TtsChunkProgressEvent(
     val utteranceId: String,
@@ -209,6 +210,28 @@ class TtsController(
             putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
         }
         tts.speak(clean, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+    }
+
+    fun speakSourceCue(itemId: Int, sourceCueText: String): Boolean {
+        val clean = sourceCueText.trim()
+        if (!initialized || clean.isBlank()) return false
+        applyPreferredOrDefaultVoice()
+        tts.setSpeechRate(speechRate)
+        val generation = generationCounter.incrementAndGet()
+        val utteranceId = "mimeo-item-$itemId-source-cue-$generation"
+        handledDoneUtterances.remove(utteranceId)
+        utteranceMetaById[utteranceId] = UtteranceMeta(
+            itemId = itemId,
+            chunkIndex = SOURCE_CUE_CHUNK_INDEX,
+            baseOffset = 0,
+            chunkTextLength = clean.length.coerceAtLeast(0),
+            generation = generation,
+        )
+        val params = Bundle().apply {
+            putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
+        }
+        tts.speak(clean, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+        return true
     }
 
     fun setSpeechRate(rate: Float) {
