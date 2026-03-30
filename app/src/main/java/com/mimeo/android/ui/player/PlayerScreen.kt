@@ -591,7 +591,8 @@ fun PlayerScreen(
         requestedItemId != null &&
             requestedItemId != currentItemId &&
             !previewModeActive &&
-            previewRouteItemId == null
+            previewRouteItemId == null &&
+            !autoPlayAfterLoad
     val hasStalePayloadForCurrentItem =
         textPayload?.itemId?.let { it != currentItemId } == true
     val transitionSettled = !waitingForRequestedItem && !hasStalePayloadForCurrentItem && bodyRevealReady
@@ -974,6 +975,12 @@ fun PlayerScreen(
                 if (err is CancellationException) {
                     return@onFailure
                 }
+                if (textPayload?.itemId != currentItemId) {
+                    textPayload = null
+                    usingCachedText = false
+                    chunks = emptyList()
+                }
+                bodyRevealReady = true
                 uiMessage = if (err is ApiException && err.statusCode == 401) {
                     "Unauthorized-check token"
                 } else if (isNetworkError(err)) {

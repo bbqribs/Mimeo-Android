@@ -1732,6 +1732,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             reconcilePendingSavesWithQueue(
                 queueItems = queueItems,
                 selectedPlaylistId = current.selectedPlaylistId,
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
             )
             _queueOffline.value = false
             _statusMessage.value = "Queue loaded (${queue.count})"
@@ -1807,6 +1809,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 reconcilePendingSavesWithQueue(
                     queueItems = refreshedQueueItems,
                     selectedPlaylistId = current.selectedPlaylistId,
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
                 )
                 _statusMessage.value = "Queue loaded (${refreshedQueue.count})"
             }
@@ -2052,15 +2056,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun reconcilePendingSavesWithQueue(
         queueItems: List<PlaybackQueueItem>,
         selectedPlaylistId: Int?,
+        baseUrl: String,
+        token: String,
     ) {
-        val confirmedPendingIds = _pendingManualSaves.value
-            .filter { it.destinationPlaylistId == selectedPlaylistId }
-            .filter { pending ->
-                queueItems.any { queueItem ->
-                    pendingMatchesQueueItem(pending, queueItem) && !hasFailedQueueStatus(queueItem)
+        val confirmedPendingIds = linkedSetOf<Long>()
+        _pendingManualSaves.value
+            .filter { it.destinationPlaylistId == selectedPlaylistId || it.destinationPlaylistId == null }
+            .forEach { pending ->
+                val matchedQueueItem = queueItems.firstOrNull { queueItem ->
+                    pendingMatchesQueueItem(pending, queueItem)
+                }
+                val queueConfirmed = matchedQueueItem != null &&
+                    !hasFailedQueueStatus(matchedQueueItem) &&
+                    !isProcessingQueueStatus(matchedQueueItem.status)
+                if (queueConfirmed) {
+                    confirmedPendingIds += pending.id
+                    return@forEach
+                }
+                val resolvedItemId = pending.resolvedItemId ?: return@forEach
+                val summary = runCatching {
+                    apiClient.getItemSummary(baseUrl, token, resolvedItemId)
+                }.getOrNull() ?: return@forEach
+                val summaryHasFailure =
+                    isTerminalPendingProcessingStatus(summary.status) ||
+                        !summary.failureReason.isNullOrBlank()
+                val summaryStillProcessing = isProcessingQueueStatus(summary.status)
+                if (!summaryHasFailure && !summaryStillProcessing) {
+                    confirmedPendingIds += pending.id
                 }
             }
-            .map { it.id }
 
         confirmedPendingIds.forEach { itemId ->
             settingsStore.removePendingManualSave(itemId)
@@ -2109,6 +2133,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun hasFailedQueueStatus(queueItem: PlaybackQueueItem): Boolean {
         return isTerminalPendingProcessingStatus(queueItem.status)
+    }
+
+    private fun isProcessingQueueStatus(status: String?): Boolean {
+        val normalized = status.orEmpty().trim().lowercase(Locale.US)
+        if (normalized.isBlank()) return false
+        return normalized.contains("pending") ||
+            normalized.contains("processing") ||
+            normalized.contains("queued") ||
+            normalized.contains("fetch")
     }
 
     private suspend fun resolveProcessingFailureMessage(
