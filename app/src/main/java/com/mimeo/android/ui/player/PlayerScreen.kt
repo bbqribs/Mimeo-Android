@@ -592,10 +592,15 @@ fun PlayerScreen(
             requestedItemId != currentItemId &&
             !previewModeActive &&
             previewRouteItemId == null &&
-            !autoPlayAfterLoad
+            !autoPlayAfterLoad &&
+            !hasLockedPlaybackOwner
     val hasStalePayloadForCurrentItem =
         textPayload?.itemId?.let { it != currentItemId } == true
-    val transitionSettled = !waitingForRequestedItem && !hasStalePayloadForCurrentItem && bodyRevealReady
+    val shouldHideForStalePayload =
+        hasStalePayloadForCurrentItem &&
+            !autoPlayAfterLoad &&
+            !hasLockedPlaybackOwner
+    val transitionSettled = !waitingForRequestedItem && !shouldHideForStalePayload && bodyRevealReady
     val bodyContentAlpha by animateFloatAsState(
         targetValue = if (transitionSettled) 1f else 0f,
         animationSpec = tween(durationMillis = 140),
@@ -933,7 +938,8 @@ fun PlayerScreen(
         lastObservedPercent = -1
         nearEndForcedForItemId = -1
 
-        vm.fetchItemText(currentItemId, preferLocal = autoPlayAfterLoad)
+        val preferLocalTextLoad = autoPlayAfterLoad || queueOffline || vm.isItemCached(currentItemId)
+        vm.fetchItemText(currentItemId, preferLocal = preferLocalTextLoad)
             .onSuccess { loaded ->
                 val payload = loaded.payload
                 textPayload = payload
@@ -1372,13 +1378,13 @@ fun PlayerScreen(
         knownProgress = lastOpenDiagnostics?.knownProgress,
         seededChunk = lastOpenDiagnostics?.seededPosition?.chunkIndex,
         seededOffset = lastOpenDiagnostics?.seededPosition?.offsetInChunkChars,
-        handoffPending = waitingForRequestedItem || hasStalePayloadForCurrentItem,
+        handoffPending = waitingForRequestedItem || shouldHideForStalePayload,
         handoffSettled = transitionSettled,
         autoPath = isAutoPlaying,
     )
     val showReaderLoadingPlaceholder = shouldShowReaderLoadingPlaceholder(
         waitingForRequestedItem = waitingForRequestedItem,
-        hasStalePayloadForCurrentItem = hasStalePayloadForCurrentItem,
+        hasStalePayloadForCurrentItem = shouldHideForStalePayload,
         isLoading = isLoading,
         transitionSettled = transitionSettled,
     )
