@@ -3020,6 +3020,69 @@ private fun LocusProblemReportDialog(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
 
+                val attachBlock: @Composable () -> Unit = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Start,
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        CompositionLocalProvider(LocalMinimumInteractiveComponentEnforcement provides false) {
+                            Checkbox(
+                                checked = attachFullText,
+                                onCheckedChange = onAttachFullTextChange,
+                                enabled = !submitting,
+                                modifier = Modifier
+                                    .align(Alignment.Top)
+                                    .padding(top = 2.dp)
+                                    .size(20.dp),
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(0.dp),
+                            modifier = Modifier
+                                .align(Alignment.Top)
+                                .padding(top = 2.dp),
+                        ) {
+                            Text("Attach article title and text")
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Start,
+                                modifier = Modifier.padding(top = 0.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(13.dp)
+                                        .border(
+                                            width = 1.dp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            shape = CircleShape,
+                                        ),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = "!",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 9.sp,
+                                            lineHeight = 9.sp,
+                                            platformStyle = PlatformTextStyle(includeFontPadding = false),
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Content may contain sensitive data.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontStyle = FontStyle.Italic,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+
                 if (showUrlField) {
                     OutlinedTextField(
                         value = urlValue,
@@ -3028,76 +3091,25 @@ private fun LocusProblemReportDialog(
                         enabled = !submitting,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    Text(
-                        text = "Clear URL",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .padding(top = 2.dp, bottom = 0.dp)
-                            .clickable(enabled = !submitting) { onUrlClear() },
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Start,
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    CompositionLocalProvider(LocalMinimumInteractiveComponentEnforcement provides false) {
-                        Checkbox(
-                            checked = attachFullText,
-                            onCheckedChange = onAttachFullTextChange,
-                            enabled = !submitting,
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            attachBlock()
+                        }
+                        Text(
+                            text = "Clear URL",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
-                                .align(Alignment.Top)
-                                .padding(top = 2.dp)
-                                .size(20.dp),
+                                .padding(top = 4.dp)
+                                .clickable(enabled = !submitting) { onUrlClear() },
                         )
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(0.dp),
-                        modifier = Modifier
-                            .align(Alignment.Top)
-                            .padding(top = 2.dp),
-                    ) {
-                        Text("Attach article title and text")
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Start,
-                            modifier = Modifier.padding(top = 0.dp),
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(13.dp)
-                                    .border(
-                                        width = 1.dp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        shape = CircleShape,
-                                    ),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = "!",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontSize = 9.sp,
-                                        lineHeight = 9.sp,
-                                        platformStyle = PlatformTextStyle(includeFontPadding = false),
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center,
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Content may contain sensitive data.",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontStyle = FontStyle.Italic,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
+                } else {
+                    attachBlock()
                 }
             }
         },
