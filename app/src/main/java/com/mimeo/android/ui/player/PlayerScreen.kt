@@ -44,6 +44,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
@@ -52,10 +54,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -105,6 +109,7 @@ import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.PlayerControlsMode
+import com.mimeo.android.model.ProblemReportCategory
 import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.model.absoluteCharOffset
 import com.mimeo.android.model.calculateCanonicalPercent
@@ -164,6 +169,41 @@ internal data class LocusSearchMatch(
     val chunkIndex: Int,
     val rangeInChunk: IntRange,
 )
+
+internal data class LocusProblemReportContext(
+    val itemId: Int?,
+    val url: String?,
+    val sourceType: String?,
+    val sourceLabel: String?,
+    val sourceUrl: String?,
+    val captureKind: String?,
+)
+
+internal fun resolveDefaultProblemReportCategory(
+    itemId: Int?,
+    url: String?,
+): ProblemReportCategory {
+    return when {
+        (itemId ?: -1) > 0 -> ProblemReportCategory.CONTENT_PROBLEM
+        !url.isNullOrBlank() -> ProblemReportCategory.SAVE_FAILURE
+        else -> ProblemReportCategory.APP_PROBLEM
+    }
+}
+
+internal fun resolveProblemReportFailureMessage(error: Throwable): String {
+    if (error is ApiException) {
+        return when (error.statusCode) {
+            401, 403 -> "Sign in to submit problem reports."
+            429 -> "Too many reports sent recently. Please try again later."
+            else -> "Couldn't send problem report. Please try again."
+        }
+    }
+    return if (isNetworkError(error)) {
+        "Couldn't reach server. Check connection and try again."
+    } else {
+        "Couldn't send problem report. Please try again."
+    }
+}
 
 internal fun collectLocusSearchMatches(
     chunks: List<PlaybackChunk>,
@@ -1265,6 +1305,7 @@ fun PlayerScreen(
     val queuedPreviewTitle = queueItems.firstOrNull { it.itemId == locusItemId }?.title.orEmpty()
     val isLocusItemFavorited = queueItems.firstOrNull { it.itemId == locusItemId }?.isFavorited == true
     val isLocusItemArchived = archivedItems.any { it.itemId == locusActionItemId }
+    val locusActionItem = queueItems.firstOrNull { it.itemId == locusActionItemId }
     val currentTitle = when {
         previewModeActive -> {
             viewerOverrideTitle
@@ -1277,6 +1318,23 @@ fun PlayerScreen(
     }
     val locusActionBarTitle = if (previewModeActive) "" else if (currentTitle.isNotBlank()) currentTitle else "Item $locusItemId"
     val currentSourceLabel = capturePresentation.sourceLabel
+    val reportContext = remember(locusActionItemId, displayPayload, locusActionItem, capturePresentation) {
+        LocusProblemReportContext(
+            itemId = locusActionItemId.takeIf { it > 0 },
+            url = displayPayload?.url?.takeIf { it.isNotBlank() }
+                ?: locusActionItem?.url?.takeIf { it.isNotBlank() },
+            sourceType = displayPayload?.sourceType,
+            sourceLabel = displayPayload?.sourceLabel?.takeIf { it.isNotBlank() } ?: capturePresentation.sourceLabel,
+            sourceUrl = displayPayload?.sourceUrl?.takeIf { it.isNotBlank() } ?: capturePresentation.sourceUrl,
+            captureKind = displayPayload?.captureKind,
+        )
+    }
+    var showProblemReportDialog by remember { mutableStateOf(false) }
+    var reportCategory by remember { mutableStateOf(ProblemReportCategory.CONTENT_PROBLEM) }
+    var reportUserNote by remember { mutableStateOf("") }
+    var reportUrlText by remember { mutableStateOf("") }
+    var reportShowUrlField by remember { mutableStateOf(false) }
+    var reportSubmitting by remember { mutableStateOf(false) }
     val chunkLabel = if (previewModeActive) {
         "Previewing item while playback continues"
     } else if (chunks.isEmpty()) {
@@ -1422,6 +1480,14 @@ fun PlayerScreen(
         if (!(isSpeaking || isAutoPlaying) && chunks.isNotEmpty()) {
             vm.playbackPlay()
         }
+    }
+    fun openProblemReport() {
+        reportCategory = resolveDefaultProblemReportCategory(reportContext.itemId, reportContext.url)
+        reportUserNote = ""
+        reportUrlText = reportContext.url.orEmpty()
+        reportShowUrlField = reportContext.url?.isNotBlank() == true
+        reportSubmitting = false
+        showProblemReportDialog = true
     }
 
     val renderPlayerControlBar: @Composable () -> Unit = {
@@ -1776,6 +1842,10 @@ fun PlayerScreen(
                                         overflowExpanded = false
                                         playLocusItem()
                                     },
+                                    onReportProblem = {
+                                        overflowExpanded = false
+                                        openProblemReport()
+                                    },
                                     onMoveToBin = {
                                         overflowExpanded = false
                                         actionScope.launch {
@@ -1812,6 +1882,7 @@ fun PlayerScreen(
                                         vm.refreshPlaylists()
                                         showPlaylistPicker = true
                                     },
+                                    canReportProblem = settings.apiToken.isNotBlank(),
                                     isExpanded = isExpanded,
                                     onToggleExpanded = {
                                         overflowExpanded = false
@@ -2040,6 +2111,10 @@ fun PlayerScreen(
                                                 overflowExpanded = false
                                                 playLocusItem()
                                             },
+                                            onReportProblem = {
+                                                overflowExpanded = false
+                                                openProblemReport()
+                                            },
                                             onMoveToBin = {
                                                 overflowExpanded = false
                                                 actionScope.launch {
@@ -2076,6 +2151,7 @@ fun PlayerScreen(
                                                 vm.refreshPlaylists()
                                                 showPlaylistPicker = true
                                             },
+                                            canReportProblem = settings.apiToken.isNotBlank(),
                                             isExpanded = isExpanded,
                                             onToggleExpanded = {
                                                 overflowExpanded = false
@@ -2121,6 +2197,63 @@ fun PlayerScreen(
                 }
             }
         }
+    }
+
+    if (showProblemReportDialog) {
+        LocusProblemReportDialog(
+            category = reportCategory,
+            onCategoryChange = { reportCategory = it },
+            userNote = reportUserNote,
+            onUserNoteChange = { next ->
+                if (next.length <= 500) {
+                    reportUserNote = next
+                }
+            },
+            showUrlField = reportShowUrlField,
+            urlValue = reportUrlText,
+            onUrlChange = { reportUrlText = it },
+            onUrlClear = { reportUrlText = "" },
+            submitting = reportSubmitting,
+            onDismiss = {
+                if (!reportSubmitting) {
+                    showProblemReportDialog = false
+                }
+            },
+            onSubmit = {
+                val trimmedNote = reportUserNote.trim()
+                if (trimmedNote.isBlank()) {
+                    onShowSnackbar("Please add a note before submitting.", null, null)
+                    return@LocusProblemReportDialog
+                }
+                reportSubmitting = true
+                actionScope.launch {
+                    val submitResult = vm.submitProblemReport(
+                        category = reportCategory,
+                        userNote = trimmedNote,
+                        itemId = reportContext.itemId,
+                        url = if (reportShowUrlField) reportUrlText else null,
+                        sourceType = reportContext.sourceType,
+                        sourceLabel = reportContext.sourceLabel,
+                        sourceUrl = reportContext.sourceUrl,
+                        captureKind = reportContext.captureKind,
+                    )
+                    reportSubmitting = false
+                    submitResult
+                        .onSuccess { reportId ->
+                            showProblemReportDialog = false
+                            onShowSnackbar("Problem report sent. Reference: $reportId", null, null)
+                        }
+                        .onFailure { error ->
+                            val message = resolveProblemReportFailureMessage(error)
+                            if (message.startsWith("Sign in", ignoreCase = true)) {
+                                onShowSnackbar(message, "Settings", "open_settings")
+                            } else {
+                                onShowSnackbar(message, null, null)
+                            }
+                        }
+                }
+            },
+        )
     }
 
     if (showPlaylistPicker) {
@@ -2782,10 +2915,111 @@ private fun LocusOverflowMenu(
 }
 
 @Composable
+private fun LocusProblemReportDialog(
+    category: ProblemReportCategory,
+    onCategoryChange: (ProblemReportCategory) -> Unit,
+    userNote: String,
+    onUserNoteChange: (String) -> Unit,
+    showUrlField: Boolean,
+    urlValue: String,
+    onUrlChange: (String) -> Unit,
+    onUrlClear: () -> Unit,
+    submitting: Boolean,
+    onDismiss: () -> Unit,
+    onSubmit: () -> Unit,
+) {
+    var categoryMenuExpanded by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Report a problem") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("Category", style = MaterialTheme.typography.labelMedium)
+                Box {
+                    TextButton(
+                        onClick = { categoryMenuExpanded = true },
+                        enabled = !submitting,
+                    ) {
+                        Text(category.label)
+                    }
+                    DropdownMenu(
+                        expanded = categoryMenuExpanded,
+                        onDismissRequest = { categoryMenuExpanded = false },
+                    ) {
+                        ProblemReportCategory.values().forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option.label) },
+                                onClick = {
+                                    categoryMenuExpanded = false
+                                    onCategoryChange(option)
+                                },
+                            )
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = userNote,
+                    onValueChange = onUserNoteChange,
+                    label = { Text("What happened?") },
+                    placeholder = { Text("Describe the issue") },
+                    minLines = 4,
+                    maxLines = 8,
+                    enabled = !submitting,
+                    supportingText = { Text("${userNote.length}/500") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                if (showUrlField) {
+                    OutlinedTextField(
+                        value = urlValue,
+                        onValueChange = onUrlChange,
+                        label = { Text("URL (optional)") },
+                        enabled = !submitting,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    TextButton(
+                        onClick = onUrlClear,
+                        enabled = !submitting,
+                    ) {
+                        Text("Clear URL")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !submitting,
+                onClick = onSubmit,
+            ) {
+                if (submitting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Text("Submit")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !submitting) {
+                Text("Cancel")
+            }
+        },
+    )
+}
+
+@Composable
 private fun LocusOverflowMenuItems(
     onPlayCurrentItem: () -> Unit,
+    onReportProblem: () -> Unit,
     onMoveToBin: () -> Unit,
     onOpenPlaylists: () -> Unit,
+    canReportProblem: Boolean,
     isExpanded: Boolean,
     onToggleExpanded: () -> Unit,
 ) {
@@ -2797,6 +3031,12 @@ private fun LocusOverflowMenuItems(
         text = { Text("Playlists...") },
         onClick = onOpenPlaylists,
     )
+    if (canReportProblem) {
+        DropdownMenuItem(
+            text = { Text("Report a problem") },
+            onClick = onReportProblem,
+        )
+    }
     DropdownMenuItem(
         text = { Text("Move to Bin (14 days)") },
         onClick = onMoveToBin,

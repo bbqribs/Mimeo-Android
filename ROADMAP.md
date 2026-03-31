@@ -84,7 +84,7 @@
 - [x] Username/password sign-in flow — shipped per `docs/ANDROID_AUTH_PHASE3_SPEC.md` slice plan (gate, recovery, sign-out, settings coexistence).
 
 ### Next tickets
-1. [ ] In-Locus problem-report flow implementation (Android v1): implement `Report a problem` from Locus overflow using `docs/ANDROID_LOCUS_PROBLEM_REPORT_FLOW_SPEC.md` and backend `/feedback/problem-report` operator contract.
+1. [x] In-Locus problem-report flow implementation (Android v1): `Report a problem` is now available from Locus overflow with online submit to `/feedback/problem-report`, category + required note + optional URL edit/clear, and bounded success/error/auth handling that preserves form state on failed submit.
 2. [ ] Cross-repo source metadata unification: align backend + extension/web on the same provenance/origin contract and rendering precedence shipped on Android (no body-link source inference).
 3. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.
 4. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
