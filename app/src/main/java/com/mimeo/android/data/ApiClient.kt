@@ -214,6 +214,7 @@ class ApiClient(
                 throwApiException(response.code, body)
             }
             val payload = json.decodeFromString<PlaybackQueueResponse>(body)
+            val responseHash = if (BuildConfig.DEBUG) sha256Short(body) else ""
             val snapshot = QueueFetchDebugSnapshot(
                 selectedPlaylistId = playlistId,
                 requestUrl = requestUrl,
@@ -221,7 +222,7 @@ class ApiClient(
                 responseItemCount = payload.items.size,
                 responseContains409 = payload.items.any { it.itemId == DEBUG_TARGET_ITEM_ID },
                 responseBytes = body.toByteArray().size,
-                responseHash = sha256Short(body),
+                responseHash = responseHash,
             )
             if (BuildConfig.DEBUG) {
                 Log.d(

@@ -188,6 +188,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Dispatchers
@@ -224,6 +225,7 @@ private const val INITIAL_SIGN_IN_BACKGROUND_HYDRATION_ATTEMPTS = 10
 private const val INITIAL_SIGN_IN_BACKGROUND_HYDRATION_RETRY_DELAY_MS = 500L
 private const val SMART_QUEUE_SESSION_CONTEXT_ID = -1
 private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
+private const val SHARE_REFRESH_COALESCE_MS = 300L
 
 private data class BottomNavDestination(
     val route: String,
@@ -754,7 +756,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             flushPendingProgress()
         }
         viewModelScope.launch {
-            ShareSaveRefreshBus.events.collect { event ->
+            ShareSaveRefreshBus.events
+                .debounce(SHARE_REFRESH_COALESCE_MS)
+                .collect { event ->
                 refreshPlaylists()
                 if (settings.value.selectedPlaylistId == event.playlistId) {
                     _pendingQueueFocusItemId.value = event.itemId

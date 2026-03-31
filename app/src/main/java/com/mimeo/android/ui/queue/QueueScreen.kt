@@ -378,59 +378,67 @@ fun QueueScreen(
         }
     }
 
-    val favoritesSourceItems = (items + archivedItems)
-        .distinctBy { it.itemId }
-
-    val activeItems = when (selectedFilter) {
-        QueueFilterChip.PENDING -> emptyList()
-        QueueFilterChip.FAVORITES -> favoritesSourceItems
-        QueueFilterChip.ARCHIVE -> archivedItems
-        QueueFilterChip.BIN -> binItems
-        else -> items
+    val searchNeedle = remember(searchQuery) { searchQuery.trim().lowercase() }
+    val normalizedSearchNeedle = remember(searchNeedle) { normalizeSearchText(searchNeedle) }
+    val favoritesSourceItems = remember(items, archivedItems) {
+        (items + archivedItems).distinctBy { it.itemId }
     }
-    val archivedItemIds = archivedItems.mapTo(hashSetOf()) { it.itemId }
-    val filteredItems = activeItems.filter { item ->
-        val matchesSearch = if (searchQuery.isBlank()) {
-            true
-        } else {
-            val needle = searchQuery.trim().lowercase()
-            val normalizedNeedle = normalizeSearchText(needle)
-            listOf(
-                item.title.orEmpty(),
-                item.host.orEmpty(),
-                item.url,
-            ).any { candidate ->
-                val lowered = candidate.lowercase()
-                lowered.contains(needle) || normalizeSearchText(lowered).contains(normalizedNeedle)
+    val activeItems = remember(selectedFilter, items, favoritesSourceItems, archivedItems, binItems) {
+        when (selectedFilter) {
+            QueueFilterChip.PENDING -> emptyList()
+            QueueFilterChip.FAVORITES -> favoritesSourceItems
+            QueueFilterChip.ARCHIVE -> archivedItems
+            QueueFilterChip.BIN -> binItems
+            else -> items
+        }
+    }
+    val archivedItemIds = remember(archivedItems) { archivedItems.mapTo(hashSetOf()) { it.itemId } }
+    val filteredItems = remember(activeItems, selectedFilter, searchNeedle, normalizedSearchNeedle) {
+        activeItems.filter { item ->
+            val matchesSearch = if (searchNeedle.isBlank()) {
+                true
+            } else {
+                listOf(
+                    item.title.orEmpty(),
+                    item.host.orEmpty(),
+                    item.url,
+                ).any { candidate ->
+                    val lowered = candidate.lowercase()
+                    lowered.contains(searchNeedle) || normalizeSearchText(lowered).contains(normalizedSearchNeedle)
+                }
             }
+            val matchesFilter = when (selectedFilter) {
+                QueueFilterChip.ALL -> true
+                QueueFilterChip.PENDING -> false
+                QueueFilterChip.FAVORITES -> item.isFavorited
+                QueueFilterChip.UNREAD -> item.furthestPercent <= 0
+                QueueFilterChip.IN_PROGRESS -> item.furthestPercent in 1 until DONE_PERCENT_THRESHOLD
+                QueueFilterChip.DONE -> item.furthestPercent >= DONE_PERCENT_THRESHOLD
+                QueueFilterChip.ARCHIVE -> true
+                QueueFilterChip.BIN -> true
+            }
+            matchesSearch && matchesFilter
         }
-        val matchesFilter = when (selectedFilter) {
-            QueueFilterChip.ALL -> true
-            QueueFilterChip.PENDING -> false
-            QueueFilterChip.FAVORITES -> item.isFavorited
-            QueueFilterChip.UNREAD -> item.furthestPercent <= 0
-            QueueFilterChip.IN_PROGRESS -> item.furthestPercent in 1 until DONE_PERCENT_THRESHOLD
-            QueueFilterChip.DONE -> item.furthestPercent >= DONE_PERCENT_THRESHOLD
-            QueueFilterChip.ARCHIVE -> true
-            QueueFilterChip.BIN -> true
-        }
-        matchesSearch && matchesFilter
     }
-    val displayedItems = when (selectedSort) {
-        QueueSortOption.NEWEST -> filteredItems.sortedByDescending { it.createdAt ?: "" }
-        QueueSortOption.OLDEST -> filteredItems.sortedBy { it.createdAt ?: "" }
-        QueueSortOption.PROGRESS_HIGH -> filteredItems.sortedByDescending { it.furthestPercent }
-        QueueSortOption.PROGRESS_LOW -> filteredItems.sortedBy { it.furthestPercent }
-        QueueSortOption.TITLE_AZ -> filteredItems.sortedBy { (it.title ?: it.url).lowercase() }
+    val displayedItems = remember(filteredItems, selectedSort) {
+        when (selectedSort) {
+            QueueSortOption.NEWEST -> filteredItems.sortedByDescending { it.createdAt ?: "" }
+            QueueSortOption.OLDEST -> filteredItems.sortedBy { it.createdAt ?: "" }
+            QueueSortOption.PROGRESS_HIGH -> filteredItems.sortedByDescending { it.furthestPercent }
+            QueueSortOption.PROGRESS_LOW -> filteredItems.sortedBy { it.furthestPercent }
+            QueueSortOption.TITLE_AZ -> filteredItems.sortedBy { (it.title ?: it.url).lowercase() }
+        }
     }
     val activePlayingItemId =
         nowPlayingSession?.currentItem?.itemId
             ?: playbackState.currentItemId.takeIf { it > 0 }
-    val visibleProjectedPendingItems = when (selectedFilter) {
-        QueueFilterChip.PENDING -> pendingManualSaves.filter { pending ->
-            pendingMatchesSearch(pending, searchQuery)
+    val visibleProjectedPendingItems = remember(selectedFilter, pendingManualSaves, searchQuery) {
+        when (selectedFilter) {
+            QueueFilterChip.PENDING -> pendingManualSaves.filter { pending ->
+                pendingMatchesSearch(pending, searchQuery)
+            }
+            else -> emptyList()
         }
-        else -> emptyList()
     }
     val hasVisibleQueueContent = displayedItems.isNotEmpty() || visibleProjectedPendingItems.isNotEmpty()
     val pullRefreshProgress = (pullRefreshDistancePx / pullRefreshThresholdPx).coerceIn(0f, 1f)
