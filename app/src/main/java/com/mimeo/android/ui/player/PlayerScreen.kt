@@ -3044,9 +3044,11 @@ private fun LocusProblemReportDialog(
                         checked = attachFullText,
                         onCheckedChange = onAttachFullTextChange,
                         enabled = !submitting,
+                        modifier = Modifier.align(Alignment.CenterVertically),
                     )
                     Column(
                         verticalArrangement = Arrangement.spacedBy(0.dp),
+                        modifier = Modifier.align(Alignment.CenterVertically),
                     ) {
                         Text("Attach article title and text")
                         Row(
@@ -3056,7 +3058,7 @@ private fun LocusProblemReportDialog(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(16.dp)
+                                    .size(13.dp)
                                     .border(
                                         width = 1.dp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -3066,7 +3068,7 @@ private fun LocusProblemReportDialog(
                             ) {
                                 Text(
                                     text = "!",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
