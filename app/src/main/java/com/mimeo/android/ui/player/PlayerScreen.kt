@@ -3045,38 +3045,40 @@ private fun LocusProblemReportDialog(
                         onCheckedChange = onAttachFullTextChange,
                         enabled = !submitting,
                     )
-                    Text("Attach article title and text")
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Start,
-                ) {
-                    Spacer(modifier = Modifier.width(48.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(16.dp)
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                shape = CircleShape,
-                            ),
-                        contentAlignment = Alignment.Center,
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(0.dp),
                     ) {
-                        Text(
-                            text = "!",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Text("Attach article title and text")
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Start,
+                            modifier = Modifier.padding(top = 0.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .border(
+                                        width = 1.dp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        shape = CircleShape,
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = "!",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Content may contain sensitive data.",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontStyle = FontStyle.Italic,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Attachment content may contain sensitive data.",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontStyle = FontStyle.Italic,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
         },
@@ -3123,7 +3125,7 @@ private fun LocusOverflowMenuItems(
     )
     if (canReportProblem) {
         DropdownMenuItem(
-            text = { Text("Report a problem") },
+            text = { Text("Report problem") },
             onClick = onReportProblem,
         )
     }
