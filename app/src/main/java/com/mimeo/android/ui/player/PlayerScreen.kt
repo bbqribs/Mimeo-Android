@@ -96,6 +96,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -3052,6 +3053,7 @@ private fun LocusProblemReportDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Start,
                 ) {
+                    Spacer(modifier = Modifier.width(48.dp))
                     Box(
                         modifier = Modifier
                             .size(16.dp)
@@ -3071,7 +3073,8 @@ private fun LocusProblemReportDialog(
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "Attachment content may contain sensitive data.",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontStyle = FontStyle.Italic,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
