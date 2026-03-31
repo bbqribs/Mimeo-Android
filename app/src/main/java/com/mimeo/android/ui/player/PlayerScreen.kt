@@ -24,8 +24,10 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -2945,16 +2947,19 @@ private fun LocusProblemReportDialog(
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Report a problem") },
-        text = {
-            Column(
+        title = {
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                Text("Report problem")
                 Box {
                     TextButton(
                         onClick = { categoryMenuExpanded = true },
                         enabled = !submitting,
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                        modifier = Modifier.defaultMinSize(minHeight = 28.dp),
                     ) {
                         Text(category.label)
                         Spacer(modifier = Modifier.width(6.dp))
@@ -2982,7 +2987,13 @@ private fun LocusProblemReportDialog(
                         }
                     }
                 }
-
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 OutlinedTextField(
                     value = userNote,
                     onValueChange = onUserNoteChange,
@@ -3006,6 +3017,8 @@ private fun LocusProblemReportDialog(
                     TextButton(
                         onClick = onUrlClear,
                         enabled = !submitting,
+                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp),
+                        modifier = Modifier.defaultMinSize(minHeight = 22.dp),
                     ) {
                         Text("Clear URL")
                     }
