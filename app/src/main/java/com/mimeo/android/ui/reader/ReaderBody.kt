@@ -510,8 +510,8 @@ fun ReaderBody(
         val visibleBottomInRoot = viewportTopInRoot + viewportSize.height.toFloat()
         val desiredBottomInRoot = visibleBottomInRoot - bottomComfortPx
         val fullyVisibleNow = startTopInRoot >= visibleTopInRoot && endBottomInRoot <= desiredBottomInRoot
-        val desiredAnchorInRoot = visibleTopInRoot + topComfortPx
-        val deltaToTopAnchor = startTopInRoot - desiredAnchorInRoot
+        val desiredTopAnchorInRoot = visibleTopInRoot + topComfortPx
+        val deltaToTopAnchor = startTopInRoot - desiredTopAnchorInRoot
         val nowMs = SystemClock.elapsedRealtime()
 
         val externalTrigger = scrollTriggerSignal != lastHandledScrollTrigger
@@ -527,7 +527,7 @@ fun ReaderBody(
             nowMs >= suppressTransitionUntilMs &&
             transitionCrossedBottom &&
             hiddenByBottom
-        val shouldScroll = externalTrigger || transitionTrigger
+        val shouldScroll = transitionTrigger || (externalTrigger && !fullyVisibleNow)
         if (!shouldScroll) {
             if (anchorChanged) {
                 lastAnchorWasFullyVisible = fullyVisibleNow
@@ -542,7 +542,11 @@ fun ReaderBody(
                 val latestChunkTop = activeChunkTopInRootPx ?: return
                 val latestViewportTop = viewportTopInRootPx ?: return
                 val latestStartTopInRoot = latestChunkTop + latestLayout.getCursorRect(anchor.first).top
-                val desiredAnchorInRoot = latestViewportTop + topComfortPx
+                val desiredAnchorInRoot = if (externalTrigger) {
+                    latestViewportTop + (viewportSize.height.toFloat() / 2f)
+                } else {
+                    latestViewportTop + topComfortPx
+                }
                 val delta = latestStartTopInRoot - desiredAnchorInRoot
                 val target = (scrollState.value + delta).roundToInt().coerceIn(0, scrollState.maxValue)
                 if (abs(target - scrollState.value) <= 1) return
