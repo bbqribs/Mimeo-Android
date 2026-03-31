@@ -520,11 +520,11 @@ fun ReaderBody(
         val deltaToTopAnchor = startTopInRoot - desiredTopAnchorInRoot
         val nowMs = SystemClock.elapsedRealtime()
 
-        val externalTrigger = scrollTriggerSignal != lastHandledScrollTrigger
-        val forceReattach = externalTrigger && scrollTriggerSignal > 0 && (scrollTriggerSignal % 2 != 0)
-        val centerIfOffscreen = scrollTriggerSignal < 0
+        val triggerKind = classifyReaderScrollTrigger(scrollTriggerSignal, lastHandledScrollTrigger)
+        val externalTrigger = triggerKind != ReaderScrollTriggerKind.NONE
+        val forceReattach = triggerKind == ReaderScrollTriggerKind.FORCE_REATTACH
         val anchorChanged = lastAnchorRange != anchor
-        if (manualScrollDetached && !forceReattach) {
+        if (shouldKeepDetachedAfterTrigger(manualScrollDetached, triggerKind)) {
             if (externalTrigger) {
                 // Consume non-reattach triggers while detached so playback updates cannot
                 // keep the effect in a perpetual "external trigger" state.
@@ -568,7 +568,7 @@ fun ReaderBody(
                 val latestMaxOffset = latestLayout.layoutInput.text.length.coerceAtLeast(0)
                 val latestSafeStart = anchor.first.coerceIn(0, latestMaxOffset)
                 val latestStartTopInRoot = latestChunkTop + latestLayout.getCursorRect(latestSafeStart).top
-                val desiredAnchorInRoot = if (externalTrigger && centerIfOffscreen) {
+                val desiredAnchorInRoot = if (shouldCenterForTrigger(triggerKind, !fullyVisibleNow)) {
                     latestViewportTop + (viewportSize.height.toFloat() / 2f)
                 } else {
                     latestViewportTop + topComfortPx
@@ -593,7 +593,10 @@ fun ReaderBody(
             suppressTransitionUntilMs = 0L
         }
         if (forceReattach) {
-            manualScrollDetached = false
+            manualScrollDetached = nextManualDetachState(
+                currentDetached = manualScrollDetached,
+                triggerKind = triggerKind,
+            )
             suppressTransitionUntilMs = 0L
         }
         lastAnchorRange = anchor
