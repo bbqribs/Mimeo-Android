@@ -8,8 +8,8 @@ import org.junit.Test
 class LocusContentModeTest {
 
     @Test
-    fun appSettings_defaultLocusMode_isFullText() {
-        assertEquals(LocusContentMode.FULL_TEXT, AppSettings().locusContentMode)
+    fun appSettings_defaultLocusMode_isFullTextWithPlayer() {
+        assertEquals(LocusContentMode.FULL_TEXT_WITH_PLAYER, AppSettings().locusContentMode)
     }
 
     @Test

@@ -524,7 +524,12 @@ fun ReaderBody(
         val forceReattach = externalTrigger && scrollTriggerSignal > 0 && (scrollTriggerSignal % 2 != 0)
         val centerIfOffscreen = scrollTriggerSignal < 0
         val anchorChanged = lastAnchorRange != anchor
-        if (manualScrollDetached && !externalTrigger && !forceReattach) {
+        if (manualScrollDetached && !forceReattach) {
+            if (externalTrigger) {
+                // Consume non-reattach triggers while detached so playback updates cannot
+                // keep the effect in a perpetual "external trigger" state.
+                lastHandledScrollTrigger = scrollTriggerSignal
+            }
             if (anchorChanged) {
                 lastAnchorWasFullyVisible = fullyVisibleNow
             }
@@ -545,6 +550,9 @@ fun ReaderBody(
             hiddenByBottom
         val shouldScroll = transitionTrigger || (externalTrigger && !fullyVisibleNow) || forceReattach
         if (!shouldScroll) {
+            if (externalTrigger) {
+                lastHandledScrollTrigger = scrollTriggerSignal
+            }
             if (anchorChanged) {
                 lastAnchorWasFullyVisible = fullyVisibleNow
             }

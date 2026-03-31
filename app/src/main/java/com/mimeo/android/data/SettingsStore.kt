@@ -139,18 +139,18 @@ class SettingsStore(private val context: Context) {
             lanBaseUrl = lanBaseUrl,
             remoteBaseUrl = remoteBaseUrl,
             apiToken = persistedToken,
-            autoAdvanceOnCompletion = prefs[autoAdvanceOnCompletionKey] ?: false,
+            autoAdvanceOnCompletion = prefs[autoAdvanceOnCompletionKey] ?: true,
             autoArchiveAtArticleEnd = prefs[autoArchiveAtArticleEndKey] ?: false,
-            speakTitleBeforeArticle = prefs[speakTitleBeforeArticleKey] ?: false,
+            speakTitleBeforeArticle = prefs[speakTitleBeforeArticleKey] ?: true,
             skipDuplicateOpeningAfterTitleIntro = prefs[skipDuplicateOpeningAfterTitleIntroKey] ?: true,
-            playCompletionCueAtArticleEnd = prefs[playCompletionCueAtArticleEndKey] ?: false,
-            keepScreenOnDuringSession = prefs[keepScreenOnDuringSessionKey] ?: false,
+            playCompletionCueAtArticleEnd = prefs[playCompletionCueAtArticleEndKey] ?: true,
+            keepScreenOnDuringSession = prefs[keepScreenOnDuringSessionKey] ?: true,
             persistentPlayerEnabled = prefs[persistentPlayerEnabledKey] ?: true,
             autoScrollWhileListening = prefs[autoScrollWhileListeningKey] ?: true,
             locusTabReturnsToPlaybackPosition = prefs[locusTabReturnsToPlaybackPositionKey] ?: false,
             locusContentMode = prefs[locusContentModeKey]
                 ?.let { runCatching { LocusContentMode.valueOf(it) }.getOrNull() }
-                ?: LocusContentMode.FULL_TEXT,
+                ?: LocusContentMode.FULL_TEXT_WITH_PLAYER,
             continuousNowPlayingMarquee = prefs[continuousNowPlayingMarqueeKey] ?: true,
             forceSentenceHighlightFallback = prefs[forceSentenceHighlightFallbackKey] ?: false,
             showPlaybackDiagnostics = prefs[showPlaybackDiagnosticsKey] ?: false,
@@ -164,10 +164,10 @@ class SettingsStore(private val context: Context) {
             playbackSpeed = prefs[playbackSpeedKey] ?: 1.0f,
             selectedPlaylistId = decodeSelectedPlaylistId(prefs[selectedPlaylistIdKey]),
             defaultSavePlaylistId = decodeSelectedPlaylistId(prefs[defaultSavePlaylistIdKey]),
-            readingFontSizeSp = prefs[readingFontSizeSpKey] ?: 18,
+            readingFontSizeSp = prefs[readingFontSizeSpKey] ?: 16,
             readingFontOption = prefs[readingFontOptionKey]
                 ?.let { runCatching { ReaderFontOption.valueOf(it) }.getOrNull() }
-                ?: ReaderFontOption.LITERATA,
+                ?: ReaderFontOption.SANS_SERIF,
             readingLineHeightPercent = prefs[readingLineHeightPercentKey] ?: 160,
             readingMaxWidthDp = prefs[readingMaxWidthDpKey] ?: 720,
             readingParagraphSpacing = prefs[readingParagraphSpacingKey]
