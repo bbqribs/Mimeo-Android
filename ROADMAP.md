@@ -59,6 +59,7 @@
 - [x] Locus source/publication cue shipped: when title-intro is active and a meaningful source label is available, TTS now speaks a brief “From {source}.” cue between title and body; skipped for missing/unhelpful provenance and unchanged for resume/replay rules.
 - [x] Archive-while-playing continuity shipped: archiving the currently playing item now marks it archived immediately for UI/list state while preserving active playback; cleanup/removal from playback context is deferred to natural playback/session boundaries.
 - [x] Locus FF/RW text navigation shipped: tap rewind/forward now moves by sentence; long-press rewind/forward moves by paragraph, with predictable edge behavior.
+- [x] Playback scroll lock-in (spec+tests) shipped: explicit trigger policy extraction, focused unit coverage for detach/reattach/recenter invariants, and bounded instrumentation smoke scaffold + contract doc.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
@@ -83,11 +84,12 @@
 - [x] Username/password sign-in flow — shipped per `docs/ANDROID_AUTH_PHASE3_SPEC.md` slice plan (gate, recovery, sign-out, settings coexistence).
 
 ### Next tickets
-1. [ ] Cross-repo source metadata unification: align backend + extension/web on the same provenance/origin contract and rendering precedence shipped on Android (no body-link source inference).
-2. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.
-3. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
-4. [ ] Keep-screen-on/session UX follow-up: refine “active session” heuristics and user copy for reader-only vs speaking states without changing playback ownership.
-5. [ ] Offline action queueing follow-up: expand deferred-sync coverage beyond favourite/archive to remaining item lifecycle actions where local-first behavior is valuable.
+1. [ ] In-Locus problem-report flow implementation (Android v1): implement `Report a problem` from Locus overflow using `docs/ANDROID_LOCUS_PROBLEM_REPORT_FLOW_SPEC.md` and backend `/feedback/problem-report` operator contract.
+2. [ ] Cross-repo source metadata unification: align backend + extension/web on the same provenance/origin contract and rendering precedence shipped on Android (no body-link source inference).
+3. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.
+4. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
+5. [ ] Keep-screen-on/session UX follow-up: refine “active session” heuristics and user copy for reader-only vs speaking states without changing playback ownership.
+6. [ ] Offline action queueing follow-up: expand deferred-sync coverage beyond favourite/archive to remaining item lifecycle actions where local-first behavior is valuable.
 
 ## Reader/Player UX fidelity + state persistence backlog
 
