@@ -660,7 +660,7 @@ fun PlayerScreen(
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     val activeChunkRange = engineState.activeChunkRange
     var readerScrollTriggerSignal by rememberSaveable { mutableIntStateOf(0) }
-    var readerScrollTriggerModeInt by rememberSaveable { mutableIntStateOf(0) }
+    var readerScrollTriggerMode by rememberSaveable { mutableStateOf(ReaderScrollTriggerMode.TOP_IF_OFFSCREEN) }
     var readerSelectionResetSignal by rememberSaveable { mutableIntStateOf(0) }
     var selectionClearArmed by rememberSaveable { mutableStateOf(false) }
     var lastHandledLocusTapSignal by rememberSaveable { mutableIntStateOf(locusTapSignal) }
@@ -886,7 +886,7 @@ fun PlayerScreen(
             viewerChunks = emptyList()
             if (pendingLocusTabPlaybackScrollAfterReturn) {
                 pendingLocusTabPlaybackScrollAfterReturn = false
-                readerScrollTriggerModeInt = 0
+                readerScrollTriggerMode = ReaderScrollTriggerMode.TOP_IF_OFFSCREEN
                 readerScrollTriggerSignal += 1
             }
             return@LaunchedEffect
@@ -993,7 +993,7 @@ fun PlayerScreen(
             return@LaunchedEffect
         }
         if (tapAction.triggerScrollToPlaybackImmediately) {
-            readerScrollTriggerModeInt = 0
+            readerScrollTriggerMode = ReaderScrollTriggerMode.TOP_IF_OFFSCREEN
             readerScrollTriggerSignal += 1
         }
     }
@@ -1125,7 +1125,7 @@ fun PlayerScreen(
                 }
                 readerViewportSessionNonce += 1
                 if (!preservingVisibleContent) {
-                    readerScrollTriggerModeInt = 0
+                    readerScrollTriggerMode = ReaderScrollTriggerMode.TOP_IF_OFFSCREEN
                     readerScrollTriggerSignal += 1
                 }
                 Log.d(
@@ -1447,7 +1447,7 @@ fun PlayerScreen(
                 offsetInChunkChars = target.offsetInChunkChars,
                 keepPlaying = isSpeaking || isAutoPlaying,
             )
-            readerScrollTriggerModeInt = 1
+            readerScrollTriggerMode = ReaderScrollTriggerMode.CENTER_IF_OFFSCREEN
             readerScrollTriggerSignal += 1
         }
         PlayerControlBar(
@@ -1500,7 +1500,7 @@ fun PlayerScreen(
                         "playTap item=$currentItemId restart=$restartFromStart " +
                             "playChunk=${livePosition.chunkIndex} playOffset=${livePosition.offsetInChunkChars}",
                     )
-                    readerScrollTriggerModeInt = 0
+                    readerScrollTriggerMode = ReaderScrollTriggerMode.TOP_IF_OFFSCREEN
                     readerScrollTriggerSignal += 1
                     vm.playbackPlay()
                 }
@@ -1861,11 +1861,7 @@ fun PlayerScreen(
                                 searchFocusRangeInChunk = activeLocusSearchMatch?.rangeInChunk,
                                 searchFocusTriggerSignal = locusSearchScrollTriggerSignal,
                                 scrollTriggerSignal = readerScrollTriggerSignal,
-                                scrollTriggerMode = if (readerScrollTriggerModeInt == 1) {
-                                    ReaderScrollTriggerMode.CENTER_IF_OFFSCREEN
-                                } else {
-                                    ReaderScrollTriggerMode.TOP_IF_OFFSCREEN
-                                },
+                                scrollTriggerMode = readerScrollTriggerMode,
                                 autoScrollWhileListening = !previewModeActive &&
                                     settings.autoScrollWhileListening &&
                                     (isSpeaking || isAutoPlaying),
