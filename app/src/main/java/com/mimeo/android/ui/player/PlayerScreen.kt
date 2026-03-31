@@ -3091,6 +3091,7 @@ private fun LocusProblemReportDialog(
                         enabled = !submitting,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -3117,6 +3118,7 @@ private fun LocusProblemReportDialog(
             Button(
                 enabled = !submitting,
                 onClick = onSubmit,
+                modifier = Modifier.offset(y = (-6).dp),
             ) {
                 if (submitting) {
                     CircularProgressIndicator(
@@ -3129,7 +3131,11 @@ private fun LocusProblemReportDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !submitting) {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !submitting,
+                modifier = Modifier.offset(y = (-6).dp),
+            ) {
                 Text("Cancel")
             }
         },
