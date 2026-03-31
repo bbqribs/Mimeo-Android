@@ -749,10 +749,6 @@ fun PlayerScreen(
         PlayerControlsMode.NUB -> "Restore player controls"
     }
     val readerChromeHidden = !compactControlsOnly && isExpanded && immersiveReaderMode
-    val triggerReaderScroll: (ReaderScrollTriggerMode) -> Unit = { mode ->
-        readerScrollTriggerMode = mode
-        readerScrollTriggerSignal += 1
-    }
     LaunchedEffect(textToolbar) {
         snapshotFlow { textToolbar.status }.collect { status ->
             if (status == TextToolbarStatus.Shown) {
@@ -890,7 +886,8 @@ fun PlayerScreen(
             viewerChunks = emptyList()
             if (pendingLocusTabPlaybackScrollAfterReturn) {
                 pendingLocusTabPlaybackScrollAfterReturn = false
-                triggerReaderScroll(ReaderScrollTriggerMode.TOP_IF_OFFSCREEN)
+                readerScrollTriggerMode = ReaderScrollTriggerMode.TOP_IF_OFFSCREEN
+                readerScrollTriggerSignal += 1
             }
             return@LaunchedEffect
         }
@@ -996,7 +993,8 @@ fun PlayerScreen(
             return@LaunchedEffect
         }
         if (tapAction.triggerScrollToPlaybackImmediately) {
-            triggerReaderScroll(ReaderScrollTriggerMode.TOP_IF_OFFSCREEN)
+            readerScrollTriggerMode = ReaderScrollTriggerMode.TOP_IF_OFFSCREEN
+            readerScrollTriggerSignal += 1
         }
     }
 
@@ -1127,7 +1125,8 @@ fun PlayerScreen(
                 }
                 readerViewportSessionNonce += 1
                 if (!preservingVisibleContent) {
-                    triggerReaderScroll(ReaderScrollTriggerMode.TOP_IF_OFFSCREEN)
+                    readerScrollTriggerMode = ReaderScrollTriggerMode.TOP_IF_OFFSCREEN
+                    readerScrollTriggerSignal += 1
                 }
                 Log.d(
                     MANUAL_OPEN_DEBUG_TAG,
@@ -1448,7 +1447,8 @@ fun PlayerScreen(
                 offsetInChunkChars = target.offsetInChunkChars,
                 keepPlaying = isSpeaking || isAutoPlaying,
             )
-            triggerReaderScroll(ReaderScrollTriggerMode.CENTER_IF_OFFSCREEN)
+            readerScrollTriggerMode = ReaderScrollTriggerMode.CENTER_IF_OFFSCREEN
+            readerScrollTriggerSignal += 1
         }
         PlayerControlBar(
             progressPercent = currentPercent,
@@ -1500,7 +1500,8 @@ fun PlayerScreen(
                         "playTap item=$currentItemId restart=$restartFromStart " +
                             "playChunk=${livePosition.chunkIndex} playOffset=${livePosition.offsetInChunkChars}",
                     )
-                    triggerReaderScroll(ReaderScrollTriggerMode.TOP_IF_OFFSCREEN)
+                    readerScrollTriggerMode = ReaderScrollTriggerMode.TOP_IF_OFFSCREEN
+                    readerScrollTriggerSignal += 1
                     vm.playbackPlay()
                 }
             },
