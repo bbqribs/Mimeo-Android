@@ -575,7 +575,9 @@ fun ReaderBody(
         if (externalTrigger) {
             lastHandledScrollTrigger = scrollTriggerSignal
             suppressTransitionUntilMs = 0L
-            manualScrollDetached = false
+            if (!fullyVisibleNow) {
+                manualScrollDetached = false
+            }
         }
         lastAnchorRange = anchor
         lastAnchorWasFullyVisible = true
