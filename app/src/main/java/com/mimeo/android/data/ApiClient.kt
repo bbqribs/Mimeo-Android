@@ -12,6 +12,8 @@ import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.model.ProgressPayload
 import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.model.RawHttpResponse
+import com.mimeo.android.model.ProblemReportRequest
+import com.mimeo.android.model.ProblemReportResponse
 import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -592,6 +594,20 @@ class ApiClient(
             .put(body)
             .build()
         executeNoBody(request)
+    }
+
+    suspend fun postProblemReport(
+        baseUrl: String,
+        token: String,
+        requestPayload: ProblemReportRequest,
+    ): ProblemReportResponse = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(requestPayload).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/feedback/problem-report"))
+            .header("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<ProblemReportResponse>(payload) }
     }
 
     private fun resolveUrl(baseUrl: String, path: String): String {
