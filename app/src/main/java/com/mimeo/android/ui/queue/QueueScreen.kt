@@ -231,6 +231,19 @@ private enum class QueueSortOption(val label: String) {
     TITLE_AZ("Title A-Z"),
 }
 
+internal fun shouldStartNewSessionOnQueueOpen(
+    tappedItemId: Int,
+    playbackCurrentItemId: Int,
+    playbackHasStartedCurrentItem: Boolean,
+): Boolean {
+    if (tappedItemId <= 0) return false
+    if (playbackCurrentItemId <= 0) return true
+    if (tappedItemId == playbackCurrentItemId) return true
+    // When another item already owns the playback session (including paused),
+    // opening a row should preview it in Locus without stealing session ownership.
+    return !playbackHasStartedCurrentItem
+}
+
 internal enum class PendingOutcomeSimulation {
     CACHED,
     NO_ACTIVE_CONTENT,
@@ -1179,10 +1192,18 @@ fun QueueScreen(
                                             "sessionBefore=${vm.currentNowPlayingItemId()}",
                                     )
                                     vm.warmItemTextForPlayer(item.itemId)
-                                    vm.startNowPlayingSession(
-                                        startItemId = item.itemId,
-                                        orderedQueueItems = displayedItems,
-                                    )
+                                    if (
+                                        shouldStartNewSessionOnQueueOpen(
+                                            tappedItemId = item.itemId,
+                                            playbackCurrentItemId = playbackState.currentItemId,
+                                            playbackHasStartedCurrentItem = playbackState.hasStartedPlaybackForCurrentItem,
+                                        )
+                                    ) {
+                                        vm.startNowPlayingSession(
+                                            startItemId = item.itemId,
+                                            orderedQueueItems = displayedItems,
+                                        )
+                                    }
                                     onOpenPlayer(item.itemId)
                                 },
                                 onDownload = {
