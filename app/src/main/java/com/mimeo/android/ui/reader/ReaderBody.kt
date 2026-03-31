@@ -1,6 +1,7 @@
 package com.mimeo.android.ui.reader
 
 import android.os.SystemClock
+import android.util.Log
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -53,6 +54,7 @@ private val READER_SCROLL_BOTTOM_PADDING = 0.dp
 private val READER_SEARCH_FOCUS_EXTRA_TOP_PADDING = 120.dp
 private const val MANUAL_SCROLL_SUPPRESS_MS = 1200L
 private const val URL_ANNOTATION_TAG = "reader-url"
+private const val READER_SCROLL_TAG = "MimeoReaderScroll"
 private val READER_LINK_BLUE = Color(0xFF64B5F6)
 
 enum class ReaderScrollTriggerMode {
@@ -185,6 +187,16 @@ fun ReaderBody(
             sentenceRange = highlightedSentenceRange,
         )
     }
+    fun safeCursorRect(layout: TextLayoutResult, offset: Int) =
+        runCatching { layout.getCursorRect(offset) }
+            .onFailure { err ->
+                Log.w(
+                    READER_SCROLL_TAG,
+                    "cursorRect failed offset=$offset textLen=${layout.layoutInput.text.length}",
+                    err,
+                )
+            }
+            .getOrNull()
 
     Box(
         modifier = modifier
@@ -449,8 +461,8 @@ fun ReaderBody(
                 val endIndex = anchor.last
                     .coerceAtLeast(anchor.first)
                     .coerceIn(startIndex, maxOffset)
-                val startBox = layout.getCursorRect(startIndex)
-                val endBox = layout.getCursorRect(endIndex)
+                val startBox = safeCursorRect(layout, startIndex) ?: return@collect
+                val endBox = safeCursorRect(layout, endIndex) ?: return@collect
                 val startTopInRoot = chunkTopInRoot + startBox.top
                 val endBottomInRoot = chunkTopInRoot + endBox.bottom
                 val visibleTopInRoot = viewportTopInRoot
@@ -480,7 +492,7 @@ fun ReaderBody(
 
         val maxOffset = layout.layoutInput.text.length.coerceAtLeast(0)
         val safeStart = range.first.coerceIn(0, maxOffset)
-        val startBox = layout.getCursorRect(safeStart)
+        val startBox = safeCursorRect(layout, safeStart) ?: return@LaunchedEffect
         val startTopInRoot = chunkTopInRoot + startBox.top
         val desiredAnchorInRoot = viewportTopInRoot + topComfortPx + searchFocusExtraTopPx
         val delta = startTopInRoot - desiredAnchorInRoot
@@ -512,8 +524,8 @@ fun ReaderBody(
         val safeEnd = anchor.last
             .coerceAtLeast(anchor.first)
             .coerceIn(safeStart, maxOffset)
-        val startBox = layout.getCursorRect(safeStart)
-        val endBox = layout.getCursorRect(safeEnd)
+        val startBox = safeCursorRect(layout, safeStart) ?: return@LaunchedEffect
+        val endBox = safeCursorRect(layout, safeEnd) ?: return@LaunchedEffect
         val startTopInRoot = chunkTopInRoot + startBox.top
         val endBottomInRoot = chunkTopInRoot + endBox.bottom
         val visibleTopInRoot = viewportTopInRoot
@@ -553,7 +565,8 @@ fun ReaderBody(
                 val latestViewportTop = viewportTopInRootPx ?: return
                 val latestMaxOffset = latestLayout.layoutInput.text.length.coerceAtLeast(0)
                 val latestSafeStart = anchor.first.coerceIn(0, latestMaxOffset)
-                val latestStartTopInRoot = latestChunkTop + latestLayout.getCursorRect(latestSafeStart).top
+                val latestStartBox = safeCursorRect(latestLayout, latestSafeStart) ?: return
+                val latestStartTopInRoot = latestChunkTop + latestStartBox.top
                 val desiredAnchorInRoot = if (externalTrigger && scrollTriggerMode == ReaderScrollTriggerMode.CENTER_IF_OFFSCREEN) {
                     latestViewportTop + (viewportSize.height.toFloat() / 2f)
                 } else {
