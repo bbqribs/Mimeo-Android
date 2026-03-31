@@ -522,10 +522,17 @@ fun ReaderBody(
 
         val externalTrigger = scrollTriggerSignal != lastHandledScrollTrigger
         val centerIfOffscreen = scrollTriggerSignal < 0
+        val anchorChanged = lastAnchorRange != anchor
+        if (manualScrollDetached && !externalTrigger) {
+            if (anchorChanged) {
+                lastAnchorWasFullyVisible = fullyVisibleNow
+            }
+            lastAnchorRange = anchor
+            return@LaunchedEffect
+        }
         if (externalTrigger && scrollState.maxValue == 0 && abs(deltaToTopAnchor) > 1f) {
             return@LaunchedEffect
         }
-        val anchorChanged = lastAnchorRange != anchor
         val hiddenByBottom = endBottomInRoot > desiredBottomInRoot
         val transitionCrossedBottom = anchorChanged &&
             lastAnchorWasFullyVisible == true &&
