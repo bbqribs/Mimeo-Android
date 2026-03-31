@@ -4891,7 +4891,8 @@ private fun PersistentNowPlayingStrip(
         ) {
             Spacer(
                 modifier = Modifier
-                    .fillMaxWidth(0.875f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp)
                     .height(1.dp)
                     .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
             )

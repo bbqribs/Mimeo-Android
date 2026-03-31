@@ -1759,16 +1759,12 @@ private fun normalizePendingComparisonUrl(raw: String?): String? {
 @Composable
 private fun ThinQueueDivider() {
     Box(
-        modifier = Modifier.fillMaxWidth(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.875f)
-                .height(1.dp)
-                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
-        )
-    }
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp)
+            .height(1.dp)
+            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
+    )
 }
 
 private fun normalizeSearchText(value: String): String {
