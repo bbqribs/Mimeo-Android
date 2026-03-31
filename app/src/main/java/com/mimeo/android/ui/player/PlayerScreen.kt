@@ -54,6 +54,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalMinimumInteractiveComponentEnforcement
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -71,6 +72,7 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -2928,6 +2930,7 @@ private fun LocusOverflowMenu(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LocusProblemReportDialog(
     category: ProblemReportCategory,
@@ -3041,14 +3044,17 @@ private fun LocusProblemReportDialog(
                     horizontalArrangement = Arrangement.Start,
                     verticalAlignment = Alignment.Top,
                 ) {
-                    Checkbox(
-                        checked = attachFullText,
-                        onCheckedChange = onAttachFullTextChange,
-                        enabled = !submitting,
-                        modifier = Modifier
-                            .align(Alignment.Top)
-                            .padding(top = 1.dp),
-                    )
+                    CompositionLocalProvider(LocalMinimumInteractiveComponentEnforcement provides false) {
+                        Checkbox(
+                            checked = attachFullText,
+                            onCheckedChange = onAttachFullTextChange,
+                            enabled = !submitting,
+                            modifier = Modifier
+                                .align(Alignment.Top)
+                                .padding(top = 2.dp, end = 4.dp)
+                                .size(20.dp),
+                        )
+                    }
                     Column(
                         verticalArrangement = Arrangement.spacedBy(0.dp),
                         modifier = Modifier.align(Alignment.Top),
