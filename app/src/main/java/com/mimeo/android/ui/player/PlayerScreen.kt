@@ -120,7 +120,6 @@ import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import com.mimeo.android.ui.reader.ReaderBody
-import com.mimeo.android.ui.reader.ReaderScrollTriggerMode
 import com.mimeo.android.ui.reader.segmentSentences
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -660,7 +659,6 @@ fun PlayerScreen(
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     val activeChunkRange = engineState.activeChunkRange
     var readerScrollTriggerSignal by rememberSaveable { mutableIntStateOf(0) }
-    var readerScrollTriggerMode by rememberSaveable { mutableStateOf(ReaderScrollTriggerMode.TOP_IF_OFFSCREEN) }
     var readerSelectionResetSignal by rememberSaveable { mutableIntStateOf(0) }
     var selectionClearArmed by rememberSaveable { mutableStateOf(false) }
     var lastHandledLocusTapSignal by rememberSaveable { mutableIntStateOf(locusTapSignal) }
@@ -749,10 +747,6 @@ fun PlayerScreen(
         PlayerControlsMode.NUB -> "Restore player controls"
     }
     val readerChromeHidden = !compactControlsOnly && isExpanded && immersiveReaderMode
-    val triggerReaderScroll: (ReaderScrollTriggerMode) -> Unit = { mode ->
-        readerScrollTriggerMode = mode
-        readerScrollTriggerSignal += 1
-    }
     LaunchedEffect(textToolbar) {
         snapshotFlow { textToolbar.status }.collect { status ->
             if (status == TextToolbarStatus.Shown) {
@@ -890,7 +884,7 @@ fun PlayerScreen(
             viewerChunks = emptyList()
             if (pendingLocusTabPlaybackScrollAfterReturn) {
                 pendingLocusTabPlaybackScrollAfterReturn = false
-                triggerReaderScroll(ReaderScrollTriggerMode.TOP_IF_OFFSCREEN)
+                readerScrollTriggerSignal += 1
             }
             return@LaunchedEffect
         }
@@ -996,7 +990,7 @@ fun PlayerScreen(
             return@LaunchedEffect
         }
         if (tapAction.triggerScrollToPlaybackImmediately) {
-            triggerReaderScroll(ReaderScrollTriggerMode.TOP_IF_OFFSCREEN)
+            readerScrollTriggerSignal += 1
         }
     }
 
@@ -1127,7 +1121,7 @@ fun PlayerScreen(
                 }
                 readerViewportSessionNonce += 1
                 if (!preservingVisibleContent) {
-                    triggerReaderScroll(ReaderScrollTriggerMode.TOP_IF_OFFSCREEN)
+                    readerScrollTriggerSignal += 1
                 }
                 Log.d(
                     MANUAL_OPEN_DEBUG_TAG,
@@ -1448,7 +1442,7 @@ fun PlayerScreen(
                 offsetInChunkChars = target.offsetInChunkChars,
                 keepPlaying = isSpeaking || isAutoPlaying,
             )
-            triggerReaderScroll(ReaderScrollTriggerMode.CENTER_IF_OFFSCREEN)
+            readerScrollTriggerSignal += 1
         }
         PlayerControlBar(
             progressPercent = currentPercent,
@@ -1500,7 +1494,7 @@ fun PlayerScreen(
                         "playTap item=$currentItemId restart=$restartFromStart " +
                             "playChunk=${livePosition.chunkIndex} playOffset=${livePosition.offsetInChunkChars}",
                     )
-                    triggerReaderScroll(ReaderScrollTriggerMode.TOP_IF_OFFSCREEN)
+                    readerScrollTriggerSignal += 1
                     vm.playbackPlay()
                 }
             },
@@ -1860,7 +1854,6 @@ fun PlayerScreen(
                                 searchFocusRangeInChunk = activeLocusSearchMatch?.rangeInChunk,
                                 searchFocusTriggerSignal = locusSearchScrollTriggerSignal,
                                 scrollTriggerSignal = readerScrollTriggerSignal,
-                                scrollTriggerMode = readerScrollTriggerMode,
                                 autoScrollWhileListening = !previewModeActive &&
                                     settings.autoScrollWhileListening &&
                                     (isSpeaking || isAutoPlaying),

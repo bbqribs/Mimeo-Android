@@ -55,11 +55,6 @@ private const val MANUAL_SCROLL_SUPPRESS_MS = 1200L
 private const val URL_ANNOTATION_TAG = "reader-url"
 private val READER_LINK_BLUE = Color(0xFF64B5F6)
 
-enum class ReaderScrollTriggerMode {
-    TOP_IF_OFFSCREEN,
-    CENTER_IF_OFFSCREEN,
-}
-
 @Composable
 fun ReaderBody(
     fullText: String?,
@@ -72,7 +67,6 @@ fun ReaderBody(
     searchFocusRangeInChunk: IntRange?,
     searchFocusTriggerSignal: Int,
     scrollTriggerSignal: Int,
-    scrollTriggerMode: ReaderScrollTriggerMode = ReaderScrollTriggerMode.TOP_IF_OFFSCREEN,
     autoScrollWhileListening: Boolean,
     readingFontSizeSp: Int,
     readingFontOption: ReaderFontOption,
@@ -548,7 +542,7 @@ fun ReaderBody(
                 val latestChunkTop = activeChunkTopInRootPx ?: return
                 val latestViewportTop = viewportTopInRootPx ?: return
                 val latestStartTopInRoot = latestChunkTop + latestLayout.getCursorRect(anchor.first).top
-                val desiredAnchorInRoot = if (externalTrigger && scrollTriggerMode == ReaderScrollTriggerMode.CENTER_IF_OFFSCREEN) {
+                val desiredAnchorInRoot = if (externalTrigger) {
                     latestViewportTop + (viewportSize.height.toFloat() / 2f)
                 } else {
                     latestViewportTop + topComfortPx
