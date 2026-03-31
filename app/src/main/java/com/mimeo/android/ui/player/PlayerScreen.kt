@@ -47,6 +47,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
@@ -58,7 +59,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -1339,7 +1339,8 @@ fun PlayerScreen(
     var reportUserNote by remember { mutableStateOf("") }
     var reportUrlText by remember { mutableStateOf("") }
     var reportShowUrlField by remember { mutableStateOf(false) }
-    var reportAttachFullText by remember { mutableStateOf(false) }
+    var reportAttachTitle by remember { mutableStateOf(false) }
+    var reportAttachText by remember { mutableStateOf(false) }
     var reportSubmitting by remember { mutableStateOf(false) }
     val chunkLabel = if (previewModeActive) {
         "Previewing item while playback continues"
@@ -1492,7 +1493,8 @@ fun PlayerScreen(
         reportUserNote = ""
         reportUrlText = reportContext.url.orEmpty()
         reportShowUrlField = reportContext.url?.isNotBlank() == true
-        reportAttachFullText = false
+        reportAttachTitle = false
+        reportAttachText = false
         reportSubmitting = false
         showProblemReportDialog = true
     }
@@ -2220,8 +2222,10 @@ fun PlayerScreen(
             urlValue = reportUrlText,
             onUrlChange = { reportUrlText = it },
             onUrlClear = { reportUrlText = "" },
-            attachFullText = reportAttachFullText,
-            onAttachFullTextChange = { reportAttachFullText = it },
+            attachTitle = reportAttachTitle,
+            onAttachTitleChange = { reportAttachTitle = it },
+            attachText = reportAttachText,
+            onAttachTextChange = { reportAttachText = it },
             submitting = reportSubmitting,
             onDismiss = {
                 if (!reportSubmitting) {
@@ -2247,7 +2251,8 @@ fun PlayerScreen(
                         captureKind = reportContext.captureKind,
                         articleTitle = reportContext.articleTitle,
                         articleText = reportContext.articleText,
-                        includeFullTextAttachment = reportAttachFullText,
+                        includeTitleAttachment = reportAttachTitle,
+                        includeTextAttachment = reportAttachText,
                     )
                     reportSubmitting = false
                     submitResult
@@ -2936,8 +2941,10 @@ private fun LocusProblemReportDialog(
     urlValue: String,
     onUrlChange: (String) -> Unit,
     onUrlClear: () -> Unit,
-    attachFullText: Boolean,
-    onAttachFullTextChange: (Boolean) -> Unit,
+    attachTitle: Boolean,
+    onAttachTitleChange: (Boolean) -> Unit,
+    attachText: Boolean,
+    onAttachTextChange: (Boolean) -> Unit,
     submitting: Boolean,
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
@@ -2951,13 +2958,21 @@ private fun LocusProblemReportDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text("Category", style = MaterialTheme.typography.labelMedium)
                 Box {
                     TextButton(
                         onClick = { categoryMenuExpanded = true },
                         enabled = !submitting,
                     ) {
-                        Text(category.label)
+                        Text("Category: ${category.label}")
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            painter = painterResource(id = R.drawable.msr_chevron_right_24),
+                            contentDescription = "Open category menu",
+                            modifier = Modifier
+                                .size(16.dp)
+                                .graphicsLayer(rotationZ = 90f),
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                     DropdownMenu(
                         expanded = categoryMenuExpanded,
@@ -3005,23 +3020,50 @@ private fun LocusProblemReportDialog(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.Start,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Attach title and full text")
-                    Switch(
-                        checked = attachFullText,
-                        onCheckedChange = onAttachFullTextChange,
+                    Checkbox(
+                        checked = attachTitle,
+                        onCheckedChange = onAttachTitleChange,
                         enabled = !submitting,
+                    )
+                    Text("Attach article title")
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = attachText,
+                        onCheckedChange = onAttachTextChange,
+                        enabled = !submitting,
+                    )
+                    Text("Attach article text")
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start,
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.msr_error_circle_24),
+                        contentDescription = "Privacy note",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Attachment content may contain sensitive data.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Text(
-                    text = "Includes article title and body text with this report.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = "For privacy, leave off if the content is sensitive. Large content may be truncated by the server.",
+                    text = "Leave unchecked if sensitive.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -85,7 +85,7 @@
 
 ### Next tickets
 1. [x] In-Locus problem-report flow implementation (Android v1): `Report a problem` is now available from Locus overflow with online submit to `/feedback/problem-report`, category + required note + optional URL edit/clear, and bounded success/error/auth handling that preserves form state on failed submit.
-2. [~] Problem reports v2 attachment contract (CONTRACT CHANGE): Android opt-in UI/payload path is now implemented (default OFF `Attach title and full text` toggle + privacy/size hinting + bounded attachment payload fields); backend persistence/export contract work remains pending per `docs/PROBLEM_REPORT_ATTACHMENT_V2_CONTRACT_SPEC.md`.
+2. [~] Problem reports v2 attachment contract (CONTRACT CHANGE): Android opt-in UI/payload path is now implemented (default-OFF in-dialog attachment checkboxes for title/text + compact privacy hint + bounded attachment payload fields); backend persistence/export contract work remains pending per `docs/PROBLEM_REPORT_ATTACHMENT_V2_CONTRACT_SPEC.md`.
    - Current backend limitation until contract lands: v1 persisted/exported report shape remains the authoritative operator record.
 3. [ ] Cross-repo source metadata unification: align backend + extension/web on the same provenance/origin contract and rendering precedence shipped on Android (no body-link source inference).
 4. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.

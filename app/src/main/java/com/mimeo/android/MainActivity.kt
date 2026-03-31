@@ -3483,7 +3483,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         captureKind: String?,
         articleTitle: String?,
         articleText: String?,
-        includeFullTextAttachment: Boolean,
+        includeTitleAttachment: Boolean,
+        includeTextAttachment: Boolean,
     ): Result<Int> {
         val current = settings.value
         if (current.apiToken.isBlank()) {
@@ -3497,8 +3498,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return Result.failure(IllegalArgumentException("Note is too long (max 500 characters)."))
         }
         val normalizedUrl = url?.trim()?.takeIf { it.isNotBlank() }
-        val attachedTitle = if (includeFullTextAttachment) toProblemReportAttachmentTitle(articleTitle) else null
-        val attachedText = if (includeFullTextAttachment) toProblemReportAttachmentText(articleText) else null
+        val attachedTitle = if (includeTitleAttachment) toProblemReportAttachmentTitle(articleTitle) else null
+        val attachedText = if (includeTextAttachment) toProblemReportAttachmentText(articleText) else null
         return try {
             val response = apiClient.postProblemReport(
                 baseUrl = current.baseUrl,
@@ -3515,7 +3516,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     sourceLabel = sourceLabel,
                     sourceUrl = sourceUrl,
                     captureKind = captureKind,
-                    includeFullTextAttachment = includeFullTextAttachment,
+                    includeFullTextAttachment = includeTitleAttachment || includeTextAttachment,
                     articleTitleAttached = attachedTitle,
                     articleTextAttached = attachedText,
                     attachmentTruncated = null,
