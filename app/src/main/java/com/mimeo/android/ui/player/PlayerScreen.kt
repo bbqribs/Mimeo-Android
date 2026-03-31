@@ -737,6 +737,8 @@ fun PlayerScreen(
     val archivedItems by vm.archivedItems.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
+    val queueItemsById = remember(queueItems) { queueItems.associateBy { it.itemId } }
+    val archivedItemIdSet = remember(archivedItems) { archivedItems.mapTo(hashSetOf()) { it.itemId } }
     val hasLockedPlaybackOwner =
         currentItemId > 0 &&
             (
@@ -954,7 +956,7 @@ fun PlayerScreen(
             bodyRevealReady = true
             isLoading = false
             viewerOverrideItemId = target
-            viewerOverrideTitle = queueItems.firstOrNull { it.itemId == target }?.title.orEmpty()
+            viewerOverrideTitle = queueItemsById[target]?.title.orEmpty()
             viewerPayload = null
             viewerPayloadItemId = -1
             viewerChunks = emptyList()
@@ -1309,10 +1311,10 @@ fun PlayerScreen(
         }
     }
     val capturePresentation = locusCapturePresentation(displayPayload)
-    val queuedPreviewTitle = queueItems.firstOrNull { it.itemId == locusItemId }?.title.orEmpty()
-    val isLocusItemFavorited = queueItems.firstOrNull { it.itemId == locusItemId }?.isFavorited == true
-    val isLocusItemArchived = archivedItems.any { it.itemId == locusActionItemId }
-    val locusActionItem = queueItems.firstOrNull { it.itemId == locusActionItemId }
+    val queuedPreviewTitle = queueItemsById[locusItemId]?.title.orEmpty()
+    val isLocusItemFavorited = queueItemsById[locusItemId]?.isFavorited == true
+    val isLocusItemArchived = archivedItemIdSet.contains(locusActionItemId)
+    val locusActionItem = queueItemsById[locusActionItemId]
     val currentTitle = when {
         previewModeActive -> {
             viewerOverrideTitle
