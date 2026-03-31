@@ -150,6 +150,16 @@ private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 private const val MANUAL_OPEN_DEBUG_TAG = "MimeoManualOpen"
 private const val ACTION_KEY_UNDO_ARCHIVE = "undo_archive"
 
+private fun nextStandardScrollTriggerSignal(current: Int): Int {
+    val base = kotlin.math.abs(current) + 1
+    return if (base % 2 == 0) base else base + 1
+}
+
+private fun nextForceReattachScrollTriggerSignal(current: Int): Int {
+    val base = kotlin.math.abs(current) + 1
+    return if (base % 2 == 1) base else base + 1
+}
+
 internal data class LocusSearchMatch(
     val chunkIndex: Int,
     val rangeInChunk: IntRange,
@@ -659,7 +669,6 @@ fun PlayerScreen(
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     val activeChunkRange = engineState.activeChunkRange
     var readerScrollTriggerSignal by rememberSaveable { mutableIntStateOf(0) }
-    var readerForceReattachSignal by rememberSaveable { mutableIntStateOf(0) }
     var readerSelectionResetSignal by rememberSaveable { mutableIntStateOf(0) }
     var selectionClearArmed by rememberSaveable { mutableStateOf(false) }
     var lastHandledLocusTapSignal by rememberSaveable { mutableIntStateOf(locusTapSignal) }
@@ -885,8 +894,7 @@ fun PlayerScreen(
             viewerChunks = emptyList()
             if (pendingLocusTabPlaybackScrollAfterReturn) {
                 pendingLocusTabPlaybackScrollAfterReturn = false
-                readerScrollTriggerSignal = kotlin.math.abs(readerScrollTriggerSignal) + 1
-                readerForceReattachSignal += 1
+                readerScrollTriggerSignal = nextForceReattachScrollTriggerSignal(readerScrollTriggerSignal)
             }
             return@LaunchedEffect
         }
@@ -992,8 +1000,7 @@ fun PlayerScreen(
             return@LaunchedEffect
         }
         if (tapAction.triggerScrollToPlaybackImmediately) {
-            readerScrollTriggerSignal = kotlin.math.abs(readerScrollTriggerSignal) + 1
-            readerForceReattachSignal += 1
+            readerScrollTriggerSignal = nextForceReattachScrollTriggerSignal(readerScrollTriggerSignal)
         }
     }
 
@@ -1124,7 +1131,7 @@ fun PlayerScreen(
                 }
                 readerViewportSessionNonce += 1
                 if (!preservingVisibleContent) {
-                    readerScrollTriggerSignal = kotlin.math.abs(readerScrollTriggerSignal) + 1
+                    readerScrollTriggerSignal = nextStandardScrollTriggerSignal(readerScrollTriggerSignal)
                 }
                 Log.d(
                     MANUAL_OPEN_DEBUG_TAG,
@@ -1497,7 +1504,7 @@ fun PlayerScreen(
                         "playTap item=$currentItemId restart=$restartFromStart " +
                             "playChunk=${livePosition.chunkIndex} playOffset=${livePosition.offsetInChunkChars}",
                     )
-                    readerScrollTriggerSignal = kotlin.math.abs(readerScrollTriggerSignal) + 1
+                    readerScrollTriggerSignal = nextStandardScrollTriggerSignal(readerScrollTriggerSignal)
                     vm.playbackPlay()
                 }
             },
@@ -1857,7 +1864,6 @@ fun PlayerScreen(
                                 searchFocusRangeInChunk = activeLocusSearchMatch?.rangeInChunk,
                                 searchFocusTriggerSignal = locusSearchScrollTriggerSignal,
                                 scrollTriggerSignal = readerScrollTriggerSignal,
-                                forceReattachSignal = readerForceReattachSignal,
                                 autoScrollWhileListening = !previewModeActive &&
                                     settings.autoScrollWhileListening &&
                                     (isSpeaking || isAutoPlaying),

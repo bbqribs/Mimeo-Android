@@ -67,7 +67,6 @@ fun ReaderBody(
     searchFocusRangeInChunk: IntRange?,
     searchFocusTriggerSignal: Int,
     scrollTriggerSignal: Int,
-    forceReattachSignal: Int,
     autoScrollWhileListening: Boolean,
     readingFontSizeSp: Int,
     readingFontOption: ReaderFontOption,
@@ -104,7 +103,6 @@ fun ReaderBody(
     var lastAnchorRange by remember { mutableStateOf<IntRange?>(null) }
     var lastAnchorWasFullyVisible by remember { mutableStateOf<Boolean?>(null) }
     var lastHandledScrollTrigger by remember { mutableIntStateOf(scrollTriggerSignal) }
-    var lastHandledForceReattachSignal by remember { mutableIntStateOf(forceReattachSignal) }
     var lastObservedScrollValue by remember(scrollState) { mutableIntStateOf(scrollState.value) }
     var isProgrammaticScroll by remember { mutableStateOf(false) }
     var suppressTransitionUntilMs by remember { mutableStateOf(0L) }
@@ -491,7 +489,6 @@ fun ReaderBody(
 
     LaunchedEffect(
         scrollTriggerSignal,
-        forceReattachSignal,
         anchorRange,
         activeTextLayout,
         activeChunkTopInRootPx,
@@ -524,7 +521,7 @@ fun ReaderBody(
         val nowMs = SystemClock.elapsedRealtime()
 
         val externalTrigger = scrollTriggerSignal != lastHandledScrollTrigger
-        val forceReattach = forceReattachSignal != lastHandledForceReattachSignal
+        val forceReattach = externalTrigger && scrollTriggerSignal > 0 && (scrollTriggerSignal % 2 != 0)
         val centerIfOffscreen = scrollTriggerSignal < 0
         val anchorChanged = lastAnchorRange != anchor
         if (manualScrollDetached && !externalTrigger && !forceReattach) {
@@ -588,7 +585,6 @@ fun ReaderBody(
             suppressTransitionUntilMs = 0L
         }
         if (forceReattach) {
-            lastHandledForceReattachSignal = forceReattachSignal
             manualScrollDetached = false
             suppressTransitionUntilMs = 0L
         }
