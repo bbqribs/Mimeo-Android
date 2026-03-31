@@ -177,6 +177,8 @@ internal data class LocusProblemReportContext(
     val sourceLabel: String?,
     val sourceUrl: String?,
     val captureKind: String?,
+    val articleTitle: String?,
+    val articleText: String?,
 )
 
 internal fun resolveDefaultProblemReportCategory(
@@ -1327,6 +1329,8 @@ fun PlayerScreen(
             sourceLabel = displayPayload?.sourceLabel?.takeIf { it.isNotBlank() } ?: capturePresentation.sourceLabel,
             sourceUrl = displayPayload?.sourceUrl?.takeIf { it.isNotBlank() } ?: capturePresentation.sourceUrl,
             captureKind = displayPayload?.captureKind,
+            articleTitle = displayPayload?.title?.takeIf { it.isNotBlank() } ?: currentTitle.takeIf { it.isNotBlank() },
+            articleText = displayPayload?.text?.takeIf { it.isNotBlank() },
         )
     }
     var showProblemReportDialog by remember { mutableStateOf(false) }
@@ -2236,6 +2240,8 @@ fun PlayerScreen(
                         sourceLabel = reportContext.sourceLabel,
                         sourceUrl = reportContext.sourceUrl,
                         captureKind = reportContext.captureKind,
+                        articleTitle = reportContext.articleTitle,
+                        articleText = reportContext.articleText,
                     )
                     reportSubmitting = false
                     submitResult

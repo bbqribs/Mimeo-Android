@@ -26,6 +26,8 @@ data class ProblemReportRequest(
     @SerialName("source_label") val sourceLabel: String? = null,
     @SerialName("source_url") val sourceUrl: String? = null,
     @SerialName("capture_kind") val captureKind: String? = null,
+    @SerialName("article_title") val articleTitle: String? = null,
+    @SerialName("article_text_excerpt") val articleTextExcerpt: String? = null,
 )
 
 @Serializable

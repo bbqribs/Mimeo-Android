@@ -3479,6 +3479,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         sourceLabel: String?,
         sourceUrl: String?,
         captureKind: String?,
+        articleTitle: String?,
+        articleText: String?,
     ): Result<Int> {
         val current = settings.value
         if (current.apiToken.isBlank()) {
@@ -3492,13 +3494,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return Result.failure(IllegalArgumentException("Note is too long (max 500 characters)."))
         }
         val normalizedUrl = url?.trim()?.takeIf { it.isNotBlank() }
+        val articleTextExcerpt = articleText
+            ?.replace(Regex("\\s+"), " ")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.take(220)
+        val composedUserNote = buildProblemReportUserNote(
+            userNote = trimmedNote,
+            articleTitle = articleTitle,
+            articleTextExcerpt = articleTextExcerpt,
+        )
         return try {
             val response = apiClient.postProblemReport(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
                 requestPayload = ProblemReportRequest(
                     category = category.wireValue,
-                    userNote = trimmedNote,
+                    userNote = composedUserNote,
                     itemId = itemId?.takeIf { it > 0 },
                     url = normalizedUrl,
                     clientType = "android",
@@ -3508,6 +3520,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     sourceLabel = sourceLabel,
                     sourceUrl = sourceUrl,
                     captureKind = captureKind,
+                    articleTitle = articleTitle?.trim()?.takeIf { it.isNotBlank() }?.take(180),
+                    articleTextExcerpt = articleTextExcerpt,
                 ),
             )
             _queueOffline.value = false
@@ -3528,6 +3542,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
         format.timeZone = TimeZone.getTimeZone("UTC")
         return format.format(Date())
+    }
+
+    private fun buildProblemReportUserNote(
+        userNote: String,
+        articleTitle: String?,
+        articleTextExcerpt: String?,
+    ): String {
+        var note = userNote.trim().take(500)
+        val titleLine = articleTitle?.trim()?.takeIf { it.isNotBlank() }?.let { "Title: $it" }
+        val excerptLine = articleTextExcerpt?.trim()?.takeIf { it.isNotBlank() }?.let { "Text: $it" }
+        val contextBlock = listOfNotNull(titleLine, excerptLine)
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(separator = "\n", prefix = "\n\n[Context]\n")
+            ?: return note
+        val available = 500 - note.length
+        if (available <= 0) return note
+        note += contextBlock.take(available)
+        return note.take(500)
     }
 
     suspend fun undoLastArchive(): Result<ArchiveUndoOutcome> {
