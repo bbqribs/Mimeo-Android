@@ -659,6 +659,7 @@ fun PlayerScreen(
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     val activeChunkRange = engineState.activeChunkRange
     var readerScrollTriggerSignal by rememberSaveable { mutableIntStateOf(0) }
+    var readerForceReattachSignal by rememberSaveable { mutableIntStateOf(0) }
     var readerSelectionResetSignal by rememberSaveable { mutableIntStateOf(0) }
     var selectionClearArmed by rememberSaveable { mutableStateOf(false) }
     var lastHandledLocusTapSignal by rememberSaveable { mutableIntStateOf(locusTapSignal) }
@@ -885,6 +886,7 @@ fun PlayerScreen(
             if (pendingLocusTabPlaybackScrollAfterReturn) {
                 pendingLocusTabPlaybackScrollAfterReturn = false
                 readerScrollTriggerSignal = kotlin.math.abs(readerScrollTriggerSignal) + 1
+                readerForceReattachSignal += 1
             }
             return@LaunchedEffect
         }
@@ -991,6 +993,7 @@ fun PlayerScreen(
         }
         if (tapAction.triggerScrollToPlaybackImmediately) {
             readerScrollTriggerSignal = kotlin.math.abs(readerScrollTriggerSignal) + 1
+            readerForceReattachSignal += 1
         }
     }
 
@@ -1854,6 +1857,7 @@ fun PlayerScreen(
                                 searchFocusRangeInChunk = activeLocusSearchMatch?.rangeInChunk,
                                 searchFocusTriggerSignal = locusSearchScrollTriggerSignal,
                                 scrollTriggerSignal = readerScrollTriggerSignal,
+                                forceReattachSignal = readerForceReattachSignal,
                                 autoScrollWhileListening = !previewModeActive &&
                                     settings.autoScrollWhileListening &&
                                     (isSpeaking || isAutoPlaying),
