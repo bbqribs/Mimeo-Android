@@ -884,7 +884,7 @@ fun PlayerScreen(
             viewerChunks = emptyList()
             if (pendingLocusTabPlaybackScrollAfterReturn) {
                 pendingLocusTabPlaybackScrollAfterReturn = false
-                readerScrollTriggerSignal += 1
+                readerScrollTriggerSignal = kotlin.math.abs(readerScrollTriggerSignal) + 1
             }
             return@LaunchedEffect
         }
@@ -990,7 +990,7 @@ fun PlayerScreen(
             return@LaunchedEffect
         }
         if (tapAction.triggerScrollToPlaybackImmediately) {
-            readerScrollTriggerSignal += 1
+            readerScrollTriggerSignal = kotlin.math.abs(readerScrollTriggerSignal) + 1
         }
     }
 
@@ -1121,7 +1121,7 @@ fun PlayerScreen(
                 }
                 readerViewportSessionNonce += 1
                 if (!preservingVisibleContent) {
-                    readerScrollTriggerSignal += 1
+                    readerScrollTriggerSignal = kotlin.math.abs(readerScrollTriggerSignal) + 1
                 }
                 Log.d(
                     MANUAL_OPEN_DEBUG_TAG,
@@ -1442,7 +1442,7 @@ fun PlayerScreen(
                 offsetInChunkChars = target.offsetInChunkChars,
                 keepPlaying = isSpeaking || isAutoPlaying,
             )
-            readerScrollTriggerSignal += 1
+            readerScrollTriggerSignal = -(kotlin.math.abs(readerScrollTriggerSignal) + 1)
         }
         PlayerControlBar(
             progressPercent = currentPercent,
@@ -1494,7 +1494,7 @@ fun PlayerScreen(
                         "playTap item=$currentItemId restart=$restartFromStart " +
                             "playChunk=${livePosition.chunkIndex} playOffset=${livePosition.offsetInChunkChars}",
                     )
-                    readerScrollTriggerSignal += 1
+                    readerScrollTriggerSignal = kotlin.math.abs(readerScrollTriggerSignal) + 1
                     vm.playbackPlay()
                 }
             },

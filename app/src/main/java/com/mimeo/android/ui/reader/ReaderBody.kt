@@ -106,6 +106,7 @@ fun ReaderBody(
     var lastObservedScrollValue by remember(scrollState) { mutableIntStateOf(scrollState.value) }
     var isProgrammaticScroll by remember { mutableStateOf(false) }
     var suppressTransitionUntilMs by remember { mutableStateOf(0L) }
+    var manualScrollDetached by remember { mutableStateOf(false) }
     val highlightedSentenceRange = remember(chunks, sentenceRangesByChunk, safeChunkIndex, currentChunkOffsetInChars, activeRangeInChunk) {
         chunks.getOrNull(safeChunkIndex)?.let { chunk ->
             val offsetForSentence = activeRangeInChunk?.first ?: currentChunkOffsetInChars
@@ -429,6 +430,7 @@ fun ReaderBody(
             .collect { scrollValue ->
                 if (scrollValue != lastObservedScrollValue && !isProgrammaticScroll) {
                     suppressTransitionUntilMs = SystemClock.elapsedRealtime() + MANUAL_SCROLL_SUPPRESS_MS
+                    manualScrollDetached = true
                 }
                 lastObservedScrollValue = scrollValue
                 val layout = activeTextLayout ?: return@collect
@@ -501,9 +503,13 @@ fun ReaderBody(
         val viewportTopInRoot = viewportTopInRootPx ?: return@LaunchedEffect
         if (viewportSize.height <= 0) return@LaunchedEffect
 
-        val startBox = layout.getCursorRect(anchor.first)
-        val endIndex = anchor.last.coerceAtLeast(anchor.first)
-        val endBox = layout.getCursorRect(endIndex)
+        val maxOffset = layout.layoutInput.text.length.coerceAtLeast(0)
+        val safeStart = anchor.first.coerceIn(0, maxOffset)
+        val safeEnd = anchor.last
+            .coerceAtLeast(anchor.first)
+            .coerceIn(safeStart, maxOffset)
+        val startBox = layout.getCursorRect(safeStart)
+        val endBox = layout.getCursorRect(safeEnd)
         val startTopInRoot = chunkTopInRoot + startBox.top
         val endBottomInRoot = chunkTopInRoot + endBox.bottom
         val visibleTopInRoot = viewportTopInRoot
@@ -515,6 +521,7 @@ fun ReaderBody(
         val nowMs = SystemClock.elapsedRealtime()
 
         val externalTrigger = scrollTriggerSignal != lastHandledScrollTrigger
+        val centerIfOffscreen = scrollTriggerSignal < 0
         if (externalTrigger && scrollState.maxValue == 0 && abs(deltaToTopAnchor) > 1f) {
             return@LaunchedEffect
         }
@@ -524,6 +531,7 @@ fun ReaderBody(
             lastAnchorWasFullyVisible == true &&
             hiddenByBottom
         val transitionTrigger = autoScrollWhileListening &&
+            !manualScrollDetached &&
             nowMs >= suppressTransitionUntilMs &&
             transitionCrossedBottom &&
             hiddenByBottom
@@ -541,8 +549,10 @@ fun ReaderBody(
                 val latestLayout = activeTextLayout ?: return
                 val latestChunkTop = activeChunkTopInRootPx ?: return
                 val latestViewportTop = viewportTopInRootPx ?: return
-                val latestStartTopInRoot = latestChunkTop + latestLayout.getCursorRect(anchor.first).top
-                val desiredAnchorInRoot = if (externalTrigger) {
+                val latestMaxOffset = latestLayout.layoutInput.text.length.coerceAtLeast(0)
+                val latestSafeStart = anchor.first.coerceIn(0, latestMaxOffset)
+                val latestStartTopInRoot = latestChunkTop + latestLayout.getCursorRect(latestSafeStart).top
+                val desiredAnchorInRoot = if (externalTrigger && centerIfOffscreen) {
                     latestViewportTop + (viewportSize.height.toFloat() / 2f)
                 } else {
                     latestViewportTop + topComfortPx
@@ -565,6 +575,7 @@ fun ReaderBody(
         if (externalTrigger) {
             lastHandledScrollTrigger = scrollTriggerSignal
             suppressTransitionUntilMs = 0L
+            manualScrollDetached = false
         }
         lastAnchorRange = anchor
         lastAnchorWasFullyVisible = true
