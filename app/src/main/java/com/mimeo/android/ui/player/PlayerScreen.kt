@@ -58,6 +58,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -1338,6 +1339,7 @@ fun PlayerScreen(
     var reportUserNote by remember { mutableStateOf("") }
     var reportUrlText by remember { mutableStateOf("") }
     var reportShowUrlField by remember { mutableStateOf(false) }
+    var reportAttachFullText by remember { mutableStateOf(false) }
     var reportSubmitting by remember { mutableStateOf(false) }
     val chunkLabel = if (previewModeActive) {
         "Previewing item while playback continues"
@@ -1490,6 +1492,7 @@ fun PlayerScreen(
         reportUserNote = ""
         reportUrlText = reportContext.url.orEmpty()
         reportShowUrlField = reportContext.url?.isNotBlank() == true
+        reportAttachFullText = false
         reportSubmitting = false
         showProblemReportDialog = true
     }
@@ -2217,6 +2220,8 @@ fun PlayerScreen(
             urlValue = reportUrlText,
             onUrlChange = { reportUrlText = it },
             onUrlClear = { reportUrlText = "" },
+            attachFullText = reportAttachFullText,
+            onAttachFullTextChange = { reportAttachFullText = it },
             submitting = reportSubmitting,
             onDismiss = {
                 if (!reportSubmitting) {
@@ -2242,6 +2247,7 @@ fun PlayerScreen(
                         captureKind = reportContext.captureKind,
                         articleTitle = reportContext.articleTitle,
                         articleText = reportContext.articleText,
+                        includeFullTextAttachment = reportAttachFullText,
                     )
                     reportSubmitting = false
                     submitResult
@@ -2930,6 +2936,8 @@ private fun LocusProblemReportDialog(
     urlValue: String,
     onUrlChange: (String) -> Unit,
     onUrlClear: () -> Unit,
+    attachFullText: Boolean,
+    onAttachFullTextChange: (Boolean) -> Unit,
     submitting: Boolean,
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
@@ -2994,6 +3002,29 @@ private fun LocusProblemReportDialog(
                         Text("Clear URL")
                     }
                 }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Attach title and full text")
+                    Switch(
+                        checked = attachFullText,
+                        onCheckedChange = onAttachFullTextChange,
+                        enabled = !submitting,
+                    )
+                }
+                Text(
+                    text = "Includes article title and body text with this report.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = "For privacy, leave off if the content is sensitive. Large content may be truncated by the server.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         },
         confirmButton = {
