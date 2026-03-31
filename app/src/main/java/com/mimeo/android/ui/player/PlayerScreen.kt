@@ -97,6 +97,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -3038,17 +3039,19 @@ private fun LocusProblemReportDialog(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Start,
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalAlignment = Alignment.Top,
                 ) {
                     Checkbox(
                         checked = attachFullText,
                         onCheckedChange = onAttachFullTextChange,
                         enabled = !submitting,
-                        modifier = Modifier.align(Alignment.CenterVertically),
+                        modifier = Modifier
+                            .align(Alignment.Top)
+                            .padding(top = 1.dp),
                     )
                     Column(
                         verticalArrangement = Arrangement.spacedBy(0.dp),
-                        modifier = Modifier.align(Alignment.CenterVertically),
+                        modifier = Modifier.align(Alignment.Top),
                     ) {
                         Text("Attach article title and text")
                         Row(
@@ -3068,8 +3071,13 @@ private fun LocusProblemReportDialog(
                             ) {
                                 Text(
                                     text = "!",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 9.sp,
+                                        lineHeight = 9.sp,
+                                        platformStyle = PlatformTextStyle(includeFontPadding = false),
+                                    ),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
                                 )
                             }
                             Spacer(modifier = Modifier.width(6.dp))
