@@ -3051,13 +3051,16 @@ private fun LocusProblemReportDialog(
                             enabled = !submitting,
                             modifier = Modifier
                                 .align(Alignment.Top)
-                                .padding(top = 2.dp, end = 4.dp)
+                                .padding(top = 2.dp)
                                 .size(20.dp),
                         )
                     }
+                    Spacer(modifier = Modifier.width(8.dp))
                     Column(
                         verticalArrangement = Arrangement.spacedBy(0.dp),
-                        modifier = Modifier.align(Alignment.Top),
+                        modifier = Modifier
+                            .align(Alignment.Top)
+                            .padding(top = 2.dp),
                     ) {
                         Text("Attach article title and text")
                         Row(
