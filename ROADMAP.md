@@ -58,6 +58,7 @@
 - [x] Locus full-text/default-open behavior shipped per `docs/ANDROID_LOCUS_FULLTEXT_DEFAULT_OPEN_SPEC.md`: default manual-open uses Full-text, explicit mode choice is remembered, autoplay preserves mode, and preview-vs-playing ownership rules remain intact.
 - [x] Locus source/publication cue shipped: when title-intro is active and a meaningful source label is available, TTS now speaks a brief “From {source}.” cue between title and body; skipped for missing/unhelpful provenance and unchanged for resume/replay rules.
 - [x] Archive-while-playing continuity shipped: archiving the currently playing item now marks it archived immediately for UI/list state while preserving active playback; cleanup/removal from playback context is deferred to natural playback/session boundaries.
+- [x] Locus FF/RW text navigation shipped: tap rewind/forward now moves by sentence; long-press rewind/forward moves by paragraph, with predictable edge behavior.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
@@ -106,7 +107,7 @@
 4. [x] Full-text/default-open behavior spec finalized: see `docs/ANDROID_LOCUS_FULLTEXT_DEFAULT_OPEN_SPEC.md` (decision-only; implementation remains a follow-up ticket).
 
 ### Later / exploratory
-1. [ ] Soft fast-forward/rewind (time/character based, not chunk-based): evaluate interaction model and accessibility impacts relative to existing chunk controls.
+1. [ ] Time-based FF/RW follow-up (optional): evaluate whether a separate time-skip control model is still useful now that text-native sentence/paragraph FF/RW is shipped.
 
 ## Android Redesign v1.1
 1. [~] Foundation: 4-tab nav shell (Up Next / Locus / Collections / Settings) plus black/purple theme foundations.

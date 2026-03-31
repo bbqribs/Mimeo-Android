@@ -120,6 +120,7 @@ import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import com.mimeo.android.ui.reader.ReaderBody
+import com.mimeo.android.ui.reader.segmentSentences
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -364,6 +365,87 @@ internal fun buildSourceCueSpeechText(
     val punctuated = chosen.trimEnd('.', '!', '?')
     if (punctuated.isBlank()) return null
     return "From $punctuated."
+}
+
+internal fun resolveSentenceJumpPosition(
+    chunks: List<PlaybackChunk>,
+    currentPosition: PlaybackPosition,
+    direction: Int,
+): PlaybackPosition? {
+    if (chunks.isEmpty()) return null
+    val safeDirection = direction.coerceIn(-1, 1)
+    if (safeDirection == 0) return null
+    val safeChunkIndex = currentPosition.chunkIndex.coerceIn(0, chunks.lastIndex)
+    val safeOffset = currentPosition.offsetInChunkChars.coerceAtLeast(0)
+
+    fun sentenceStartOffsets(chunkText: String): List<Int> {
+        val ranges = segmentSentences(chunkText)
+        if (ranges.isEmpty()) return if (chunkText.isBlank()) emptyList() else listOf(0)
+        return ranges.map { it.start.coerceIn(0, chunkText.length) }
+    }
+
+    if (safeDirection > 0) {
+        var chunkIndex = safeChunkIndex
+        while (chunkIndex <= chunks.lastIndex) {
+            val starts = sentenceStartOffsets(chunks[chunkIndex].text)
+            val targetStart = if (chunkIndex == safeChunkIndex) {
+                starts.firstOrNull { it > safeOffset }
+            } else {
+                starts.firstOrNull()
+            }
+            if (targetStart != null) {
+                return PlaybackPosition(chunkIndex = chunkIndex, offsetInChunkChars = targetStart)
+            }
+            chunkIndex += 1
+        }
+        return null
+    }
+
+    var chunkIndex = safeChunkIndex
+    while (chunkIndex >= 0) {
+        val starts = sentenceStartOffsets(chunks[chunkIndex].text)
+        val targetStart = if (chunkIndex == safeChunkIndex) {
+            starts.lastOrNull { it < safeOffset }
+        } else {
+            starts.lastOrNull()
+        }
+        if (targetStart != null) {
+            return PlaybackPosition(chunkIndex = chunkIndex, offsetInChunkChars = targetStart)
+        }
+        chunkIndex -= 1
+    }
+    return null
+}
+
+internal fun resolveParagraphJumpPosition(
+    chunks: List<PlaybackChunk>,
+    currentPosition: PlaybackPosition,
+    direction: Int,
+): PlaybackPosition? {
+    if (chunks.isEmpty()) return null
+    val safeDirection = direction.coerceIn(-1, 1)
+    if (safeDirection == 0) return null
+    val safeChunkIndex = currentPosition.chunkIndex.coerceIn(0, chunks.lastIndex)
+
+    if (safeDirection > 0) {
+        var idx = safeChunkIndex + 1
+        while (idx <= chunks.lastIndex) {
+            if (chunks[idx].text.isNotBlank()) {
+                return PlaybackPosition(chunkIndex = idx, offsetInChunkChars = 0)
+            }
+            idx += 1
+        }
+        return null
+    }
+
+    var idx = safeChunkIndex - 1
+    while (idx >= 0) {
+        if (chunks[idx].text.isNotBlank()) {
+            return PlaybackPosition(chunkIndex = idx, offsetInChunkChars = 0)
+        }
+        idx -= 1
+    }
+    return null
 }
 
 internal fun shouldSkipInitialReopen(
@@ -1333,12 +1415,32 @@ fun PlayerScreen(
     }
 
     val renderPlayerControlBar: @Composable () -> Unit = {
+        val previousSentencePosition = resolveSentenceJumpPosition(
+            chunks = chunks,
+            currentPosition = safePosition,
+            direction = -1,
+        )
+        val nextSentencePosition = resolveSentenceJumpPosition(
+            chunks = chunks,
+            currentPosition = safePosition,
+            direction = 1,
+        )
+        val previousParagraphPosition = resolveParagraphJumpPosition(
+            chunks = chunks,
+            currentPosition = safePosition,
+            direction = -1,
+        )
+        val nextParagraphPosition = resolveParagraphJumpPosition(
+            chunks = chunks,
+            currentPosition = safePosition,
+            direction = 1,
+        )
         PlayerControlBar(
             progressPercent = currentPercent,
             minimal = controlsMode == PlayerControlsMode.MINIMAL,
             canSeek = chunks.isNotEmpty(),
-            canMoveBackward = chunks.size > 1 && safePosition.chunkIndex > 0,
-            canMoveForward = chunks.size > 1 && safePosition.chunkIndex < chunks.lastIndex,
+            canMoveBackward = previousSentencePosition != null,
+            canMoveForward = nextSentencePosition != null,
             canPlay = chunks.isNotEmpty(),
             isPlaying = isSpeaking || isAutoPlaying,
             onSeekToPercent = { targetPercent ->
@@ -1357,12 +1459,21 @@ fun PlayerScreen(
                 )
             },
             onPreviousSegment = {
-                if (chunks.isNotEmpty() && safePosition.chunkIndex > 0) {
-                    val target = safePosition.chunkIndex - 1
-                    setPlaybackPosition(target, 0)
+                previousSentencePosition?.let { target ->
+                    setPlaybackPosition(target.chunkIndex, target.offsetInChunkChars)
                     vm.playbackSeekToChunkOffset(
-                        chunkIndex = target,
-                        offsetInChunkChars = 0,
+                        chunkIndex = target.chunkIndex,
+                        offsetInChunkChars = target.offsetInChunkChars,
+                        keepPlaying = isSpeaking || isAutoPlaying,
+                    )
+                }
+            },
+            onPreviousSegmentLongPress = {
+                previousParagraphPosition?.let { target ->
+                    setPlaybackPosition(target.chunkIndex, target.offsetInChunkChars)
+                    vm.playbackSeekToChunkOffset(
+                        chunkIndex = target.chunkIndex,
+                        offsetInChunkChars = target.offsetInChunkChars,
                         keepPlaying = isSpeaking || isAutoPlaying,
                     )
                 }
@@ -1390,12 +1501,21 @@ fun PlayerScreen(
             },
             onPlayButtonLongPress = { playLocusItem() },
             onNextSegment = {
-                if (chunks.isNotEmpty() && safePosition.chunkIndex < chunks.lastIndex) {
-                    val target = safePosition.chunkIndex + 1
-                    setPlaybackPosition(target, 0)
+                nextSentencePosition?.let { target ->
+                    setPlaybackPosition(target.chunkIndex, target.offsetInChunkChars)
                     vm.playbackSeekToChunkOffset(
-                        chunkIndex = target,
-                        offsetInChunkChars = 0,
+                        chunkIndex = target.chunkIndex,
+                        offsetInChunkChars = target.offsetInChunkChars,
+                        keepPlaying = isSpeaking || isAutoPlaying,
+                    )
+                }
+            },
+            onNextSegmentLongPress = {
+                nextParagraphPosition?.let { target ->
+                    setPlaybackPosition(target.chunkIndex, target.offsetInChunkChars)
+                    vm.playbackSeekToChunkOffset(
+                        chunkIndex = target.chunkIndex,
+                        offsetInChunkChars = target.offsetInChunkChars,
                         keepPlaying = isSpeaking || isAutoPlaying,
                     )
                 }
@@ -2900,9 +3020,11 @@ private fun PlayerControlBar(
     isPlaying: Boolean,
     onSeekToPercent: (Int) -> Unit,
     onPreviousSegment: () -> Unit,
+    onPreviousSegmentLongPress: () -> Unit,
     onPlayPause: () -> Unit,
     onPlayButtonLongPress: () -> Unit,
     onNextSegment: () -> Unit,
+    onNextSegmentLongPress: () -> Unit,
     onPreviousItem: () -> Unit,
     onNextItem: () -> Unit,
 ) {
@@ -2969,10 +3091,19 @@ private fun PlayerControlBar(
                 Spacer(modifier = Modifier.size(CONTROL_SLOT_SIZE))
             }
             Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
-            IconButton(onClick = onPreviousSegment, enabled = canMoveBackward, modifier = Modifier.size(CONTROL_SLOT_SIZE)) {
+            Box(
+                modifier = Modifier
+                    .size(CONTROL_SLOT_SIZE)
+                    .combinedClickable(
+                        enabled = canMoveBackward,
+                        onClick = onPreviousSegment,
+                        onLongClick = onPreviousSegmentLongPress,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(
                     painter = painterResource(id = R.drawable.msr_fast_rewind_24),
-                    contentDescription = "Previous segment",
+                    contentDescription = "Previous sentence (long press: previous paragraph)",
                     modifier = Modifier.size(24.dp),
                 )
             }
@@ -2996,10 +3127,19 @@ private fun PlayerControlBar(
                 )
             }
             Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
-            IconButton(onClick = onNextSegment, enabled = canMoveForward, modifier = Modifier.size(CONTROL_SLOT_SIZE)) {
+            Box(
+                modifier = Modifier
+                    .size(CONTROL_SLOT_SIZE)
+                    .combinedClickable(
+                        enabled = canMoveForward,
+                        onClick = onNextSegment,
+                        onLongClick = onNextSegmentLongPress,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(
                     painter = painterResource(id = R.drawable.msr_fast_forward_24),
-                    contentDescription = "Next segment",
+                    contentDescription = "Next sentence (long press: next paragraph)",
                     modifier = Modifier.size(24.dp),
                 )
             }
