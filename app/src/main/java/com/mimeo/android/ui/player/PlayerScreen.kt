@@ -1435,11 +1435,20 @@ fun PlayerScreen(
             currentPosition = safePosition,
             direction = 1,
         )
+        fun seekToTargetAndReveal(target: PlaybackPosition) {
+            setPlaybackPosition(target.chunkIndex, target.offsetInChunkChars)
+            vm.playbackSeekToChunkOffset(
+                chunkIndex = target.chunkIndex,
+                offsetInChunkChars = target.offsetInChunkChars,
+                keepPlaying = isSpeaking || isAutoPlaying,
+            )
+            readerScrollTriggerSignal += 1
+        }
         PlayerControlBar(
             progressPercent = currentPercent,
             minimal = controlsMode == PlayerControlsMode.MINIMAL,
             canSeek = chunks.isNotEmpty(),
-            canMoveBackward = previousSentencePosition != null,
+            canMoveBackward = chunks.isNotEmpty(),
             canMoveForward = nextSentencePosition != null,
             canPlay = chunks.isNotEmpty(),
             isPlaying = isSpeaking || isAutoPlaying,
@@ -1459,24 +1468,14 @@ fun PlayerScreen(
                 )
             },
             onPreviousSegment = {
-                previousSentencePosition?.let { target ->
-                    setPlaybackPosition(target.chunkIndex, target.offsetInChunkChars)
-                    vm.playbackSeekToChunkOffset(
-                        chunkIndex = target.chunkIndex,
-                        offsetInChunkChars = target.offsetInChunkChars,
-                        keepPlaying = isSpeaking || isAutoPlaying,
-                    )
-                }
+                val fallbackStart = PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
+                val target = previousSentencePosition ?: fallbackStart
+                seekToTargetAndReveal(target)
             },
             onPreviousSegmentLongPress = {
-                previousParagraphPosition?.let { target ->
-                    setPlaybackPosition(target.chunkIndex, target.offsetInChunkChars)
-                    vm.playbackSeekToChunkOffset(
-                        chunkIndex = target.chunkIndex,
-                        offsetInChunkChars = target.offsetInChunkChars,
-                        keepPlaying = isSpeaking || isAutoPlaying,
-                    )
-                }
+                val fallbackStart = PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
+                val target = previousParagraphPosition ?: fallbackStart
+                seekToTargetAndReveal(target)
             },
             onPlayPause = {
                 if (isSpeaking || isAutoPlaying) {
@@ -1502,22 +1501,12 @@ fun PlayerScreen(
             onPlayButtonLongPress = { playLocusItem() },
             onNextSegment = {
                 nextSentencePosition?.let { target ->
-                    setPlaybackPosition(target.chunkIndex, target.offsetInChunkChars)
-                    vm.playbackSeekToChunkOffset(
-                        chunkIndex = target.chunkIndex,
-                        offsetInChunkChars = target.offsetInChunkChars,
-                        keepPlaying = isSpeaking || isAutoPlaying,
-                    )
+                    seekToTargetAndReveal(target)
                 }
             },
             onNextSegmentLongPress = {
                 nextParagraphPosition?.let { target ->
-                    setPlaybackPosition(target.chunkIndex, target.offsetInChunkChars)
-                    vm.playbackSeekToChunkOffset(
-                        chunkIndex = target.chunkIndex,
-                        offsetInChunkChars = target.offsetInChunkChars,
-                        keepPlaying = isSpeaking || isAutoPlaying,
-                    )
+                    seekToTargetAndReveal(target)
                 }
             },
             onPreviousItem = {
