@@ -1339,8 +1339,7 @@ fun PlayerScreen(
     var reportUserNote by remember { mutableStateOf("") }
     var reportUrlText by remember { mutableStateOf("") }
     var reportShowUrlField by remember { mutableStateOf(false) }
-    var reportAttachTitle by remember { mutableStateOf(false) }
-    var reportAttachText by remember { mutableStateOf(false) }
+    var reportAttachFullText by remember { mutableStateOf(false) }
     var reportSubmitting by remember { mutableStateOf(false) }
     val chunkLabel = if (previewModeActive) {
         "Previewing item while playback continues"
@@ -1493,8 +1492,7 @@ fun PlayerScreen(
         reportUserNote = ""
         reportUrlText = reportContext.url.orEmpty()
         reportShowUrlField = reportContext.url?.isNotBlank() == true
-        reportAttachTitle = false
-        reportAttachText = false
+        reportAttachFullText = false
         reportSubmitting = false
         showProblemReportDialog = true
     }
@@ -2222,10 +2220,8 @@ fun PlayerScreen(
             urlValue = reportUrlText,
             onUrlChange = { reportUrlText = it },
             onUrlClear = { reportUrlText = "" },
-            attachTitle = reportAttachTitle,
-            onAttachTitleChange = { reportAttachTitle = it },
-            attachText = reportAttachText,
-            onAttachTextChange = { reportAttachText = it },
+            attachFullText = reportAttachFullText,
+            onAttachFullTextChange = { reportAttachFullText = it },
             submitting = reportSubmitting,
             onDismiss = {
                 if (!reportSubmitting) {
@@ -2251,8 +2247,7 @@ fun PlayerScreen(
                         captureKind = reportContext.captureKind,
                         articleTitle = reportContext.articleTitle,
                         articleText = reportContext.articleText,
-                        includeTitleAttachment = reportAttachTitle,
-                        includeTextAttachment = reportAttachText,
+                        includeFullTextAttachment = reportAttachFullText,
                     )
                     reportSubmitting = false
                     submitResult
@@ -2941,10 +2936,8 @@ private fun LocusProblemReportDialog(
     urlValue: String,
     onUrlChange: (String) -> Unit,
     onUrlClear: () -> Unit,
-    attachTitle: Boolean,
-    onAttachTitleChange: (Boolean) -> Unit,
-    attachText: Boolean,
-    onAttachTextChange: (Boolean) -> Unit,
+    attachFullText: Boolean,
+    onAttachFullTextChange: (Boolean) -> Unit,
     submitting: Boolean,
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
@@ -2956,14 +2949,14 @@ private fun LocusProblemReportDialog(
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Box {
                     TextButton(
                         onClick = { categoryMenuExpanded = true },
                         enabled = !submitting,
                     ) {
-                        Text("Category: ${category.label}")
+                        Text(category.label)
                         Spacer(modifier = Modifier.width(6.dp))
                         Icon(
                             painter = painterResource(id = R.drawable.msr_chevron_right_24),
@@ -3024,24 +3017,11 @@ private fun LocusProblemReportDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Checkbox(
-                        checked = attachTitle,
-                        onCheckedChange = onAttachTitleChange,
+                        checked = attachFullText,
+                        onCheckedChange = onAttachFullTextChange,
                         enabled = !submitting,
                     )
-                    Text("Attach article title")
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Start,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(
-                        checked = attachText,
-                        onCheckedChange = onAttachTextChange,
-                        enabled = !submitting,
-                    )
-                    Text("Attach article text")
+                    Text("Attach article title and text")
                 }
 
                 Row(
@@ -3049,12 +3029,22 @@ private fun LocusProblemReportDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Start,
                 ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.msr_error_circle_24),
-                        contentDescription = "Privacy note",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp),
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                shape = CircleShape,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "!",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "Attachment content may contain sensitive data.",
@@ -3062,11 +3052,6 @@ private fun LocusProblemReportDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Text(
-                    text = "Leave unchecked if sensitive.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         },
         confirmButton = {
