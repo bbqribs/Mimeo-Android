@@ -2945,27 +2945,45 @@ private fun LocusProblemReportDialog(
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Report a problem") },
+        title = null,
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
+                Text(
+                    text = "Report problem",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
                 Box {
-                    TextButton(
-                        onClick = { categoryMenuExpanded = true },
-                        enabled = !submitting,
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        border = androidx.compose.foundation.BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                        ),
+                        modifier = Modifier
+                            .clickable(enabled = !submitting) { categoryMenuExpanded = true },
                     ) {
-                        Text(category.label)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Icon(
-                            painter = painterResource(id = R.drawable.msr_chevron_right_24),
-                            contentDescription = "Open category menu",
-                            modifier = Modifier
-                                .size(16.dp)
-                                .graphicsLayer(rotationZ = 90f),
-                            tint = MaterialTheme.colorScheme.onSurface,
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(category.label, style = MaterialTheme.typography.bodyMedium)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(
+                                painter = painterResource(id = R.drawable.msr_chevron_right_24),
+                                contentDescription = "Open category menu",
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .graphicsLayer(rotationZ = 90f),
+                                tint = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
                     }
                     DropdownMenu(
                         expanded = categoryMenuExpanded,
@@ -2982,18 +3000,20 @@ private fun LocusProblemReportDialog(
                         }
                     }
                 }
+                Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedTextField(
                     value = userNote,
                     onValueChange = onUserNoteChange,
                     label = { Text("What happened?") },
                     placeholder = { Text("Describe the issue") },
-                    minLines = 4,
+                    minLines = 3,
                     maxLines = 8,
                     enabled = !submitting,
                     supportingText = { Text("${userNote.length}/500") },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Spacer(modifier = Modifier.height(4.dp))
 
                 if (showUrlField) {
                     OutlinedTextField(
@@ -3003,17 +3023,15 @@ private fun LocusProblemReportDialog(
                         enabled = !submitting,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    TextButton(
-                        onClick = onUrlClear,
-                        enabled = !submitting,
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            horizontal = 0.dp,
-                            vertical = 0.dp,
-                        ),
-                        modifier = Modifier.height(20.dp),
-                    ) {
-                        Text("Clear URL")
-                    }
+                    Text(
+                        text = "Clear URL",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .padding(top = 2.dp, bottom = 0.dp)
+                            .clickable(enabled = !submitting) { onUrlClear() },
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
                 }
 
                 Row(
