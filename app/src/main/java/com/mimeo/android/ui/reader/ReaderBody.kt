@@ -258,7 +258,10 @@ fun ReaderBody(
                                 end = offset,
                             ).firstOrNull()?.item
                             if (!url.isNullOrBlank()) {
-                                runCatching { uriHandler.openUri(url) }
+                                val opened = runCatching { uriHandler.openUri(url) }.isSuccess
+                                if (!opened) {
+                                    onNonLinkTap?.invoke()
+                                }
                             } else {
                                 onNonLinkTap?.invoke()
                             }
@@ -386,7 +389,10 @@ fun ReaderBody(
                                         end = offset,
                                     ).firstOrNull()?.item
                                     if (!url.isNullOrBlank()) {
-                                        runCatching { uriHandler.openUri(url) }
+                                        val opened = runCatching { uriHandler.openUri(url) }.isSuccess
+                                        if (!opened) {
+                                            onNonLinkTap?.invoke()
+                                        }
                                     } else {
                                         onNonLinkTap?.invoke()
                                     }
@@ -479,6 +485,7 @@ fun ReaderBody(
         isProgrammaticScroll = true
         scrollState.scrollTo(target)
         isProgrammaticScroll = false
+        suppressTransitionUntilMs = SystemClock.elapsedRealtime() + MANUAL_SCROLL_SUPPRESS_MS
         lastHandledSearchTrigger = searchFocusTriggerSignal
     }
 
@@ -519,6 +526,20 @@ fun ReaderBody(
         val externalTrigger = triggerKind != ReaderScrollTriggerKind.NONE
         val forceReattach = triggerKind == ReaderScrollTriggerKind.FORCE_REATTACH
         val anchorChanged = lastAnchorRange != anchor
+        if (
+            shouldSuppressStandardTriggerDuringCooldown(
+                triggerKind = triggerKind,
+                nowMs = nowMs,
+                suppressUntilMs = suppressTransitionUntilMs,
+            )
+        ) {
+            lastHandledScrollTrigger = scrollTriggerSignal
+            if (anchorChanged) {
+                lastAnchorWasFullyVisible = fullyVisibleNow
+            }
+            lastAnchorRange = anchor
+            return@LaunchedEffect
+        }
         if (shouldKeepDetachedAfterTrigger(manualScrollDetached, triggerKind)) {
             if (externalTrigger) {
                 // Consume non-reattach triggers while detached so playback updates cannot
@@ -698,4 +719,12 @@ private fun normalizeInclusiveRange(range: IntRange?, textLength: Int): IntRange
     val start = range.first.coerceIn(0, textLength)
     val endExclusive = (range.last + 1).coerceIn(start, textLength)
     return if (start < endExclusive) start until endExclusive else null
+}
+
+internal fun shouldSuppressStandardTriggerDuringCooldown(
+    triggerKind: ReaderScrollTriggerKind,
+    nowMs: Long,
+    suppressUntilMs: Long,
+): Boolean {
+    return triggerKind == ReaderScrollTriggerKind.STANDARD && nowMs < suppressUntilMs
 }
