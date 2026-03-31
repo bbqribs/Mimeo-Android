@@ -47,12 +47,14 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalMinimumInteractiveComponentEnforcement
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -70,6 +72,7 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -95,6 +98,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1338,6 +1343,7 @@ fun PlayerScreen(
     var reportUserNote by remember { mutableStateOf("") }
     var reportUrlText by remember { mutableStateOf("") }
     var reportShowUrlField by remember { mutableStateOf(false) }
+    var reportAttachFullText by remember { mutableStateOf(false) }
     var reportSubmitting by remember { mutableStateOf(false) }
     val chunkLabel = if (previewModeActive) {
         "Previewing item while playback continues"
@@ -1490,6 +1496,7 @@ fun PlayerScreen(
         reportUserNote = ""
         reportUrlText = reportContext.url.orEmpty()
         reportShowUrlField = reportContext.url?.isNotBlank() == true
+        reportAttachFullText = false
         reportSubmitting = false
         showProblemReportDialog = true
     }
@@ -2217,6 +2224,8 @@ fun PlayerScreen(
             urlValue = reportUrlText,
             onUrlChange = { reportUrlText = it },
             onUrlClear = { reportUrlText = "" },
+            attachFullText = reportAttachFullText,
+            onAttachFullTextChange = { reportAttachFullText = it },
             submitting = reportSubmitting,
             onDismiss = {
                 if (!reportSubmitting) {
@@ -2242,6 +2251,7 @@ fun PlayerScreen(
                         captureKind = reportContext.captureKind,
                         articleTitle = reportContext.articleTitle,
                         articleText = reportContext.articleText,
+                        includeFullTextAttachment = reportAttachFullText,
                     )
                     reportSubmitting = false
                     submitResult
@@ -2920,6 +2930,7 @@ private fun LocusOverflowMenu(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LocusProblemReportDialog(
     category: ProblemReportCategory,
@@ -2930,6 +2941,8 @@ private fun LocusProblemReportDialog(
     urlValue: String,
     onUrlChange: (String) -> Unit,
     onUrlClear: () -> Unit,
+    attachFullText: Boolean,
+    onAttachFullTextChange: (Boolean) -> Unit,
     submitting: Boolean,
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
@@ -2937,19 +2950,45 @@ private fun LocusProblemReportDialog(
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Report a problem") },
+        title = null,
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
-                Text("Category", style = MaterialTheme.typography.labelMedium)
+                Text(
+                    text = "Report problem",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
                 Box {
-                    TextButton(
-                        onClick = { categoryMenuExpanded = true },
-                        enabled = !submitting,
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        border = androidx.compose.foundation.BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                        ),
+                        modifier = Modifier
+                            .clickable(enabled = !submitting) { categoryMenuExpanded = true },
                     ) {
-                        Text(category.label)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(category.label, style = MaterialTheme.typography.bodyMedium)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(
+                                painter = painterResource(id = R.drawable.msr_chevron_right_24),
+                                contentDescription = "Open category menu",
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .graphicsLayer(rotationZ = 90f),
+                                tint = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
                     }
                     DropdownMenu(
                         expanded = categoryMenuExpanded,
@@ -2966,18 +3005,83 @@ private fun LocusProblemReportDialog(
                         }
                     }
                 }
+                Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedTextField(
                     value = userNote,
                     onValueChange = onUserNoteChange,
                     label = { Text("What happened?") },
                     placeholder = { Text("Describe the issue") },
-                    minLines = 4,
+                    minLines = 3,
                     maxLines = 8,
                     enabled = !submitting,
                     supportingText = { Text("${userNote.length}/500") },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Spacer(modifier = Modifier.height(4.dp))
+
+                val attachBlock: @Composable () -> Unit = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Start,
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        CompositionLocalProvider(LocalMinimumInteractiveComponentEnforcement provides false) {
+                            Checkbox(
+                                checked = attachFullText,
+                                onCheckedChange = onAttachFullTextChange,
+                                enabled = !submitting,
+                                modifier = Modifier
+                                    .align(Alignment.Top)
+                                    .padding(top = 2.dp)
+                                    .size(20.dp),
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(0.dp),
+                            modifier = Modifier
+                                .align(Alignment.Top)
+                                .padding(top = 2.dp),
+                        ) {
+                            Text("Attach article title and text")
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Start,
+                                modifier = Modifier.padding(top = 0.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(13.dp)
+                                        .border(
+                                            width = 1.dp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            shape = CircleShape,
+                                        ),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = "!",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 9.sp,
+                                            lineHeight = 9.sp,
+                                            platformStyle = PlatformTextStyle(includeFontPadding = false),
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Content may contain sensitive data.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontStyle = FontStyle.Italic,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
 
                 if (showUrlField) {
                     OutlinedTextField(
@@ -2987,12 +3091,26 @@ private fun LocusProblemReportDialog(
                         enabled = !submitting,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    TextButton(
-                        onClick = onUrlClear,
-                        enabled = !submitting,
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top,
                     ) {
-                        Text("Clear URL")
+                        Box(modifier = Modifier.weight(1f)) {
+                            attachBlock()
+                        }
+                        Text(
+                            text = "Clear URL",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .clickable(enabled = !submitting) { onUrlClear() },
+                        )
                     }
+                } else {
+                    attachBlock()
                 }
             }
         },
@@ -3000,6 +3118,7 @@ private fun LocusProblemReportDialog(
             Button(
                 enabled = !submitting,
                 onClick = onSubmit,
+                modifier = Modifier.offset(y = (-6).dp),
             ) {
                 if (submitting) {
                     CircularProgressIndicator(
@@ -3012,7 +3131,11 @@ private fun LocusProblemReportDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !submitting) {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !submitting,
+                modifier = Modifier.offset(y = (-6).dp),
+            ) {
                 Text("Cancel")
             }
         },
@@ -3039,7 +3162,7 @@ private fun LocusOverflowMenuItems(
     )
     if (canReportProblem) {
         DropdownMenuItem(
-            text = { Text("Report a problem") },
+            text = { Text("Report problem") },
             onClick = onReportProblem,
         )
     }

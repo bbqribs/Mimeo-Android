@@ -13,6 +13,22 @@ enum class ProblemReportCategory(
     OTHER("other", "Other"),
 }
 
+const val PROBLEM_REPORT_TITLE_ATTACHMENT_MAX_CHARS = 512
+const val PROBLEM_REPORT_TEXT_ATTACHMENT_MAX_CHARS = 200_000
+
+fun toProblemReportAttachmentTitle(raw: String?): String? {
+    return raw
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?.take(PROBLEM_REPORT_TITLE_ATTACHMENT_MAX_CHARS)
+}
+
+fun toProblemReportAttachmentText(raw: String?): String? {
+    return raw
+        ?.takeIf { it.isNotBlank() }
+        ?.take(PROBLEM_REPORT_TEXT_ATTACHMENT_MAX_CHARS)
+}
+
 @Serializable
 data class ProblemReportRequest(
     val category: String,
@@ -26,8 +42,10 @@ data class ProblemReportRequest(
     @SerialName("source_label") val sourceLabel: String? = null,
     @SerialName("source_url") val sourceUrl: String? = null,
     @SerialName("capture_kind") val captureKind: String? = null,
-    @SerialName("article_title") val articleTitle: String? = null,
-    @SerialName("article_text_excerpt") val articleTextExcerpt: String? = null,
+    @SerialName("include_full_text_attachment") val includeFullTextAttachment: Boolean? = null,
+    @SerialName("article_title_attached") val articleTitleAttached: String? = null,
+    @SerialName("article_text_attached") val articleTextAttached: String? = null,
+    @SerialName("attachment_truncated") val attachmentTruncated: Boolean? = null,
 )
 
 @Serializable
