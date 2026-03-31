@@ -138,6 +138,7 @@ import com.mimeo.android.player.PlaybackService
 import com.mimeo.android.player.PlaybackServiceBridge
 import com.mimeo.android.player.PlaybackServiceSnapshot
 import com.mimeo.android.share.ShareSaveCoordinator
+import com.mimeo.android.share.ShareRefreshEvent
 import com.mimeo.android.share.ShareSaveRefreshBus
 import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.isAutoRetryEligiblePendingSaveResult
@@ -189,6 +190,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Dispatchers
@@ -226,6 +228,37 @@ private const val INITIAL_SIGN_IN_BACKGROUND_HYDRATION_RETRY_DELAY_MS = 500L
 private const val SMART_QUEUE_SESSION_CONTEXT_ID = -1
 private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 private const val SHARE_REFRESH_COALESCE_MS = 300L
+private const val SHARE_REFRESH_KEYED_DEDUPE_WINDOW_MS = 1_500L
+private const val SHARE_REFRESH_DEBUG_TAG = "MimeoShareRefresh"
+
+private data class ShareRefreshDebugSnapshot(
+    val seen: Int = 0,
+    val postDebounceSeen: Int = 0,
+    val skippedByKey: Int = 0,
+    val executed: Int = 0,
+    val coalescedOrSkipped: Int = 0,
+    val lastSignalAtMs: Long = 0L,
+    val lastExecutedAtMs: Long = 0L,
+    val sourceCounts: Map<String, Int> = emptyMap(),
+)
+
+internal fun resolveShareRefreshBurstKey(event: ShareRefreshEvent): String {
+    val playlistPart = event.playlistId?.toString() ?: "smart"
+    return if (event.itemId != null && event.itemId > 0) {
+        "playlist:$playlistPart:item:${event.itemId}"
+    } else {
+        "playlist:$playlistPart:source:${event.source}"
+    }
+}
+
+internal fun shouldSkipShareRefreshBurst(
+    lastExecutedAtMs: Long?,
+    nowMs: Long,
+    dedupeWindowMs: Long = SHARE_REFRESH_KEYED_DEDUPE_WINDOW_MS,
+): Boolean {
+    if (lastExecutedAtMs == null) return false
+    return (nowMs - lastExecutedAtMs) < dedupeWindowMs
+}
 
 private data class BottomNavDestination(
     val route: String,
@@ -621,6 +654,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         application.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
     private var connectivityCallback: ConnectivityManager.NetworkCallback? = null
     private var lastConnectivityRefreshAtMs: Long = 0L
+    private val shareRefreshLastExecutedAtByKeyMs = mutableMapOf<String, Long>()
+    private var shareRefreshDebugSnapshot = ShareRefreshDebugSnapshot()
 
     init {
         bindPlaybackService()
@@ -757,13 +792,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             ShareSaveRefreshBus.events
+                .onEach { event ->
+                    recordShareRefreshSignal(event)
+                }
                 .debounce(SHARE_REFRESH_COALESCE_MS)
                 .collect { event ->
+                val nowMs = System.currentTimeMillis()
+                pruneShareRefreshDedupeKeys(nowMs)
+                val burstKey = resolveShareRefreshBurstKey(event)
+                if (shouldSkipShareRefreshBurst(shareRefreshLastExecutedAtByKeyMs[burstKey], nowMs)) {
+                    recordShareRefreshSkip(event, burstKey)
+                    return@collect
+                }
+                shareRefreshLastExecutedAtByKeyMs[burstKey] = nowMs
                 refreshPlaylists()
                 if (settings.value.selectedPlaylistId == event.playlistId) {
                     _pendingQueueFocusItemId.value = event.itemId
                 }
                 loadQueue()
+                recordShareRefreshExecution(event, burstKey)
             }
         }
         viewModelScope.launch {
@@ -1968,6 +2015,64 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         return successCount
+    }
+
+    private fun pruneShareRefreshDedupeKeys(nowMs: Long) {
+        if (shareRefreshLastExecutedAtByKeyMs.isEmpty()) return
+        val maxAgeMs = SHARE_REFRESH_KEYED_DEDUPE_WINDOW_MS * 8
+        shareRefreshLastExecutedAtByKeyMs.entries.removeAll { (_, atMs) -> nowMs - atMs > maxAgeMs }
+    }
+
+    private fun recordShareRefreshSignal(event: ShareRefreshEvent) {
+        if (!BuildConfig.DEBUG) return
+        val sourceCounts = shareRefreshDebugSnapshot.sourceCounts.toMutableMap()
+        sourceCounts[event.source] = (sourceCounts[event.source] ?: 0) + 1
+        val seen = shareRefreshDebugSnapshot.seen + 1
+        val coalescedOrSkipped = (seen - shareRefreshDebugSnapshot.executed).coerceAtLeast(0)
+        shareRefreshDebugSnapshot = shareRefreshDebugSnapshot.copy(
+            seen = seen,
+            lastSignalAtMs = System.currentTimeMillis(),
+            sourceCounts = sourceCounts.toSortedMap(),
+            coalescedOrSkipped = coalescedOrSkipped,
+        )
+    }
+
+    private fun recordShareRefreshSkip(event: ShareRefreshEvent, burstKey: String) {
+        if (!BuildConfig.DEBUG) return
+        val postDebounceSeen = shareRefreshDebugSnapshot.postDebounceSeen + 1
+        val skippedByKey = shareRefreshDebugSnapshot.skippedByKey + 1
+        val coalescedOrSkipped = (shareRefreshDebugSnapshot.seen - shareRefreshDebugSnapshot.executed).coerceAtLeast(0)
+        shareRefreshDebugSnapshot = shareRefreshDebugSnapshot.copy(
+            postDebounceSeen = postDebounceSeen,
+            skippedByKey = skippedByKey,
+            coalescedOrSkipped = coalescedOrSkipped,
+        )
+        Log.d(
+            SHARE_REFRESH_DEBUG_TAG,
+            "event=skip source=${event.source} key=$burstKey seen=${shareRefreshDebugSnapshot.seen} " +
+                "coalescedOrSkipped=${shareRefreshDebugSnapshot.coalescedOrSkipped} " +
+                "executed=${shareRefreshDebugSnapshot.executed} skippedByKey=${shareRefreshDebugSnapshot.skippedByKey}",
+        )
+    }
+
+    private fun recordShareRefreshExecution(event: ShareRefreshEvent, burstKey: String) {
+        if (!BuildConfig.DEBUG) return
+        val postDebounceSeen = shareRefreshDebugSnapshot.postDebounceSeen + 1
+        val executed = shareRefreshDebugSnapshot.executed + 1
+        val coalescedOrSkipped = (shareRefreshDebugSnapshot.seen - executed).coerceAtLeast(0)
+        val nowMs = System.currentTimeMillis()
+        shareRefreshDebugSnapshot = shareRefreshDebugSnapshot.copy(
+            postDebounceSeen = postDebounceSeen,
+            executed = executed,
+            lastExecutedAtMs = nowMs,
+            coalescedOrSkipped = coalescedOrSkipped,
+        )
+        Log.d(
+            SHARE_REFRESH_DEBUG_TAG,
+            "event=execute source=${event.source} key=$burstKey seen=${shareRefreshDebugSnapshot.seen} " +
+                "coalescedOrSkipped=${shareRefreshDebugSnapshot.coalescedOrSkipped} " +
+                "executed=${shareRefreshDebugSnapshot.executed} skippedByKey=${shareRefreshDebugSnapshot.skippedByKey}",
+        )
     }
 
     private suspend fun enqueuePendingItemAction(

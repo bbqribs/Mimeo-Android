@@ -61,6 +61,7 @@
 - [x] Locus FF/RW text navigation shipped: tap rewind/forward now moves by sentence; long-press rewind/forward moves by paragraph, with predictable edge behavior.
 - [x] Playback scroll lock-in (spec+tests) shipped: explicit trigger policy extraction, focused unit coverage for detach/reattach/recenter invariants, and bounded instrumentation smoke scaffold + contract doc.
 - [x] Android performance quick-wins shipped (bounded): share/save refresh coalescing to reduce duplicate queue churn, memoized QueueScreen list transforms, PlayerScreen keyed queue/archive lookups, and debug-only queue-hash gating so release paths avoid unnecessary hash work.
+- [x] Share-save refresh burst dedupe follow-up shipped (bounded): keyed coalescing layered on top of debounce to collapse same-item refresh bursts, plus debug-only refresh counters (source/seen/skipped/executed) for validation without release-path impact.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.

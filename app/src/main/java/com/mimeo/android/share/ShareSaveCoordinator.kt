@@ -40,11 +40,18 @@ private const val SAVED_ITEM_STATUS_POLL_DELAY_MS = 3_000L
 data class ShareRefreshEvent(
     val playlistId: Int?,
     val itemId: Int? = null,
+    val source: String = SHARE_REFRESH_SOURCE_UNKNOWN,
 )
 
 object ShareSaveRefreshBus {
     val events = MutableSharedFlow<ShareRefreshEvent>(extraBufferCapacity = 8)
 }
+
+private const val SHARE_REFRESH_SOURCE_UNKNOWN = "unknown"
+private const val SHARE_REFRESH_SOURCE_SAVE_COMPLETED = "save_completed"
+private const val SHARE_REFRESH_SOURCE_AUTODOWNLOAD_FINISHED = "autodownload_finished"
+private const val SHARE_REFRESH_SOURCE_STATUS_CHANGED = "status_changed"
+private const val SHARE_REFRESH_SOURCE_READY_FOLLOWUP = "ready_followup"
 
 internal fun shouldAttemptLateShareSaveResolution(result: ShareSaveResult): Boolean = when (result) {
     ShareSaveResult.NetworkError,
@@ -614,6 +621,7 @@ class ShareSaveCoordinator(
             ShareRefreshEvent(
                 playlistId = destinationPlaylistId,
                 itemId = itemId,
+                source = SHARE_REFRESH_SOURCE_SAVE_COMPLETED,
             ),
         )
         startSavedItemStatusWatcher(
@@ -754,6 +762,7 @@ class ShareSaveCoordinator(
                 ShareRefreshEvent(
                     playlistId = destinationPlaylistId,
                     itemId = itemId,
+                    source = SHARE_REFRESH_SOURCE_AUTODOWNLOAD_FINISHED,
                 ),
             )
         }
@@ -789,6 +798,7 @@ class ShareSaveCoordinator(
                         ShareRefreshEvent(
                             playlistId = destinationPlaylistId,
                             itemId = itemId,
+                            source = SHARE_REFRESH_SOURCE_STATUS_CHANGED,
                         ),
                     )
                     if (!isProcessingItemStatus(status)) {
@@ -798,6 +808,7 @@ class ShareSaveCoordinator(
                             ShareRefreshEvent(
                                 playlistId = destinationPlaylistId,
                                 itemId = itemId,
+                                source = SHARE_REFRESH_SOURCE_READY_FOLLOWUP,
                             ),
                         )
                     }
