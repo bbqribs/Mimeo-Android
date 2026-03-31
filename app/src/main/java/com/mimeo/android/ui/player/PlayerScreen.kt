@@ -595,6 +595,7 @@ fun PlayerScreen(
     val actionBarHiddenByMode = readerModeEnabled
     val playerDockHiddenByMode = immersiveReaderMode
     val queueItems by vm.queueItems.collectAsState()
+    val archivedItems by vm.archivedItems.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val hasLockedPlaybackOwner =
@@ -1171,6 +1172,7 @@ fun PlayerScreen(
     val capturePresentation = locusCapturePresentation(displayPayload)
     val queuedPreviewTitle = queueItems.firstOrNull { it.itemId == locusItemId }?.title.orEmpty()
     val isLocusItemFavorited = queueItems.firstOrNull { it.itemId == locusItemId }?.isFavorited == true
+    val isLocusItemArchived = archivedItems.any { it.itemId == locusActionItemId }
     val currentTitle = when {
         previewModeActive -> {
             viewerOverrideTitle
@@ -1523,6 +1525,7 @@ fun PlayerScreen(
                             refreshState = refreshActionState,
                             showConnectivityIssue = hasRefreshProblem,
                             isFavorited = isLocusItemFavorited,
+                            isArchived = isLocusItemArchived,
                             onRefresh = {
                                 if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
                                 actionScope.launch {
@@ -1603,37 +1606,48 @@ fun PlayerScreen(
                             },
                             onArchive = {
                                 actionScope.launch {
-                                    val nextItemId = nextSessionItemIdForArchive(locusActionItemId)
-                                    vm.archiveItem(
-                                        locusActionItemId,
-                                        source = ArchiveActionSource.LOCUS,
-                                    )
-                                        .onSuccess {
-                                            onShowSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
-                                            val archivedActivePlaybackItem =
-                                                locusActionItemId == currentItemId &&
-                                                    (isSpeaking || isAutoPlaying || autoPlayAfterLoad)
-                                            if (archivedActivePlaybackItem) {
-                                                // Keep playback continuity for the currently playing item.
-                                                Unit
-                                            } else if (locusActionItemId != currentItemId && currentItemId > 0) {
-                                                onOpenItem(currentItemId)
-                                            } else if (nextItemId != null) {
-                                                vm.startNowPlayingSession(startItemId = nextItemId)
-                                                vm.playbackOpenItem(
-                                                    itemId = nextItemId,
-                                                    intent = PlaybackOpenIntent.ManualOpen,
-                                                    autoPlayAfterLoad = false,
-                                                )
-                                                onOpenItem(nextItemId)
-                                            } else {
-                                                onRequestBack()
+                                    if (isLocusItemArchived) {
+                                        vm.unarchiveItem(locusActionItemId)
+                                            .onSuccess {
+                                                onShowSnackbar("Unarchived", null, null)
                                             }
-                                        }
-                                        .onFailure { error ->
-                                            if (error is CancellationException) return@onFailure
-                                            onShowSnackbar("Couldn't archive item", "Diagnostics", "open_diagnostics")
-                                        }
+                                            .onFailure { error ->
+                                                if (error is CancellationException) return@onFailure
+                                                onShowSnackbar("Couldn't unarchive item", "Diagnostics", "open_diagnostics")
+                                            }
+                                    } else {
+                                        val nextItemId = nextSessionItemIdForArchive(locusActionItemId)
+                                        vm.archiveItem(
+                                            locusActionItemId,
+                                            source = ArchiveActionSource.LOCUS,
+                                        )
+                                            .onSuccess {
+                                                onShowSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
+                                                val archivedActivePlaybackItem =
+                                                    locusActionItemId == currentItemId &&
+                                                        (isSpeaking || isAutoPlaying || autoPlayAfterLoad)
+                                                if (archivedActivePlaybackItem) {
+                                                    // Keep playback continuity for the currently playing item.
+                                                    Unit
+                                                } else if (locusActionItemId != currentItemId && currentItemId > 0) {
+                                                    onOpenItem(currentItemId)
+                                                } else if (nextItemId != null) {
+                                                    vm.startNowPlayingSession(startItemId = nextItemId)
+                                                    vm.playbackOpenItem(
+                                                        itemId = nextItemId,
+                                                        intent = PlaybackOpenIntent.ManualOpen,
+                                                        autoPlayAfterLoad = false,
+                                                    )
+                                                    onOpenItem(nextItemId)
+                                                } else {
+                                                    onRequestBack()
+                                                }
+                                            }
+                                            .onFailure { error ->
+                                                if (error is CancellationException) return@onFailure
+                                                onShowSnackbar("Couldn't archive item", "Diagnostics", "open_diagnostics")
+                                            }
+                                    }
                                 }
                             },
                             onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
@@ -1775,6 +1789,7 @@ fun PlayerScreen(
                                     refreshState = refreshActionState,
                                     showConnectivityIssue = hasRefreshProblem,
                                     isFavorited = isLocusItemFavorited,
+                                    isArchived = isLocusItemArchived,
                                     onRefresh = {
                                         if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
                                         actionScope.launch {
@@ -1855,37 +1870,48 @@ fun PlayerScreen(
                                     },
                                     onArchive = {
                                         actionScope.launch {
-                                            val nextItemId = nextSessionItemIdForArchive(locusActionItemId)
-                                            vm.archiveItem(
-                                                locusActionItemId,
-                                                source = ArchiveActionSource.LOCUS,
-                                            )
-                                                .onSuccess {
-                                                    onShowSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
-                                                    val archivedActivePlaybackItem =
-                                                        locusActionItemId == currentItemId &&
-                                                            (isSpeaking || isAutoPlaying || autoPlayAfterLoad)
-                                                    if (archivedActivePlaybackItem) {
-                                                        // Keep playback continuity for the currently playing item.
-                                                        Unit
-                                                    } else if (locusActionItemId != currentItemId && currentItemId > 0) {
-                                                        onOpenItem(currentItemId)
-                                                    } else if (nextItemId != null) {
-                                                        vm.startNowPlayingSession(startItemId = nextItemId)
-                                                        vm.playbackOpenItem(
-                                                            itemId = nextItemId,
-                                                            intent = PlaybackOpenIntent.ManualOpen,
-                                                            autoPlayAfterLoad = false,
-                                                        )
-                                                        onOpenItem(nextItemId)
-                                                    } else {
-                                                        onRequestBack()
+                                            if (isLocusItemArchived) {
+                                                vm.unarchiveItem(locusActionItemId)
+                                                    .onSuccess {
+                                                        onShowSnackbar("Unarchived", null, null)
                                                     }
-                                                }
-                                                .onFailure { error ->
-                                                    if (error is CancellationException) return@onFailure
-                                                    onShowSnackbar("Couldn't archive item", "Diagnostics", "open_diagnostics")
-                                                }
+                                                    .onFailure { error ->
+                                                        if (error is CancellationException) return@onFailure
+                                                        onShowSnackbar("Couldn't unarchive item", "Diagnostics", "open_diagnostics")
+                                                    }
+                                            } else {
+                                                val nextItemId = nextSessionItemIdForArchive(locusActionItemId)
+                                                vm.archiveItem(
+                                                    locusActionItemId,
+                                                    source = ArchiveActionSource.LOCUS,
+                                                )
+                                                    .onSuccess {
+                                                        onShowSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
+                                                        val archivedActivePlaybackItem =
+                                                            locusActionItemId == currentItemId &&
+                                                                (isSpeaking || isAutoPlaying || autoPlayAfterLoad)
+                                                        if (archivedActivePlaybackItem) {
+                                                            // Keep playback continuity for the currently playing item.
+                                                            Unit
+                                                        } else if (locusActionItemId != currentItemId && currentItemId > 0) {
+                                                            onOpenItem(currentItemId)
+                                                        } else if (nextItemId != null) {
+                                                            vm.startNowPlayingSession(startItemId = nextItemId)
+                                                            vm.playbackOpenItem(
+                                                                itemId = nextItemId,
+                                                                intent = PlaybackOpenIntent.ManualOpen,
+                                                                autoPlayAfterLoad = false,
+                                                            )
+                                                            onOpenItem(nextItemId)
+                                                        } else {
+                                                            onRequestBack()
+                                                        }
+                                                    }
+                                                    .onFailure { error ->
+                                                        if (error is CancellationException) return@onFailure
+                                                        onShowSnackbar("Couldn't archive item", "Diagnostics", "open_diagnostics")
+                                                    }
+                                            }
                                         }
                                     },
                                     onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
@@ -2064,6 +2090,7 @@ private fun ExpandedPlayerTopBar(
     refreshState: RefreshActionVisualState,
     showConnectivityIssue: Boolean,
     isFavorited: Boolean,
+    isArchived: Boolean,
     onRefresh: () -> Unit,
     onMarkDone: () -> Unit,
     onSpeedChange: (Float) -> Unit,
@@ -2144,11 +2171,12 @@ private fun ExpandedPlayerTopBar(
                             )
                         }
                     }
-                    ActionHintTooltip(label = "Archive") {
+                    ActionHintTooltip(label = if (isArchived) "Unarchive" else "Archive") {
                         IconButton(onClick = onArchive) {
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_archive_box_24),
-                                contentDescription = "Archive item",
+                                contentDescription = if (isArchived) "Unarchive item" else "Archive item",
+                                tint = if (isArchived) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(20.dp),
                             )
                         }

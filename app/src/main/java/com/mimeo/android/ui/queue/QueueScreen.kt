@@ -1764,9 +1764,9 @@ private fun ThinQueueDivider() {
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxWidth(0.75f)
                 .height(1.dp)
-                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f)),
+                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
         )
     }
 }
