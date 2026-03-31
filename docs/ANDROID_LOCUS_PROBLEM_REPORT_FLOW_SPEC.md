@@ -50,6 +50,7 @@ Not included in v1:
 - attachments
 - multi-step triage questions
 - contact-preference capture
+- optional full title/text attachment contract (deferred to v2, see `docs/PROBLEM_REPORT_ATTACHMENT_V2_CONTRACT_SPEC.md`)
 
 ## Auto-Attached Context
 
@@ -110,6 +111,12 @@ On failure:
 - If offline/unreachable:
   - submit fails immediately with retry guidance
   - no local queue persistence in v1
+
+## v2 Follow-up Note
+
+- v1 remains bounded-context only.
+- Optional full title/text attachment, storage/export behavior, and Android opt-in UX are specified separately in:
+  - `docs/PROBLEM_REPORT_ATTACHMENT_V2_CONTRACT_SPEC.md`
 
 ## Smallest Follow-up Implementation Ticket
 
