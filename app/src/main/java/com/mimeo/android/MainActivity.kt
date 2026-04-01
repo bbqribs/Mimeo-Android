@@ -762,19 +762,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _connectionTestSuccessByMode.value = snapshots
             }
         }
-        // Reactively update offline-ready state whenever AutoDownloadWorker writes to the cache.
-        // This eliminates the need for a second manual refresh to see newly downloaded items.
+        // Reactively update offline-ready state whenever cache rows change, while avoiding
+        // full cached-id table emissions for each write.
         viewModelScope.launch {
-            database.cachedItemDao().observeAllCachedItemIds()
+            var previousCount: Int? = null
+            database.cachedItemDao().observeCachedItemCount()
                 .distinctUntilChanged()
-                .drop(1) // skip the initial emission — queue load handles the first resolve
-                .collect {
-                    val currentQueue = _queueItems.value
-                    val currentArchive = _archivedItems.value
-                    val combined = (currentQueue + currentArchive).distinctBy { item -> item.itemId }
-                    if (combined.isNotEmpty()) {
-                        val offlineReadyIds = resolveOfflineReadyIds(combined)
-                        _cachedItemIds.update { previous -> previous + offlineReadyIds }
+                .collect { count ->
+                    val prior = previousCount
+                    previousCount = count
+                    // Shrink path (delete/eviction): bounded full recompute to avoid stale badges.
+                    if (prior != null && count < prior) {
+                        val currentQueue = _queueItems.value
+                        val currentArchive = _archivedItems.value
+                        val combined = (currentQueue + currentArchive).distinctBy { item -> item.itemId }
+                        val combinedIds = combined.mapTo(mutableSetOf()) { it.itemId }
+                        val resolved = resolveOfflineReadyIds(combined)
+                        _cachedItemIds.update { existing ->
+                            existing.filterTo(mutableSetOf()) { it !in combinedIds } + resolved
+                        }
                         reconcileCachedItemVisibility()
                         updateAutoDownloadQueueSnapshotDiagnostics(
                             current = settings.value,
@@ -783,6 +789,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             knownNoActiveIds = _noActiveContentItemIds.value,
                         )
                     }
+                }
+        }
+        viewModelScope.launch {
+            database.cachedItemDao().observeLatestCachedItemWrite()
+                .drop(1) // skip the initial emission — queue load/session restore handle first resolve
+                .collect { signal ->
+                    val itemId = signal?.itemId ?: return@collect
+                    val currentQueue = _queueItems.value
+                    val currentArchive = _archivedItems.value
+                    val visibleItemIds = buildSet {
+                        currentQueue.forEach { add(it.itemId) }
+                        currentArchive.forEach { add(it.itemId) }
+                    }
+                    if (!visibleItemIds.contains(itemId)) return@collect
+                    val resolved = resolveOfflineReadyIdsForItemIds(setOf(itemId))
+                    _cachedItemIds.update { previous ->
+                        if (resolved.contains(itemId)) previous + itemId else previous - itemId
+                    }
+                    reconcileCachedItemVisibility()
+                    updateAutoDownloadQueueSnapshotDiagnostics(
+                        current = settings.value,
+                        queueItems = currentQueue,
+                        offlineReadyIds = _cachedItemIds.value,
+                        knownNoActiveIds = _noActiveContentItemIds.value,
+                    )
                 }
         }
         WorkScheduler.enqueueProgressSync(application.applicationContext)
@@ -4111,6 +4142,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 activeContentVersionId = item.activeContentVersionId,
             )
         }
+        val cachedByItemId = repository.getCachedItemIds(candidates.map { it.itemId })
+        val cachedByVersion = repository.getCachedActiveContentVersionIds(
+            candidates.mapNotNull { it.activeContentVersionId },
+        )
+        return resolveOfflineReadyItemIds(candidates, cachedByItemId, cachedByVersion)
+    }
+
+    private suspend fun resolveOfflineReadyIdsForItemIds(itemIds: Set<Int>): Set<Int> {
+        if (itemIds.isEmpty()) return emptySet()
+        val queueById = _queueItems.value.associateBy { it.itemId }
+        val archiveById = _archivedItems.value.associateBy { it.itemId }
+        val candidates = itemIds.mapNotNull { itemId ->
+            val item = queueById[itemId] ?: archiveById[itemId] ?: return@mapNotNull null
+            OfflineReadyCandidate(
+                itemId = item.itemId,
+                activeContentVersionId = item.activeContentVersionId,
+            )
+        }
+        if (candidates.isEmpty()) return emptySet()
         val cachedByItemId = repository.getCachedItemIds(candidates.map { it.itemId })
         val cachedByVersion = repository.getCachedActiveContentVersionIds(
             candidates.mapNotNull { it.activeContentVersionId },

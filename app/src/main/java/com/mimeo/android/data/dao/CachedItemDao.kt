@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import com.mimeo.android.data.entities.CachedItemWriteSignal
 import com.mimeo.android.data.entities.CachedItemEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -28,10 +29,16 @@ interface CachedItemDao {
     suspend fun deleteByItemId(itemId: Int)
 
     /**
-     * Emits the full set of cached item IDs whenever the [cached_items] table changes.
-     * Used by the ViewModel to reactively update offline-ready state when [AutoDownloadWorker]
-     * writes new rows, without requiring a manual queue refresh.
+     * Emits the latest cached-item write signal whenever the [cached_items] table changes.
+     * This avoids full-table ID emissions for each cache write.
      */
-    @Query("SELECT itemId FROM cached_items")
-    fun observeAllCachedItemIds(): Flow<List<Int>>
+    @Query("SELECT itemId, cachedAt FROM cached_items ORDER BY cachedAt DESC LIMIT 1")
+    fun observeLatestCachedItemWrite(): Flow<CachedItemWriteSignal?>
+
+    /**
+     * Emits table size changes so consumers can detect shrink/deletion paths that require
+     * bounded reconciliation.
+     */
+    @Query("SELECT COUNT(*) FROM cached_items")
+    fun observeCachedItemCount(): Flow<Int>
 }
