@@ -51,7 +51,7 @@ import kotlin.math.roundToInt
 
 private val READER_SCROLL_TOP_PADDING = 0.dp
 private val READER_SCROLL_BOTTOM_PADDING = 0.dp
-private val READER_SEARCH_FOCUS_EXTRA_TOP_PADDING = 24.dp
+private val READER_SEARCH_FOCUS_EXTRA_TOP_PADDING = 56.dp
 private const val MANUAL_SCROLL_SUPPRESS_MS = 1200L
 private const val URL_ANNOTATION_TAG = "reader-url"
 private val READER_LINK_BLUE = Color(0xFF64B5F6)
