@@ -188,6 +188,11 @@ fun ReaderBody(
             fullTextLength = effectiveFullText.length,
         )
     }
+    val searchFocusRangeForScroll = if (useFullTextLayout) {
+        fullTextFocusedSearchRange
+    } else {
+        searchFocusRangeInChunk
+    }
     val fullTextLinks = remember(effectiveFullText) {
         extractReaderHttpLinks(effectiveFullText)
     }
@@ -489,7 +494,7 @@ fun ReaderBody(
     LaunchedEffect(
         searchFocusTriggerSignal,
         searchFocusChunkIndex,
-        searchFocusRangeInChunk,
+        searchFocusRangeForScroll,
         searchTextLayout,
         searchChunkTopInRootPx,
         viewportTopInRootPx,
@@ -497,7 +502,7 @@ fun ReaderBody(
         scrollState.maxValue,
     ) {
         if (searchFocusTriggerSignal == lastHandledSearchTrigger) return@LaunchedEffect
-        val range = searchFocusRangeInChunk ?: return@LaunchedEffect
+        val range = searchFocusRangeForScroll ?: return@LaunchedEffect
         val layout = searchTextLayout ?: return@LaunchedEffect
         val chunkTopInRoot = searchChunkTopInRootPx ?: return@LaunchedEffect
         val viewportTopInRoot = viewportTopInRootPx ?: return@LaunchedEffect
