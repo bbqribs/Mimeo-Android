@@ -33,6 +33,7 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.graphics.Color
@@ -118,9 +119,18 @@ fun ReaderBody(
         }
     }
     val effectiveFullText = remember(fullText, chunks) {
-        fullText
-            ?.takeIf { it.isNotBlank() }
-            ?: chunks.joinToString(separator = "\n\n") { it.text }
+        if (chunks.isNotEmpty()) {
+            chunks.joinToString(separator = "\n\n") { it.text }
+        } else {
+            fullText.orEmpty()
+        }
+    }
+    val fullTextChunkStartOffsets = remember(useFullTextLayout, chunks, effectiveFullText) {
+        if (!useFullTextLayout || effectiveFullText.isBlank() || chunks.isEmpty()) {
+            emptyList()
+        } else {
+            buildChunkStartOffsetsForJoinedText(chunks)
+        }
     }
     val fullTextHighlightRange = remember(
         useFullTextLayout,
@@ -137,13 +147,25 @@ fun ReaderBody(
             activeRange = activeRangeInChunk,
             sentenceRange = highlightedSentenceRange,
         ) ?: return@remember null
-        mapChunkRangeToFullText(chunk, baseRange, effectiveFullText.length)
+        mapChunkRangeToFullText(
+            chunkIndex = safeChunkIndex,
+            chunks = chunks,
+            chunkStartOffsets = fullTextChunkStartOffsets,
+            range = baseRange,
+            fullTextLength = effectiveFullText.length,
+        )
     }
     val fullTextSearchRanges = remember(useFullTextLayout, effectiveFullText, chunks, searchHighlightRangesByChunk) {
         if (!useFullTextLayout || effectiveFullText.isBlank()) return@remember emptyList()
         chunks.flatMapIndexed { index, chunk ->
             searchHighlightRangesByChunk[index].orEmpty().mapNotNull { range ->
-                mapChunkRangeToFullText(chunk, range, effectiveFullText.length)
+                mapChunkRangeToFullText(
+                    chunkIndex = index,
+                    chunks = chunks,
+                    chunkStartOffsets = fullTextChunkStartOffsets,
+                    range = range,
+                    fullTextLength = effectiveFullText.length,
+                )
             }
         }
     }
@@ -155,9 +177,63 @@ fun ReaderBody(
         searchFocusRangeInChunk,
     ) {
         if (!useFullTextLayout || effectiveFullText.isBlank()) return@remember null
-        val focusChunk = searchFocusChunkIndex?.let { chunks.getOrNull(it) } ?: return@remember null
+        val focusChunkIndex = searchFocusChunkIndex ?: return@remember null
+        chunks.getOrNull(focusChunkIndex) ?: return@remember null
         val focusRange = searchFocusRangeInChunk ?: return@remember null
-        mapChunkRangeToFullText(focusChunk, focusRange, effectiveFullText.length)
+        mapChunkRangeToFullText(
+            chunkIndex = focusChunkIndex,
+            chunks = chunks,
+            chunkStartOffsets = fullTextChunkStartOffsets,
+            range = focusRange,
+            fullTextLength = effectiveFullText.length,
+        )
+    }
+    val searchFocusRangeForScroll = if (useFullTextLayout) {
+        fullTextFocusedSearchRange
+    } else {
+        searchFocusRangeInChunk
+    }
+    val fullTextLinks = remember(effectiveFullText) {
+        extractReaderHttpLinks(effectiveFullText)
+    }
+    val fullTextBaseAnnotated = remember(
+        useFullTextLayout,
+        effectiveFullText,
+        fullTextLinks,
+        fullTextSearchRanges,
+        searchHighlightBg,
+    ) {
+        if (!useFullTextLayout || effectiveFullText.isBlank()) {
+            AnnotatedString("")
+        } else {
+            buildReaderBaseAnnotatedText(
+                text = effectiveFullText,
+                links = fullTextLinks,
+                passiveSearchRanges = fullTextSearchRanges,
+                passiveSearchHighlightBg = searchHighlightBg,
+            )
+        }
+    }
+    val fullTextAnnotated = remember(
+        fullTextBaseAnnotated,
+        effectiveFullText,
+        fullTextHighlightRange,
+        fullTextFocusedSearchRange,
+        highlightBg,
+        searchActiveHighlightBg,
+    ) {
+        if (!useFullTextLayout || effectiveFullText.isBlank()) {
+            AnnotatedString("")
+        } else {
+            withReaderHighlightOverlays(
+                base = fullTextBaseAnnotated,
+                textLength = effectiveFullText.length,
+                highlightRange = fullTextHighlightRange,
+                focusedSearchRange = fullTextFocusedSearchRange,
+                highlightBg = highlightBg,
+                focusedSearchHighlightBg = searchActiveHighlightBg,
+            )
+        }
     }
     val readingTextStyle = MaterialTheme.typography.bodyMedium.merge(
         TextStyle(
@@ -192,54 +268,6 @@ fun ReaderBody(
         key(selectionResetSignal) {
             SelectionContainer {
                 if (useFullTextLayout && effectiveFullText.isNotBlank()) {
-                    val fullTextAnnotated = buildAnnotatedString {
-                        append(effectiveFullText)
-                        extractReaderHttpLinks(effectiveFullText).forEach { link ->
-                            val start = link.start.coerceIn(0, effectiveFullText.length)
-                            val endExclusive = link.endExclusive.coerceIn(start, effectiveFullText.length)
-                            if (start < endExclusive) {
-                                addStringAnnotation(
-                                    tag = URL_ANNOTATION_TAG,
-                                    annotation = link.url,
-                                    start = start,
-                                    end = endExclusive,
-                                )
-                                addStyle(
-                                    style = SpanStyle(
-                                        color = READER_LINK_BLUE,
-                                        textDecoration = TextDecoration.Underline,
-                                    ),
-                                    start = start,
-                                    end = endExclusive,
-                                )
-                            }
-                        }
-                        fullTextSearchRanges.forEach { range ->
-                            val start = range.first.coerceIn(0, effectiveFullText.length)
-                            val endExclusive = (range.last + 1).coerceIn(start, effectiveFullText.length)
-                            if (start < endExclusive) {
-                                addStyle(
-                                    style = SpanStyle(background = searchHighlightBg),
-                                    start = start,
-                                    end = endExclusive,
-                                )
-                            }
-                        }
-                        fullTextHighlightRange?.let { range ->
-                            addStyle(
-                                style = SpanStyle(background = highlightBg),
-                                start = range.first.coerceIn(0, effectiveFullText.length),
-                                end = (range.last + 1).coerceIn(range.first.coerceIn(0, effectiveFullText.length), effectiveFullText.length),
-                            )
-                        }
-                        fullTextFocusedSearchRange?.let { range ->
-                            addStyle(
-                                style = SpanStyle(background = searchActiveHighlightBg),
-                                start = range.first.coerceIn(0, effectiveFullText.length),
-                                end = (range.last + 1).coerceIn(range.first.coerceIn(0, effectiveFullText.length), effectiveFullText.length),
-                            )
-                        }
-                    }
                     ClickableText(
                         text = fullTextAnnotated,
                         modifier = Modifier
@@ -263,7 +291,10 @@ fun ReaderBody(
                                 end = offset,
                             ).firstOrNull()?.item
                             if (!url.isNullOrBlank()) {
-                                runCatching { uriHandler.openUri(url) }
+                                val opened = runCatching { uriHandler.openUri(url) }.isSuccess
+                                if (!opened) {
+                                    onNonLinkTap?.invoke()
+                                }
                             } else {
                                 onNonLinkTap?.invoke()
                             }
@@ -391,7 +422,10 @@ fun ReaderBody(
                                         end = offset,
                                     ).firstOrNull()?.item
                                     if (!url.isNullOrBlank()) {
-                                        runCatching { uriHandler.openUri(url) }
+                                        val opened = runCatching { uriHandler.openUri(url) }.isSuccess
+                                        if (!opened) {
+                                            onNonLinkTap?.invoke()
+                                        }
                                     } else {
                                         onNonLinkTap?.invoke()
                                     }
@@ -460,7 +494,7 @@ fun ReaderBody(
     LaunchedEffect(
         searchFocusTriggerSignal,
         searchFocusChunkIndex,
-        searchFocusRangeInChunk,
+        searchFocusRangeForScroll,
         searchTextLayout,
         searchChunkTopInRootPx,
         viewportTopInRootPx,
@@ -468,7 +502,7 @@ fun ReaderBody(
         scrollState.maxValue,
     ) {
         if (searchFocusTriggerSignal == lastHandledSearchTrigger) return@LaunchedEffect
-        val range = searchFocusRangeInChunk ?: return@LaunchedEffect
+        val range = searchFocusRangeForScroll ?: return@LaunchedEffect
         val layout = searchTextLayout ?: return@LaunchedEffect
         val chunkTopInRoot = searchChunkTopInRootPx ?: return@LaunchedEffect
         val viewportTopInRoot = viewportTopInRootPx ?: return@LaunchedEffect
@@ -479,11 +513,20 @@ fun ReaderBody(
         val startBox = layout.getCursorRect(safeStart)
         val startTopInRoot = chunkTopInRoot + startBox.top
         val desiredAnchorInRoot = viewportTopInRoot + topComfortPx + searchFocusExtraTopPx
-        val delta = startTopInRoot - desiredAnchorInRoot
-        val target = (scrollState.value + delta).roundToInt().coerceIn(0, scrollState.maxValue)
+        val target = computeReaderSearchFocusScrollTarget(
+            useFullTextLayout = useFullTextLayout,
+            scrollValue = scrollState.value,
+            scrollMaxValue = scrollState.maxValue,
+            startBoxTop = startBox.top,
+            startTopInRoot = startTopInRoot,
+            desiredAnchorInRoot = desiredAnchorInRoot,
+            topComfortPx = topComfortPx,
+            searchFocusExtraTopPx = searchFocusExtraTopPx,
+        )
         isProgrammaticScroll = true
         scrollState.scrollTo(target)
         isProgrammaticScroll = false
+        suppressTransitionUntilMs = SystemClock.elapsedRealtime() + MANUAL_SCROLL_SUPPRESS_MS
         lastHandledSearchTrigger = searchFocusTriggerSignal
     }
 
@@ -524,6 +567,20 @@ fun ReaderBody(
         val externalTrigger = triggerKind != ReaderScrollTriggerKind.NONE
         val forceReattach = triggerKind == ReaderScrollTriggerKind.FORCE_REATTACH
         val anchorChanged = lastAnchorRange != anchor
+        if (
+            shouldSuppressStandardTriggerDuringCooldown(
+                triggerKind = triggerKind,
+                nowMs = nowMs,
+                suppressUntilMs = suppressTransitionUntilMs,
+            )
+        ) {
+            lastHandledScrollTrigger = scrollTriggerSignal
+            if (anchorChanged) {
+                lastAnchorWasFullyVisible = fullyVisibleNow
+            }
+            lastAnchorRange = anchor
+            return@LaunchedEffect
+        }
         if (shouldKeepDetachedAfterTrigger(manualScrollDetached, triggerKind)) {
             if (externalTrigger) {
                 // Consume non-reattach triggers while detached so playback updates cannot
@@ -609,19 +666,146 @@ private fun ParagraphSpacer(height: Dp) {
     Spacer(modifier = Modifier.height(height))
 }
 
-private fun mapChunkRangeToFullText(
-    chunk: PlaybackChunk,
+internal fun mapChunkRangeToFullText(
+    chunkIndex: Int,
+    chunks: List<PlaybackChunk>,
+    chunkStartOffsets: List<Int>,
     range: IntRange,
     fullTextLength: Int,
 ): IntRange? {
     if (fullTextLength <= 0) return null
+    if (chunkIndex !in chunks.indices) return null
+    if (chunkIndex !in chunkStartOffsets.indices) return null
+    val chunk = chunks[chunkIndex]
     val chunkLength = chunk.text.length.coerceAtLeast(0)
     if (chunkLength <= 0) return null
     val safeStartInChunk = range.first.coerceIn(0, chunkLength)
     val safeEndInChunk = range.last
         .coerceAtLeast(safeStartInChunk)
         .coerceIn(safeStartInChunk, chunkLength)
-    val start = (chunk.startChar + safeStartInChunk).coerceIn(0, fullTextLength)
-    val endExclusive = (chunk.startChar + safeEndInChunk + 1).coerceIn(start, fullTextLength)
+    val chunkStart = chunkStartOffsets[chunkIndex].coerceIn(0, fullTextLength)
+    val start = (chunkStart + safeStartInChunk).coerceIn(0, fullTextLength)
+    val endExclusive = (chunkStart + safeEndInChunk + 1).coerceIn(start, fullTextLength)
     return if (start < endExclusive) start until endExclusive else null
+}
+
+internal fun buildChunkStartOffsetsForJoinedText(chunks: List<PlaybackChunk>): List<Int> {
+    if (chunks.isEmpty()) return emptyList()
+    var cursor = 0
+    return buildList(chunks.size) {
+        chunks.forEachIndexed { index, chunk ->
+            add(cursor)
+            cursor += chunk.text.length
+            if (index < chunks.lastIndex) {
+                cursor += 2 // "\n\n" separator used by joined full-text layout
+            }
+        }
+    }
+}
+
+internal fun computeReaderSearchFocusScrollTarget(
+    useFullTextLayout: Boolean,
+    scrollValue: Int,
+    scrollMaxValue: Int,
+    startBoxTop: Float,
+    startTopInRoot: Float,
+    desiredAnchorInRoot: Float,
+    topComfortPx: Float,
+    searchFocusExtraTopPx: Float,
+): Int {
+    val rawTarget = if (useFullTextLayout) {
+        // Full-text uses a single text layout; target in local text coordinates.
+        startBoxTop - (topComfortPx + searchFocusExtraTopPx)
+    } else {
+        val delta = startTopInRoot - desiredAnchorInRoot
+        scrollValue + delta
+    }
+    return rawTarget.roundToInt().coerceIn(0, scrollMaxValue)
+}
+
+internal fun buildReaderBaseAnnotatedText(
+    text: String,
+    links: List<ReaderLinkRange>,
+    passiveSearchRanges: List<IntRange>,
+    passiveSearchHighlightBg: Color,
+): AnnotatedString = buildAnnotatedString {
+    append(text)
+    links.forEach { link ->
+        val start = link.start.coerceIn(0, text.length)
+        val endExclusive = link.endExclusive.coerceIn(start, text.length)
+        if (start < endExclusive) {
+            addStringAnnotation(
+                tag = URL_ANNOTATION_TAG,
+                annotation = link.url,
+                start = start,
+                end = endExclusive,
+            )
+            addStyle(
+                style = SpanStyle(
+                    color = READER_LINK_BLUE,
+                    textDecoration = TextDecoration.Underline,
+                ),
+                start = start,
+                end = endExclusive,
+            )
+        }
+    }
+    passiveSearchRanges.forEach { range ->
+        addBackgroundStyleIfValidRange(
+            range = range,
+            textLength = text.length,
+            background = passiveSearchHighlightBg,
+        )
+    }
+}
+
+internal fun withReaderHighlightOverlays(
+    base: AnnotatedString,
+    textLength: Int,
+    highlightRange: IntRange?,
+    focusedSearchRange: IntRange?,
+    highlightBg: Color,
+    focusedSearchHighlightBg: Color,
+): AnnotatedString {
+    if (base.text.isBlank() || textLength <= 0) return base
+    val builder = AnnotatedString.Builder(base)
+    builder.addBackgroundStyleIfValidRange(
+        range = highlightRange,
+        textLength = textLength,
+        background = highlightBg,
+    )
+    builder.addBackgroundStyleIfValidRange(
+        range = focusedSearchRange,
+        textLength = textLength,
+        background = focusedSearchHighlightBg,
+    )
+    return builder.toAnnotatedString()
+}
+
+private fun AnnotatedString.Builder.addBackgroundStyleIfValidRange(
+    range: IntRange?,
+    textLength: Int,
+    background: Color,
+) {
+    val normalized = normalizeInclusiveRange(range = range, textLength = textLength) ?: return
+    addStyle(
+        style = SpanStyle(background = background),
+        start = normalized.first,
+        end = normalized.last + 1,
+    )
+}
+
+private fun normalizeInclusiveRange(range: IntRange?, textLength: Int): IntRange? {
+    if (range == null || textLength <= 0) return null
+    val start = range.first.coerceIn(0, textLength)
+    val endExclusive = (range.last + 1).coerceIn(start, textLength)
+    return if (start < endExclusive) start until endExclusive else null
+}
+
+internal fun shouldSuppressStandardTriggerDuringCooldown(
+    triggerKind: ReaderScrollTriggerKind,
+    nowMs: Long,
+    suppressUntilMs: Long,
+): Boolean {
+    return triggerKind == ReaderScrollTriggerKind.STANDARD && nowMs < suppressUntilMs
 }

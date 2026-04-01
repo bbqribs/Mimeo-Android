@@ -231,6 +231,31 @@ private enum class QueueSortOption(val label: String) {
     TITLE_AZ("Title A-Z"),
 }
 
+internal fun shouldStartNewSessionOnQueueOpen(
+    tappedItemId: Int,
+    sessionCurrentItemId: Int,
+    sessionCurrentProgressPercent: Int?,
+    sessionCurrentChunkIndex: Int,
+    sessionCurrentOffsetInChunkChars: Int,
+    playbackHasStartedCurrentItem: Boolean,
+    playbackActive: Boolean,
+): Boolean {
+    if (tappedItemId <= 0) return false
+    if (sessionCurrentItemId <= 0) return true
+    if (tappedItemId == sessionCurrentItemId) return true
+    val sessionIndicatesStartedPlayback =
+        (sessionCurrentProgressPercent ?: 0) > 0 ||
+            sessionCurrentChunkIndex > 0 ||
+            sessionCurrentOffsetInChunkChars > 0
+    val preserveExistingOwner =
+        playbackHasStartedCurrentItem ||
+            playbackActive ||
+            sessionIndicatesStartedPlayback
+    // When another item already owns playback context (including paused/started),
+    // opening a row should preview it in Locus without stealing session ownership.
+    return !preserveExistingOwner
+}
+
 internal enum class PendingOutcomeSimulation {
     CACHED,
     NO_ACTIVE_CONTENT,
@@ -1179,10 +1204,22 @@ fun QueueScreen(
                                             "sessionBefore=${vm.currentNowPlayingItemId()}",
                                     )
                                     vm.warmItemTextForPlayer(item.itemId)
-                                    vm.startNowPlayingSession(
-                                        startItemId = item.itemId,
-                                        orderedQueueItems = displayedItems,
-                                    )
+                                    if (
+                                        shouldStartNewSessionOnQueueOpen(
+                                            tappedItemId = item.itemId,
+                                            sessionCurrentItemId = nowPlayingSession?.currentItem?.itemId ?: -1,
+                                            sessionCurrentProgressPercent = nowPlayingSession?.currentItem?.lastReadPercent,
+                                            sessionCurrentChunkIndex = nowPlayingSession?.currentItem?.chunkIndex ?: 0,
+                                            sessionCurrentOffsetInChunkChars = nowPlayingSession?.currentItem?.offsetInChunkChars ?: 0,
+                                            playbackHasStartedCurrentItem = playbackState.hasStartedPlaybackForCurrentItem,
+                                            playbackActive = playbackState.isSpeaking || playbackState.isAutoPlaying,
+                                        )
+                                    ) {
+                                        vm.startNowPlayingSession(
+                                            startItemId = item.itemId,
+                                            orderedQueueItems = displayedItems,
+                                        )
+                                    }
                                     onOpenPlayer(item.itemId)
                                 },
                                 onDownload = {

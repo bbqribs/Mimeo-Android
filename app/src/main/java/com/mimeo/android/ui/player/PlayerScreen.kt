@@ -1451,12 +1451,8 @@ fun PlayerScreen(
         }
     }
     val toggleReaderMode = {
-        if (previewModeActive) {
-            Unit
-        } else {
-            val nextMode = toggledLocusContentMode(locusContentMode)
-            vm.saveLocusContentMode(nextMode)
-        }
+        val nextMode = toggledLocusContentMode(locusContentMode)
+        vm.saveLocusContentMode(nextMode)
     }
     fun nextSessionItemIdForArchive(currentId: Int): Int? {
         val session = nowPlayingSession ?: return null
