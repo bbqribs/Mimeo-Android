@@ -11,8 +11,12 @@ class QueueOpenSessionOwnershipTest {
         assertTrue(
             shouldStartNewSessionOnQueueOpen(
                 tappedItemId = 42,
-                playbackCurrentItemId = -1,
+                sessionCurrentItemId = -1,
+                sessionCurrentProgressPercent = null,
+                sessionCurrentChunkIndex = 0,
+                sessionCurrentOffsetInChunkChars = 0,
                 playbackHasStartedCurrentItem = false,
+                playbackActive = false,
             ),
         )
     }
@@ -22,8 +26,12 @@ class QueueOpenSessionOwnershipTest {
         assertFalse(
             shouldStartNewSessionOnQueueOpen(
                 tappedItemId = 99,
-                playbackCurrentItemId = 42,
+                sessionCurrentItemId = 42,
+                sessionCurrentProgressPercent = 12,
+                sessionCurrentChunkIndex = 1,
+                sessionCurrentOffsetInChunkChars = 5,
                 playbackHasStartedCurrentItem = true,
+                playbackActive = false,
             ),
         )
     }
@@ -33,8 +41,27 @@ class QueueOpenSessionOwnershipTest {
         assertTrue(
             shouldStartNewSessionOnQueueOpen(
                 tappedItemId = 42,
-                playbackCurrentItemId = 42,
+                sessionCurrentItemId = 42,
+                sessionCurrentProgressPercent = 12,
+                sessionCurrentChunkIndex = 1,
+                sessionCurrentOffsetInChunkChars = 5,
                 playbackHasStartedCurrentItem = true,
+                playbackActive = false,
+            ),
+        )
+    }
+
+    @Test
+    fun preservesSessionOwnerWhenPausedContextIsRestoredFromSession() {
+        assertFalse(
+            shouldStartNewSessionOnQueueOpen(
+                tappedItemId = 88,
+                sessionCurrentItemId = 42,
+                sessionCurrentProgressPercent = 23,
+                sessionCurrentChunkIndex = 0,
+                sessionCurrentOffsetInChunkChars = 0,
+                playbackHasStartedCurrentItem = false,
+                playbackActive = false,
             ),
         )
     }

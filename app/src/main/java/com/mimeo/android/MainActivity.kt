@@ -4590,6 +4590,7 @@ private fun MimeoApp(vm: AppViewModel) {
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var upNextTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var playerOpenRequestSignal by rememberSaveable { mutableIntStateOf(0) }
+    var offlineBannerVisible by rememberSaveable { mutableStateOf(false) }
     val presentingLocus = isOnLocusRoute
     val compactControlsOnly = !isOnLocusRoute
     val bottomNavVisible = !requiresSignIn && !(presentingLocus && readerChromeHidden)
@@ -4610,26 +4611,36 @@ private fun MimeoApp(vm: AppViewModel) {
             lower.contains("forbidden") ||
             lower.contains("timeout")
     } ?: false
+    LaunchedEffect(queueOffline) {
+        if (!queueOffline) {
+            offlineBannerVisible = false
+            return@LaunchedEffect
+        }
+        delay(450)
+        if (queueOffline) {
+            offlineBannerVisible = true
+        }
+    }
     val bannerStateLabel = when {
-        queueOffline -> "Offline"
+        offlineBannerVisible -> "Offline"
         baseUrlHint != null -> "LAN mismatch"
         else -> "Status"
     }
     val bannerSummary = when {
-        queueOffline -> ""
+        offlineBannerVisible -> ""
         baseUrlHint != null -> "Connection guidance"
         statusLooksError -> "Request failed"
         else -> ""
     }
     val bannerDetail = when {
-        queueOffline && !statusMessage.isNullOrBlank() -> "Cannot reach server at $baseAddress\n$statusMessage"
-        queueOffline -> "Cannot reach server at $baseAddress"
+        offlineBannerVisible && !statusMessage.isNullOrBlank() -> "Cannot reach server at $baseAddress\n$statusMessage"
+        offlineBannerVisible -> "Cannot reach server at $baseAddress"
         baseUrlHint != null && !statusMessage.isNullOrBlank() -> "$baseUrlHint\n$statusMessage"
         baseUrlHint != null -> baseUrlHint
         statusLooksError -> statusMessage
         else -> null
     }
-    val showGlobalBanner = !requiresSignIn && (queueOffline || baseUrlHint != null || statusLooksError)
+    val showGlobalBanner = !requiresSignIn && (offlineBannerVisible || baseUrlHint != null || statusLooksError)
 
     LaunchedEffect(vm, snackbarHostState) {
         vm.snackbarMessages.collect { message ->
