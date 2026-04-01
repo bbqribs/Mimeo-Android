@@ -508,8 +508,16 @@ fun ReaderBody(
         val startBox = layout.getCursorRect(safeStart)
         val startTopInRoot = chunkTopInRoot + startBox.top
         val desiredAnchorInRoot = viewportTopInRoot + topComfortPx + searchFocusExtraTopPx
-        val delta = startTopInRoot - desiredAnchorInRoot
-        val target = (scrollState.value + delta).roundToInt().coerceIn(0, scrollState.maxValue)
+        val target = computeReaderSearchFocusScrollTarget(
+            useFullTextLayout = useFullTextLayout,
+            scrollValue = scrollState.value,
+            scrollMaxValue = scrollState.maxValue,
+            startBoxTop = startBox.top,
+            startTopInRoot = startTopInRoot,
+            desiredAnchorInRoot = desiredAnchorInRoot,
+            topComfortPx = topComfortPx,
+            searchFocusExtraTopPx = searchFocusExtraTopPx,
+        )
         isProgrammaticScroll = true
         scrollState.scrollTo(target)
         isProgrammaticScroll = false
@@ -688,6 +696,26 @@ internal fun buildChunkStartOffsetsForJoinedText(chunks: List<PlaybackChunk>): L
             }
         }
     }
+}
+
+internal fun computeReaderSearchFocusScrollTarget(
+    useFullTextLayout: Boolean,
+    scrollValue: Int,
+    scrollMaxValue: Int,
+    startBoxTop: Float,
+    startTopInRoot: Float,
+    desiredAnchorInRoot: Float,
+    topComfortPx: Float,
+    searchFocusExtraTopPx: Float,
+): Int {
+    val rawTarget = if (useFullTextLayout) {
+        // Full-text uses a single text layout; target in local text coordinates.
+        startBoxTop - (topComfortPx + searchFocusExtraTopPx)
+    } else {
+        val delta = startTopInRoot - desiredAnchorInRoot
+        scrollValue + delta
+    }
+    return rawTarget.roundToInt().coerceIn(0, scrollMaxValue)
 }
 
 internal fun buildReaderBaseAnnotatedText(
