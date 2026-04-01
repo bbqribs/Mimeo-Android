@@ -51,7 +51,7 @@ import kotlin.math.roundToInt
 
 private val READER_SCROLL_TOP_PADDING = 0.dp
 private val READER_SCROLL_BOTTOM_PADDING = 0.dp
-private val READER_SEARCH_FOCUS_EXTRA_TOP_PADDING = 120.dp
+private val READER_SEARCH_FOCUS_EXTRA_TOP_PADDING = 24.dp
 private const val MANUAL_SCROLL_SUPPRESS_MS = 1200L
 private const val URL_ANNOTATION_TAG = "reader-url"
 private val READER_LINK_BLUE = Color(0xFF64B5F6)
@@ -119,9 +119,18 @@ fun ReaderBody(
         }
     }
     val effectiveFullText = remember(fullText, chunks) {
-        fullText
-            ?.takeIf { it.isNotBlank() }
-            ?: chunks.joinToString(separator = "\n\n") { it.text }
+        if (chunks.isNotEmpty()) {
+            chunks.joinToString(separator = "\n\n") { it.text }
+        } else {
+            fullText.orEmpty()
+        }
+    }
+    val fullTextChunkStartOffsets = remember(useFullTextLayout, chunks, effectiveFullText) {
+        if (!useFullTextLayout || effectiveFullText.isBlank() || chunks.isEmpty()) {
+            emptyList()
+        } else {
+            buildChunkStartOffsetsForJoinedText(chunks)
+        }
     }
     val fullTextHighlightRange = remember(
         useFullTextLayout,
@@ -138,13 +147,25 @@ fun ReaderBody(
             activeRange = activeRangeInChunk,
             sentenceRange = highlightedSentenceRange,
         ) ?: return@remember null
-        mapChunkRangeToFullText(chunk, baseRange, effectiveFullText.length)
+        mapChunkRangeToFullText(
+            chunkIndex = safeChunkIndex,
+            chunks = chunks,
+            chunkStartOffsets = fullTextChunkStartOffsets,
+            range = baseRange,
+            fullTextLength = effectiveFullText.length,
+        )
     }
     val fullTextSearchRanges = remember(useFullTextLayout, effectiveFullText, chunks, searchHighlightRangesByChunk) {
         if (!useFullTextLayout || effectiveFullText.isBlank()) return@remember emptyList()
         chunks.flatMapIndexed { index, chunk ->
             searchHighlightRangesByChunk[index].orEmpty().mapNotNull { range ->
-                mapChunkRangeToFullText(chunk, range, effectiveFullText.length)
+                mapChunkRangeToFullText(
+                    chunkIndex = index,
+                    chunks = chunks,
+                    chunkStartOffsets = fullTextChunkStartOffsets,
+                    range = range,
+                    fullTextLength = effectiveFullText.length,
+                )
             }
         }
     }
@@ -156,9 +177,16 @@ fun ReaderBody(
         searchFocusRangeInChunk,
     ) {
         if (!useFullTextLayout || effectiveFullText.isBlank()) return@remember null
-        val focusChunk = searchFocusChunkIndex?.let { chunks.getOrNull(it) } ?: return@remember null
+        val focusChunkIndex = searchFocusChunkIndex ?: return@remember null
+        chunks.getOrNull(focusChunkIndex) ?: return@remember null
         val focusRange = searchFocusRangeInChunk ?: return@remember null
-        mapChunkRangeToFullText(focusChunk, focusRange, effectiveFullText.length)
+        mapChunkRangeToFullText(
+            chunkIndex = focusChunkIndex,
+            chunks = chunks,
+            chunkStartOffsets = fullTextChunkStartOffsets,
+            range = focusRange,
+            fullTextLength = effectiveFullText.length,
+        )
     }
     val fullTextLinks = remember(effectiveFullText) {
         extractReaderHttpLinks(effectiveFullText)
@@ -625,21 +653,41 @@ private fun ParagraphSpacer(height: Dp) {
     Spacer(modifier = Modifier.height(height))
 }
 
-private fun mapChunkRangeToFullText(
-    chunk: PlaybackChunk,
+internal fun mapChunkRangeToFullText(
+    chunkIndex: Int,
+    chunks: List<PlaybackChunk>,
+    chunkStartOffsets: List<Int>,
     range: IntRange,
     fullTextLength: Int,
 ): IntRange? {
     if (fullTextLength <= 0) return null
+    if (chunkIndex !in chunks.indices) return null
+    if (chunkIndex !in chunkStartOffsets.indices) return null
+    val chunk = chunks[chunkIndex]
     val chunkLength = chunk.text.length.coerceAtLeast(0)
     if (chunkLength <= 0) return null
     val safeStartInChunk = range.first.coerceIn(0, chunkLength)
     val safeEndInChunk = range.last
         .coerceAtLeast(safeStartInChunk)
         .coerceIn(safeStartInChunk, chunkLength)
-    val start = (chunk.startChar + safeStartInChunk).coerceIn(0, fullTextLength)
-    val endExclusive = (chunk.startChar + safeEndInChunk + 1).coerceIn(start, fullTextLength)
+    val chunkStart = chunkStartOffsets[chunkIndex].coerceIn(0, fullTextLength)
+    val start = (chunkStart + safeStartInChunk).coerceIn(0, fullTextLength)
+    val endExclusive = (chunkStart + safeEndInChunk + 1).coerceIn(start, fullTextLength)
     return if (start < endExclusive) start until endExclusive else null
+}
+
+internal fun buildChunkStartOffsetsForJoinedText(chunks: List<PlaybackChunk>): List<Int> {
+    if (chunks.isEmpty()) return emptyList()
+    var cursor = 0
+    return buildList(chunks.size) {
+        chunks.forEachIndexed { index, chunk ->
+            add(cursor)
+            cursor += chunk.text.length
+            if (index < chunks.lastIndex) {
+                cursor += 2 // "\n\n" separator used by joined full-text layout
+            }
+        }
+    }
 }
 
 internal fun buildReaderBaseAnnotatedText(
