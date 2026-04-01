@@ -3842,6 +3842,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return if (engineItemId > 0) engineItemId else currentNowPlayingItemId()
     }
 
+    fun hasPlaybackInProgressForSessionItem(itemId: Int?): Boolean {
+        val targetId = itemId ?: return false
+        if (targetId <= 0) return false
+        val engine = playbackEngineState.value
+        if (engine.currentItemId != targetId) return false
+        return engine.hasStartedPlaybackForCurrentItem || engine.isSpeaking || engine.isAutoPlaying
+    }
+
     private fun isItemActivelyPlaying(itemId: Int): Boolean {
         val engine = playbackEngineState.value
         if (engine.currentItemId != itemId || itemId <= 0) return false
@@ -4565,18 +4573,10 @@ private fun MimeoApp(vm: AppViewModel) {
     val queueOffline by vm.queueOffline.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val pendingNavigationRoute by vm.pendingNavigationRoute.collectAsState()
-    val playbackEngineState by vm.playbackEngineState.collectAsState()
     val requiresSignIn = settings.apiToken.isBlank()
     var pendingLocusOpen by rememberSaveable { mutableStateOf(false) }
     var pendingLocusItemId by rememberSaveable { mutableIntStateOf(-1) }
     val sessionNowPlayingItemId = vm.currentNowPlayingItemId()
-    val hasPlaybackItemInProgress =
-        (sessionNowPlayingItemId ?: -1) > 0 &&
-            (
-                playbackEngineState.hasStartedPlaybackForCurrentItem ||
-                    playbackEngineState.isSpeaking ||
-                    playbackEngineState.isAutoPlaying
-                )
     val routeItemId = navBackStack?.arguments?.let { args ->
         if (args.containsKey("itemId")) args.getInt("itemId").takeIf { it > 0 } else null
     }
@@ -4591,7 +4591,7 @@ private fun MimeoApp(vm: AppViewModel) {
         requiresSignIn = requiresSignIn,
         isOnLocusRoute = currentRoute.startsWith(ROUTE_LOCUS),
         requestedPlayerItemId = requestedPlayerItemId,
-        playbackActive = playbackActive || hasPlaybackItemInProgress,
+        playbackActive = playbackActive,
         manualReadingActive = manualReadingActive,
     )
     SideEffect {
@@ -4909,7 +4909,8 @@ private fun MimeoApp(vm: AppViewModel) {
                                 upNextTabTapSignal = upNextTabTapSignal,
                                 onOpenPlayer = { itemId ->
                                     val activeNowPlayingItemId = sessionNowPlayingItemId?.takeIf { it > 0 }
-                                    if (hasPlaybackItemInProgress && activeNowPlayingItemId != null && activeNowPlayingItemId != itemId) {
+                                    val playbackInProgress = vm.hasPlaybackInProgressForSessionItem(activeNowPlayingItemId)
+                                    if (playbackInProgress && activeNowPlayingItemId != null && activeNowPlayingItemId != itemId) {
                                         pendingLocusOpen = true
                                         pendingLocusItemId = itemId
                                         vm.showSnackbar(
