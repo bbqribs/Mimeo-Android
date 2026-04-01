@@ -63,6 +63,7 @@
 - [x] Android performance quick-wins shipped (bounded): share/save refresh coalescing to reduce duplicate queue churn, memoized QueueScreen list transforms, PlayerScreen keyed queue/archive lookups, and debug-only queue-hash gating so release paths avoid unnecessary hash work.
 - [x] Share-save refresh burst dedupe follow-up shipped (bounded): keyed coalescing layered on top of debounce to collapse same-item refresh bursts, plus debug-only refresh counters (source/seen/skipped/executed) for validation without release-path impact.
 - [x] Reader rendering performance follow-up shipped (bounded): ReaderBody now caches base annotated full-text/link/search markup by stable keys and applies playback/focus highlight overlays on top, reducing repeated long-article annotated-string rebuild work while preserving current behavior.
+- [x] Cached-item invalidation narrowing shipped (bounded): replaced full cached-id table emission observer with scoped latest-write + count-change reconciliation so cache writes update only impacted visible items while still handling delete/eviction shrink paths safely.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
