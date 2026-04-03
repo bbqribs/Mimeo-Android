@@ -38,3 +38,34 @@ internal fun shouldCenterForTrigger(
     anchorOffscreen: Boolean,
 ): Boolean = triggerKind == ReaderScrollTriggerKind.CENTER_IF_OFFSCREEN && anchorOffscreen
 
+internal fun shouldDetachOnManualScroll(
+    manualScrollDetached: Boolean,
+    anchorFullyVisible: Boolean,
+): Boolean = !manualScrollDetached && !anchorFullyVisible
+
+internal fun shouldAutoScrollForStandardPlayback(
+    triggerKind: ReaderScrollTriggerKind,
+    autoScrollWhileListening: Boolean,
+    manualScrollDetached: Boolean,
+    hiddenByBottom: Boolean,
+    nowMs: Long,
+    suppressUntilMs: Long,
+): Boolean {
+    if (triggerKind != ReaderScrollTriggerKind.STANDARD) return false
+    if (!autoScrollWhileListening || manualScrollDetached || !hiddenByBottom) return false
+    return nowMs >= suppressUntilMs
+}
+
+internal fun shouldAutoScrollForPlaybackBoundary(
+    autoScrollWhileListening: Boolean,
+    manualScrollDetached: Boolean,
+    anchorChanged: Boolean,
+    hiddenByBottom: Boolean,
+    nowMs: Long,
+    suppressUntilMs: Long,
+): Boolean {
+    if (!autoScrollWhileListening || manualScrollDetached) return false
+    if (!anchorChanged || !hiddenByBottom) return false
+    return nowMs >= suppressUntilMs
+}
+

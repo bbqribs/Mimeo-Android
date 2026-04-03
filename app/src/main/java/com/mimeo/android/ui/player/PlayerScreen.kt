@@ -89,6 +89,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.TextToolbarStatus
@@ -760,6 +761,8 @@ fun PlayerScreen(
     var readerViewportSessionNonce by rememberSaveable { mutableIntStateOf(0) }
     var readerScrollOffsets by rememberSaveable { mutableStateOf<Map<Int, Int>>(emptyMap()) }
     var persistedReaderScrollOffsets by rememberSaveable { mutableStateOf<Map<Int, Int>>(emptyMap()) }
+    var locusTopOverlayHeightPx by remember { mutableIntStateOf(0) }
+    var locusBottomOverlayHeightPx by remember { mutableIntStateOf(0) }
     val persistedReaderOffset = nowPlayingSession
         ?.items
         ?.firstOrNull { it.itemId == readerScrollItemId }
@@ -1312,6 +1315,7 @@ fun PlayerScreen(
     }
     val capturePresentation = locusCapturePresentation(displayPayload)
     val queuedPreviewTitle = queueItemsById[locusItemId]?.title.orEmpty()
+    val queuedNowPlayingTitle = queueItemsById[currentItemId]?.title.orEmpty()
     val isLocusItemFavorited = queueItemsById[locusItemId]?.isFavorited == true
     val isLocusItemArchived = archivedItemIdSet.contains(locusActionItemId)
     val locusActionItem = queueItemsById[locusActionItemId]
@@ -1325,7 +1329,18 @@ fun PlayerScreen(
         }
         else -> capturePresentation.title.ifBlank { displayPayload?.url.orEmpty() }
     }
-    val locusActionBarTitle = if (previewModeActive) "" else if (currentTitle.isNotBlank()) currentTitle else "Item $locusItemId"
+    val nowPlayingTitle = queuedNowPlayingTitle
+        .ifBlank { textPayload?.title.orEmpty() }
+        .ifBlank { textPayload?.sourceLabel.orEmpty() }
+        .ifBlank { queueItemsById[currentItemId]?.url.orEmpty() }
+        .ifBlank { if (currentItemId > 0) "Item $currentItemId" else "" }
+    val locusActionBarTitle = if (nowPlayingTitle.isNotBlank()) {
+        nowPlayingTitle
+    } else if (currentTitle.isNotBlank()) {
+        currentTitle
+    } else {
+        "Item $locusItemId"
+    }
     val currentSourceLabel = capturePresentation.sourceLabel
     val reportContext = remember(locusActionItemId, displayPayload, locusActionItem, capturePresentation) {
         LocusProblemReportContext(
@@ -1920,6 +1935,18 @@ fun PlayerScreen(
                             .fillMaxWidth()
                             .weight(1f, fill = true),
                     ) {
+                        val showLocusTopBar = (!actionBarHiddenByMode || locusSearchActive) && transitionSettled
+                        val showReaderDockOverlay = !playerDockHiddenByMode && transitionSettled
+                        LaunchedEffect(showLocusTopBar) {
+                            if (!showLocusTopBar) {
+                                locusTopOverlayHeightPx = 0
+                            }
+                        }
+                        LaunchedEffect(showReaderDockOverlay) {
+                            if (!showReaderDockOverlay) {
+                                locusBottomOverlayHeightPx = 0
+                            }
+                        }
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -1955,6 +1982,8 @@ fun PlayerScreen(
                                 selectionResetSignal = readerSelectionResetSignal,
                                 scrollState = readerScrollState,
                                 showEmptyPlaceholder = transitionSettled && !isLoading,
+                                topOverlayOcclusionPx = locusTopOverlayHeightPx,
+                                bottomOverlayOcclusionPx = locusBottomOverlayHeightPx,
                                 onNonLinkTap = {
                                     if (textToolbar.status == TextToolbarStatus.Shown || selectionClearArmed) {
                                         clearActiveSelection()
@@ -1966,7 +1995,6 @@ fun PlayerScreen(
                                     .fillMaxSize()
                                     .graphicsLayer { alpha = bodyContentAlpha },
                             )
-                            val showLocusTopBar = (!actionBarHiddenByMode || locusSearchActive) && transitionSettled
                             androidx.compose.animation.AnimatedVisibility(
                                 visible = showLocusTopBar,
                                 enter = slideInVertically(
@@ -1976,7 +2004,10 @@ fun PlayerScreen(
                                 exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(animationSpec = tween(120)),
                                 modifier = Modifier
                                     .align(Alignment.TopCenter)
-                                    .fillMaxWidth(),
+                                    .fillMaxWidth()
+                                    .onSizeChanged { size ->
+                                        locusTopOverlayHeightPx = size.height
+                                    },
                             ) {
                                 ExpandedPlayerTopBar(
                                     title = locusActionBarTitle,
@@ -2171,7 +2202,7 @@ fun PlayerScreen(
                                 )
                             }
                             androidx.compose.animation.AnimatedVisibility(
-                                visible = !playerDockHiddenByMode && transitionSettled,
+                                visible = showReaderDockOverlay,
                                 enter = slideInVertically(
                                     initialOffsetY = { it / 2 },
                                     animationSpec = tween(durationMillis = 140, delayMillis = 40),
@@ -2179,7 +2210,10 @@ fun PlayerScreen(
                                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
-                                    .fillMaxWidth(),
+                                    .fillMaxWidth()
+                                    .onSizeChanged { size ->
+                                        locusBottomOverlayHeightPx = size.height
+                                    },
                             ) {
                                 renderPlayerDock()
                             }

@@ -26,6 +26,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -49,7 +50,7 @@ import com.mimeo.android.ui.theme.toFontFamily
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-private val READER_SCROLL_TOP_PADDING = 0.dp
+private val READER_SCROLL_TOP_PADDING = 8.dp
 private val READER_SCROLL_BOTTOM_PADDING = 0.dp
 private val READER_SEARCH_FOCUS_EXTRA_TOP_PADDING = 120.dp
 private const val MANUAL_SCROLL_SUPPRESS_MS = 1200L
@@ -76,6 +77,8 @@ fun ReaderBody(
     paragraphSpacing: ParagraphSpacingOption,
     selectionResetSignal: Int,
     scrollState: ScrollState,
+    topOverlayOcclusionPx: Int = 0,
+    bottomOverlayOcclusionPx: Int = 0,
     showEmptyPlaceholder: Boolean = true,
     onNonLinkTap: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -152,6 +155,26 @@ fun ReaderBody(
             chunks = chunks,
             chunkStartOffsets = fullTextChunkStartOffsets,
             range = baseRange,
+            fullTextLength = effectiveFullText.length,
+        )
+    }
+    val fullTextFollowRange = remember(
+        useFullTextLayout,
+        effectiveFullText,
+        chunks,
+        safeChunkIndex,
+        currentChunkOffsetInChars,
+    ) {
+        if (!useFullTextLayout || effectiveFullText.isBlank()) return@remember null
+        val chunk = chunks.getOrNull(safeChunkIndex) ?: return@remember null
+        val chunkLength = chunk.text.length
+        if (chunkLength <= 0) return@remember null
+        val clampedOffset = currentChunkOffsetInChars.coerceIn(0, chunkLength - 1)
+        mapChunkRangeToFullText(
+            chunkIndex = safeChunkIndex,
+            chunks = chunks,
+            chunkStartOffsets = fullTextChunkStartOffsets,
+            range = clampedOffset..clampedOffset,
             fullTextLength = effectiveFullText.length,
         )
     }
@@ -247,6 +270,8 @@ fun ReaderBody(
     val topComfortPx = with(density) { READER_SCROLL_TOP_PADDING.roundToPx().toFloat() }
     val bottomComfortPx = with(density) { READER_SCROLL_BOTTOM_PADDING.roundToPx().toFloat() }
     val searchFocusExtraTopPx = with(density) { READER_SEARCH_FOCUS_EXTRA_TOP_PADDING.roundToPx().toFloat() }
+    val topOverlayPx = topOverlayOcclusionPx.coerceAtLeast(0).toFloat()
+    val bottomOverlayPx = bottomOverlayOcclusionPx.coerceAtLeast(0).toFloat()
     val anchorRange = if (useFullTextLayout) {
         fullTextHighlightRange
     } else {
@@ -256,6 +281,19 @@ fun ReaderBody(
             sentenceRange = highlightedSentenceRange,
         )
     }
+    val followRange = if (useFullTextLayout) {
+        fullTextFollowRange
+    } else {
+        val chunk = chunks.getOrNull(safeChunkIndex)
+        val chunkLength = chunk?.text?.length ?: 0
+        if (chunkLength > 0) {
+            val clampedOffset = currentChunkOffsetInChars.coerceIn(0, chunkLength - 1)
+            clampedOffset..clampedOffset
+        } else {
+            null
+        }
+    }
+    val scrollAnchorRange = followRange ?: anchorRange
 
     Box(
         modifier = modifier
@@ -459,34 +497,39 @@ fun ReaderBody(
         }
     }
 
-    LaunchedEffect(scrollState) {
+    LaunchedEffect(scrollState, topOverlayOcclusionPx, bottomOverlayOcclusionPx) {
         snapshotFlow { scrollState.value }
             .collect { scrollValue ->
-                if (scrollValue != lastObservedScrollValue && !isProgrammaticScroll) {
-                    suppressTransitionUntilMs = SystemClock.elapsedRealtime() + MANUAL_SCROLL_SUPPRESS_MS
-                    manualScrollDetached = true
-                }
+                val manualScrollChange = scrollValue != lastObservedScrollValue && !isProgrammaticScroll
                 lastObservedScrollValue = scrollValue
                 val layout = activeTextLayout ?: return@collect
-                val anchor = anchorRange ?: return@collect
+                val anchor = scrollAnchorRange ?: return@collect
                 val chunkTopInRoot = activeChunkTopInRootPx ?: return@collect
                 val viewportTopInRoot = viewportTopInRootPx ?: return@collect
                 if (viewportSize.height <= 0) return@collect
-                if (lastAnchorRange != anchor) return@collect
+                if (lastAnchorRange != anchor && !manualScrollChange) return@collect
 
-                val maxOffset = layout.layoutInput.text.length.coerceAtLeast(0)
-                val startIndex = anchor.first.coerceIn(0, maxOffset)
-                val endIndex = anchor.last
-                    .coerceAtLeast(anchor.first)
-                    .coerceIn(startIndex, maxOffset)
-                val startBox = layout.getCursorRect(startIndex)
-                val endBox = layout.getCursorRect(endIndex)
-                val startTopInRoot = chunkTopInRoot + startBox.top
-                val endBottomInRoot = chunkTopInRoot + endBox.bottom
-                val visibleTopInRoot = viewportTopInRoot
-                val visibleBottomInRoot = viewportTopInRoot + viewportSize.height.toFloat()
+                val metrics = resolveReaderAnchorMetrics(layout, anchor) ?: return@collect
+                val startTopInRoot = chunkTopInRoot + metrics.startTop
+                val endBottomInRoot = chunkTopInRoot + metrics.endBottom
+                val (visibleTopInRoot, visibleBottomInRoot) = computeReaderVisibleBounds(
+                    viewportTopInRoot = viewportTopInRoot,
+                    viewportHeightPx = viewportSize.height,
+                    topOcclusionPx = topOverlayPx,
+                    bottomOcclusionPx = bottomOverlayPx,
+                )
                 val fullyVisible = startTopInRoot >= visibleTopInRoot &&
                     endBottomInRoot <= (visibleBottomInRoot - bottomComfortPx)
+                if (
+                    manualScrollChange &&
+                    shouldDetachOnManualScroll(
+                        manualScrollDetached = manualScrollDetached,
+                        anchorFullyVisible = fullyVisible,
+                    )
+                ) {
+                    suppressTransitionUntilMs = SystemClock.elapsedRealtime() + MANUAL_SCROLL_SUPPRESS_MS
+                    manualScrollDetached = true
+                }
                 lastAnchorWasFullyVisible = fullyVisible
             }
     }
@@ -499,6 +542,7 @@ fun ReaderBody(
         searchChunkTopInRootPx,
         viewportTopInRootPx,
         viewportSize,
+        topOverlayOcclusionPx,
         scrollState.maxValue,
     ) {
         if (searchFocusTriggerSignal == lastHandledSearchTrigger) return@LaunchedEffect
@@ -512,7 +556,7 @@ fun ReaderBody(
         val safeStart = range.first.coerceIn(0, maxOffset)
         val startBox = layout.getCursorRect(safeStart)
         val startTopInRoot = chunkTopInRoot + startBox.top
-        val desiredAnchorInRoot = viewportTopInRoot + topComfortPx + searchFocusExtraTopPx
+        val desiredAnchorInRoot = viewportTopInRoot + topOverlayPx + topComfortPx + searchFocusExtraTopPx
         val target = computeReaderSearchFocusScrollTarget(
             useFullTextLayout = useFullTextLayout,
             scrollValue = scrollState.value,
@@ -532,31 +576,31 @@ fun ReaderBody(
 
     LaunchedEffect(
         scrollTriggerSignal,
-        anchorRange,
+        scrollAnchorRange,
         activeTextLayout,
         activeChunkTopInRootPx,
         viewportTopInRootPx,
         viewportSize,
+        topOverlayOcclusionPx,
+        bottomOverlayOcclusionPx,
         scrollState.maxValue,
         autoScrollWhileListening,
     ) {
         val layout = activeTextLayout ?: return@LaunchedEffect
-        val anchor = anchorRange ?: return@LaunchedEffect
+        val anchor = scrollAnchorRange ?: return@LaunchedEffect
         val chunkTopInRoot = activeChunkTopInRootPx ?: return@LaunchedEffect
         val viewportTopInRoot = viewportTopInRootPx ?: return@LaunchedEffect
         if (viewportSize.height <= 0) return@LaunchedEffect
 
-        val maxOffset = layout.layoutInput.text.length.coerceAtLeast(0)
-        val safeStart = anchor.first.coerceIn(0, maxOffset)
-        val safeEnd = anchor.last
-            .coerceAtLeast(anchor.first)
-            .coerceIn(safeStart, maxOffset)
-        val startBox = layout.getCursorRect(safeStart)
-        val endBox = layout.getCursorRect(safeEnd)
-        val startTopInRoot = chunkTopInRoot + startBox.top
-        val endBottomInRoot = chunkTopInRoot + endBox.bottom
-        val visibleTopInRoot = viewportTopInRoot
-        val visibleBottomInRoot = viewportTopInRoot + viewportSize.height.toFloat()
+        val metrics = resolveReaderAnchorMetrics(layout, anchor) ?: return@LaunchedEffect
+        val startTopInRoot = chunkTopInRoot + metrics.startTop
+        val endBottomInRoot = chunkTopInRoot + metrics.endBottom
+        val (visibleTopInRoot, visibleBottomInRoot) = computeReaderVisibleBounds(
+            viewportTopInRoot = viewportTopInRoot,
+            viewportHeightPx = viewportSize.height,
+            topOcclusionPx = topOverlayPx,
+            bottomOcclusionPx = bottomOverlayPx,
+        )
         val desiredBottomInRoot = visibleBottomInRoot - bottomComfortPx
         val fullyVisibleNow = startTopInRoot >= visibleTopInRoot && endBottomInRoot <= desiredBottomInRoot
         val desiredTopAnchorInRoot = visibleTopInRoot + topComfortPx
@@ -597,15 +641,27 @@ fun ReaderBody(
             return@LaunchedEffect
         }
         val hiddenByBottom = endBottomInRoot > desiredBottomInRoot
-        val transitionCrossedBottom = anchorChanged &&
-            lastAnchorWasFullyVisible == true &&
-            hiddenByBottom
-        val transitionTrigger = autoScrollWhileListening &&
-            !manualScrollDetached &&
-            nowMs >= suppressTransitionUntilMs &&
-            transitionCrossedBottom &&
-            hiddenByBottom
-        val shouldScroll = transitionTrigger || (externalTrigger && !fullyVisibleNow) || forceReattach
+        val standardFollowTrigger = shouldAutoScrollForStandardPlayback(
+            triggerKind = triggerKind,
+            autoScrollWhileListening = autoScrollWhileListening,
+            manualScrollDetached = manualScrollDetached,
+            hiddenByBottom = hiddenByBottom,
+            nowMs = nowMs,
+            suppressUntilMs = suppressTransitionUntilMs,
+        )
+        val boundaryFollowTrigger = shouldAutoScrollForPlaybackBoundary(
+            autoScrollWhileListening = autoScrollWhileListening,
+            manualScrollDetached = manualScrollDetached,
+            anchorChanged = anchorChanged,
+            hiddenByBottom = hiddenByBottom,
+            nowMs = nowMs,
+            suppressUntilMs = suppressTransitionUntilMs,
+        )
+        val centerIfOffscreenTrigger = shouldCenterForTrigger(
+            triggerKind = triggerKind,
+            anchorOffscreen = !fullyVisibleNow,
+        )
+        val shouldScroll = boundaryFollowTrigger || standardFollowTrigger || centerIfOffscreenTrigger || forceReattach
         if (!shouldScroll) {
             if (externalTrigger) {
                 lastHandledScrollTrigger = scrollTriggerSignal
@@ -622,13 +678,19 @@ fun ReaderBody(
                 val latestLayout = activeTextLayout ?: return
                 val latestChunkTop = activeChunkTopInRootPx ?: return
                 val latestViewportTop = viewportTopInRootPx ?: return
-                val latestMaxOffset = latestLayout.layoutInput.text.length.coerceAtLeast(0)
-                val latestSafeStart = anchor.first.coerceIn(0, latestMaxOffset)
-                val latestStartTopInRoot = latestChunkTop + latestLayout.getCursorRect(latestSafeStart).top
+                val latestMetrics = resolveReaderAnchorMetrics(latestLayout, anchor) ?: return
+                val latestStartTopInRoot = latestChunkTop + latestMetrics.startTop
+                val (latestVisibleTop, latestVisibleBottom) = computeReaderVisibleBounds(
+                    viewportTopInRoot = latestViewportTop,
+                    viewportHeightPx = viewportSize.height,
+                    topOcclusionPx = topOverlayPx,
+                    bottomOcclusionPx = bottomOverlayPx,
+                )
+                val latestVisibleHeight = (latestVisibleBottom - latestVisibleTop).coerceAtLeast(1f)
                 val desiredAnchorInRoot = if (shouldCenterForTrigger(triggerKind, !fullyVisibleNow)) {
-                    latestViewportTop + (viewportSize.height.toFloat() / 2f)
+                    latestVisibleTop + (latestVisibleHeight / 2f)
                 } else {
-                    latestViewportTop + topComfortPx
+                    latestVisibleTop + topComfortPx
                 }
                 val delta = latestStartTopInRoot - desiredAnchorInRoot
                 val target = (scrollState.value + delta).roundToInt().coerceIn(0, scrollState.maxValue)
@@ -808,4 +870,97 @@ internal fun shouldSuppressStandardTriggerDuringCooldown(
     suppressUntilMs: Long,
 ): Boolean {
     return triggerKind == ReaderScrollTriggerKind.STANDARD && nowMs < suppressUntilMs
+}
+
+internal fun computeReaderVisibleBounds(
+    viewportTopInRoot: Float,
+    viewportHeightPx: Int,
+    topOcclusionPx: Float,
+    bottomOcclusionPx: Float,
+): Pair<Float, Float> {
+    val visibleTop = viewportTopInRoot + topOcclusionPx.coerceAtLeast(0f)
+    val rawVisibleBottom = viewportTopInRoot + viewportHeightPx.toFloat() - bottomOcclusionPx.coerceAtLeast(0f)
+    val visibleBottom = if (rawVisibleBottom <= visibleTop) visibleTop + 1f else rawVisibleBottom
+    return visibleTop to visibleBottom
+}
+
+internal data class ReaderAnchorMetrics(
+    val startTop: Float,
+    val endBottom: Float,
+)
+
+internal fun resolveReaderAnchorMetrics(
+    layout: TextLayoutResult,
+    anchorRange: IntRange,
+): ReaderAnchorMetrics? {
+    val text = layout.layoutInput.text.text
+    if (text.isEmpty()) return null
+    val maxIndex = text.lastIndex
+    val safeStart = anchorRange.first.coerceIn(0, maxIndex)
+    val safeEnd = anchorRange.last
+        .coerceAtLeast(anchorRange.first)
+        .coerceIn(safeStart, maxIndex)
+    val glyphStart = findReaderVisibleGlyphOffset(
+        text = text,
+        start = safeStart,
+        end = safeEnd,
+        preferEnd = false,
+    )
+    val glyphEnd = findReaderVisibleGlyphOffset(
+        text = text,
+        start = safeStart,
+        end = safeEnd,
+        preferEnd = true,
+    )
+    val startRect = resolveReaderGlyphRect(
+        layout = layout,
+        preferredOffset = glyphStart,
+        fallbackOffset = safeStart,
+    )
+    val endRect = resolveReaderGlyphRect(
+        layout = layout,
+        preferredOffset = glyphEnd,
+        fallbackOffset = safeEnd,
+    )
+    return ReaderAnchorMetrics(
+        startTop = startRect.top,
+        endBottom = endRect.bottom,
+    )
+}
+
+internal fun findReaderVisibleGlyphOffset(
+    text: String,
+    start: Int,
+    end: Int,
+    preferEnd: Boolean,
+): Int {
+    if (text.isEmpty()) return 0
+    val maxIndex = text.lastIndex
+    val safeStart = start.coerceIn(0, maxIndex)
+    val safeEnd = end.coerceAtLeast(safeStart).coerceIn(safeStart, maxIndex)
+    if (preferEnd) {
+        for (index in safeEnd downTo safeStart) {
+            if (!text[index].isWhitespace()) return index
+        }
+        return safeEnd
+    }
+    for (index in safeStart..safeEnd) {
+        if (!text[index].isWhitespace()) return index
+    }
+    return safeStart
+}
+
+private fun resolveReaderGlyphRect(
+    layout: TextLayoutResult,
+    preferredOffset: Int,
+    fallbackOffset: Int,
+): Rect {
+    val textLength = layout.layoutInput.text.length
+    if (textLength <= 0) return Rect.Zero
+    val maxIndex = textLength - 1
+    val safePreferred = preferredOffset.coerceIn(0, maxIndex)
+    val safeFallback = fallbackOffset.coerceIn(0, maxIndex)
+    val glyphRect = layout.getBoundingBox(safePreferred)
+    if (glyphRect.height > 0f) return glyphRect
+    return layout.getCursorRect(safeFallback.coerceIn(0, textLength))
 }

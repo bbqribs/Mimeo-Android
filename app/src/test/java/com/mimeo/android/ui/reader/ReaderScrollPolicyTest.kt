@@ -54,5 +54,109 @@ class ReaderScrollPolicyTest {
         assertFalse(shouldCenterForTrigger(triggerKind, anchorOffscreen = true))
         assertTrue(nextManualDetachState(currentDetached = true, triggerKind = triggerKind))
     }
+
+    @Test
+    fun manualScroll_doesNotDetachWhenAnchorStillVisible() {
+        assertFalse(
+            shouldDetachOnManualScroll(
+                manualScrollDetached = false,
+                anchorFullyVisible = true,
+            ),
+        )
+    }
+
+    @Test
+    fun manualScroll_detachesWhenAnchorNotFullyVisible() {
+        assertTrue(
+            shouldDetachOnManualScroll(
+                manualScrollDetached = false,
+                anchorFullyVisible = false,
+            ),
+        )
+    }
+
+    @Test
+    fun standardPlayback_autoscrollsWhenHiddenByBottomAndNotDetached() {
+        assertTrue(
+            shouldAutoScrollForStandardPlayback(
+                triggerKind = ReaderScrollTriggerKind.STANDARD,
+                autoScrollWhileListening = true,
+                manualScrollDetached = false,
+                hiddenByBottom = true,
+                nowMs = 5_000L,
+                suppressUntilMs = 4_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun standardPlayback_doesNotAutoscrollWhenNotPastBottom() {
+        assertFalse(
+            shouldAutoScrollForStandardPlayback(
+                triggerKind = ReaderScrollTriggerKind.STANDARD,
+                autoScrollWhileListening = true,
+                manualScrollDetached = false,
+                hiddenByBottom = false,
+                nowMs = 5_000L,
+                suppressUntilMs = 4_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun standardPlayback_doesNotAutoscrollWhenDetached() {
+        assertFalse(
+            shouldAutoScrollForStandardPlayback(
+                triggerKind = ReaderScrollTriggerKind.STANDARD,
+                autoScrollWhileListening = true,
+                manualScrollDetached = true,
+                hiddenByBottom = true,
+                nowMs = 5_000L,
+                suppressUntilMs = 4_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun boundaryFollow_autoscrollsOnAnchorChangeWhenPastBottom() {
+        assertTrue(
+            shouldAutoScrollForPlaybackBoundary(
+                autoScrollWhileListening = true,
+                manualScrollDetached = false,
+                anchorChanged = true,
+                hiddenByBottom = true,
+                nowMs = 5_000L,
+                suppressUntilMs = 4_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun boundaryFollow_doesNotAutoscrollWhenDetached() {
+        assertFalse(
+            shouldAutoScrollForPlaybackBoundary(
+                autoScrollWhileListening = true,
+                manualScrollDetached = true,
+                anchorChanged = true,
+                hiddenByBottom = true,
+                nowMs = 5_000L,
+                suppressUntilMs = 4_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun boundaryFollow_doesNotAutoscrollWithoutAnchorChange() {
+        assertFalse(
+            shouldAutoScrollForPlaybackBoundary(
+                autoScrollWhileListening = true,
+                manualScrollDetached = false,
+                anchorChanged = false,
+                hiddenByBottom = true,
+                nowMs = 5_000L,
+                suppressUntilMs = 4_000L,
+            ),
+        )
+    }
 }
 
