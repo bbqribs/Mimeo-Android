@@ -11,8 +11,10 @@ This contract defines the expected Locus reader scroll behavior during playback 
 7. FF/RW triggers are distinct from standard playback progress triggers.
 8. FF/RW re-centering is allowed only when the target highlight would otherwise be off-screen.
 9. If FF/RW target remains visible, no re-centering scroll should occur.
-10. FF/RW at the start boundary should clamp to article start (no-op past beginning is not allowed).
-11. Search-focus scrolling is independent of playback follow mode and should not silently clear manual detach.
+10. When FF/RW target is off-screen, FF/RW centering takes precedence over boundary/top-follow in that same pass.
+11. Manual detach is temporary: once the active playback highlight becomes fully visible again, follow mode may re-engage.
+12. FF/RW at the start boundary should clamp to article start (no-op past beginning is not allowed).
+13. Search-focus scrolling is independent of playback follow mode and should not silently clear manual detach.
 
 Any intentional change to these rules should be documented in this file and accompanied by test updates.
 

@@ -522,10 +522,8 @@ fun ReaderBody(
                     endBottomInRoot <= (visibleBottomInRoot - bottomComfortPx)
                 if (
                     manualScrollChange &&
-                    shouldDetachOnManualScroll(
-                        manualScrollDetached = manualScrollDetached,
-                        anchorFullyVisible = fullyVisible,
-                    )
+                    autoScrollWhileListening &&
+                    !manualScrollDetached
                 ) {
                     suppressTransitionUntilMs = SystemClock.elapsedRealtime() + MANUAL_SCROLL_SUPPRESS_MS
                     manualScrollDetached = true
@@ -610,6 +608,15 @@ fun ReaderBody(
         val triggerKind = classifyReaderScrollTrigger(scrollTriggerSignal, lastHandledScrollTrigger)
         val externalTrigger = triggerKind != ReaderScrollTriggerKind.NONE
         val forceReattach = triggerKind == ReaderScrollTriggerKind.FORCE_REATTACH
+        if (
+            shouldAutoReattachAfterManualScroll(
+                manualScrollDetached = manualScrollDetached,
+                anchorFullyVisible = fullyVisibleNow,
+                triggerKind = triggerKind,
+            )
+        ) {
+            manualScrollDetached = false
+        }
         val anchorChanged = lastAnchorRange != anchor
         if (
             shouldSuppressStandardTriggerDuringCooldown(
@@ -661,6 +668,12 @@ fun ReaderBody(
             triggerKind = triggerKind,
             anchorOffscreen = !fullyVisibleNow,
         )
+        val useCenteredAnchor = shouldUseCenteredJumpAnchor(
+            centerIfOffscreenTrigger = centerIfOffscreenTrigger,
+            standardFollowTrigger = standardFollowTrigger,
+            boundaryFollowTrigger = boundaryFollowTrigger,
+            forceReattach = forceReattach,
+        )
         val shouldScroll = boundaryFollowTrigger || standardFollowTrigger || centerIfOffscreenTrigger || forceReattach
         if (!shouldScroll) {
             if (externalTrigger) {
@@ -687,7 +700,7 @@ fun ReaderBody(
                     bottomOcclusionPx = bottomOverlayPx,
                 )
                 val latestVisibleHeight = (latestVisibleBottom - latestVisibleTop).coerceAtLeast(1f)
-                val desiredAnchorInRoot = if (shouldCenterForTrigger(triggerKind, !fullyVisibleNow)) {
+                val desiredAnchorInRoot = if (useCenteredAnchor) {
                     latestVisibleTop + (latestVisibleHeight / 2f)
                 } else {
                     latestVisibleTop + topComfortPx

@@ -76,6 +76,28 @@ class ReaderScrollPolicyTest {
     }
 
     @Test
+    fun manualScrollDetached_autoReattachesWhenAnchorVisibleAgain() {
+        assertTrue(
+            shouldAutoReattachAfterManualScroll(
+                manualScrollDetached = true,
+                anchorFullyVisible = true,
+                triggerKind = ReaderScrollTriggerKind.NONE,
+            ),
+        )
+    }
+
+    @Test
+    fun manualScrollDetached_doesNotAutoReattachWhenAnchorStillOffscreen() {
+        assertFalse(
+            shouldAutoReattachAfterManualScroll(
+                manualScrollDetached = true,
+                anchorFullyVisible = false,
+                triggerKind = ReaderScrollTriggerKind.NONE,
+            ),
+        )
+    }
+
+    @Test
     fun standardPlayback_autoscrollsWhenHiddenByBottomAndNotDetached() {
         assertTrue(
             shouldAutoScrollForStandardPlayback(
@@ -155,6 +177,46 @@ class ReaderScrollPolicyTest {
                 hiddenByBottom = true,
                 nowMs = 5_000L,
                 suppressUntilMs = 4_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun centeredAnchor_usedOnlyForPureCenterTrigger() {
+        assertTrue(
+            shouldUseCenteredJumpAnchor(
+                centerIfOffscreenTrigger = true,
+                standardFollowTrigger = false,
+                boundaryFollowTrigger = false,
+                forceReattach = false,
+            ),
+        )
+    }
+
+    @Test
+    fun centeredAnchor_stillUsedWhenStandardOrBoundaryAlsoActive_butNotForceReattach() {
+        assertTrue(
+            shouldUseCenteredJumpAnchor(
+                centerIfOffscreenTrigger = true,
+                standardFollowTrigger = true,
+                boundaryFollowTrigger = false,
+                forceReattach = false,
+            ),
+        )
+        assertTrue(
+            shouldUseCenteredJumpAnchor(
+                centerIfOffscreenTrigger = true,
+                standardFollowTrigger = false,
+                boundaryFollowTrigger = true,
+                forceReattach = false,
+            ),
+        )
+        assertFalse(
+            shouldUseCenteredJumpAnchor(
+                centerIfOffscreenTrigger = true,
+                standardFollowTrigger = false,
+                boundaryFollowTrigger = false,
+                forceReattach = true,
             ),
         )
     }

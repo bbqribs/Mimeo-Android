@@ -148,5 +148,36 @@ class PlaybackScrollContractGuardTest {
             ),
         )
     }
+
+    @Test
+    fun manualDetach_autoReattachesWhenAnchorBecomesVisibleAgain() {
+        assertTrue(
+            shouldAutoReattachAfterManualScroll(
+                manualScrollDetached = true,
+                anchorFullyVisible = true,
+                triggerKind = ReaderScrollTriggerKind.NONE,
+            ),
+        )
+    }
+
+    @Test
+    fun ffRwCentering_winsOverBoundaryTopFollow_whenOffscreen() {
+        assertTrue(
+            shouldUseCenteredJumpAnchor(
+                centerIfOffscreenTrigger = true,
+                standardFollowTrigger = false,
+                boundaryFollowTrigger = true,
+                forceReattach = false,
+            ),
+        )
+        assertTrue(
+            shouldUseCenteredJumpAnchor(
+                centerIfOffscreenTrigger = true,
+                standardFollowTrigger = true,
+                boundaryFollowTrigger = false,
+                forceReattach = false,
+            ),
+        )
+    }
 }
 

@@ -43,6 +43,18 @@ internal fun shouldDetachOnManualScroll(
     anchorFullyVisible: Boolean,
 ): Boolean = !manualScrollDetached && !anchorFullyVisible
 
+internal fun shouldAutoReattachAfterManualScroll(
+    manualScrollDetached: Boolean,
+    anchorFullyVisible: Boolean,
+    triggerKind: ReaderScrollTriggerKind,
+): Boolean {
+    if (!manualScrollDetached) return false
+    if (!anchorFullyVisible) return false
+    // Keep FF/RW center-if-offscreen semantics independent from manual-scroll follow logic.
+    if (triggerKind == ReaderScrollTriggerKind.CENTER_IF_OFFSCREEN) return false
+    return true
+}
+
 internal fun shouldAutoScrollForStandardPlayback(
     triggerKind: ReaderScrollTriggerKind,
     autoScrollWhileListening: Boolean,
@@ -67,5 +79,19 @@ internal fun shouldAutoScrollForPlaybackBoundary(
     if (!autoScrollWhileListening || manualScrollDetached) return false
     if (!anchorChanged || !hiddenByBottom) return false
     return nowMs >= suppressUntilMs
+}
+
+internal fun shouldUseCenteredJumpAnchor(
+    centerIfOffscreenTrigger: Boolean,
+    standardFollowTrigger: Boolean,
+    boundaryFollowTrigger: Boolean,
+    forceReattach: Boolean,
+): Boolean {
+    if (!centerIfOffscreenTrigger) return false
+    // FF/RW center-if-offscreen should win over boundary/top-follow in that same pass.
+    // Standard/boundary flags can also evaluate true for the same frame when the anchor is
+    // near/beyond bottom, but that must not downgrade a user-initiated FF/RW center action.
+    if (forceReattach) return false
+    return true
 }
 

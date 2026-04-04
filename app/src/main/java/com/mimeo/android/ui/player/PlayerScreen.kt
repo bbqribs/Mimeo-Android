@@ -1047,7 +1047,9 @@ fun PlayerScreen(
             viewerPayload = null
             viewerPayloadItemId = -1
             viewerChunks = emptyList()
-            pendingLocusTabPlaybackScrollAfterReturn = tapAction.triggerScrollToPlaybackAfterReturn
+            val forceReturnToPlaybackPosition = isSpeaking || isAutoPlaying
+            pendingLocusTabPlaybackScrollAfterReturn =
+                tapAction.triggerScrollToPlaybackAfterReturn || forceReturnToPlaybackPosition
             onOpenItem(currentItemId)
             return@LaunchedEffect
         }
