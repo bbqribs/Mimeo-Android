@@ -220,6 +220,7 @@ class PlaybackObservabilityTest {
     @Test
     fun locusTitle_showsPlaybackOwnerDuringPreviewWhenOwnerExists() {
         val title = resolveLocusActionBarTitle(
+            playbackActive = true,
             playbackOwnerItemId = 42,
             playbackOwnerTitle = "Now Playing A",
             playbackOwnerUrl = "",
@@ -234,12 +235,28 @@ class PlaybackObservabilityTest {
     @Test
     fun locusTitle_allowsPreviewOverrideWhenNoPlaybackOwner() {
         val title = resolveLocusActionBarTitle(
+            playbackActive = false,
             playbackOwnerItemId = -1,
             playbackOwnerTitle = "",
             playbackOwnerUrl = "",
             previewModeActive = true,
             previewTitle = "Preview B",
             fallbackItemId = 99,
+        )
+
+        assertEquals("Preview B", title)
+    }
+
+    @Test
+    fun locusTitle_allowsPreviewOverrideWhenPlaybackInactiveEvenIfOwnerExists() {
+        val title = resolveLocusActionBarTitle(
+            playbackActive = false,
+            playbackOwnerItemId = 42,
+            playbackOwnerTitle = "Now Playing A",
+            playbackOwnerUrl = "",
+            previewModeActive = true,
+            previewTitle = "Preview B",
+            fallbackItemId = 42,
         )
 
         assertEquals("Preview B", title)

@@ -400,6 +400,7 @@ internal fun resolveLocusPlaybackOwnerItemId(
 }
 
 internal fun resolveLocusActionBarTitle(
+    playbackActive: Boolean,
     playbackOwnerItemId: Int,
     playbackOwnerTitle: String,
     playbackOwnerUrl: String,
@@ -407,7 +408,7 @@ internal fun resolveLocusActionBarTitle(
     previewTitle: String,
     fallbackItemId: Int,
 ): String {
-    if (playbackOwnerItemId > 0) {
+    if (playbackActive && playbackOwnerItemId > 0) {
         return playbackOwnerTitle
             .ifBlank { playbackOwnerUrl }
             .ifBlank { "Item $playbackOwnerItemId" }
@@ -1386,6 +1387,7 @@ fun PlayerScreen(
     val nowPlayingUrl = queueItemsById[playbackOwnerItemId]?.url.orEmpty()
         .ifBlank { nowPlayingSession?.currentItem?.url.orEmpty() }
     val locusActionBarTitle = resolveLocusActionBarTitle(
+        playbackActive = isSpeaking || isAutoPlaying || autoPlayAfterLoad,
         playbackOwnerItemId = playbackOwnerItemId,
         playbackOwnerTitle = nowPlayingTitle,
         playbackOwnerUrl = nowPlayingUrl,

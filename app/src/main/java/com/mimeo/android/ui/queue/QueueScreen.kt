@@ -234,25 +234,14 @@ private enum class QueueSortOption(val label: String) {
 internal fun shouldStartNewSessionOnQueueOpen(
     tappedItemId: Int,
     sessionCurrentItemId: Int,
-    sessionCurrentProgressPercent: Int?,
-    sessionCurrentChunkIndex: Int,
-    sessionCurrentOffsetInChunkChars: Int,
-    playbackHasStartedCurrentItem: Boolean,
     playbackActive: Boolean,
 ): Boolean {
     if (tappedItemId <= 0) return false
     if (sessionCurrentItemId <= 0) return true
     if (tappedItemId == sessionCurrentItemId) return true
-    val sessionIndicatesStartedPlayback =
-        (sessionCurrentProgressPercent ?: 0) > 0 ||
-            sessionCurrentChunkIndex > 0 ||
-            sessionCurrentOffsetInChunkChars > 0
-    val preserveExistingOwner =
-        playbackHasStartedCurrentItem ||
-            playbackActive ||
-            sessionIndicatesStartedPlayback
-    // When another item already owns playback context (including paused/started),
-    // opening a row should preview it in Locus without stealing session ownership.
+    val preserveExistingOwner = playbackActive
+    // Preserve playback owner only while playback is actively running. If playback is
+    // paused/inactive, tapping a row should retarget ownership to that opened item.
     return !preserveExistingOwner
 }
 
@@ -1249,10 +1238,6 @@ fun QueueScreen(
                                         shouldStartNewSessionOnQueueOpen(
                                             tappedItemId = item.itemId,
                                             sessionCurrentItemId = nowPlayingSession?.currentItem?.itemId ?: -1,
-                                            sessionCurrentProgressPercent = nowPlayingSession?.currentItem?.lastReadPercent,
-                                            sessionCurrentChunkIndex = nowPlayingSession?.currentItem?.chunkIndex ?: 0,
-                                            sessionCurrentOffsetInChunkChars = nowPlayingSession?.currentItem?.offsetInChunkChars ?: 0,
-                                            playbackHasStartedCurrentItem = playbackState.hasStartedPlaybackForCurrentItem,
                                             playbackActive = playbackState.isSpeaking || playbackState.isAutoPlaying,
                                         )
                                     ) {

@@ -12,10 +12,6 @@ class QueueOpenSessionOwnershipTest {
             shouldStartNewSessionOnQueueOpen(
                 tappedItemId = 42,
                 sessionCurrentItemId = -1,
-                sessionCurrentProgressPercent = null,
-                sessionCurrentChunkIndex = 0,
-                sessionCurrentOffsetInChunkChars = 0,
-                playbackHasStartedCurrentItem = false,
                 playbackActive = false,
             ),
         )
@@ -27,11 +23,7 @@ class QueueOpenSessionOwnershipTest {
             shouldStartNewSessionOnQueueOpen(
                 tappedItemId = 99,
                 sessionCurrentItemId = 42,
-                sessionCurrentProgressPercent = 12,
-                sessionCurrentChunkIndex = 1,
-                sessionCurrentOffsetInChunkChars = 5,
-                playbackHasStartedCurrentItem = true,
-                playbackActive = false,
+                playbackActive = true,
             ),
         )
     }
@@ -42,25 +34,17 @@ class QueueOpenSessionOwnershipTest {
             shouldStartNewSessionOnQueueOpen(
                 tappedItemId = 42,
                 sessionCurrentItemId = 42,
-                sessionCurrentProgressPercent = 12,
-                sessionCurrentChunkIndex = 1,
-                sessionCurrentOffsetInChunkChars = 5,
-                playbackHasStartedCurrentItem = true,
                 playbackActive = false,
             ),
         )
     }
 
     @Test
-    fun preservesSessionOwnerWhenPausedContextIsRestoredFromSession() {
-        assertFalse(
+    fun retargetsSessionOwnerWhenPlaybackIsPaused() {
+        assertTrue(
             shouldStartNewSessionOnQueueOpen(
                 tappedItemId = 88,
                 sessionCurrentItemId = 42,
-                sessionCurrentProgressPercent = 23,
-                sessionCurrentChunkIndex = 0,
-                sessionCurrentOffsetInChunkChars = 0,
-                playbackHasStartedCurrentItem = false,
                 playbackActive = false,
             ),
         )
