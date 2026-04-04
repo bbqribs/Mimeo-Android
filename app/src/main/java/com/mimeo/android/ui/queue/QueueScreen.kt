@@ -256,6 +256,32 @@ internal fun shouldStartNewSessionOnQueueOpen(
     return !preserveExistingOwner
 }
 
+internal data class QueueRowStateMarkers(
+    val playingItemId: Int?,
+    val readyResumeItemId: Int?,
+)
+
+internal fun resolveQueueRowStateMarkers(
+    engineCurrentItemId: Int,
+    sessionCurrentItemId: Int?,
+    isSpeaking: Boolean,
+    isAutoPlaying: Boolean,
+    autoPlayAfterLoad: Boolean,
+): QueueRowStateMarkers {
+    val ownerItemId = when {
+        engineCurrentItemId > 0 -> engineCurrentItemId
+        (sessionCurrentItemId ?: -1) > 0 -> sessionCurrentItemId
+        else -> null
+    }
+    val playbackActive = isSpeaking || isAutoPlaying || autoPlayAfterLoad
+    val playingItemId = if (playbackActive) ownerItemId else null
+    val readyResumeItemId = if (!playbackActive) ownerItemId else null
+    return QueueRowStateMarkers(
+        playingItemId = playingItemId,
+        readyResumeItemId = readyResumeItemId,
+    )
+}
+
 internal enum class PendingOutcomeSimulation {
     CACHED,
     NO_ACTIVE_CONTENT,
@@ -454,9 +480,23 @@ fun QueueScreen(
             QueueSortOption.TITLE_AZ -> filteredItems.sortedBy { (it.title ?: it.url).lowercase() }
         }
     }
-    val activePlayingItemId =
-        nowPlayingSession?.currentItem?.itemId
-            ?: playbackState.currentItemId.takeIf { it > 0 }
+    val rowStateMarkers = remember(
+        playbackState.currentItemId,
+        nowPlayingSession?.currentItem?.itemId,
+        playbackState.isSpeaking,
+        playbackState.isAutoPlaying,
+        playbackState.autoPlayAfterLoad,
+    ) {
+        resolveQueueRowStateMarkers(
+            engineCurrentItemId = playbackState.currentItemId,
+            sessionCurrentItemId = nowPlayingSession?.currentItem?.itemId,
+            isSpeaking = playbackState.isSpeaking,
+            isAutoPlaying = playbackState.isAutoPlaying,
+            autoPlayAfterLoad = playbackState.autoPlayAfterLoad,
+        )
+    }
+    val activePlayingItemId = rowStateMarkers.playingItemId
+    val readyResumeItemId = rowStateMarkers.readyResumeItemId
     val visibleProjectedPendingItems = remember(selectedFilter, pendingManualSaves, searchQuery) {
         when (selectedFilter) {
             QueueFilterChip.PENDING -> pendingManualSaves.filter { pending ->
@@ -1194,6 +1234,7 @@ fun QueueScreen(
                                 noActiveContent = noActiveContentItemIds.contains(item.itemId),
                                 failedProcessing = hasFailedPendingProjectionStatus(item),
                                 isActivePlayingItem = item.itemId == activePlayingItemId,
+                                isReadyResumeItem = item.itemId == readyResumeItemId,
                                 showQueueCaptureMetadata = settings.showQueueCaptureMetadata,
                                 onOpenPlayer = {
                                     Log.d(
@@ -2339,6 +2380,7 @@ private fun QueueItemCard(
     noActiveContent: Boolean,
     failedProcessing: Boolean,
     isActivePlayingItem: Boolean,
+    isReadyResumeItem: Boolean,
     showQueueCaptureMetadata: Boolean,
     onOpenPlayer: () -> Unit,
     onDownload: () -> Unit,
@@ -2550,6 +2592,13 @@ private fun QueueItemCard(
                             painter = painterResource(id = R.drawable.msr_play_arrow_24),
                             contentDescription = "Currently playing",
                             tint = activeIndicatorColor,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    } else if (isReadyResumeItem) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.msr_play_arrow_24),
+                            contentDescription = "Ready to resume",
+                            tint = activeIndicatorColor.copy(alpha = 0.66f),
                             modifier = Modifier.size(16.dp),
                         )
                     }

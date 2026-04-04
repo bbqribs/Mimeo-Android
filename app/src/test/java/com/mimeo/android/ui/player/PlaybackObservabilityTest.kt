@@ -193,4 +193,55 @@ class PlaybackObservabilityTest {
         assertTrue(action.triggerScrollToPlaybackImmediately)
         assertEquals(false, action.triggerScrollToPlaybackAfterReturn)
     }
+
+    @Test
+    fun locusPlaybackOwner_prefersEngineThenSessionThenFallback() {
+        val fromEngine = resolveLocusPlaybackOwnerItemId(
+            engineCurrentItemId = 88,
+            sessionCurrentItemId = 77,
+            fallbackItemId = 66,
+        )
+        val fromSession = resolveLocusPlaybackOwnerItemId(
+            engineCurrentItemId = -1,
+            sessionCurrentItemId = 77,
+            fallbackItemId = 66,
+        )
+        val fromFallback = resolveLocusPlaybackOwnerItemId(
+            engineCurrentItemId = -1,
+            sessionCurrentItemId = null,
+            fallbackItemId = 66,
+        )
+
+        assertEquals(88, fromEngine)
+        assertEquals(77, fromSession)
+        assertEquals(66, fromFallback)
+    }
+
+    @Test
+    fun locusTitle_showsPlaybackOwnerDuringPreviewWhenOwnerExists() {
+        val title = resolveLocusActionBarTitle(
+            playbackOwnerItemId = 42,
+            playbackOwnerTitle = "Now Playing A",
+            playbackOwnerUrl = "",
+            previewModeActive = true,
+            previewTitle = "Preview B",
+            fallbackItemId = 42,
+        )
+
+        assertEquals("Now Playing A", title)
+    }
+
+    @Test
+    fun locusTitle_allowsPreviewOverrideWhenNoPlaybackOwner() {
+        val title = resolveLocusActionBarTitle(
+            playbackOwnerItemId = -1,
+            playbackOwnerTitle = "",
+            playbackOwnerUrl = "",
+            previewModeActive = true,
+            previewTitle = "Preview B",
+            fallbackItemId = 99,
+        )
+
+        assertEquals("Preview B", title)
+    }
 }

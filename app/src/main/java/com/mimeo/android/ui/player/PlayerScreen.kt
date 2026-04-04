@@ -388,6 +388,38 @@ internal fun resolveLocusTabTapAction(
     )
 }
 
+internal fun resolveLocusPlaybackOwnerItemId(
+    engineCurrentItemId: Int,
+    sessionCurrentItemId: Int?,
+    fallbackItemId: Int,
+): Int {
+    if (engineCurrentItemId > 0) return engineCurrentItemId
+    val sessionId = sessionCurrentItemId ?: -1
+    if (sessionId > 0) return sessionId
+    return fallbackItemId
+}
+
+internal fun resolveLocusActionBarTitle(
+    playbackOwnerItemId: Int,
+    playbackOwnerTitle: String,
+    playbackOwnerUrl: String,
+    previewModeActive: Boolean,
+    previewTitle: String,
+    fallbackItemId: Int,
+): String {
+    if (playbackOwnerItemId > 0) {
+        return playbackOwnerTitle
+            .ifBlank { playbackOwnerUrl }
+            .ifBlank { "Item $playbackOwnerItemId" }
+    }
+    if (previewModeActive) {
+        return previewTitle.ifBlank { "Item $fallbackItemId" }
+    }
+    return playbackOwnerTitle
+        .ifBlank { previewTitle }
+        .ifBlank { "Item $fallbackItemId" }
+}
+
 internal fun shouldSpeakTitleBeforeBody(
     enabled: Boolean,
     title: String?,
@@ -749,6 +781,12 @@ fun PlayerScreen(
                 )
     // Route item IDs can temporarily lag behind session ownership during auto-continue.
     // Preview mode should only be driven by an explicit viewer override, not raw route mismatch.
+    val sessionCurrentItemId = nowPlayingSession?.currentItem?.itemId
+    val playbackOwnerItemId = resolveLocusPlaybackOwnerItemId(
+        engineCurrentItemId = engineState.currentItemId,
+        sessionCurrentItemId = sessionCurrentItemId,
+        fallbackItemId = currentItemId,
+    )
     val previewItemId = viewerOverrideItemId.takeIf { it > 0 }
     val previewModeActive = previewItemId != null
     val readerScrollItemId = previewItemId ?: currentItemId
@@ -1317,7 +1355,7 @@ fun PlayerScreen(
     }
     val capturePresentation = locusCapturePresentation(displayPayload)
     val queuedPreviewTitle = queueItemsById[locusItemId]?.title.orEmpty()
-    val queuedNowPlayingTitle = queueItemsById[currentItemId]?.title.orEmpty()
+    val queuedNowPlayingTitle = queueItemsById[playbackOwnerItemId]?.title.orEmpty()
     val isLocusItemFavorited = queueItemsById[locusItemId]?.isFavorited == true
     val isLocusItemArchived = archivedItemIdSet.contains(locusActionItemId)
     val locusActionItem = queueItemsById[locusActionItemId]
@@ -1332,17 +1370,29 @@ fun PlayerScreen(
         else -> capturePresentation.title.ifBlank { displayPayload?.url.orEmpty() }
     }
     val nowPlayingTitle = queuedNowPlayingTitle
-        .ifBlank { textPayload?.title.orEmpty() }
-        .ifBlank { textPayload?.sourceLabel.orEmpty() }
-        .ifBlank { queueItemsById[currentItemId]?.url.orEmpty() }
-        .ifBlank { if (currentItemId > 0) "Item $currentItemId" else "" }
-    val locusActionBarTitle = if (nowPlayingTitle.isNotBlank()) {
-        nowPlayingTitle
-    } else if (currentTitle.isNotBlank()) {
-        currentTitle
-    } else {
-        "Item $locusItemId"
-    }
+        .ifBlank {
+            textPayload
+                ?.takeIf { it.itemId == playbackOwnerItemId }
+                ?.title
+                .orEmpty()
+        }
+        .ifBlank { nowPlayingSession?.currentItem?.title.orEmpty() }
+        .ifBlank {
+            textPayload
+                ?.takeIf { it.itemId == playbackOwnerItemId }
+                ?.sourceLabel
+                .orEmpty()
+        }
+    val nowPlayingUrl = queueItemsById[playbackOwnerItemId]?.url.orEmpty()
+        .ifBlank { nowPlayingSession?.currentItem?.url.orEmpty() }
+    val locusActionBarTitle = resolveLocusActionBarTitle(
+        playbackOwnerItemId = playbackOwnerItemId,
+        playbackOwnerTitle = nowPlayingTitle,
+        playbackOwnerUrl = nowPlayingUrl,
+        previewModeActive = previewModeActive,
+        previewTitle = currentTitle,
+        fallbackItemId = locusItemId,
+    )
     val currentSourceLabel = capturePresentation.sourceLabel
     val reportContext = remember(locusActionItemId, displayPayload, locusActionItem, capturePresentation) {
         LocusProblemReportContext(
