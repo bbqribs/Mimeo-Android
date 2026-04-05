@@ -261,4 +261,30 @@ class PlaybackObservabilityTest {
 
         assertEquals("Preview B", title)
     }
+
+    @Test
+    fun preservePlaybackOwnerForPreviewOpen_whenPlaybackActiveAndTargetDiffers() {
+        val shouldPreserve = shouldPreservePlaybackOwnerForPreviewOpen(
+            targetItemId = 20,
+            currentItemId = 10,
+            playbackActive = true,
+        )
+        assertTrue(shouldPreserve)
+    }
+
+    @Test
+    fun preservePlaybackOwnerForPreviewOpen_falseWhenPlaybackInactiveOrSameItem() {
+        val inactive = shouldPreservePlaybackOwnerForPreviewOpen(
+            targetItemId = 20,
+            currentItemId = 10,
+            playbackActive = false,
+        )
+        val sameItem = shouldPreservePlaybackOwnerForPreviewOpen(
+            targetItemId = 10,
+            currentItemId = 10,
+            playbackActive = true,
+        )
+        assertEquals(false, inactive)
+        assertEquals(false, sameItem)
+    }
 }

@@ -421,6 +421,16 @@ internal fun resolveLocusActionBarTitle(
         .ifBlank { "Item $fallbackItemId" }
 }
 
+internal fun shouldPreservePlaybackOwnerForPreviewOpen(
+    targetItemId: Int,
+    currentItemId: Int,
+    playbackActive: Boolean,
+): Boolean {
+    if (targetItemId <= 0 || currentItemId <= 0) return false
+    if (targetItemId == currentItemId) return false
+    return playbackActive
+}
+
 internal fun shouldSpeakTitleBeforeBody(
     enabled: Boolean,
     title: String?,
@@ -989,11 +999,51 @@ fun PlayerScreen(
             }
             return@LaunchedEffect
         }
+        val playbackActiveNow = isSpeaking || isAutoPlaying || autoPlayAfterLoad
+        val preserveOwnerForPreviewOpen = shouldPreservePlaybackOwnerForPreviewOpen(
+            targetItemId = target,
+            currentItemId = currentItemId,
+            playbackActive = playbackActiveNow,
+        )
         if (hasLockedPlaybackOwner) {
             continuationLog(
                 "requestedItemEffect previewOnly target=$target current=$currentItemId speaking=$isSpeaking auto=$isAutoPlaying",
             )
             // Keep the currently playing reader surface stable while preview content loads.
+            preserveVisibleContentOnReload = true
+            bodyRevealReady = true
+            isLoading = false
+            viewerOverrideItemId = target
+            viewerOverrideTitle = queueItemsById[target]?.title.orEmpty()
+            viewerPayload = null
+            viewerPayloadItemId = -1
+            viewerChunks = emptyList()
+            val preferLocalPreviewLoad = queueOffline || vm.isItemCached(target)
+            val previewLoadTag = if (preferLocalPreviewLoad) {
+                "locus_preview_cache_first"
+            } else {
+                "locus_preview_network_first"
+            }
+            vm.fetchItemText(
+                target,
+                preferLocal = preferLocalPreviewLoad,
+                loadPolicyTag = previewLoadTag,
+            )
+                .onSuccess { loaded ->
+                    viewerPayload = loaded.payload
+                    viewerPayloadItemId = target
+                    viewerChunks = buildPlaybackChunks(loaded.payload)
+                }
+                .onFailure { err ->
+                    if (err is CancellationException) return@onFailure
+                    uiMessage = err.message ?: "Failed to load item"
+                }
+            return@LaunchedEffect
+        }
+        if (preserveOwnerForPreviewOpen) {
+            continuationLog(
+                "requestedItemEffect preserveOwnerPreview target=$target current=$currentItemId speaking=$isSpeaking auto=$isAutoPlaying autoContinue=$autoPlayAfterLoad",
+            )
             preserveVisibleContentOnReload = true
             bodyRevealReady = true
             isLoading = false
