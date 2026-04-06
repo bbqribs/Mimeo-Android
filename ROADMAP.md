@@ -66,6 +66,7 @@
 - [x] Cached-item invalidation narrowing shipped (bounded): replaced full cached-id table emission observer with scoped latest-write + count-change reconciliation so cache writes update only impacted visible items while still handling delete/eviction shrink paths safely.
 - [x] App-shell recomposition pressure follow-up shipped (bounded): removed root collection of high-churn playback engine state in `MimeoApp`, shifted playback-in-progress checks to local usage points, and preserved existing navigation/playback behavior without broad state architecture refactors.
 - [x] Playback-owner state correctness pass shipped: Locus title ownership now follows true playback owner (engine/session) with bounded preview override rules, and Up Next row markers now distinguish actively playing vs ready-to-resume owner states.
+- [x] In-article link preservation (Android v2 slice) shipped: reader/Locus now render preserved HTTP/HTTPS in-article links as clickable spans using backend `content_blocks.links` metadata with safe fallback behavior when metadata is absent/invalid, and taps open externally via Android `Intent.ACTION_VIEW`.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
@@ -105,7 +106,7 @@
 1. [ ] Search within Locus: in-article text search with next/previous result navigation, visible match count, and preservation of active playback highlight behavior.
 2. [x] Scroll-level persistence across tabs (Locus rules): per-item reader scroll offsets now persist/restore; Locus-tab return from preview now reattaches to now-playing item using a Settings toggle for either last reader position (default) or live playback pointer.
 3. [ ] Reader/Locus paragraph formatting fidelity: preserve paragraph breaks/spacing consistently between fetched text and rendered Locus body, including edge cases from manual/excerpt saves.
-4. [ ] Reader/Locus clickable links: render links as tappable in-body spans with safe external-open behavior, while preserving current selection and playback UX.
+4. [x] Reader/Locus clickable links: render links as tappable in-body spans with safe external-open behavior, while preserving current selection and playback UX.
 5. [ ] Locus bottom-gap transition issue: remove the intermittent bottom-gap/blank-space artifact during Locus open/close and mode transitions.
 6. [ ] Progress/player scroll jerk during drag: smooth seek-drag + scroll coupling so seek interaction does not cause abrupt jump/jitter in reader scroll position.
 7. [ ] Collapsible pending-item section in Up Next: make pending rows collapsible/expandable with persisted collapsed state to reduce queue noise without hiding failures.

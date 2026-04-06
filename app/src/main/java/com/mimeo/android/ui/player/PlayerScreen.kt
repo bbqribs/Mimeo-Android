@@ -131,6 +131,7 @@ import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import com.mimeo.android.ui.reader.ReaderBody
+import com.mimeo.android.ui.reader.extractReaderPreservedLinks
 import com.mimeo.android.ui.reader.segmentSentences
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -1363,6 +1364,19 @@ fun PlayerScreen(
         previewModeActive -> emptyList()
         else -> chunks
     }
+    val displayReaderText = remember(displayPayload?.text, displayChunks) {
+        if (displayChunks.isNotEmpty()) {
+            displayChunks.joinToString(separator = "\n\n") { it.text }
+        } else {
+            displayPayload?.text.orEmpty()
+        }
+    }
+    val preservedReaderLinks = remember(displayReaderText, displayPayload?.contentBlocks) {
+        extractReaderPreservedLinks(
+            text = displayReaderText,
+            contentBlocks = displayPayload?.contentBlocks,
+        )
+    }
     var locusSearchActive by rememberSaveable(locusItemId) { mutableStateOf(false) }
     var locusSearchQuery by rememberSaveable(locusItemId) { mutableStateOf("") }
     var locusSearchMatchIndex by rememberSaveable(locusItemId) { mutableIntStateOf(-1) }
@@ -2065,6 +2079,7 @@ fun PlayerScreen(
                             ReaderBody(
                                 fullText = displayPayload?.text,
                                 chunks = displayChunks,
+                                preservedLinks = preservedReaderLinks,
                                 currentChunkIndex = if (previewModeActive) 0 else safePosition.chunkIndex,
                                 currentChunkOffsetInChars = if (previewModeActive) 0 else safePosition.offsetInChunkChars,
                                 activeRangeInChunk = if (previewModeActive) null else activeChunkRange,

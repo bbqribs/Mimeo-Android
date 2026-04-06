@@ -144,6 +144,7 @@ data class ItemTextResponse(
     val paragraphs: List<String>? = null,
     @SerialName("total_chars") val totalChars: Int? = null,
     val chunks: List<ItemTextChunk>? = null,
+    @SerialName("content_blocks") val contentBlocks: List<ItemTextContentBlock>? = null,
 )
 
 @Serializable
@@ -152,6 +153,21 @@ data class ItemTextChunk(
     @SerialName("start_char") val startChar: Int,
     @SerialName("end_char") val endChar: Int,
     val text: String,
+)
+
+@Serializable
+data class ItemTextContentBlock(
+    val type: String,
+    val text: String? = null,
+    val links: List<ItemTextContentLink>? = null,
+)
+
+@Serializable
+data class ItemTextContentLink(
+    val text: String? = null,
+    val href: String? = null,
+    val start: Int? = null,
+    val end: Int? = null,
 )
 
 @Serializable

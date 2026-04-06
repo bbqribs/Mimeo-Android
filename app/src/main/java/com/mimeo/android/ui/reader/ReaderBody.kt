@@ -1,5 +1,8 @@
 package com.mimeo.android.ui.reader
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
 import android.os.SystemClock
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -42,7 +45,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalContext
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.ReaderFontOption
@@ -61,6 +64,7 @@ private val READER_LINK_BLUE = Color(0xFF64B5F6)
 fun ReaderBody(
     fullText: String?,
     chunks: List<PlaybackChunk>,
+    preservedLinks: List<ReaderLinkRange> = emptyList(),
     currentChunkIndex: Int,
     currentChunkOffsetInChars: Int,
     activeRangeInChunk: IntRange?,
@@ -83,7 +87,7 @@ fun ReaderBody(
     onNonLinkTap: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
     val paragraphSpacingDp = when (paragraphSpacing) {
         ParagraphSpacingOption.SMALL -> 12.dp
         ParagraphSpacingOption.MEDIUM -> 18.dp
@@ -216,8 +220,26 @@ fun ReaderBody(
     } else {
         searchFocusRangeInChunk
     }
-    val fullTextLinks = remember(effectiveFullText) {
-        extractReaderHttpLinks(effectiveFullText)
+    val fullTextLinks = remember(effectiveFullText, preservedLinks) {
+        if (preservedLinks.isNotEmpty()) {
+            preservedLinks
+                .mapNotNull { link ->
+                    val safeStart = link.start.coerceIn(0, effectiveFullText.length)
+                    val safeEnd = link.endExclusive.coerceIn(safeStart, effectiveFullText.length)
+                    if (safeStart < safeEnd) {
+                        ReaderLinkRange(
+                            start = safeStart,
+                            endExclusive = safeEnd,
+                            url = link.url,
+                        )
+                    } else {
+                        null
+                    }
+                }
+                .distinctBy { Triple(it.start, it.endExclusive, it.url) }
+        } else {
+            extractReaderHttpLinks(effectiveFullText)
+        }
     }
     val fullTextBaseAnnotated = remember(
         useFullTextLayout,
@@ -329,7 +351,18 @@ fun ReaderBody(
                                 end = offset,
                             ).firstOrNull()?.item
                             if (!url.isNullOrBlank()) {
-                                val opened = runCatching { uriHandler.openUri(url) }.isSuccess
+                                val opened = try {
+                                    val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    context.startActivity(viewIntent)
+                                    true
+                                } catch (_: ActivityNotFoundException) {
+                                    false
+                                } catch (_: SecurityException) {
+                                    false
+                                } catch (_: IllegalArgumentException) {
+                                    false
+                                }
                                 if (!opened) {
                                     onNonLinkTap?.invoke()
                                 }
@@ -460,7 +493,18 @@ fun ReaderBody(
                                         end = offset,
                                     ).firstOrNull()?.item
                                     if (!url.isNullOrBlank()) {
-                                        val opened = runCatching { uriHandler.openUri(url) }.isSuccess
+                                        val opened = try {
+                                            val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            context.startActivity(viewIntent)
+                                            true
+                                        } catch (_: ActivityNotFoundException) {
+                                            false
+                                        } catch (_: SecurityException) {
+                                            false
+                                        } catch (_: IllegalArgumentException) {
+                                            false
+                                        }
                                         if (!opened) {
                                             onNonLinkTap?.invoke()
                                         }
