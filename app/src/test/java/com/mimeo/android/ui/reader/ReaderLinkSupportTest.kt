@@ -133,4 +133,74 @@ class ReaderLinkSupportTest {
         assertTrue(rendered.startsWith("newrepublic.com/article/2086"))
         assertEquals("https://newrepublic.com/article/2086/the-end-of-something", links.first().url)
     }
+
+    @Test
+    fun extractReaderPreservedLinks_mapsRepeatedAbbreviatedHostPathLinksInOrder() {
+        val line = "newrepublic.com/article/2086..."
+        val text = listOf(
+            "New piece from me:",
+            line,
+            "",
+            "This is the essence of personalist rule:",
+            line,
+            "",
+            "He can only be failed.",
+            line,
+        ).joinToString(separator = "\n")
+
+        val blocks = listOf(
+            ItemTextContentBlock(
+                type = "paragraph",
+                text = line,
+                links = listOf(
+                    ItemTextContentLink(text = "", href = "https://newrepublic.com/article/2086/a"),
+                ),
+            ),
+            ItemTextContentBlock(
+                type = "paragraph",
+                text = line,
+                links = listOf(
+                    ItemTextContentLink(text = "", href = "https://newrepublic.com/article/2086/b"),
+                ),
+            ),
+            ItemTextContentBlock(
+                type = "paragraph",
+                text = line,
+                links = listOf(
+                    ItemTextContentLink(text = "", href = "https://newrepublic.com/article/2086/c"),
+                ),
+            ),
+        )
+
+        val links = extractReaderPreservedLinks(text = text, contentBlocks = blocks)
+
+        assertEquals(3, links.size)
+        assertTrue(links[0].start < links[1].start)
+        assertTrue(links[1].start < links[2].start)
+        assertEquals("https://newrepublic.com/article/2086/a", links[0].url)
+        assertEquals("https://newrepublic.com/article/2086/b", links[1].url)
+        assertEquals("https://newrepublic.com/article/2086/c", links[2].url)
+    }
+
+    @Test
+    fun extractReaderPreservedLinks_includesNonParagraphBlocks() {
+        val text = "Quoted source: newrepublic.com/article/2086..."
+        val blocks = listOf(
+            ItemTextContentBlock(
+                type = "quote",
+                text = text,
+                links = listOf(
+                    ItemTextContentLink(
+                        text = "",
+                        href = "https://newrepublic.com/article/2086/the-end-of-something",
+                    ),
+                ),
+            ),
+        )
+
+        val links = extractReaderPreservedLinks(text = text, contentBlocks = blocks)
+
+        assertEquals(1, links.size)
+        assertEquals("https://newrepublic.com/article/2086/the-end-of-something", links.first().url)
+    }
 }

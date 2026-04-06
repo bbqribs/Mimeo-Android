@@ -36,90 +36,139 @@ internal fun extractReaderPreservedLinks(
 ): List<ReaderLinkRange> {
     if (text.isBlank() || contentBlocks.isNullOrEmpty()) return emptyList()
     val ranges = mutableListOf<ReaderLinkRange>()
-    val normalizedBlocks = contentBlocks.filter { it.type.equals("paragraph", ignoreCase = true) }
-    if (normalizedBlocks.isEmpty()) return emptyList()
-    var paragraphSearchCursor = 0
-    normalizedBlocks.forEach { block ->
-        val paragraphText = block.text.orEmpty()
-        if (paragraphText.isBlank()) return@forEach
-        val paragraphStart = text.indexOf(paragraphText, startIndex = paragraphSearchCursor)
-            .takeIf { it >= 0 }
-            ?: text.indexOf(paragraphText).takeIf { it >= 0 }
-            ?: return@forEach
-        paragraphSearchCursor = paragraphStart + paragraphText.length
-        val paragraphLinks = block.links.orEmpty()
-        if (paragraphLinks.isEmpty()) return@forEach
-        var localSearchCursor = 0
-        paragraphLinks.forEach { link ->
-            val normalized = normalizePreservedLink(link = link, paragraphText = paragraphText, localSearchCursor = localSearchCursor)
-                ?: return@forEach
-            localSearchCursor = normalized.endExclusive
-            val globalStart = paragraphStart + normalized.start
-            val globalEnd = paragraphStart + normalized.endExclusive
-            if (globalStart < 0 || globalEnd > text.length || globalStart >= globalEnd) return@forEach
-            if (ranges.any { existing -> globalStart < existing.endExclusive && globalEnd > existing.start }) return@forEach
-            ranges += ReaderLinkRange(
-                start = globalStart,
-                endExclusive = globalEnd,
-                url = normalized.url,
-            )
+    val linkSpecs = buildPreservedLinkSpecs(contentBlocks)
+    if (linkSpecs.isEmpty()) return emptyList()
+    var globalSearchCursor = 0
+    linkSpecs.forEach { spec ->
+        val match = resolveLinkRangeInText(
+            fullText = text,
+            spec = spec,
+            globalSearchCursor = globalSearchCursor,
+        ) ?: return@forEach
+        if (ranges.any { existing -> match.start < existing.endExclusive && match.endExclusive > existing.start }) {
+            return@forEach
         }
+        ranges += ReaderLinkRange(
+            start = match.start,
+            endExclusive = match.endExclusive,
+            url = spec.url,
+        )
+        globalSearchCursor = match.endExclusive.coerceAtLeast(globalSearchCursor)
     }
-    return ranges.sortedBy { it.start }
+    return ranges
 }
 
-private data class NormalizedLinkRange(
-    val start: Int,
-    val endExclusive: Int,
+private data class PreservedLinkSpec(
     val url: String,
+    val preferredText: String?,
+    val hrefHints: List<String>,
 )
 
-private fun normalizePreservedLink(
-    link: ItemTextContentLink,
-    paragraphText: String,
-    localSearchCursor: Int,
-): NormalizedLinkRange? {
-    val url = normalizeHttpUrl(link.href ?: return null) ?: return null
-    val textLength = paragraphText.length
-    if (textLength <= 0) return null
+private data class FullTextLinkRange(
+    val start: Int,
+    val endExclusive: Int,
+)
 
-    val explicitStart = link.start
-    val explicitEnd = link.end
-    if (explicitStart != null && explicitEnd != null) {
-        val safeStart = explicitStart.coerceIn(0, textLength)
-        val safeEnd = explicitEnd.coerceIn(0, textLength)
-        if (safeEnd > safeStart) {
-            val expected = link.text?.trim().orEmpty()
-            if (expected.isBlank() || paragraphText.substring(safeStart, safeEnd) == expected) {
-                return NormalizedLinkRange(
-                    start = safeStart,
-                    endExclusive = safeEnd,
-                    url = url,
-                )
+private fun buildPreservedLinkSpecs(contentBlocks: List<ItemTextContentBlock>): List<PreservedLinkSpec> {
+    return buildList {
+        contentBlocks
+            .asSequence()
+            .filter { block ->
+                block.links.isNullOrEmpty().not() && block.text.isNullOrBlank().not()
             }
-        }
+            .forEach { block ->
+                val paragraphText = block.text.orEmpty()
+                block.links.orEmpty().forEach { link ->
+                    val url = normalizeHttpUrl(link.href ?: return@forEach) ?: return@forEach
+                    val preferredFromOffsets = normalizedTextFromOffsets(
+                        paragraphText = paragraphText,
+                        start = link.start,
+                        end = link.end,
+                    )
+                    val preferredText = preferredFromOffsets
+                        ?: link.text?.trim()?.takeIf { it.isNotEmpty() }
+                    val hrefHints = buildHrefHostPathHints(url)
+                    add(
+                        PreservedLinkSpec(
+                            url = url,
+                            preferredText = preferredText,
+                            hrefHints = hrefHints,
+                        ),
+                    )
+                }
+            }
     }
+}
 
-    val linkText = link.text?.trim().orEmpty()
-    val found = if (linkText.isNotBlank()) {
-        paragraphText.indexOf(linkText, startIndex = localSearchCursor.coerceIn(0, textLength))
+private fun normalizedTextFromOffsets(
+    paragraphText: String,
+    start: Int?,
+    end: Int?,
+): String? {
+    if (paragraphText.isBlank()) return null
+    if (start == null || end == null) return null
+    val length = paragraphText.length
+    val safeStart = start.coerceIn(0, length)
+    val safeEnd = end.coerceIn(0, length)
+    if (safeEnd <= safeStart) return null
+    return paragraphText.substring(safeStart, safeEnd).trim().takeIf { it.isNotEmpty() }
+}
+
+private fun resolveLinkRangeInText(
+    fullText: String,
+    spec: PreservedLinkSpec,
+    globalSearchCursor: Int,
+): FullTextLinkRange? {
+    val fullLength = fullText.length
+    if (fullLength <= 0) return null
+    val candidates = buildList {
+        spec.preferredText?.takeIf { it.isNotBlank() }?.let { add(it) }
+        spec.hrefHints.forEach { hint ->
+            if (hint.isNotBlank()) add(hint)
+        }
+    }.distinct()
+    if (candidates.isEmpty()) return null
+
+    val cursor = globalSearchCursor.coerceIn(0, fullLength)
+    val loweredFull = fullText.lowercase(Locale.US)
+    for (candidate in candidates) {
+        val loweredCandidate = candidate.lowercase(Locale.US)
+        val index = loweredFull.indexOf(loweredCandidate, startIndex = cursor)
             .takeIf { it >= 0 }
-            ?: paragraphText.indexOf(linkText).takeIf { it >= 0 }
-    } else {
-        null
-    } ?: findLinkStartFromHrefHint(
-        paragraphText = paragraphText,
-        href = url,
-        localSearchCursor = localSearchCursor,
-    )
-        ?: return null
-    val computedLength = if (linkText.isNotBlank()) linkText.length else computeLinkTokenLength(paragraphText, found)
-    if (computedLength <= 0) return null
-    return NormalizedLinkRange(
-        start = found,
-        endExclusive = (found + computedLength).coerceIn(found, textLength),
-        url = url,
-    )
+            ?: loweredFull.indexOf(loweredCandidate).takeIf { it >= 0 }
+            ?: continue
+        val tokenLength = if (spec.hrefHints.contains(candidate)) {
+            computeLinkTokenLength(fullText, index)
+        } else {
+            candidate.length
+        }
+        if (tokenLength <= 0) continue
+        val endExclusive = (index + tokenLength).coerceIn(index, fullLength)
+        if (endExclusive <= index) continue
+        return FullTextLinkRange(
+            start = index,
+            endExclusive = endExclusive,
+        )
+    }
+    return null
+}
+
+private fun buildHrefHostPathHints(url: String): List<String> {
+    val uri = runCatching { URI(url) }.getOrNull() ?: return emptyList()
+    val host = uri.host?.removePrefix("www.") ?: return emptyList()
+    val path = uri.rawPath.orEmpty()
+    if (path.isBlank() || path == "/") return listOf(host)
+    val segments = path.split('/').filter { it.isNotBlank() }
+    if (segments.isEmpty()) return listOf(host)
+
+    val hints = mutableListOf<String>()
+    var prefix = host
+    hints += prefix
+    segments.forEach { segment ->
+        prefix += "/$segment"
+        hints += prefix
+    }
+    return hints.reversed()
 }
 
 private fun normalizeHttpUrl(raw: String): String? {
@@ -129,26 +178,6 @@ private fun normalizeHttpUrl(raw: String): String? {
     val scheme = parsed.scheme?.lowercase() ?: return null
     if (scheme != "http" && scheme != "https") return null
     return trimmed
-}
-
-private fun findLinkStartFromHrefHint(
-    paragraphText: String,
-    href: String,
-    localSearchCursor: Int,
-): Int? {
-    val uri = runCatching { URI(href) }.getOrNull() ?: return null
-    val host = uri.host?.removePrefix("www.")?.lowercase(Locale.US) ?: return null
-    val path = uri.rawPath.orEmpty()
-    val hostPath = if (path.isBlank() || path == "/") host else host + path
-    if (hostPath.isBlank()) return null
-
-    val haystack = paragraphText.lowercase(Locale.US)
-    val hint = hostPath.lowercase(Locale.US)
-    return haystack.indexOf(hint, startIndex = localSearchCursor.coerceAtLeast(0))
-        .takeIf { it >= 0 }
-        ?: haystack.indexOf(hint).takeIf { it >= 0 }
-        ?: haystack.indexOf(host, startIndex = localSearchCursor.coerceAtLeast(0)).takeIf { it >= 0 }
-        ?: haystack.indexOf(host).takeIf { it >= 0 }
 }
 
 private fun computeLinkTokenLength(text: String, start: Int): Int {
