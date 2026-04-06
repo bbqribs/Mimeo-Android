@@ -149,3 +149,21 @@ If media buttons route incorrectly, confirm platform routing targets `com.mimeo.
 - Tapping Locus while already on the active item (not in preview mode) keeps the existing “jump to playback pointer” behavior.
 
 These rules are UX-only navigation/scroll rules and do not alter interruption policy, playback ownership, or queue/progress semantics.
+
+## 11) Preview-Open Ownership Guardrail
+
+When playback-owner item A is active (speaking or autoplay handoff) and user opens item B from Up Next/Locus:
+
+- B must load as preview-only content in Locus.
+- A must remain playback owner until explicit transfer (for example, pressing Play on B).
+- The preview-open path must not call pause/stop on the active playback-owner session.
+- Notification/headset transport controls must continue to target A while previewing B.
+
+If playback is not active, opening B is allowed to replace current owner/session as normal.
+
+Regression lock-in:
+
+- `PlaybackObservabilityTest.requestedItemTransitionMode_*`
+- `PlaybackObservabilityTest.preservePlaybackOwnerForPreviewOpen_*`
+- `QueueOpenSessionOwnershipTest.*`
+- `QueueRowStateMarkersTest.*`

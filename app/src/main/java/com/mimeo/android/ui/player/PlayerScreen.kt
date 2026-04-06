@@ -431,6 +431,37 @@ internal fun shouldPreservePlaybackOwnerForPreviewOpen(
     return playbackActive
 }
 
+internal enum class RequestedItemTransitionMode {
+    AlreadyCurrent,
+    PreviewOnly,
+    ReplaceCurrent,
+}
+
+internal fun resolveRequestedItemTransitionMode(
+    targetItemId: Int,
+    currentItemId: Int,
+    playbackActive: Boolean,
+    hasLockedPlaybackOwner: Boolean,
+): RequestedItemTransitionMode {
+    if (targetItemId <= 0 || targetItemId == currentItemId) {
+        return RequestedItemTransitionMode.AlreadyCurrent
+    }
+    if (hasLockedPlaybackOwner) {
+        return RequestedItemTransitionMode.PreviewOnly
+    }
+    return if (
+        shouldPreservePlaybackOwnerForPreviewOpen(
+            targetItemId = targetItemId,
+            currentItemId = currentItemId,
+            playbackActive = playbackActive,
+        )
+    ) {
+        RequestedItemTransitionMode.PreviewOnly
+    } else {
+        RequestedItemTransitionMode.ReplaceCurrent
+    }
+}
+
 internal fun shouldSpeakTitleBeforeBody(
     enabled: Boolean,
     title: String?,
@@ -987,7 +1018,14 @@ fun PlayerScreen(
     LaunchedEffect(requestedItemId, resolvedInitial) {
         if (!resolvedInitial) return@LaunchedEffect
         val target = requestedItemId ?: return@LaunchedEffect
-        if (target == currentItemId) {
+        val playbackActiveNow = isSpeaking || isAutoPlaying || autoPlayAfterLoad
+        val requestedItemTransitionMode = resolveRequestedItemTransitionMode(
+            targetItemId = target,
+            currentItemId = currentItemId,
+            playbackActive = playbackActiveNow,
+            hasLockedPlaybackOwner = hasLockedPlaybackOwner,
+        )
+        if (requestedItemTransitionMode == RequestedItemTransitionMode.AlreadyCurrent) {
             viewerOverrideItemId = -1
             viewerOverrideTitle = ""
             viewerPayload = null
@@ -999,51 +1037,11 @@ fun PlayerScreen(
             }
             return@LaunchedEffect
         }
-        val playbackActiveNow = isSpeaking || isAutoPlaying || autoPlayAfterLoad
-        val preserveOwnerForPreviewOpen = shouldPreservePlaybackOwnerForPreviewOpen(
-            targetItemId = target,
-            currentItemId = currentItemId,
-            playbackActive = playbackActiveNow,
-        )
-        if (hasLockedPlaybackOwner) {
+        if (requestedItemTransitionMode == RequestedItemTransitionMode.PreviewOnly) {
             continuationLog(
-                "requestedItemEffect previewOnly target=$target current=$currentItemId speaking=$isSpeaking auto=$isAutoPlaying",
+                "requestedItemEffect previewOnly target=$target current=$currentItemId speaking=$isSpeaking auto=$isAutoPlaying locked=$hasLockedPlaybackOwner",
             )
             // Keep the currently playing reader surface stable while preview content loads.
-            preserveVisibleContentOnReload = true
-            bodyRevealReady = true
-            isLoading = false
-            viewerOverrideItemId = target
-            viewerOverrideTitle = queueItemsById[target]?.title.orEmpty()
-            viewerPayload = null
-            viewerPayloadItemId = -1
-            viewerChunks = emptyList()
-            val preferLocalPreviewLoad = queueOffline || vm.isItemCached(target)
-            val previewLoadTag = if (preferLocalPreviewLoad) {
-                "locus_preview_cache_first"
-            } else {
-                "locus_preview_network_first"
-            }
-            vm.fetchItemText(
-                target,
-                preferLocal = preferLocalPreviewLoad,
-                loadPolicyTag = previewLoadTag,
-            )
-                .onSuccess { loaded ->
-                    viewerPayload = loaded.payload
-                    viewerPayloadItemId = target
-                    viewerChunks = buildPlaybackChunks(loaded.payload)
-                }
-                .onFailure { err ->
-                    if (err is CancellationException) return@onFailure
-                    uiMessage = err.message ?: "Failed to load item"
-                }
-            return@LaunchedEffect
-        }
-        if (preserveOwnerForPreviewOpen) {
-            continuationLog(
-                "requestedItemEffect preserveOwnerPreview target=$target current=$currentItemId speaking=$isSpeaking auto=$isAutoPlaying autoContinue=$autoPlayAfterLoad",
-            )
             preserveVisibleContentOnReload = true
             bodyRevealReady = true
             isLoading = false

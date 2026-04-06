@@ -1,6 +1,7 @@
 package com.mimeo.android.ui.player
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -286,5 +287,61 @@ class PlaybackObservabilityTest {
         )
         assertEquals(false, inactive)
         assertEquals(false, sameItem)
+    }
+
+    @Test
+    fun requestedItemTransitionMode_previewOnlyWhenPlaybackActiveAndTargetDiffers() {
+        val mode = resolveRequestedItemTransitionMode(
+            targetItemId = 20,
+            currentItemId = 10,
+            playbackActive = true,
+            hasLockedPlaybackOwner = false,
+        )
+
+        assertEquals(RequestedItemTransitionMode.PreviewOnly, mode)
+    }
+
+    @Test
+    fun requestedItemTransitionMode_previewOnlyWhenLockedPlaybackOwner() {
+        val mode = resolveRequestedItemTransitionMode(
+            targetItemId = 20,
+            currentItemId = 10,
+            playbackActive = false,
+            hasLockedPlaybackOwner = true,
+        )
+
+        assertEquals(RequestedItemTransitionMode.PreviewOnly, mode)
+    }
+
+    @Test
+    fun requestedItemTransitionMode_replaceCurrentWhenPlaybackInactiveAndUnlocked() {
+        val mode = resolveRequestedItemTransitionMode(
+            targetItemId = 20,
+            currentItemId = 10,
+            playbackActive = false,
+            hasLockedPlaybackOwner = false,
+        )
+
+        assertEquals(RequestedItemTransitionMode.ReplaceCurrent, mode)
+    }
+
+    @Test
+    fun requestedItemTransitionMode_alreadyCurrentWhenInvalidOrSameTarget() {
+        val invalid = resolveRequestedItemTransitionMode(
+            targetItemId = -1,
+            currentItemId = 10,
+            playbackActive = true,
+            hasLockedPlaybackOwner = true,
+        )
+        val same = resolveRequestedItemTransitionMode(
+            targetItemId = 10,
+            currentItemId = 10,
+            playbackActive = true,
+            hasLockedPlaybackOwner = false,
+        )
+
+        assertEquals(RequestedItemTransitionMode.AlreadyCurrent, invalid)
+        assertEquals(RequestedItemTransitionMode.AlreadyCurrent, same)
+        assertFalse(invalid == RequestedItemTransitionMode.ReplaceCurrent)
     }
 }
