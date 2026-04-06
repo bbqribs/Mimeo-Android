@@ -24,3 +24,6 @@ Regression guard suite (must pass for any reader auto-scroll change):
 .\gradlew.bat testDebugUnitTest --tests "com.mimeo.android.ui.reader.PlaybackScrollContractGuardTest" --tests "com.mimeo.android.ui.reader.ReaderScrollPolicyTest" --tests "com.mimeo.android.ui.reader.ReaderScrollCooldownPolicyTest" --tests "com.mimeo.android.ui.reader.ReaderVisibleBoundsTest"
 ```
 
+CI merge-gate check name:
+- `Playback Scroll Guard Suite`
+
