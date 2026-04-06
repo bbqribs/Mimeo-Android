@@ -253,7 +253,11 @@ class PlaybackRepository(
             }
         }
         return try {
-            val payload = apiClient.getItemText(baseUrl, token, itemId)
+            val payload = enrichItemTextWithContentBlocks(
+                baseUrl = baseUrl,
+                token = token,
+                payload = apiClient.getItemText(baseUrl, token, itemId),
+            )
             cacheItem(payload)
             if (BuildConfig.DEBUG) {
                 Log.d(
@@ -708,6 +712,19 @@ class PlaybackRepository(
                 cachedAt = System.currentTimeMillis(),
             ),
         )
+    }
+
+    private suspend fun enrichItemTextWithContentBlocks(
+        baseUrl: String,
+        token: String,
+        payload: ItemTextResponse,
+    ): ItemTextResponse {
+        if (!payload.contentBlocks.isNullOrEmpty()) return payload
+        val fallbackBlocks = runCatching { apiClient.getItemContentBlocks(baseUrl, token, payload.itemId) }
+            .getOrNull()
+            .orEmpty()
+        if (fallbackBlocks.isEmpty()) return payload
+        return payload.copy(contentBlocks = fallbackBlocks)
     }
 
     private fun CachedItemEntity.toPayload(): ItemTextResponse {

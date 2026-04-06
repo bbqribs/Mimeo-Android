@@ -6,6 +6,7 @@ import com.mimeo.android.model.AuthTokenResponse
 import com.mimeo.android.model.DebugVersionResponse
 import com.mimeo.android.model.DebugPythonResponse
 import com.mimeo.android.model.ItemTextResponse
+import com.mimeo.android.model.ItemTextContentBlock
 import com.mimeo.android.model.ArticleSummary
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackQueueResponse
@@ -94,6 +95,18 @@ private data class ChangePasswordPayload(
 @Serializable
 private data class FavoriteUpdatePayload(
     val favorited: Boolean,
+)
+
+@Serializable
+private data class ItemDetailLitePayload(
+    @kotlinx.serialization.SerialName("extracted_content")
+    val extractedContent: ExtractedContentLitePayload? = null,
+)
+
+@Serializable
+private data class ExtractedContentLitePayload(
+    @kotlinx.serialization.SerialName("content_blocks")
+    val contentBlocks: List<ItemTextContentBlock>? = null,
 )
 
 class ApiClient(
@@ -427,6 +440,18 @@ class ApiClient(
             .build()
         executeJson(request) { payload -> json.decodeFromString<ItemTextResponse>(payload) }
     }
+
+    suspend fun getItemContentBlocks(baseUrl: String, token: String, itemId: Int): List<ItemTextContentBlock>? =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url(resolveUrl(baseUrl, "/items/$itemId"))
+                .header("Authorization", "Bearer $token")
+                .get()
+                .build()
+            executeJson(request) { payload ->
+                json.decodeFromString<ItemDetailLitePayload>(payload).extractedContent?.contentBlocks
+            }
+        }
 
     suspend fun postProgress(
         baseUrl: String,
