@@ -66,6 +66,9 @@
 - [x] Cached-item invalidation narrowing shipped (bounded): replaced full cached-id table emission observer with scoped latest-write + count-change reconciliation so cache writes update only impacted visible items while still handling delete/eviction shrink paths safely.
 - [x] App-shell recomposition pressure follow-up shipped (bounded): removed root collection of high-churn playback engine state in `MimeoApp`, shifted playback-in-progress checks to local usage points, and preserved existing navigation/playback behavior without broad state architecture refactors.
 - [x] Playback-owner state correctness pass shipped: Locus title ownership now follows true playback owner (engine/session) with bounded preview override rules, and Up Next row markers now distinguish actively playing vs ready-to-resume owner states.
+- [x] Headed auth extraction v1 shipped (PR #315): auth/session extraction work is merged and no longer part of active queue.
+- [x] Extension trusted-user sideload readiness shipped (PR #316): distribution-readiness baseline is merged (see `docs/EXTENSION_DISTRIBUTION_READINESS.md` in sibling repo for canonical details).
+- [x] Android problem-report v2 UI shipped in sibling repo: in-dialog attachment opt-in UX is merged; remaining work is backend contract persistence/export completion only.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
@@ -89,15 +92,14 @@
 ### User sign-in (Phase 3)
 - [x] Username/password sign-in flow — shipped per `docs/ANDROID_AUTH_PHASE3_SPEC.md` slice plan (gate, recovery, sign-out, settings coexistence).
 
-### Next tickets
-1. [x] In-Locus problem-report flow implementation (Android v1): `Report a problem` is now available from Locus overflow with online submit to `/feedback/problem-report`, category + required note + optional URL edit/clear, and bounded success/error/auth handling that preserves form state on failed submit.
-2. [~] Problem reports v2 attachment contract (CONTRACT CHANGE): Android opt-in UI/payload path is now implemented (default-OFF in-dialog attachment checkboxes for title/text + compact privacy hint + bounded attachment payload fields); backend persistence/export contract work remains pending per `docs/PROBLEM_REPORT_ATTACHMENT_V2_CONTRACT_SPEC.md`.
-   - Current backend limitation until contract lands: v1 persisted/exported report shape remains the authoritative operator record.
-3. [ ] Cross-repo source metadata unification: align backend + extension/web on the same provenance/origin contract and rendering precedence shipped on Android (no body-link source inference).
-4. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.
-5. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
-6. [ ] Keep-screen-on/session UX follow-up: refine “active session” heuristics and user copy for reader-only vs speaking states without changing playback ownership.
-7. [ ] Offline action queueing follow-up: expand deferred-sync coverage beyond favourite/archive to remaining item lifecycle actions where local-first behavior is valuable.
+### Now (Active Queue)
+1. [~] Problem reports v2 attachment contract (CONTRACT CHANGE): Android opt-in UI/payload path is shipped; backend persistence/export contract completion remains pending per `docs/PROBLEM_REPORT_ATTACHMENT_V2_CONTRACT_SPEC.md`.
+   - Current limitation until backend lands: v1 persisted/exported report shape remains the authoritative operator record.
+2. [ ] Cross-repo source metadata unification: align backend + extension/web on the same provenance/origin contract and rendering precedence shipped on Android (no body-link source inference).
+3. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.
+4. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
+5. [ ] Keep-screen-on/session UX follow-up: refine “active session” heuristics and user copy for reader-only vs speaking states without changing playback ownership.
+6. [ ] Offline action queueing follow-up: expand deferred-sync coverage beyond favourite/archive to remaining item lifecycle actions where local-first behavior is valuable.
 
 ## Reader/Player UX fidelity + state persistence backlog
 
