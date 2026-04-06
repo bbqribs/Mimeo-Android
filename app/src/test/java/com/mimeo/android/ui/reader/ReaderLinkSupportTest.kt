@@ -109,4 +109,28 @@ class ReaderLinkSupportTest {
         assertEquals("project board", text.substring(links.first().start, links.first().endExclusive))
         assertEquals("https://example.com/board", links.first().url)
     }
+
+    @Test
+    fun extractReaderPreservedLinks_fallsBackToHrefHostPathWhenLinkTextUnavailable() {
+        val text = "New piece from me: newrepublic.com/article/2086..."
+        val blocks = listOf(
+            ItemTextContentBlock(
+                type = "paragraph",
+                text = text,
+                links = listOf(
+                    ItemTextContentLink(
+                        text = "",
+                        href = "https://newrepublic.com/article/2086/the-end-of-something",
+                    ),
+                ),
+            ),
+        )
+
+        val links = extractReaderPreservedLinks(text = text, contentBlocks = blocks)
+
+        assertEquals(1, links.size)
+        val rendered = text.substring(links.first().start, links.first().endExclusive)
+        assertTrue(rendered.startsWith("newrepublic.com/article/2086"))
+        assertEquals("https://newrepublic.com/article/2086/the-end-of-something", links.first().url)
+    }
 }
