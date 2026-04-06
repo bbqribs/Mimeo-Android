@@ -14,5 +14,6 @@ data class CachedItemEntity(
     val wordCount: Int?,
     val text: String,
     val paragraphsJson: String,
+    val contentBlocksJson: String? = null,
     val cachedAt: Long,
 )

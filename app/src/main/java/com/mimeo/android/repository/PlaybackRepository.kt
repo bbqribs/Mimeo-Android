@@ -13,6 +13,7 @@ import com.mimeo.android.data.entities.PendingProgressEntity
 import com.mimeo.android.model.ArticleSummary
 import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.model.ItemTextResponse
+import com.mimeo.android.model.ItemTextContentBlock
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaybackQueueResponse
@@ -689,6 +690,9 @@ class PlaybackRepository(
     private suspend fun cacheItem(payload: ItemTextResponse) {
         val paragraphs = payload.paragraphs.orEmpty()
         val paragraphsJson = json.encodeToString(ListSerializer(String.serializer()), paragraphs)
+        val contentBlocksJson = payload.contentBlocks
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { json.encodeToString(ListSerializer(ItemTextContentBlock.serializer()), it) }
         database.cachedItemDao().upsert(
             CachedItemEntity(
                 itemId = payload.itemId,
@@ -700,6 +704,7 @@ class PlaybackRepository(
                 wordCount = payload.wordCount,
                 text = payload.text,
                 paragraphsJson = paragraphsJson,
+                contentBlocksJson = contentBlocksJson,
                 cachedAt = System.currentTimeMillis(),
             ),
         )
@@ -709,6 +714,16 @@ class PlaybackRepository(
         val parsedParagraphs = runCatching {
             json.decodeFromString(ListSerializer(String.serializer()), paragraphsJson)
         }.getOrElse { emptyList() }
+        val parsedContentBlocks = contentBlocksJson
+            ?.takeIf { it.isNotBlank() }
+            ?.let { serialized ->
+                runCatching {
+                    json.decodeFromString(
+                        ListSerializer(ItemTextContentBlock.serializer()),
+                        serialized,
+                    )
+                }.getOrElse { emptyList() }
+            }
         return ItemTextResponse(
             itemId = itemId,
             title = title,
@@ -720,6 +735,7 @@ class PlaybackRepository(
             wordCount = wordCount,
             text = text,
             paragraphs = parsedParagraphs,
+            contentBlocks = parsedContentBlocks,
         )
     }
 
