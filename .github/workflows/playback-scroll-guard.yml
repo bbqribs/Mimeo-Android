@@ -1,0 +1,34 @@
+name: Playback Scroll Guard Suite
+
+on:
+  pull_request:
+    paths:
+      - "app/src/main/java/com/mimeo/android/ui/reader/**"
+      - "app/src/main/java/com/mimeo/android/ui/player/**"
+      - "app/src/main/java/com/mimeo/android/MainActivity.kt"
+      - "app/src/test/java/com/mimeo/android/ui/reader/**"
+      - "docs/ANDROID_PLAYBACK_SCROLL_CONTRACT.md"
+      - ".github/workflows/playback-scroll-guard.yml"
+  workflow_dispatch:
+
+jobs:
+  playback-scroll-guard:
+    name: Playback Scroll Guard Suite
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Run guarded playback-scroll tests
+        run: >
+          .\gradlew.bat testDebugUnitTest --no-daemon
+          --tests "com.mimeo.android.ui.reader.PlaybackScrollContractGuardTest"
+          --tests "com.mimeo.android.ui.reader.ReaderScrollPolicyTest"
+          --tests "com.mimeo.android.ui.reader.ReaderScrollCooldownPolicyTest"
+          --tests "com.mimeo.android.ui.reader.ReaderVisibleBoundsTest"
