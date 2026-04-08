@@ -269,11 +269,11 @@ data class AutoDownloadDiagnostics(
 
 @Serializable
 data class AppSettings(
-    val baseUrl: String = "http://10.0.2.2:8000",
-    val connectionMode: ConnectionMode = ConnectionMode.LOCAL,
-    val localBaseUrl: String = "http://10.0.2.2:8000",
-    val lanBaseUrl: String = "",
-    val remoteBaseUrl: String = "",
+    val baseUrl: String = DEFAULT_REMOTE_BASE_URL,
+    val connectionMode: ConnectionMode = ConnectionMode.REMOTE,
+    val localBaseUrl: String = DEFAULT_LOCAL_BASE_URL,
+    val lanBaseUrl: String = DEFAULT_LAN_BASE_URL,
+    val remoteBaseUrl: String = DEFAULT_REMOTE_BASE_URL,
     val apiToken: String = "",
     val autoAdvanceOnCompletion: Boolean = true,
     val autoArchiveAtArticleEnd: Boolean = false,

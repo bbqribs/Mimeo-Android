@@ -41,6 +41,7 @@ internal fun validateConnectionEndpoint(
     val isEmulatorHost = lowerHost == "10.0.2.2"
     val isLanIp = isLanIpv4(lowerHost)
     val isLikelyTailnetIp = isTailnetIpv4(lowerHost)
+    val isLikelyTailnetHost = lowerHost.endsWith(".ts.net")
 
     when (mode) {
         ConnectionMode.LOCAL -> {
@@ -58,6 +59,9 @@ internal fun validateConnectionEndpoint(
                     blockingError = "LAN mode needs your server LAN IP (for example http://192.168.x.y:8000).",
                 )
             }
+            if (isLikelyTailnetIp || isLikelyTailnetHost) {
+                warnings += "This host looks like a Remote/Tailscale target. Use Remote mode unless phone + laptop are on the same LAN."
+            }
             if (!isLanIp) {
                 warnings += "LAN mode is intended for same-network server addresses."
             }
@@ -72,7 +76,7 @@ internal fun validateConnectionEndpoint(
             if (isLanIp) {
                 warnings += "Remote mode is using a LAN IP. If phone and server are on same network, use LAN mode."
             }
-            if (scheme == "http" && !isLikelyTailnetIp && !isLanIp) {
+            if (scheme == "http" && !isLikelyTailnetIp && !isLikelyTailnetHost && !isLanIp) {
                 warnings += "HTTP remote URLs are supported over trusted VPN/Tailscale. Use HTTPS for internet-exposed hosts."
             }
         }

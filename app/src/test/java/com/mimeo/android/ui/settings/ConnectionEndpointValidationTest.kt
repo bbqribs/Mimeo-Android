@@ -71,4 +71,14 @@ class ConnectionEndpointValidationTest {
         assertNull(tailnet.blockingError)
         assertTrue(tailnet.warnings.none { it.contains("Use HTTPS", ignoreCase = true) })
     }
+
+    @Test
+    fun `lan mode warns when using ts dot net host`() {
+        val validation = validateConnectionEndpoint(ConnectionMode.LAN, "http://beh-dec2022.taildacac5.ts.net:8000")
+
+        assertNull(validation.blockingError)
+        assertTrue(
+            validation.warnings.any { it.contains("Remote/Tailscale target", ignoreCase = true) },
+        )
+    }
 }

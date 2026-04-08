@@ -10,6 +10,9 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectionMode
+import com.mimeo.android.model.DEFAULT_LAN_BASE_URL
+import com.mimeo.android.model.DEFAULT_LOCAL_BASE_URL
+import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
 import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.ParagraphSpacingOption
@@ -25,6 +28,7 @@ import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.decodeSelectedPlaylistId
 import com.mimeo.android.model.encodeSelectedPlaylistId
+import com.mimeo.android.model.inferConnectionModeForHost
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -121,17 +125,16 @@ class SettingsStore(private val context: Context) {
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->
         val legacyToken = prefs[tokenKey] ?: ""
         val persistedToken = authTokenStorage.readToken().ifBlank { legacyToken.trim() }
-        val storedBaseUrl = prefs[baseUrlKey] ?: "http://10.0.2.2:8000"
+        val storedBaseUrl = prefs[baseUrlKey] ?: DEFAULT_REMOTE_BASE_URL
         val parsedConnectionMode = prefs[connectionModeKey]
             ?.let { runCatching { ConnectionMode.valueOf(it) }.getOrNull() }
-            ?: if (storedBaseUrl.contains("10.0.2.2")) ConnectionMode.LOCAL else ConnectionMode.LAN
-        val localBaseUrl = prefs[localBaseUrlKey] ?: if (storedBaseUrl.contains("10.0.2.2")) {
-            storedBaseUrl
-        } else {
-            "http://10.0.2.2:8000"
-        }
-        val lanBaseUrl = prefs[lanBaseUrlKey] ?: storedBaseUrl
-        val remoteBaseUrl = prefs[remoteBaseUrlKey] ?: storedBaseUrl
+            ?: inferConnectionModeForHost(storedBaseUrl)
+        val localBaseUrl = prefs[localBaseUrlKey]
+            ?: if (parsedConnectionMode == ConnectionMode.LOCAL) storedBaseUrl else DEFAULT_LOCAL_BASE_URL
+        val lanBaseUrl = prefs[lanBaseUrlKey]
+            ?: if (parsedConnectionMode == ConnectionMode.LAN) storedBaseUrl else DEFAULT_LAN_BASE_URL
+        val remoteBaseUrl = prefs[remoteBaseUrlKey]
+            ?: if (parsedConnectionMode == ConnectionMode.REMOTE) storedBaseUrl else DEFAULT_REMOTE_BASE_URL
         AppSettings(
             baseUrl = storedBaseUrl,
             connectionMode = parsedConnectionMode,
