@@ -34,11 +34,11 @@ class SignInSupportTest {
     @Test
     fun `defaults blank and local sign in url to remote http preset`() {
         assertEquals(
-            "http://100.93.62.125:8000",
+            "http://beh-dec2022.taildacac5.ts.net:8000",
             defaultSignInServerUrl(""),
         )
         assertEquals(
-            "http://100.93.62.125:8000",
+            "http://beh-dec2022.taildacac5.ts.net:8000",
             defaultSignInServerUrl("http://10.0.2.2:8000"),
         )
     }
@@ -46,7 +46,7 @@ class SignInSupportTest {
     @Test
     fun `builds preset urls for remote lan and manual entry`() {
         assertEquals(
-            "http://100.93.62.125:8000",
+            "http://beh-dec2022.taildacac5.ts.net:8000",
             buildPresetServerUrl(SignInServerPreset.REMOTE, SignInUrlScheme.HTTP, ""),
         )
         assertEquals(
@@ -63,7 +63,7 @@ class SignInSupportTest {
     fun `infers preset and scheme from sign in url`() {
         assertEquals(
             SignInServerPreset.REMOTE,
-            inferSignInPreset("https://100.93.62.125:8000"),
+            inferSignInPreset("https://beh-dec2022.taildacac5.ts.net:8000"),
         )
         assertEquals(
             SignInServerPreset.LAN,
@@ -75,7 +75,7 @@ class SignInSupportTest {
         )
         assertEquals(
             SignInUrlScheme.HTTPS,
-            inferSignInScheme("https://100.93.62.125:8000"),
+            inferSignInScheme("https://beh-dec2022.taildacac5.ts.net:8000"),
         )
     }
 }

@@ -82,6 +82,10 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 - Physical device -> use host LAN IP (for example `http://192.168.x.y:8000`)
 - `127.0.0.1` on Android points to the device itself, not your host backend.
 - If your PC IP is `192.168.68.124`, set app base URL to `http://192.168.68.124:8000`.
+- Current Stage 2 defaults/presets:
+  - `Local`: `http://10.0.2.2:8000`
+  - `LAN`: `http://192.168.68.124:8000`
+  - `Remote`: `http://beh-dec2022.taildacac5.ts.net:8000`
 
 ## Remote mode (Tailscale / off-LAN)
 Use this when your phone is not on the same home LAN as the backend host.

@@ -2,8 +2,11 @@ package com.mimeo.android.ui.signin
 
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.ConnectionMode
+import com.mimeo.android.model.DEFAULT_LAN_HOST
+import com.mimeo.android.model.DEFAULT_LOCAL_BASE_URL
+import com.mimeo.android.model.DEFAULT_REMOTE_HOST
+import com.mimeo.android.model.inferConnectionModeForHost
 import java.io.IOException
-import java.net.URI
 import java.util.Locale
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
@@ -27,20 +30,12 @@ enum class SignInUrlScheme(val value: String) {
     HTTPS("https"),
 }
 
-internal const val DEFAULT_REMOTE_SIGN_IN_HOST = "100.93.62.125:8000"
-internal const val DEFAULT_LAN_SIGN_IN_HOST = "192.168.68.124:8000"
-private const val DEFAULT_LOCAL_SIGN_IN_URL = "http://10.0.2.2:8000"
+internal const val DEFAULT_REMOTE_SIGN_IN_HOST = DEFAULT_REMOTE_HOST
+internal const val DEFAULT_LAN_SIGN_IN_HOST = DEFAULT_LAN_HOST
+private const val DEFAULT_LOCAL_SIGN_IN_URL = DEFAULT_LOCAL_BASE_URL
 
 internal fun inferConnectionModeForBaseUrl(baseUrl: String): ConnectionMode {
-    val host = parseHost(baseUrl)
-    if (host.isBlank()) return ConnectionMode.LAN
-    if (host == "10.0.2.2" || host == "127.0.0.1" || host == "localhost") {
-        return ConnectionMode.LOCAL
-    }
-    if (isCarrierGradeNat(host)) {
-        return ConnectionMode.REMOTE
-    }
-    return ConnectionMode.LAN
+    return inferConnectionModeForHost(baseUrl)
 }
 
 internal fun resolveSignInErrorMessage(error: Throwable): String {
@@ -125,29 +120,8 @@ private fun normalizeManualServerUrl(manualUrl: String, scheme: SignInUrlScheme)
     }
 }
 
-private fun parseHost(baseUrl: String): String {
-    val trimmed = baseUrl.trim()
-    if (trimmed.isBlank()) return ""
-    return runCatching {
-        URI(trimmed).host.orEmpty()
-    }.getOrElse {
-        trimmed.removePrefix("http://")
-            .removePrefix("https://")
-            .substringBefore('/')
-            .substringBefore(':')
-    }.lowercase(Locale.US)
-}
-
 private fun normalizeServerUrl(serverUrl: String): String {
     return serverUrl.trim().trimEnd('/').lowercase(Locale.US)
-}
-
-private fun isCarrierGradeNat(host: String): Boolean {
-    if (!host.startsWith("100.")) return false
-    val octets = host.split('.')
-    if (octets.size != 4) return false
-    val secondOctet = octets.getOrNull(1)?.toIntOrNull() ?: return false
-    return secondOctet in 64..127
 }
 
 private fun extractApiDetail(message: String?): String? {
