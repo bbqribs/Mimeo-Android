@@ -215,7 +215,13 @@ class ApiClient(
 
     suspend fun getQueue(baseUrl: String, token: String, playlistId: Int? = null): QueueFetchResult = withContext(Dispatchers.IO) {
         val playlistParam = playlistId?.let { "&playlist_id=$it" } ?: ""
-        val requestUrl = resolveUrl(baseUrl, "/playback/queue?include_done=true&limit=$QUEUE_FETCH_LIMIT$playlistParam")
+        // Keep fetch ordering aligned with the default Up Next expectation (Newest first).
+        // QueueScreen applies additional client-side sort modes, but server-side newest
+        // ordering ensures the latest saves are present in this limited window.
+        val requestUrl = resolveUrl(
+            baseUrl,
+            "/playback/queue?include_done=true&limit=$QUEUE_FETCH_LIMIT&sort=created&dir=desc$playlistParam",
+        )
         val request = Request.Builder()
             .url(requestUrl)
             .header("Authorization", "Bearer $token")

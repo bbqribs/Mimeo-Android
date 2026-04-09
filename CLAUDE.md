@@ -4,7 +4,6 @@
 
 - **Parallelism allowed**: Codex and Claude may both implement tickets, including code changes, in either repo.
 - **Single-writer per PR/branch**: Exactly one agent may push commits to a given PR branch. No tag-team pushing.
-- **Merge authority**: Only Codex may merge PRs (or perform the final "merge step" for the session).
 - **Serialized merges**: Only one merge operation may happen at a time across BOTH repos (Mimeo + Mimeo-Android).
 - **No history rewrites**: No rebases or force-pushes by agents. Additive commits only.
 - **Contract-change flag**: Any PR that changes backend/API semantics must be labeled "CONTRACT CHANGE" and coordinated; dependent client work must not assume the new contract until merged.
@@ -27,6 +26,21 @@ Mimeo Android is the mobile client for the Mimeo "read later" system. It communi
 .\gradlew.bat :app:assembleDebug
 .\gradlew.bat :app:testDebugUnitTest
 ```
+
+## Context hygiene
+
+- Treat one ticket as one working session by default.
+- Prefer a fresh Claude session for a new ticket rather than carrying forward prior ticket discussion.
+- Stay in the same session while finishing the same ticket, including implementation, test iteration, report drafting, and merge cleanup.
+- If the same-ticket session gets noisy or drifts through rejected approaches, use `/compact` and preserve only: objective, branch, files changed, accepted decisions, current failures, manual-test findings, and exact next step.
+- When switching to a different ticket, start a fresh session. Use `/clear` only when staying in the same terminal/session is materially more convenient.
+- Do not rely on old chat history for project rules; rely on `CLAUDE.md`, the repo, and the current ticket.
+- Prefer subagents for broad repo exploration, multi-file tracing, comparison work, or "find all places this is handled" tasks, so the main session stays lean.
+- For large files, avoid unnecessary full-file rereads; inspect only the relevant section or function when possible.
+
+## Current focus
+
+See `ROADMAP.md` for next tickets and project priorities.
 
 ## Related repo
 
