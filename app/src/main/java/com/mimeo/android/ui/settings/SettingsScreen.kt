@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -1670,14 +1671,12 @@ private fun SettingsDescribedRow(
                 modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = title,
-                    modifier = Modifier.weight(1f),
-                )
+                Text(text = title)
                 IconButton(onClick = { descriptionVisible = !descriptionVisible }) {
                     Icon(
                         Icons.Outlined.Info,
                         contentDescription = if (descriptionVisible) "Hide description" else "Show description",
+                        modifier = Modifier.size(16.dp),
                         tint = if (descriptionVisible) {
                             androidx.compose.material3.MaterialTheme.colorScheme.primary
                         } else {
