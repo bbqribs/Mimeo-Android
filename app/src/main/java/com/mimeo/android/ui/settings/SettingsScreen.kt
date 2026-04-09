@@ -18,6 +18,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
@@ -52,6 +53,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Share
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.ConnectionMode
@@ -563,7 +568,7 @@ fun SettingsScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     SettingsActionIconButton(
                         enabled = fullTestResultText.isNotBlank(),
-                        icon = { Text("⧉") },
+                        icon = { Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy test result") },
                         tooltip = "Copy test result",
                         onClick = {
                             clipboardManager.setText(AnnotatedString(fullTestResultText))
@@ -572,7 +577,7 @@ fun SettingsScreen(
                     )
                     SettingsActionIconButton(
                         enabled = fullTestResultText.isNotBlank(),
-                        icon = { Text("↗") },
+                        icon = { Icon(Icons.Outlined.Share, contentDescription = "Share test result") },
                         tooltip = "Share test result",
                         onClick = { sharePlainText(context, "Mimeo connection test", fullTestResultText) },
                     )
@@ -596,12 +601,12 @@ fun SettingsScreen(
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 SettingsActionIconButton(
-                                    icon = { Text("✓") },
+                                    icon = { Icon(Icons.Outlined.Check, contentDescription = "Use this URL") },
                                     tooltip = "Use this URL",
                                     onClick = { applyConnectionSnapshot(snapshot) },
                                 )
                                 SettingsActionIconButton(
-                                    icon = { Text("⧉") },
+                                    icon = { Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy URL") },
                                     tooltip = "Copy URL",
                                     onClick = {
                                         clipboardManager.setText(AnnotatedString(snapshot.baseUrl))
@@ -609,7 +614,7 @@ fun SettingsScreen(
                                     },
                                 )
                                 SettingsActionIconButton(
-                                    icon = { Text("↗") },
+                                    icon = { Icon(Icons.Outlined.Share, contentDescription = "Share URL") },
                                     tooltip = "Share URL",
                                     onClick = {
                                         val shareText = "${snapshot.mode.displayName()} URL: ${snapshot.baseUrl}"
