@@ -1786,7 +1786,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         mode = current.connectionMode,
                         baseUrl = current.baseUrl,
                         gitSha = version.gitSha,
-                    )
+                    ) + connectionTestPendingFailureSuffix(current.selectedPlaylistId)
                     _queueOffline.value = false
                     updateSyncBadgeState()
                 }
@@ -1810,6 +1810,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _testingConnection.value = false
             }
         }
+    }
+
+    private fun connectionTestPendingFailureSuffix(selectedPlaylistId: Int?): String {
+        val pendingFailures = _pendingManualSaves.value
+            .asSequence()
+            .filter { it.destinationPlaylistId == selectedPlaylistId }
+            .mapNotNull { it.lastFailureMessage?.trim().takeIf { message -> message.isNotBlank() } }
+            .distinct()
+            .toList()
+        if (pendingFailures.isEmpty()) return ""
+        val summary = pendingFailures.take(2).joinToString(" | ")
+        val suffix = if (pendingFailures.size > 2) "$summary | …" else summary
+        return "\nPending saves: $suffix"
     }
 
     suspend fun loadQueueOnce(
