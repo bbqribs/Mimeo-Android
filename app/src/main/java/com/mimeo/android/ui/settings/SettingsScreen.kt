@@ -686,7 +686,7 @@ fun SettingsScreen(
                     },
                 )
                 SettingsDescribedRow(
-                    title = "Keep share result notifications",
+                    title = "Keep share notifications",
                     description = "Off: share results drop away after about 4 seconds. On: results stay in the notification tray.",
                     trailing = {
                         Switch(
@@ -696,7 +696,7 @@ fun SettingsScreen(
                     },
                 )
                 SettingsDescribedRow(
-                    title = "Auto-download saved articles for offline reading",
+                    title = "Auto-download for offline",
                     description = "When on, successful share-saves also fetch and cache article text for offline use.",
                     trailing = {
                         Switch(
@@ -804,7 +804,7 @@ fun SettingsScreen(
                     },
                 )
                 SettingsDescribedRow(
-                    title = "Skip duplicated opening after title",
+                    title = "Skip duplicate intro",
                     description = "When title intro is on, skip matching opening words in body playback.",
                     trailing = {
                         Switch(
@@ -817,7 +817,7 @@ fun SettingsScreen(
                     },
                 )
                 SettingsDescribedRow(
-                    title = "Keep screen on during active session",
+                    title = "Keep screen on",
                     description = "Keeps screen awake while speaking, or while manually reading in Reader mode on Locus.",
                     trailing = {
                         Switch(
@@ -855,7 +855,7 @@ fun SettingsScreen(
                     )
                 }
                 SettingsDescribedRow(
-                    title = "Locus return follows now-playing",
+                    title = "Locus follows now-playing",
                     description = "While previewing another item, tapping Locus returns to the now-playing item. On: jump to live playback line. Off: keep the last reader position.",
                     trailing = {
                         Switch(
