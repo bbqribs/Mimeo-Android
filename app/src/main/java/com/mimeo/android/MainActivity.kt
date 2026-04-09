@@ -551,6 +551,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val snackbarMessages: Flow<UiSnackbarMessage> = _snackbarMessages.receiveAsFlow()
     private val _testingConnection = MutableStateFlow(false)
     val testingConnection: StateFlow<Boolean> = _testingConnection.asStateFlow()
+    private val suppressPendingFailureSnackbarsUntilMs = MutableStateFlow(0L)
     private val _signInState = MutableStateFlow<SignInState>(SignInState.Idle)
     val signInState: StateFlow<SignInState> = _signInState.asStateFlow()
     private val _passwordChangeState = MutableStateFlow<PasswordChangeState>(PasswordChangeState.Idle)
@@ -1762,6 +1763,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
+            suppressPendingFailureSnackbarsUntilMs.value = System.currentTimeMillis() + 30_000L
             _testingConnection.value = true
             try {
                 val version = apiClient.getDebugVersion(current.baseUrl, current.apiToken)
@@ -2443,6 +2445,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         token: String,
         notifySnackbars: Boolean,
     ) {
+        val shouldShowSnackbars = notifySnackbars &&
+            System.currentTimeMillis() >= suppressPendingFailureSnackbarsUntilMs.value
         _pendingManualSaves.value
             .filter { it.destinationPlaylistId == selectedPlaylistId }
             .forEach { pending ->
@@ -2458,7 +2462,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         statusMessage = failureMessage,
                         autoRetryEligible = false,
                     )
-                    if (notifySnackbars) {
+                    if (shouldShowSnackbars) {
                         showSnackbar(failureMessage)
                     }
                 }
