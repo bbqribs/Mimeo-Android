@@ -181,6 +181,8 @@ fun SettingsScreen(
     var currentPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
     var confirmNewPassword by remember { mutableStateOf("") }
+    var lastConnectionTestResult by remember { mutableStateOf<String?>(null) }
+    var lastConnectionTestedAtMs by remember { mutableStateOf<Long?>(null) }
 
     fun selectedModeBaseUrl(): String {
         return when (connectionMode) {
@@ -309,21 +311,8 @@ fun SettingsScreen(
         val message = statusMessage.orEmpty()
         if (message.equals("Settings saved", ignoreCase = true)) return@LaunchedEffect
         testRequested = false
-        when {
-            message.startsWith("Connected") -> {
-                vm.showSnackbar(message)
-            }
-            message.contains("Token required", ignoreCase = true) -> {
-                vm.showSnackbar("Token required")
-            }
-            else -> {
-                vm.showSnackbar(
-                    message = message.ifBlank { "Can't reach server" },
-                    actionLabel = "Diagnostics",
-                    actionKey = "open_diagnostics",
-                )
-            }
-        }
+        lastConnectionTestResult = message.ifBlank { "Can't reach server" }
+        lastConnectionTestedAtMs = System.currentTimeMillis()
         vm.consumeStatusMessage(message)
     }
 
@@ -520,13 +509,15 @@ fun SettingsScreen(
                         enabled = !testingConnection && endpointValidation.blockingError == null,
                         onClick = {
                             if (endpointValidation.blockingError != null) {
-                                vm.showSnackbar(endpointValidation.blockingError)
+                                lastConnectionTestResult = endpointValidation.blockingError
+                                lastConnectionTestedAtMs = System.currentTimeMillis()
                                 return@Button
                             }
                             saveCurrent()
                             if (token.isBlank()) {
                                 testRequested = false
-                                vm.showSnackbar("Token required")
+                                lastConnectionTestResult = "Token required"
+                                lastConnectionTestedAtMs = System.currentTimeMillis()
                             } else {
                                 testRequested = true
                                 vm.testConnection()
@@ -534,6 +525,36 @@ fun SettingsScreen(
                         },
                     ) { Text(if (testingConnection) "Testing..." else "Test") }
                     Button(onClick = onOpenDiagnostics) { Text("Diagnostics") }
+                }
+                val testResultTimestamp = lastConnectionTestedAtMs?.let { millis ->
+                    runCatching {
+                        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(millis))
+                    }.getOrDefault(null)
+                }
+                Text(
+                    text = "Test results",
+                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                )
+                Text(
+                    text = buildString {
+                        append(lastConnectionTestResult ?: "No test run in this session.")
+                        if (!testResultTimestamp.isNullOrBlank()) {
+                            append("\n")
+                            append("Checked at: ")
+                            append(testResultTimestamp)
+                        }
+                    },
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(
+                        enabled = !lastConnectionTestResult.isNullOrBlank(),
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(lastConnectionTestResult.orEmpty()))
+                            vm.showSnackbar("Test result copied")
+                        },
+                    ) { Text("Copy result") }
                 }
                 val lastSuccessItems = ConnectionMode.entries.mapNotNull { mode ->
                     connectionTestSuccessByMode[mode]?.let { snapshot -> mode to snapshot }
