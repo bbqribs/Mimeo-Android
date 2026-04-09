@@ -33,15 +33,15 @@ internal fun resolveTerminalPendingProcessingMessage(
         normalizedReason == "blocked_by_bot" ||
             normalizedReason == "blocked_by_bot_confirmed" ||
             normalizedReason == "human_verification_required" ->
-            "Article blocked by source"
+            "Source blocked access"
         normalizedReason == "consent_banner_ignored" -> "Article blocked by consent banner"
         normalizedReason == "article_not_found" -> "Article not found"
         normalizedReason == "cookie_decrypt_failed" -> "Article login needs refresh"
-        normalizedReason == "http_request_failed" && fetchHttpStatus == 403 -> "Article blocked by source"
+        normalizedReason == "http_request_failed" && fetchHttpStatus == 403 -> "Source blocked access"
         normalizedReason == "http_request_failed" && fetchHttpStatus == 404 -> "Article not found"
         normalizedReason.isNotBlank() -> "Article processing failed"
         normalized.isBlank() -> "Article processing failed"
-        normalized.contains("blocked") || normalized.contains("paywall") -> "Article blocked by source"
+        normalized.contains("blocked") || normalized.contains("paywall") -> "Source blocked access"
         normalized.contains("unsupported") -> "Article source unsupported"
         normalized.contains("denied") || normalized.contains("forbidden") -> "Article access denied"
         normalized.contains("fail") || normalized.contains("error") -> "Article processing failed"

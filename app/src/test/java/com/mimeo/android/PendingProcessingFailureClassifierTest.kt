@@ -17,15 +17,15 @@ class PendingProcessingFailureClassifierTest {
 
     @Test
     fun `terminal processing message stays concise for blocked like outcomes`() {
-        assertEquals("Article blocked by source", resolveTerminalPendingProcessingMessage("blocked"))
-        assertEquals("Article blocked by source", resolveTerminalPendingProcessingMessage("paywall"))
+        assertEquals("Source blocked access", resolveTerminalPendingProcessingMessage("blocked"))
+        assertEquals("Source blocked access", resolveTerminalPendingProcessingMessage("paywall"))
         assertEquals("Article source unsupported", resolveTerminalPendingProcessingMessage("unsupported"))
         assertEquals("Article processing failed", resolveTerminalPendingProcessingMessage("processing_failed"))
     }
 
     @Test
     fun `pending processing failure message recognises blocked like wording`() {
-        assertTrue(isPendingProcessingFailureMessage("Article blocked by source"))
+        assertTrue(isPendingProcessingFailureMessage("Source blocked access"))
         assertTrue(isPendingProcessingFailureMessage("Article source unsupported"))
         assertTrue(isPendingProcessingFailureMessage("Article processing failed"))
         assertFalse(isPendingProcessingFailureMessage("Saving..."))
@@ -42,7 +42,7 @@ class PendingProcessingFailureClassifierTest {
             ),
         )
         assertEquals(
-            "Article blocked by source",
+            "Source blocked access",
             resolveTerminalPendingProcessingMessage(
                 status = "blocked",
                 failureReason = "blocked_by_bot_confirmed",

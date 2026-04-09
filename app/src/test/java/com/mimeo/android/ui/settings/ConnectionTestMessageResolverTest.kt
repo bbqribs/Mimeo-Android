@@ -91,6 +91,17 @@ class ConnectionTestMessageResolverTest {
     }
 
     @Test
+    fun `connected with unavailable git sha is explicit`() {
+        val message = ConnectionTestMessageResolver.connected(
+            mode = ConnectionMode.REMOTE,
+            baseUrl = "http://100.101.102.103:8000",
+            gitSha = "unknown",
+        )
+
+        assertEquals("Connected (git_sha unavailable on this host)", message)
+    }
+
+    @Test
     fun `diagnostics remote timeout on tailnet host indicates tailnet path failure`() {
         val message = ConnectionTestMessageResolver.forDiagnosticsException(
             mode = ConnectionMode.REMOTE,

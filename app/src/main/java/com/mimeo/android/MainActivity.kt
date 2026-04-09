@@ -2917,8 +2917,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
                 val debugVersion = debugVersionDeferred.await()
                 rows += if (debugVersion.outcome == ConnectivityDiagnosticOutcome.PASS) {
-                    val gitSha = extractJsonField(debugVersion.detail, "git_sha") ?: "unknown"
-                    debugVersion.copy(detail = withProbeMeta("git_sha=$gitSha", debugVersion.detail))
+                    val gitSha = extractJsonField(debugVersion.detail, "git_sha")
+                        ?.takeIf { value ->
+                            val normalized = value.trim().lowercase(Locale.US)
+                            normalized.isNotBlank() &&
+                                normalized != "unknown" &&
+                                normalized != "null" &&
+                                !normalized.startsWith("unavailable")
+                        }
+                    val gitShaNote = extractJsonField(debugVersion.detail, "git_sha_note")
+                    val gitShaSummary = if (gitSha != null) {
+                        "git_sha=$gitSha"
+                    } else {
+                        val noteSuffix = gitShaNote?.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
+                        "git_sha=unavailable$noteSuffix"
+                    }
+                    debugVersion.copy(detail = withProbeMeta(gitShaSummary, debugVersion.detail))
                 } else {
                     debugVersion
                 }

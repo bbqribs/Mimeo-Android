@@ -12,13 +12,27 @@ internal object ConnectionTestMessageResolver {
         baseUrl: String,
         gitSha: String?,
     ): String {
-        val base = "Connected git_sha=${gitSha ?: "unknown"}"
+        val base = when (val displaySha = formatGitShaForStatus(gitSha)) {
+            null -> "Connected (git_sha unavailable on this host)"
+            else -> "Connected git_sha=$displaySha"
+        }
         return when {
             mode == ConnectionMode.REMOTE && isLanIp(parseHost(baseUrl).lowercase(Locale.US)) ->
                 "$base (Remote mode is using a LAN IP; use LAN mode or a Tailscale/VPN URL.)"
             mode == ConnectionMode.LAN && isLoopbackHost(parseHost(baseUrl).lowercase(Locale.US)) ->
                 "$base (LAN mode is using loopback/emulator host; prefer your server LAN IP.)"
             else -> base
+        }
+    }
+
+    private fun formatGitShaForStatus(gitSha: String?): String? {
+        val trimmed = gitSha?.trim().orEmpty()
+        if (trimmed.isBlank()) return null
+        val normalized = trimmed.lowercase(Locale.US)
+        return when {
+            normalized == "unknown" || normalized == "null" -> null
+            normalized.startsWith("unavailable") -> null
+            else -> trimmed
         }
     }
 
