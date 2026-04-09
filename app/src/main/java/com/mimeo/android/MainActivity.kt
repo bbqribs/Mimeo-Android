@@ -1767,7 +1767,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val version = apiClient.getDebugVersion(current.baseUrl, current.apiToken)
                 val retrySummary = retryAllPendingManualSaves()
                 val queueResult = if (retrySummary.successCount >= 0) {
-                    loadQueueOnce(autoRetryPendingSaves = false)
+                    loadQueueOnce(
+                        autoRetryPendingSaves = false,
+                        notifyPendingFailureSnackbars = false,
+                    )
                 } else {
                     Result.success(Unit)
                 }
@@ -1810,6 +1813,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun loadQueueOnce(
         autoRetryPendingSaves: Boolean = true,
         forceAutoDownloadAllVisibleUncached: Boolean = false,
+        notifyPendingFailureSnackbars: Boolean = true,
     ): Result<Unit> = queueLoadMutex.withLock {
         val current = settings.value
         val wasOffline = _queueOffline.value
@@ -1897,6 +1901,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 selectedPlaylistId = current.selectedPlaylistId,
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
+                notifySnackbars = notifyPendingFailureSnackbars,
             )
             reconcilePendingSavesWithQueue(
                 queueItems = queueItems,
@@ -1974,6 +1979,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     selectedPlaylistId = current.selectedPlaylistId,
                     baseUrl = current.baseUrl,
                     token = current.apiToken,
+                    notifySnackbars = notifyPendingFailureSnackbars,
                 )
                 reconcilePendingSavesWithQueue(
                     queueItems = refreshedQueueItems,
@@ -2435,6 +2441,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         selectedPlaylistId: Int?,
         baseUrl: String,
         token: String,
+        notifySnackbars: Boolean,
     ) {
         _pendingManualSaves.value
             .filter { it.destinationPlaylistId == selectedPlaylistId }
@@ -2451,7 +2458,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         statusMessage = failureMessage,
                         autoRetryEligible = false,
                     )
-                    showSnackbar(failureMessage)
+                    if (notifySnackbars) {
+                        showSnackbar(failureMessage)
+                    }
                 }
             }
     }
