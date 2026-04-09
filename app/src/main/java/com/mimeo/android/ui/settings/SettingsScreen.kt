@@ -50,6 +50,7 @@ import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.ParagraphSpacingOption
+import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.ui.queue.autoDownloadStatusLines
 import com.mimeo.android.ui.theme.toFontFamily
@@ -72,6 +73,7 @@ fun SettingsScreen(
 ) {
     val clipboardManager = LocalClipboardManager.current
     val settings by vm.settings.collectAsState()
+    val pendingManualSaves by vm.pendingManualSaves.collectAsState()
     val settingsScrollOffset by vm.settingsScrollOffset.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val testingConnection by vm.testingConnection.collectAsState()
@@ -531,6 +533,10 @@ fun SettingsScreen(
                         SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(millis))
                     }.getOrDefault(null)
                 }
+                val pendingSummary = formatPendingSaveTestSummary(
+                    pendingItems = pendingManualSaves,
+                    selectedPlaylistId = settings.selectedPlaylistId,
+                )
                 Text(
                     text = "Test results",
                     style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
@@ -538,6 +544,12 @@ fun SettingsScreen(
                 Text(
                     text = buildString {
                         append(lastConnectionTestResult ?: "No test run in this session.")
+                        val hasInlinePending = (lastConnectionTestResult ?: "").contains("\nPending saves:")
+                        if (!pendingSummary.isNullOrBlank() && !hasInlinePending) {
+                            append("\n")
+                            append("Pending saves: ")
+                            append(pendingSummary)
+                        }
                         if (!testResultTimestamp.isNullOrBlank()) {
                             append("\n")
                             append("Checked at: ")
@@ -1683,6 +1695,32 @@ internal fun formatCurrentConnectionStatusSummary(
     } else {
         "${mode.displayName()}: differs from last successful target (${snapshot.baseUrl}) at $snapshotTime"
     }
+}
+
+private fun formatPendingSaveTestSummary(
+    pendingItems: List<PendingManualSaveItem>,
+    selectedPlaylistId: Int?,
+): String? {
+    val messages = pendingItems
+        .asSequence()
+        .filter { it.destinationPlaylistId == selectedPlaylistId }
+        .map { it.lastFailureMessage.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+        .toList()
+    if (messages.isEmpty()) return null
+    val terminal = messages.filterNot { isPendingSaveProcessingMessage(it) }
+    return when {
+        terminal.isNotEmpty() -> terminal.take(2).joinToString(" | ")
+        else -> "Processing..."
+    }
+}
+
+private fun isPendingSaveProcessingMessage(message: String): Boolean {
+    val normalized = message.trim().lowercase(Locale.getDefault())
+    return normalized.contains("processing") ||
+        normalized.contains("saving") ||
+        normalized.contains("queued")
 }
 
 internal fun normalizeConnectionBaseUrl(url: String): String {
