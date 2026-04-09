@@ -1,6 +1,7 @@
 package com.mimeo.android.ui.settings
 
 import android.app.Application
+import android.content.Intent
 import android.speech.tts.TextToSpeech
 import android.speech.tts.Voice
 import androidx.compose.foundation.rememberScrollState
@@ -17,11 +18,16 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -35,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -44,6 +51,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.ConnectionMode
@@ -72,6 +80,7 @@ fun SettingsScreen(
     onSignOut: () -> Unit,
 ) {
     val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
     val settings by vm.settings.collectAsState()
     val pendingManualSaves by vm.pendingManualSaves.collectAsState()
     val settingsScrollOffset by vm.settingsScrollOffset.collectAsState()
@@ -541,32 +550,32 @@ fun SettingsScreen(
                     text = "Test results",
                     style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                 )
+                val fullTestResultText = buildConnectionTestResultText(
+                    baseResult = lastConnectionTestResult,
+                    pendingSummary = pendingSummary,
+                    timestamp = testResultTimestamp,
+                )
                 Text(
-                    text = buildString {
-                        append(lastConnectionTestResult ?: "No test run in this session.")
-                        val hasInlinePending = (lastConnectionTestResult ?: "").contains("\nPending saves:")
-                        if (!pendingSummary.isNullOrBlank() && !hasInlinePending) {
-                            append("\n")
-                            append("Pending saves: ")
-                            append(pendingSummary)
-                        }
-                        if (!testResultTimestamp.isNullOrBlank()) {
-                            append("\n")
-                            append("Checked at: ")
-                            append(testResultTimestamp)
-                        }
-                    },
+                    text = fullTestResultText,
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TextButton(
-                        enabled = !lastConnectionTestResult.isNullOrBlank(),
+                    SettingsActionIconButton(
+                        enabled = fullTestResultText.isNotBlank(),
+                        icon = { Text("⧉") },
+                        tooltip = "Copy test result",
                         onClick = {
-                            clipboardManager.setText(AnnotatedString(lastConnectionTestResult.orEmpty()))
+                            clipboardManager.setText(AnnotatedString(fullTestResultText))
                             vm.showSnackbar("Test result copied")
                         },
-                    ) { Text("Copy result") }
+                    )
+                    SettingsActionIconButton(
+                        enabled = fullTestResultText.isNotBlank(),
+                        icon = { Text("↗") },
+                        tooltip = "Share test result",
+                        onClick = { sharePlainText(context, "Mimeo connection test", fullTestResultText) },
+                    )
                 }
                 val lastSuccessItems = ConnectionMode.entries.mapNotNull { mode ->
                     connectionTestSuccessByMode[mode]?.let { snapshot -> mode to snapshot }
@@ -586,15 +595,27 @@ fun SettingsScreen(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                TextButton(
+                                SettingsActionIconButton(
+                                    icon = { Text("✓") },
+                                    tooltip = "Use this URL",
                                     onClick = { applyConnectionSnapshot(snapshot) },
-                                ) { Text("Use") }
-                                TextButton(
+                                )
+                                SettingsActionIconButton(
+                                    icon = { Text("⧉") },
+                                    tooltip = "Copy URL",
                                     onClick = {
                                         clipboardManager.setText(AnnotatedString(snapshot.baseUrl))
                                         vm.showSnackbar("${snapshot.mode.displayName()} URL copied")
                                     },
-                                ) { Text("Copy") }
+                                )
+                                SettingsActionIconButton(
+                                    icon = { Text("↗") },
+                                    tooltip = "Share URL",
+                                    onClick = {
+                                        val shareText = "${snapshot.mode.displayName()} URL: ${snapshot.baseUrl}"
+                                        sharePlainText(context, "Mimeo connection URL", shareText)
+                                    },
+                                )
                             }
                         }
                     }
@@ -1695,6 +1716,59 @@ internal fun formatCurrentConnectionStatusSummary(
     } else {
         "${mode.displayName()}: differs from last successful target (${snapshot.baseUrl}) at $snapshotTime"
     }
+}
+
+private fun buildConnectionTestResultText(
+    baseResult: String?,
+    pendingSummary: String?,
+    timestamp: String?,
+): String {
+    return buildString {
+        append(baseResult ?: "No test run in this session.")
+        val hasInlinePending = (baseResult ?: "").contains("\nPending saves:")
+        if (!pendingSummary.isNullOrBlank() && !hasInlinePending) {
+            append("\n")
+            append("Pending saves: ")
+            append(pendingSummary)
+        }
+        if (!timestamp.isNullOrBlank()) {
+            append("\n")
+            append("Checked at: ")
+            append(timestamp)
+        }
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsActionIconButton(
+    icon: @Composable () -> Unit,
+    tooltip: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(tooltip) } },
+        state = rememberTooltipState(),
+    ) {
+        IconButton(
+            enabled = enabled,
+            onClick = onClick,
+        ) {
+            icon()
+        }
+    }
+}
+
+private fun sharePlainText(context: android.content.Context, subject: String, text: String) {
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    val chooser = Intent.createChooser(send, "Share via").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    ContextCompat.startActivity(context, chooser, null)
 }
 
 private fun formatPendingSaveTestSummary(
