@@ -57,6 +57,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.material.icons.outlined.Info
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.ConnectionMode
@@ -673,127 +675,77 @@ fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text("Saving")
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text("Default playlist")
-                    TextButton(onClick = { showDefaultSavePlaylistDialog = true }) {
-                        Text("$defaultSavePlaylistName ▼")
-                    }
-                }
-                Text(
-                    text = "Shared links save to Smart Queue unless you choose a playlist here.",
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text("Keep share result notifications")
-                        Text(
-                            text = "Off: share results drop away after about 4 seconds. On: results stay in the notification tray.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(
-                        checked = keepShareResultNotifications,
-                        onCheckedChange = { keepShareResultNotifications = it },
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text("Auto-download saved articles for offline reading")
-                        Text(
-                            text = "When on, successful share-saves also fetch and cache article text for offline use.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(
-                        checked = autoDownloadSavedArticles,
-                        onCheckedChange = {
-                            autoDownloadSavedArticles = it
-                            vm.saveAutoDownloadSavedArticles(it)
-                        },
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text("Default Locus view")
-                        Text(
-                            text = "Sets how Locus opens by default. You can still cycle views by tapping article text.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        TextButton(onClick = { showLocusContentModeMenu = true }) {
-                            Text("${locusContentMode.displayName()} ▼")
+                SettingsDescribedRow(
+                    title = "Default playlist",
+                    description = "Shared links save to Smart Queue unless you choose a playlist here.",
+                    trailing = {
+                        TextButton(onClick = { showDefaultSavePlaylistDialog = true }) {
+                            Text("$defaultSavePlaylistName ▼")
                         }
-                        DropdownMenu(
-                            expanded = showLocusContentModeMenu,
-                            onDismissRequest = { showLocusContentModeMenu = false },
-                        ) {
-                            LocusContentMode.entries.forEach { mode ->
-                                DropdownMenuItem(
-                                    text = { Text(mode.displayName()) },
-                                    onClick = {
-                                        showLocusContentModeMenu = false
-                                        locusContentMode = mode
-                                        vm.saveLocusContentMode(mode)
-                                    },
-                                )
+                    },
+                )
+                SettingsDescribedRow(
+                    title = "Keep share result notifications",
+                    description = "Off: share results drop away after about 4 seconds. On: results stay in the notification tray.",
+                    trailing = {
+                        Switch(
+                            checked = keepShareResultNotifications,
+                            onCheckedChange = { keepShareResultNotifications = it },
+                        )
+                    },
+                )
+                SettingsDescribedRow(
+                    title = "Auto-download saved articles for offline reading",
+                    description = "When on, successful share-saves also fetch and cache article text for offline use.",
+                    trailing = {
+                        Switch(
+                            checked = autoDownloadSavedArticles,
+                            onCheckedChange = {
+                                autoDownloadSavedArticles = it
+                                vm.saveAutoDownloadSavedArticles(it)
+                            },
+                        )
+                    },
+                )
+                SettingsDescribedRow(
+                    title = "Default Locus view",
+                    description = "Sets how Locus opens by default. You can still cycle views by tapping article text.",
+                    trailing = {
+                        Column(horizontalAlignment = Alignment.End) {
+                            TextButton(onClick = { showLocusContentModeMenu = true }) {
+                                Text("${locusContentMode.displayName()} ▼")
+                            }
+                            DropdownMenu(
+                                expanded = showLocusContentModeMenu,
+                                onDismissRequest = { showLocusContentModeMenu = false },
+                            ) {
+                                LocusContentMode.entries.forEach { mode ->
+                                    DropdownMenuItem(
+                                        text = { Text(mode.displayName()) },
+                                        onClick = {
+                                            showLocusContentModeMenu = false
+                                            locusContentMode = mode
+                                            vm.saveLocusContentMode(mode)
+                                        },
+                                    )
+                                }
                             }
                         }
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text("Auto-cache favourited items")
-                        Text(
-                            text = "When on, favourited items (including in Archive) are cached for offline reading. Bin items stay excluded.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    },
+                )
+                SettingsDescribedRow(
+                    title = "Auto-cache favourited items",
+                    description = "When on, favourited items (including in Archive) are cached for offline reading. Bin items stay excluded.",
+                    trailing = {
+                        Switch(
+                            checked = autoCacheFavoritedItems,
+                            onCheckedChange = {
+                                autoCacheFavoritedItems = it
+                                vm.saveAutoCacheFavoritedItems(it)
+                            },
                         )
-                    }
-                    Switch(
-                        checked = autoCacheFavoritedItems,
-                        onCheckedChange = {
-                            autoCacheFavoritedItems = it
-                            vm.saveAutoCacheFavoritedItems(it)
-                        },
-                    )
-                }
+                    },
+                )
             }
         }
         SettingsSectionSeparator()
@@ -824,102 +776,58 @@ fun SettingsScreen(
                         },
                     )
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text("Auto-archive at end of article")
-                        Text(
-                            text = "When playback reaches a real end-of-article, move that item to Archive.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                SettingsDescribedRow(
+                    title = "Auto-archive at end of article",
+                    description = "When playback reaches a real end-of-article, move that item to Archive.",
+                    trailing = {
+                        Switch(
+                            checked = autoArchiveAtArticleEnd,
+                            onCheckedChange = {
+                                autoArchiveAtArticleEnd = it
+                                vm.saveAutoArchiveAtArticleEnd(it)
+                            },
                         )
-                    }
-                    Switch(
-                        checked = autoArchiveAtArticleEnd,
-                        onCheckedChange = {
-                            autoArchiveAtArticleEnd = it
-                            vm.saveAutoArchiveAtArticleEnd(it)
-                        },
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text("Speak title before article")
-                        Text(
-                            text = "When enabled, playback speaks the title before body text (duplicate intros are skipped).",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    },
+                )
+                SettingsDescribedRow(
+                    title = "Speak title before article",
+                    description = "When enabled, playback speaks the title before body text (duplicate intros are skipped).",
+                    trailing = {
+                        Switch(
+                            checked = speakTitleBeforeArticle,
+                            onCheckedChange = {
+                                speakTitleBeforeArticle = it
+                                vm.saveSpeakTitleBeforeArticle(it)
+                            },
                         )
-                    }
-                    Switch(
-                        checked = speakTitleBeforeArticle,
-                        onCheckedChange = {
-                            speakTitleBeforeArticle = it
-                            vm.saveSpeakTitleBeforeArticle(it)
-                        },
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text("Skip duplicated opening after title")
-                        Text(
-                            text = "When title intro is on, skip matching opening words in body playback.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    },
+                )
+                SettingsDescribedRow(
+                    title = "Skip duplicated opening after title",
+                    description = "When title intro is on, skip matching opening words in body playback.",
+                    trailing = {
+                        Switch(
+                            checked = skipDuplicateOpeningAfterTitleIntro,
+                            onCheckedChange = {
+                                skipDuplicateOpeningAfterTitleIntro = it
+                                vm.saveSkipDuplicateOpeningAfterTitleIntro(it)
+                            },
                         )
-                    }
-                    Switch(
-                        checked = skipDuplicateOpeningAfterTitleIntro,
-                        onCheckedChange = {
-                            skipDuplicateOpeningAfterTitleIntro = it
-                            vm.saveSkipDuplicateOpeningAfterTitleIntro(it)
-                        },
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text("Keep screen on during active session")
-                        Text(
-                            text = "Keeps screen awake while speaking, or while manually reading in Reader mode on Locus.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    },
+                )
+                SettingsDescribedRow(
+                    title = "Keep screen on during active session",
+                    description = "Keeps screen awake while speaking, or while manually reading in Reader mode on Locus.",
+                    trailing = {
+                        Switch(
+                            checked = keepScreenOnDuringSession,
+                            onCheckedChange = {
+                                keepScreenOnDuringSession = it
+                                vm.saveKeepScreenOnDuringSession(it)
+                            },
                         )
-                    }
-                    Switch(
-                        checked = keepScreenOnDuringSession,
-                        onCheckedChange = {
-                            keepScreenOnDuringSession = it
-                            vm.saveKeepScreenOnDuringSession(it)
-                        },
-                    )
-                }
+                    },
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -945,30 +853,19 @@ fun SettingsScreen(
                         onCheckedChange = { autoScrollWhileListening = it },
                     )
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text("Locus return follows now-playing")
-                        Text(
-                            text = "While previewing another item, tapping Locus returns to the now-playing item. On: jump to live playback line. Off: keep the last reader position.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                SettingsDescribedRow(
+                    title = "Locus return follows now-playing",
+                    description = "While previewing another item, tapping Locus returns to the now-playing item. On: jump to live playback line. Off: keep the last reader position.",
+                    trailing = {
+                        Switch(
+                            checked = locusTabReturnsToPlaybackPosition,
+                            onCheckedChange = {
+                                locusTabReturnsToPlaybackPosition = it
+                                vm.saveLocusTabReturnsToPlaybackPosition(it)
+                            },
                         )
-                    }
-                    Switch(
-                        checked = locusTabReturnsToPlaybackPosition,
-                        onCheckedChange = {
-                            locusTabReturnsToPlaybackPosition = it
-                            vm.saveLocusTabReturnsToPlaybackPosition(it)
-                        },
-                    )
-                }
+                    },
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1016,30 +913,19 @@ fun SettingsScreen(
                         }
                     }
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text("End-of-article completion cue")
-                        Text(
-                            text = "Play a short tone when an article finishes.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                SettingsDescribedRow(
+                    title = "End-of-article completion cue",
+                    description = "Play a short tone when an article finishes.",
+                    trailing = {
+                        Switch(
+                            checked = playCompletionCueAtArticleEnd,
+                            onCheckedChange = {
+                                playCompletionCueAtArticleEnd = it
+                                vm.savePlayCompletionCueAtArticleEnd(it)
+                            },
                         )
-                    }
-                    Switch(
-                        checked = playCompletionCueAtArticleEnd,
-                        onCheckedChange = {
-                            playCompletionCueAtArticleEnd = it
-                            vm.savePlayCompletionCueAtArticleEnd(it)
-                        },
-                    )
-                }
+                    },
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1762,6 +1648,53 @@ private fun SettingsActionIconButton(
             onClick = onClick,
         ) {
             icon()
+        }
+    }
+}
+
+@Composable
+private fun SettingsDescribedRow(
+    title: String,
+    description: String,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    var descriptionVisible by remember { mutableStateOf(false) }
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = title,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = { descriptionVisible = !descriptionVisible }) {
+                    Icon(
+                        Icons.Outlined.Info,
+                        contentDescription = if (descriptionVisible) "Hide description" else "Show description",
+                        tint = if (descriptionVisible) {
+                            androidx.compose.material3.MaterialTheme.colorScheme.primary
+                        } else {
+                            androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        },
+                    )
+                }
+            }
+            trailing?.invoke()
+        }
+        AnimatedVisibility(visible = descriptionVisible) {
+            Text(
+                text = description,
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
         }
     }
 }
