@@ -1816,7 +1816,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val pendingFailures = _pendingManualSaves.value
             .asSequence()
             .filter { it.destinationPlaylistId == selectedPlaylistId }
-            .mapNotNull { it.lastFailureMessage?.trim().takeIf { message -> message.isNotBlank() } }
+            .mapNotNull { it.lastFailureMessage?.trim()?.takeIf { message -> message.isNotBlank() } }
             .distinct()
             .toList()
         if (pendingFailures.isEmpty()) return ""
