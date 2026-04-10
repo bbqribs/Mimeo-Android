@@ -163,7 +163,10 @@ internal fun shouldAutoScrollToTopForNewItems(
     if (previousDisplayedItemIds.isEmpty()) return false
     if (currentDisplayedItemIds.isEmpty()) return false
     val previousSet = previousDisplayedItemIds.toHashSet()
-    return currentDisplayedItemIds.any { it !in previousSet }
+    // Only scroll to top if the FIRST item in the sorted list is genuinely new
+    // (a new save appeared at the head). Appended pages from pagination add items
+    // at the tail and must not trigger a bounce to top.
+    return currentDisplayedItemIds.first() !in previousSet
 }
 
 internal data class UpNextRestorePosition(
