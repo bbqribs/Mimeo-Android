@@ -126,6 +126,8 @@ import com.mimeo.android.player.SOURCE_CUE_CHUNK_INDEX
 import com.mimeo.android.player.TITLE_INTRO_CHUNK_INDEX
 import com.mimeo.android.player.TtsController
 import com.mimeo.android.ui.common.locusCapturePresentation
+import com.mimeo.android.ui.common.openItemInBrowser
+import com.mimeo.android.ui.common.shareItemUrl
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
@@ -767,6 +769,7 @@ fun PlayerScreen(
     onChevronSnapChange: (PlayerChevronSnapEdge) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val engineState by vm.playbackEngineState.collectAsState()
     val currentItemId = if (engineState.currentItemId > 0) engineState.currentItemId else initialItemId
     var resolvedInitial by rememberSaveable(initialItemId) { mutableStateOf(false) }
@@ -1471,6 +1474,9 @@ fun PlayerScreen(
             articleText = displayPayload?.text?.takeIf { it.isNotBlank() },
         )
     }
+    val locusItemUrl = reportContext.url.orEmpty()
+    val locusItemTitle = reportContext.articleTitle
+    val locusHasUrl = locusItemUrl.isNotBlank()
     var showProblemReportDialog by remember { mutableStateOf(false) }
     var reportCategory by remember { mutableStateOf(ProblemReportCategory.CONTENT_PROBLEM) }
     var reportUserNote by remember { mutableStateOf("") }
@@ -2023,6 +2029,15 @@ fun PlayerScreen(
                                         showPlaylistPicker = true
                                     },
                                     canReportProblem = settings.apiToken.isNotBlank(),
+                                    hasUrl = locusHasUrl,
+                                    onOpenInBrowser = {
+                                        overflowExpanded = false
+                                        openItemInBrowser(context, locusItemUrl)
+                                    },
+                                    onShareUrl = {
+                                        overflowExpanded = false
+                                        shareItemUrl(context, locusItemUrl, locusItemTitle)
+                                    },
                                     isExpanded = isExpanded,
                                     onToggleExpanded = {
                                         overflowExpanded = false
@@ -2309,6 +2324,15 @@ fun PlayerScreen(
                                                 showPlaylistPicker = true
                                             },
                                             canReportProblem = settings.apiToken.isNotBlank(),
+                                            hasUrl = locusHasUrl,
+                                            onOpenInBrowser = {
+                                                overflowExpanded = false
+                                                openItemInBrowser(context, locusItemUrl)
+                                            },
+                                            onShareUrl = {
+                                                overflowExpanded = false
+                                                shareItemUrl(context, locusItemUrl, locusItemTitle)
+                                            },
                                             isExpanded = isExpanded,
                                             onToggleExpanded = {
                                                 overflowExpanded = false
@@ -3298,6 +3322,9 @@ private fun LocusOverflowMenuItems(
     onMoveToBin: () -> Unit,
     onOpenPlaylists: () -> Unit,
     canReportProblem: Boolean,
+    hasUrl: Boolean,
+    onOpenInBrowser: () -> Unit,
+    onShareUrl: () -> Unit,
     isExpanded: Boolean,
     onToggleExpanded: () -> Unit,
 ) {
@@ -3309,6 +3336,16 @@ private fun LocusOverflowMenuItems(
         text = { Text("Playlists...") },
         onClick = onOpenPlaylists,
     )
+    if (hasUrl) {
+        DropdownMenuItem(
+            text = { Text("Open in browser") },
+            onClick = onOpenInBrowser,
+        )
+        DropdownMenuItem(
+            text = { Text("Share URL") },
+            onClick = onShareUrl,
+        )
+    }
     if (canReportProblem) {
         DropdownMenuItem(
             text = { Text("Report problem") },
