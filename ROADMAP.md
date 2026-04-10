@@ -97,7 +97,7 @@
 3. [x] Item actions UX pass (spec only): unified action model for Up Next, Locus, Archive, and Bin views defined in `docs/ANDROID_ITEM_ACTIONS_SPEC.md`; establishes share URL, open in browser, long-press, and canonical overflow order.
 4. [ ] Item actions implementation: wire Share URL + Open in browser into Up Next and Locus overflows, add long-press-to-menu on Up Next rows, per `docs/ANDROID_ITEM_ACTIONS_SPEC.md` implementation order.
 5. [x] Reader text actions spec: copy/share model for selected text and whole-article text defined in `docs/ANDROID_READER_TEXT_ACTIONS_SPEC.md`; selected-text via native SelectionContainer (already live); whole-article via two new Locus overflow items with citation block on share.
-6. [ ] Reader text actions implementation: add `Copy article text` + `Share article text` to Locus overflow per `docs/ANDROID_READER_TEXT_ACTIONS_SPEC.md` implementation order.
+6. [x] Reader text actions implementation: `Copy article text` + `Share article text` added to Locus overflow; citation block (title/source/URL, each conditional + generic-label filtered) on share, bare text on copy; `buildArticleShareText` unit tests added; native selection toolbar unchanged.
 7. [ ] Cross-repo source metadata unification: align backend + extension/web on the same provenance/origin contract and rendering precedence shipped on Android (no body-link source inference).
 6. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.
 7. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.

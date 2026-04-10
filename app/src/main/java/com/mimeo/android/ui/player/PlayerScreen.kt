@@ -126,7 +126,9 @@ import com.mimeo.android.player.SOURCE_CUE_CHUNK_INDEX
 import com.mimeo.android.player.TITLE_INTRO_CHUNK_INDEX
 import com.mimeo.android.player.TtsController
 import com.mimeo.android.ui.common.locusCapturePresentation
+import com.mimeo.android.ui.common.copyItemText
 import com.mimeo.android.ui.common.openItemInBrowser
+import com.mimeo.android.ui.common.shareItemText
 import com.mimeo.android.ui.common.shareItemUrl
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
@@ -2038,6 +2040,16 @@ fun PlayerScreen(
                                         overflowExpanded = false
                                         shareItemUrl(context, locusItemUrl, locusItemTitle)
                                     },
+                                    hasArticleText = displayReaderText.isNotBlank(),
+                                    onCopyArticleText = {
+                                        overflowExpanded = false
+                                        copyItemText(context, displayReaderText)
+                                        onShowSnackbar("Article text copied", null, null)
+                                    },
+                                    onShareArticleText = {
+                                        overflowExpanded = false
+                                        shareItemText(context, displayReaderText, locusItemTitle, currentSourceLabel, locusItemUrl.takeIf { locusHasUrl })
+                                    },
                                     isExpanded = isExpanded,
                                     onToggleExpanded = {
                                         overflowExpanded = false
@@ -2332,6 +2344,16 @@ fun PlayerScreen(
                                             onShareUrl = {
                                                 overflowExpanded = false
                                                 shareItemUrl(context, locusItemUrl, locusItemTitle)
+                                            },
+                                            hasArticleText = displayReaderText.isNotBlank(),
+                                            onCopyArticleText = {
+                                                overflowExpanded = false
+                                                copyItemText(context, displayReaderText)
+                                                onShowSnackbar("Article text copied", null, null)
+                                            },
+                                            onShareArticleText = {
+                                                overflowExpanded = false
+                                                shareItemText(context, displayReaderText, locusItemTitle, currentSourceLabel, locusItemUrl.takeIf { locusHasUrl })
                                             },
                                             isExpanded = isExpanded,
                                             onToggleExpanded = {
@@ -3325,6 +3347,9 @@ private fun LocusOverflowMenuItems(
     hasUrl: Boolean,
     onOpenInBrowser: () -> Unit,
     onShareUrl: () -> Unit,
+    hasArticleText: Boolean,
+    onCopyArticleText: () -> Unit,
+    onShareArticleText: () -> Unit,
     isExpanded: Boolean,
     onToggleExpanded: () -> Unit,
 ) {
@@ -3344,6 +3369,16 @@ private fun LocusOverflowMenuItems(
         DropdownMenuItem(
             text = { Text("Share URL") },
             onClick = onShareUrl,
+        )
+    }
+    if (hasArticleText) {
+        DropdownMenuItem(
+            text = { Text("Copy article text") },
+            onClick = onCopyArticleText,
+        )
+        DropdownMenuItem(
+            text = { Text("Share article text") },
+            onClick = onShareArticleText,
         )
     }
     if (canReportProblem) {
