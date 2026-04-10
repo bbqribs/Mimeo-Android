@@ -322,7 +322,8 @@ fun ReaderBody(
             .onSizeChanged { viewportSize = it }
             .onGloballyPositioned { coordinates ->
                 viewportTopInRootPx = coordinates.positionInRoot().y
-            },
+            }
+            .verticalScroll(scrollState),
         contentAlignment = Alignment.TopCenter,
     ) {
         key(selectionResetSignal) {
@@ -333,7 +334,6 @@ fun ReaderBody(
                         modifier = Modifier
                             .widthIn(max = readingMaxWidthDp.dp)
                             .fillMaxWidth()
-                            .verticalScroll(scrollState)
                             .onGloballyPositioned { coordinates ->
                                 val top = coordinates.positionInRoot().y
                                 activeChunkTopInRootPx = top
@@ -375,8 +375,7 @@ fun ReaderBody(
                     Column(
                         modifier = Modifier
                             .widthIn(max = readingMaxWidthDp.dp)
-                            .fillMaxWidth()
-                            .verticalScroll(scrollState),
+                            .fillMaxWidth(),
                     ) {
                         chunks.forEachIndexed { index, chunk ->
                             val isHighlighted = index == safeChunkIndex
@@ -524,16 +523,14 @@ fun ReaderBody(
                             text = fullText?.ifBlank { "No readable text available." } ?: "No readable text available.",
                             modifier = Modifier
                                 .widthIn(max = readingMaxWidthDp.dp)
-                                .fillMaxWidth()
-                                .verticalScroll(scrollState),
+                                .fillMaxWidth(),
                             style = readingTextStyle,
                         )
                     } else {
                         Spacer(
                             modifier = Modifier
                                 .widthIn(max = readingMaxWidthDp.dp)
-                                .fillMaxWidth()
-                                .verticalScroll(scrollState),
+                                .fillMaxWidth(),
                         )
                     }
                 }

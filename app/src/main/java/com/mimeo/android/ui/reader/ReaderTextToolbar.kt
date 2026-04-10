@@ -19,6 +19,11 @@ internal class ReaderTextToolbar(
     private var actionMode: ActionMode? = null
     private var _status = TextToolbarStatus.Hidden
 
+    // Updated each time showMenu is called so onGetContentRect always returns the latest position.
+    private var currentRect = Rect.Zero
+    private var onCopyRequested: (() -> Unit)? = null
+    private var onSelectAllRequested: (() -> Unit)? = null
+
     override val status: TextToolbarStatus get() = _status
 
     override fun showMenu(
@@ -28,17 +33,28 @@ internal class ReaderTextToolbar(
         onCutRequested: (() -> Unit)?,
         onSelectAllRequested: (() -> Unit)?,
     ) {
-        actionMode?.finish()
+        currentRect = rect
+        this.onCopyRequested = onCopyRequested
+        this.onSelectAllRequested = onSelectAllRequested
+
+        // If the action mode is already alive (e.g. user scrolled while selection is active),
+        // just reposition the toolbar — no destroy/recreate cycle that would leave visual traces.
+        val existing = actionMode
+        if (existing != null) {
+            existing.invalidateContentRect()
+            return
+        }
+
         actionMode = view.startActionMode(
             object : ActionMode.Callback2() {
                 override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
-                    if (onCopyRequested != null) {
+                    if (this@ReaderTextToolbar.onCopyRequested != null) {
                         menu.add(Menu.NONE, ITEM_COPY, 0, android.R.string.copy)
                             .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
                     }
                     menu.add(Menu.NONE, ITEM_SHARE, 1, "Share")
                         .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                    if (onSelectAllRequested != null) {
+                    if (this@ReaderTextToolbar.onSelectAllRequested != null) {
                         menu.add(Menu.NONE, ITEM_SELECT_ALL, 2, android.R.string.selectAll)
                             .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
                     }
@@ -50,12 +66,12 @@ internal class ReaderTextToolbar(
                 override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
                     return when (item.itemId) {
                         ITEM_COPY -> {
-                            onCopyRequested?.invoke()
+                            this@ReaderTextToolbar.onCopyRequested?.invoke()
                             mode.finish()
                             true
                         }
                         ITEM_SHARE -> {
-                            onCopyRequested?.invoke()
+                            this@ReaderTextToolbar.onCopyRequested?.invoke()
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
                                 as ClipboardManager
                             val text = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
@@ -64,7 +80,7 @@ internal class ReaderTextToolbar(
                             true
                         }
                         ITEM_SELECT_ALL -> {
-                            onSelectAllRequested?.invoke()
+                            this@ReaderTextToolbar.onSelectAllRequested?.invoke()
                             true
                         }
                         else -> false
@@ -77,12 +93,8 @@ internal class ReaderTextToolbar(
                 }
 
                 override fun onGetContentRect(mode: ActionMode, view: View, outRect: android.graphics.Rect) {
-                    outRect.set(
-                        rect.left.toInt(),
-                        rect.top.toInt(),
-                        rect.right.toInt(),
-                        rect.bottom.toInt(),
-                    )
+                    val r = currentRect
+                    outRect.set(r.left.toInt(), r.top.toInt(), r.right.toInt(), r.bottom.toInt())
                 }
             },
             ActionMode.TYPE_FLOATING,
