@@ -23,6 +23,15 @@ fun openItemInBrowser(context: Context, url: String) {
     ContextCompat.startActivity(context, intent, null)
 }
 
+fun shareSelectedText(context: Context, text: String) {
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    val chooser = Intent.createChooser(send, "Share").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    ContextCompat.startActivity(context, chooser, null)
+}
+
 fun copyItemText(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText("article text", text))

@@ -92,6 +92,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.input.pointer.pointerInput
@@ -130,6 +131,8 @@ import com.mimeo.android.ui.common.copyItemText
 import com.mimeo.android.ui.common.openItemInBrowser
 import com.mimeo.android.ui.common.shareItemText
 import com.mimeo.android.ui.common.shareItemUrl
+import com.mimeo.android.ui.common.shareSelectedText
+import com.mimeo.android.ui.reader.ReaderTextToolbar
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
@@ -880,7 +883,12 @@ fun PlayerScreen(
     )
     val currentPosition = engineState.currentPosition
     val actionScope = rememberCoroutineScope()
-    val textToolbar = LocalTextToolbar.current
+    val view = LocalView.current
+    val textToolbar = remember(view) {
+        ReaderTextToolbar(view, context) { selectedText ->
+            shareSelectedText(context, selectedText)
+        }
+    }
     val hasActiveSelection = textToolbar.status == TextToolbarStatus.Shown
     val chevronSide = remember(chevronSnapEdge) {
         when (chevronSnapEdge) {
@@ -2103,42 +2111,44 @@ fun PlayerScreen(
                                     }
                                 },
                         ) {
-                            ReaderBody(
-                                fullText = displayPayload?.text,
-                                chunks = displayChunks,
-                                preservedLinks = preservedReaderLinks,
-                                currentChunkIndex = if (previewModeActive) 0 else safePosition.chunkIndex,
-                                currentChunkOffsetInChars = if (previewModeActive) 0 else safePosition.offsetInChunkChars,
-                                activeRangeInChunk = if (previewModeActive) null else activeChunkRange,
-                                searchHighlightRangesByChunk = locusSearchRangesByChunk,
-                                searchFocusChunkIndex = activeLocusSearchMatch?.chunkIndex,
-                                searchFocusRangeInChunk = activeLocusSearchMatch?.rangeInChunk,
-                                searchFocusTriggerSignal = locusSearchScrollTriggerSignal,
-                                scrollTriggerSignal = readerScrollTriggerSignal,
-                                autoScrollWhileListening = !previewModeActive &&
-                                    settings.autoScrollWhileListening &&
-                                    (isSpeaking || isAutoPlaying),
-                                readingFontSizeSp = settings.readingFontSizeSp,
-                                readingFontOption = settings.readingFontOption,
-                                readingLineHeightPercent = settings.readingLineHeightPercent,
-                                readingMaxWidthDp = settings.readingMaxWidthDp,
-                                paragraphSpacing = settings.readingParagraphSpacing,
-                                selectionResetSignal = readerSelectionResetSignal,
-                                scrollState = readerScrollState,
-                                showEmptyPlaceholder = transitionSettled && !isLoading,
-                                topOverlayOcclusionPx = locusTopOverlayHeightPx,
-                                bottomOverlayOcclusionPx = locusBottomOverlayHeightPx,
-                                onNonLinkTap = {
-                                    if (textToolbar.status == TextToolbarStatus.Shown || selectionClearArmed) {
-                                        clearActiveSelection()
-                                    } else {
-                                        toggleReaderMode()
-                                    }
-                                },
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .graphicsLayer { alpha = bodyContentAlpha },
-                            )
+                            CompositionLocalProvider(LocalTextToolbar provides textToolbar) {
+                                ReaderBody(
+                                    fullText = displayPayload?.text,
+                                    chunks = displayChunks,
+                                    preservedLinks = preservedReaderLinks,
+                                    currentChunkIndex = if (previewModeActive) 0 else safePosition.chunkIndex,
+                                    currentChunkOffsetInChars = if (previewModeActive) 0 else safePosition.offsetInChunkChars,
+                                    activeRangeInChunk = if (previewModeActive) null else activeChunkRange,
+                                    searchHighlightRangesByChunk = locusSearchRangesByChunk,
+                                    searchFocusChunkIndex = activeLocusSearchMatch?.chunkIndex,
+                                    searchFocusRangeInChunk = activeLocusSearchMatch?.rangeInChunk,
+                                    searchFocusTriggerSignal = locusSearchScrollTriggerSignal,
+                                    scrollTriggerSignal = readerScrollTriggerSignal,
+                                    autoScrollWhileListening = !previewModeActive &&
+                                        settings.autoScrollWhileListening &&
+                                        (isSpeaking || isAutoPlaying),
+                                    readingFontSizeSp = settings.readingFontSizeSp,
+                                    readingFontOption = settings.readingFontOption,
+                                    readingLineHeightPercent = settings.readingLineHeightPercent,
+                                    readingMaxWidthDp = settings.readingMaxWidthDp,
+                                    paragraphSpacing = settings.readingParagraphSpacing,
+                                    selectionResetSignal = readerSelectionResetSignal,
+                                    scrollState = readerScrollState,
+                                    showEmptyPlaceholder = transitionSettled && !isLoading,
+                                    topOverlayOcclusionPx = locusTopOverlayHeightPx,
+                                    bottomOverlayOcclusionPx = locusBottomOverlayHeightPx,
+                                    onNonLinkTap = {
+                                        if (textToolbar.status == TextToolbarStatus.Shown || selectionClearArmed) {
+                                            clearActiveSelection()
+                                        } else {
+                                            toggleReaderMode()
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer { alpha = bodyContentAlpha },
+                                )
+                            }
                             androidx.compose.animation.AnimatedVisibility(
                                 visible = showLocusTopBar,
                                 enter = slideInVertically(
