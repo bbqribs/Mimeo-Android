@@ -530,6 +530,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val queueHasMorePages: StateFlow<Boolean> = _queueHasMorePages.asStateFlow()
     private var queueServerFetchedCount = 0
     private var lastQueueLoadCompletedAtMs: Long = 0L
+    private val _queueReloadGeneration = MutableStateFlow(0)
+    val queueReloadGeneration: StateFlow<Int> = _queueReloadGeneration.asStateFlow()
     private val queueLoadMutex = Mutex()
     private val _lastQueueFetchDebug = MutableStateFlow(QueueFetchDebugSnapshot())
     val lastQueueFetchDebug: StateFlow<QueueFetchDebugSnapshot> = _lastQueueFetchDebug.asStateFlow()
@@ -2016,6 +2018,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _statusMessage.value = "Synced offline actions"
             }
             lastQueueLoadCompletedAtMs = System.currentTimeMillis()
+            _queueReloadGeneration.value++
             Result.success(Unit)
         } catch (e: ApiException) {
             if (handleAuthFailureIfNeeded(e)) {

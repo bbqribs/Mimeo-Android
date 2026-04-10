@@ -338,6 +338,7 @@ fun QueueScreen(
     val loading by vm.queueLoading.collectAsState()
     val loadingMore by vm.queueLoadingMore.collectAsState()
     val queueHasMorePages by vm.queueHasMorePages.collectAsState()
+    val queueReloadGeneration by vm.queueReloadGeneration.collectAsState()
     val offline by vm.queueOffline.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
     val noActiveContentItemIds by vm.noActiveContentItemIds.collectAsState()
@@ -1182,7 +1183,7 @@ fun QueueScreen(
                     )
                 }
             }
-            LaunchedEffect(listState, queueHasMorePages) {
+            LaunchedEffect(listState, queueHasMorePages, queueReloadGeneration) {
                 if (BuildConfig.DEBUG) Log.d("MimeoQueueFetch", "scroll-trigger LaunchedEffect started hasMore=$queueHasMorePages")
                 snapshotFlow {
                     val layoutInfo = listState.layoutInfo
