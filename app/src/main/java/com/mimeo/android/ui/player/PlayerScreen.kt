@@ -17,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -95,6 +96,7 @@ import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -141,6 +143,7 @@ import com.mimeo.android.ui.reader.ReaderBody
 import com.mimeo.android.ui.reader.extractReaderPreservedLinks
 import com.mimeo.android.ui.reader.segmentSentences
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -2107,6 +2110,36 @@ fun PlayerScreen(
                                             clearActiveSelection()
                                         } else {
                                             toggleReaderMode()
+                                        }
+                                    }
+                                }
+                                .pointerInput(hasActiveSelection) {
+                                    if (!hasActiveSelection) return@pointerInput
+                                    val edgeZonePx = 80.dp.toPx()
+                                    var scrollSpeed = 0f
+                                    coroutineScope {
+                                        launch {
+                                            while (true) {
+                                                if (scrollSpeed != 0f) readerScrollState.scrollBy(scrollSpeed)
+                                                delay(16L)
+                                            }
+                                        }
+                                        awaitPointerEventScope {
+                                            while (true) {
+                                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                                val y = event.changes.firstOrNull()
+                                                    ?.takeIf { it.pressed }?.position?.y
+                                                scrollSpeed = if (y == null) 0f else {
+                                                    val h = size.height.toFloat()
+                                                    when {
+                                                        y < edgeZonePx ->
+                                                            -(1f - y / edgeZonePx).coerceIn(0f, 1f) * 14f
+                                                        y > h - edgeZonePx ->
+                                                            (1f - (h - y) / edgeZonePx).coerceIn(0f, 1f) * 14f
+                                                        else -> 0f
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 },
