@@ -522,6 +522,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _queueLoading = MutableStateFlow(false)
     val queueLoading: StateFlow<Boolean> = _queueLoading.asStateFlow()
+    private val _queueLoadingMore = MutableStateFlow(false)
+    val queueLoadingMore: StateFlow<Boolean> = _queueLoadingMore.asStateFlow()
+    private val _queueTotalCount = MutableStateFlow(0)
+    val queueTotalCount: StateFlow<Int> = _queueTotalCount.asStateFlow()
+    private val _queueHasMorePages = MutableStateFlow(false)
+    val queueHasMorePages: StateFlow<Boolean> = _queueHasMorePages.asStateFlow()
+    private var queueServerFetchedCount = 0
     private val queueLoadMutex = Mutex()
     private val _lastQueueFetchDebug = MutableStateFlow(QueueFetchDebugSnapshot())
     val lastQueueFetchDebug: StateFlow<QueueFetchDebugSnapshot> = _lastQueueFetchDebug.asStateFlow()
@@ -1872,6 +1879,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 includeAllVisibleUncached = forceAutoDownloadAllVisibleUncached,
             )
             _queueItems.value = queueItems
+            _queueTotalCount.value = queue.totalCount
+            queueServerFetchedCount = queueItems.size
+            _queueHasMorePages.value = queueItems.size < queue.totalCount
             val appliedSnapshot = queueResult.debugSnapshot.copy(
                 appliedItemCount = _queueItems.value.size,
                 appliedContains409 = _queueItems.value.any { it.itemId == DEBUG_TARGET_ITEM_ID },
@@ -1950,6 +1960,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     includeAllVisibleUncached = forceAutoDownloadAllVisibleUncached,
                 )
                 _queueItems.value = refreshedQueueItems
+                _queueTotalCount.value = refreshedQueue.totalCount
+                queueServerFetchedCount = refreshedQueueItems.size
+                _queueHasMorePages.value = refreshedQueueItems.size < refreshedQueue.totalCount
                 val refreshedSnapshot = refreshedQueueResult.debugSnapshot.copy(
                     appliedItemCount = _queueItems.value.size,
                     appliedContains409 = _queueItems.value.any { it.itemId == DEBUG_TARGET_ITEM_ID },
@@ -2039,6 +2052,41 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun loadQueue(autoRetryPendingSaves: Boolean = true) {
         viewModelScope.launch {
             loadQueueOnce(autoRetryPendingSaves = autoRetryPendingSaves)
+        }
+    }
+
+    fun loadMoreQueueItems() {
+        if (!_queueHasMorePages.value || _queueLoadingMore.value) return
+        // Use tryLock so we skip silently if a full reload holds the mutex.
+        if (!queueLoadMutex.tryLock()) return
+        viewModelScope.launch {
+            try {
+                _queueLoadingMore.value = true
+                val current = settings.value
+                if (current.apiToken.isBlank()) return@launch
+                val offset = queueServerFetchedCount
+                val result = apiClient.getQueue(
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
+                    playlistId = current.selectedPlaylistId,
+                    offset = offset,
+                    limit = ApiClient.QUEUE_LOAD_MORE_LIMIT,
+                )
+                val newItems = applyFavoriteOverrides(result.payload.items)
+                val existingIds = _queueItems.value.mapTo(linkedSetOf()) { it.itemId }
+                val deduplicated = newItems.filter { it.itemId !in existingIds }
+                if (deduplicated.isNotEmpty()) {
+                    _queueItems.value = _queueItems.value + deduplicated
+                }
+                queueServerFetchedCount = offset + result.payload.items.size
+                _queueTotalCount.value = result.payload.totalCount
+                _queueHasMorePages.value = queueServerFetchedCount < result.payload.totalCount
+            } catch (_: Exception) {
+                // Best-effort: ignore load-more failures silently.
+            } finally {
+                _queueLoadingMore.value = false
+                queueLoadMutex.unlock()
+            }
         }
     }
 

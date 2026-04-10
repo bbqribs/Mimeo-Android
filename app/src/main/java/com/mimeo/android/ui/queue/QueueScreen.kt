@@ -35,6 +35,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
@@ -332,6 +333,8 @@ fun QueueScreen(
     val playlists by vm.playlists.collectAsState()
     val settings by vm.settings.collectAsState()
     val loading by vm.queueLoading.collectAsState()
+    val loadingMore by vm.queueLoadingMore.collectAsState()
+    val queueHasMorePages by vm.queueHasMorePages.collectAsState()
     val offline by vm.queueOffline.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
     val noActiveContentItemIds by vm.noActiveContentItemIds.collectAsState()
@@ -1176,6 +1179,21 @@ fun QueueScreen(
                     )
                 }
             }
+            LaunchedEffect(listState, queueHasMorePages) {
+                snapshotFlow {
+                    val layoutInfo = listState.layoutInfo
+                    val totalItems = layoutInfo.totalItemsCount
+                    val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                    lastVisibleIndex to totalItems
+                }
+                    .distinctUntilChanged()
+                    .collect { (lastVisible, total) ->
+                        if (queueHasMorePages && total > 0 && lastVisible >= total - 5) {
+                            vm.loadMoreQueueItems()
+                        }
+                    }
+            }
+
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1364,6 +1382,18 @@ fun QueueScreen(
                         }
                         if (index < displayedItems.lastIndex) {
                             ThinQueueDivider()
+                        }
+                    }
+                }
+                if (loadingMore) {
+                    item(key = "queue-load-more-footer") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
                         }
                     }
                 }

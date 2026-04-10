@@ -65,6 +65,7 @@ data class AuthTokenResponse(
 @Serializable
 data class PlaybackQueueResponse(
     val count: Int,
+    @SerialName("total_count") val totalCount: Int = 0,
     val items: List<PlaybackQueueItem>,
 )
 
