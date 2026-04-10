@@ -94,11 +94,13 @@
 1. [x] In-Locus problem-report flow implementation (Android v1): `Report a problem` is now available from Locus overflow with online submit to `/feedback/problem-report`, category + required note + optional URL edit/clear, and bounded success/error/auth handling that preserves form state on failed submit.
 2. [~] Problem reports v2 attachment contract (CONTRACT CHANGE): Android opt-in UI/payload path is now implemented (default-OFF in-dialog attachment checkboxes for title/text + compact privacy hint + bounded attachment payload fields); backend persistence/export contract work remains pending per `docs/PROBLEM_REPORT_ATTACHMENT_V2_CONTRACT_SPEC.md`.
    - Current backend limitation until contract lands: v1 persisted/exported report shape remains the authoritative operator record.
-3. [ ] Cross-repo source metadata unification: align backend + extension/web on the same provenance/origin contract and rendering precedence shipped on Android (no body-link source inference).
-4. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.
-5. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
-6. [ ] Keep-screen-on/session UX follow-up: refine “active session” heuristics and user copy for reader-only vs speaking states without changing playback ownership.
-7. [ ] Offline action queueing follow-up: expand deferred-sync coverage beyond favourite/archive to remaining item lifecycle actions where local-first behavior is valuable.
+3. [x] Item actions UX pass (spec only): unified action model for Up Next, Locus, Archive, and Bin views defined in `docs/ANDROID_ITEM_ACTIONS_SPEC.md`; establishes share URL, open in browser, long-press, and canonical overflow order.
+4. [ ] Item actions implementation: wire Share URL + Open in browser into Up Next and Locus overflows, add long-press-to-menu on Up Next rows, per `docs/ANDROID_ITEM_ACTIONS_SPEC.md` implementation order.
+5. [ ] Cross-repo source metadata unification: align backend + extension/web on the same provenance/origin contract and rendering precedence shipped on Android (no body-link source inference).
+6. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.
+7. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
+8. [ ] Keep-screen-on/session UX follow-up: refine “active session” heuristics and user copy for reader-only vs speaking states without changing playback ownership.
+9. [ ] Offline action queueing follow-up: expand deferred-sync coverage beyond favourite/archive to remaining item lifecycle actions where local-first behavior is valuable.
 
 ## Reader/Player UX fidelity + state persistence backlog
 
