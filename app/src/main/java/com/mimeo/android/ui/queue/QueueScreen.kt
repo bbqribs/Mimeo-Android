@@ -35,6 +35,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
@@ -162,7 +163,10 @@ internal fun shouldAutoScrollToTopForNewItems(
     if (previousDisplayedItemIds.isEmpty()) return false
     if (currentDisplayedItemIds.isEmpty()) return false
     val previousSet = previousDisplayedItemIds.toHashSet()
-    return currentDisplayedItemIds.any { it !in previousSet }
+    // Only scroll to top if the FIRST item in the sorted list is genuinely new
+    // (a new save appeared at the head). Appended pages from pagination add items
+    // at the tail and must not trigger a bounce to top.
+    return currentDisplayedItemIds.first() !in previousSet
 }
 
 internal data class UpNextRestorePosition(
@@ -332,6 +336,9 @@ fun QueueScreen(
     val playlists by vm.playlists.collectAsState()
     val settings by vm.settings.collectAsState()
     val loading by vm.queueLoading.collectAsState()
+    val loadingMore by vm.queueLoadingMore.collectAsState()
+    val queueHasMorePages by vm.queueHasMorePages.collectAsState()
+    val queueReloadGeneration by vm.queueReloadGeneration.collectAsState()
     val offline by vm.queueOffline.collectAsState()
     val cachedItemIds by vm.cachedItemIds.collectAsState()
     val noActiveContentItemIds by vm.noActiveContentItemIds.collectAsState()
@@ -390,7 +397,7 @@ fun QueueScreen(
 
     LaunchedEffect(Unit) {
         vm.refreshPlaylists()
-        vm.loadQueue()
+        vm.loadQueueIfNotRecent()
         vm.flushPendingProgress()
     }
 
@@ -1176,6 +1183,23 @@ fun QueueScreen(
                     )
                 }
             }
+            LaunchedEffect(listState, queueHasMorePages, queueReloadGeneration) {
+                if (BuildConfig.DEBUG) Log.d("MimeoQueueFetch", "scroll-trigger LaunchedEffect started hasMore=$queueHasMorePages")
+                snapshotFlow {
+                    val layoutInfo = listState.layoutInfo
+                    val totalItems = layoutInfo.totalItemsCount
+                    val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                    lastVisibleIndex to totalItems
+                }
+                    .distinctUntilChanged()
+                    .collect { (lastVisible, total) ->
+                        if (BuildConfig.DEBUG) Log.d("MimeoQueueFetch", "scroll pos: last=$lastVisible total=$total hasMore=$queueHasMorePages threshold=${total - 5}")
+                        if (queueHasMorePages && total > 0 && lastVisible >= total - 5) {
+                            vm.loadMoreQueueItems()
+                        }
+                    }
+            }
+
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1364,6 +1388,18 @@ fun QueueScreen(
                         }
                         if (index < displayedItems.lastIndex) {
                             ThinQueueDivider()
+                        }
+                    }
+                }
+                if (loadingMore) {
+                    item(key = "queue-load-more-footer") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
                         }
                     }
                 }

@@ -47,6 +47,20 @@ class QueueAutoScrollBehaviorTest {
     }
 
     @Test
+    fun `pagination append does not trigger scroll to top`() {
+        // Older items appended at the bottom (load-more) must never bounce the user to top.
+        val shouldScroll = shouldAutoScrollToTopForNewItems(
+            previousDisplayedItemIds = listOf(10, 9, 8, 7, 6),
+            currentDisplayedItemIds = listOf(10, 9, 8, 7, 6, 5, 4, 3),
+            pendingFocusId = -1,
+            hasSearchQuery = false,
+            isDefaultFilterAndSort = true,
+        )
+
+        assertFalse(shouldScroll)
+    }
+
+    @Test
     fun `non-default filtered or searched views do not auto-jump`() {
         val filtered = shouldAutoScrollToTopForNewItems(
             previousDisplayedItemIds = listOf(10, 9, 8),

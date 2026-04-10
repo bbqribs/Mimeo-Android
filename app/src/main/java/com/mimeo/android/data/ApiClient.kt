@@ -117,6 +117,7 @@ class ApiClient(
         private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
         private const val DEBUG_TARGET_ITEM_ID = 409
         private const val QUEUE_FETCH_LIMIT = 100
+        const val QUEUE_LOAD_MORE_LIMIT = 50
     }
 
     suspend fun getDebugVersion(baseUrl: String, token: String): DebugVersionResponse = withContext(Dispatchers.IO) {
@@ -213,9 +214,21 @@ class ApiClient(
         throw lastError ?: ApiException(500, "Couldn't change password. Please try again.")
     }
 
-    suspend fun getQueue(baseUrl: String, token: String, playlistId: Int? = null): QueueFetchResult = withContext(Dispatchers.IO) {
+    suspend fun getQueue(
+        baseUrl: String,
+        token: String,
+        playlistId: Int? = null,
+        offset: Int = 0,
+        limit: Int = QUEUE_FETCH_LIMIT,
+    ): QueueFetchResult = withContext(Dispatchers.IO) {
         val playlistParam = playlistId?.let { "&playlist_id=$it" } ?: ""
-        val requestUrl = resolveUrl(baseUrl, "/playback/queue?include_done=true&limit=$QUEUE_FETCH_LIMIT$playlistParam")
+        // Keep fetch ordering aligned with the default Up Next expectation (Newest first).
+        // QueueScreen applies additional client-side sort modes, but server-side newest
+        // ordering ensures the latest saves are present in this limited window.
+        val requestUrl = resolveUrl(
+            baseUrl,
+            "/playback/queue?include_done=true&limit=$limit&offset=$offset&sort=created&dir=desc$playlistParam",
+        )
         val request = Request.Builder()
             .url(requestUrl)
             .header("Authorization", "Bearer $token")
