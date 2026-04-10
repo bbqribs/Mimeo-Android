@@ -9,6 +9,13 @@ import android.view.View
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.TextToolbarStatus
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 internal class ReaderTextToolbar(
     private val view: View,
@@ -19,10 +26,19 @@ internal class ReaderTextToolbar(
     private var actionMode: ActionMode? = null
     private var _status = TextToolbarStatus.Hidden
 
-    // Updated each time showMenu is called so onGetContentRect always returns the latest position.
+    // Updated each showMenu call; onGetContentRect reads it for smooth repositioning.
     private var currentRect = Rect.Zero
     private var onCopyRequested: (() -> Unit)? = null
     private var onSelectAllRequested: (() -> Unit)? = null
+
+    // Edge-scroll state. PlayerScreen polls this at ~60fps and calls scrollBy.
+    // Non-zero when the selection rect is within the edge zone (top or bottom).
+    @Volatile var edgeScrollSpeed: Float = 0f
+        private set
+
+    private val edgePx = 80f * context.resources.displayMetrics.density
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var edgeResetJob: Job? = null
 
     override val status: TextToolbarStatus get() = _status
 
@@ -37,8 +53,8 @@ internal class ReaderTextToolbar(
         this.onCopyRequested = onCopyRequested
         this.onSelectAllRequested = onSelectAllRequested
 
-        // If the action mode is already alive (e.g. user scrolled while selection is active),
-        // just reposition the toolbar — no destroy/recreate cycle that would leave visual traces.
+        updateEdgeScroll(rect)
+
         val existing = actionMode
         if (existing != null) {
             existing.invalidateContentRect()
@@ -106,6 +122,35 @@ internal class ReaderTextToolbar(
         actionMode?.finish()
         actionMode = null
         _status = TextToolbarStatus.Hidden
+        edgeScrollSpeed = 0f
+        edgeResetJob?.cancel()
+        edgeResetJob = null
+    }
+
+    fun dispose() {
+        scope.cancel(null)
+        edgeScrollSpeed = 0f
+    }
+
+    private fun updateEdgeScroll(rect: Rect) {
+        val viewH = view.height.toFloat()
+        val speed = when {
+            rect.bottom > viewH - edgePx ->
+                ((rect.bottom - (viewH - edgePx)) / edgePx).coerceIn(0f, 1f) * 14f
+            rect.top < edgePx ->
+                -((edgePx - rect.top) / edgePx).coerceIn(0f, 1f) * 14f
+            else -> 0f
+        }
+        edgeScrollSpeed = speed
+
+        // After 300ms without a showMenu update, assume the finger lifted and stop scrolling.
+        edgeResetJob?.cancel()
+        if (speed != 0f) {
+            edgeResetJob = scope.launch {
+                delay(300L)
+                edgeScrollSpeed = 0f
+            }
+        }
     }
 
     companion object {
