@@ -4,9 +4,11 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -98,7 +100,9 @@ import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.extractFirstHttpUrl
 import com.mimeo.android.share.isRetryablePendingSaveResult
+import com.mimeo.android.ui.common.openItemInBrowser
 import com.mimeo.android.ui.common.queueCapturePresentation
+import com.mimeo.android.ui.common.shareItemUrl
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
@@ -1381,6 +1385,12 @@ fun QueueScreen(
                                             }
                                     }
                                 },
+                                onShareUrl = {
+                                    shareItemUrl(context, item.url, item.title)
+                                },
+                                onOpenInBrowser = {
+                                    openItemInBrowser(context, item.url)
+                                },
                                 isMenuExpanded = rowMenuItemId == item.itemId,
                                 onDismissMenu = { rowMenuItemId = -1 },
                                 onExpandMenu = { rowMenuItemId = item.itemId },
@@ -2391,6 +2401,7 @@ internal fun queueDownloadMenuLabel(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun QueueItemCard(
     item: PlaybackQueueItem,
@@ -2412,6 +2423,8 @@ private fun QueueItemCard(
     onUnarchive: () -> Unit,
     onPurgeFromBin: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onShareUrl: () -> Unit,
+    onOpenInBrowser: () -> Unit,
     isMenuExpanded: Boolean,
     onDismissMenu: () -> Unit,
     onExpandMenu: () -> Unit,
@@ -2419,6 +2432,7 @@ private fun QueueItemCard(
     val capturePresentation = queueCapturePresentation(item)
     val title = capturePresentation.title
     val source = capturePresentation.sourceLabel ?: "Unknown source"
+    val hasUrl = item.url.isNotBlank()
     val progress = item.progressPercent
     val isDone = item.furthestPercent >= DONE_PERCENT_THRESHOLD
     val captureStrategyLabel = queueCaptureStrategyLabel(item.strategyUsed)
@@ -2469,7 +2483,11 @@ private fun QueueItemCard(
                     Modifier
                 },
             )
-            .clickable(enabled = !isBinView) { onOpenPlayer() },
+            .combinedClickable(
+                enabled = !isBinView,
+                onClick = onOpenPlayer,
+                onLongClick = onExpandMenu,
+            ),
         colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
     ) {
@@ -2515,6 +2533,22 @@ private fun QueueItemCard(
                                     onRestoreFromBin()
                                 },
                             )
+                            if (hasUrl) {
+                                DropdownMenuItem(
+                                    text = { Text("Open in browser") },
+                                    onClick = {
+                                        onDismissMenu()
+                                        onOpenInBrowser()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Share URL") },
+                                    onClick = {
+                                        onDismissMenu()
+                                        onShareUrl()
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Purge permanently") },
                                 onClick = {
@@ -2537,6 +2571,22 @@ private fun QueueItemCard(
                                     onUnarchive()
                                 },
                             )
+                            if (hasUrl) {
+                                DropdownMenuItem(
+                                    text = { Text("Open in browser") },
+                                    onClick = {
+                                        onDismissMenu()
+                                        onOpenInBrowser()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Share URL") },
+                                    onClick = {
+                                        onDismissMenu()
+                                        onShareUrl()
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Move to Bin (14 days)") },
                                 onClick = {
@@ -2577,6 +2627,22 @@ private fun QueueItemCard(
                                     onArchive()
                                 },
                             )
+                            if (hasUrl) {
+                                DropdownMenuItem(
+                                    text = { Text("Open in browser") },
+                                    onClick = {
+                                        onDismissMenu()
+                                        onOpenInBrowser()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Share URL") },
+                                    onClick = {
+                                        onDismissMenu()
+                                        onShareUrl()
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Move to Bin (14 days)") },
                                 onClick = {
