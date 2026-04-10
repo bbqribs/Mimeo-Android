@@ -529,6 +529,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _queueHasMorePages = MutableStateFlow(false)
     val queueHasMorePages: StateFlow<Boolean> = _queueHasMorePages.asStateFlow()
     private var queueServerFetchedCount = 0
+    private var lastQueueLoadCompletedAtMs: Long = 0L
     private val queueLoadMutex = Mutex()
     private val _lastQueueFetchDebug = MutableStateFlow(QueueFetchDebugSnapshot())
     val lastQueueFetchDebug: StateFlow<QueueFetchDebugSnapshot> = _lastQueueFetchDebug.asStateFlow()
@@ -1881,7 +1882,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _queueItems.value = queueItems
             _queueTotalCount.value = queue.totalCount
             queueServerFetchedCount = queueItems.size
-            _queueHasMorePages.value = queueItems.size < queue.totalCount
+            // Fallback: if backend returns totalCount=0 but we received a full page, assume more exist.
+            _queueHasMorePages.value = if (queue.totalCount > 0) {
+                queueItems.size < queue.totalCount
+            } else {
+                queueItems.size >= ApiClient.QUEUE_LOAD_MORE_LIMIT
+            }
+            if (BuildConfig.DEBUG) {
+                Log.d(QUEUE_DEBUG_TAG, "pagination reset: fetched=${queueItems.size} totalCount=${queue.totalCount} hasMore=${_queueHasMorePages.value}")
+            }
             val appliedSnapshot = queueResult.debugSnapshot.copy(
                 appliedItemCount = _queueItems.value.size,
                 appliedContains409 = _queueItems.value.any { it.itemId == DEBUG_TARGET_ITEM_ID },
@@ -2006,6 +2015,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } else if (flushedPendingActions > 0) {
                 _statusMessage.value = "Synced offline actions"
             }
+            lastQueueLoadCompletedAtMs = System.currentTimeMillis()
             Result.success(Unit)
         } catch (e: ApiException) {
             if (handleAuthFailureIfNeeded(e)) {
@@ -2055,10 +2065,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Called on composable re-entry (e.g. returning from Locus). Skips the reload if the
+     * queue was loaded recently, preserving any appended pages from infinite scroll.
+     * Explicit pull-to-refresh calls [loadQueue] directly and always resets.
+     */
+    fun loadQueueIfNotRecent() {
+        val ageMs = System.currentTimeMillis() - lastQueueLoadCompletedAtMs
+        if (_queueItems.value.isNotEmpty() && ageMs < 300_000L) return
+        loadQueue()
+    }
+
     fun loadMoreQueueItems() {
-        if (!_queueHasMorePages.value || _queueLoadingMore.value) return
+        if (!_queueHasMorePages.value || _queueLoadingMore.value) {
+            if (BuildConfig.DEBUG) Log.d(QUEUE_DEBUG_TAG, "loadMore: skipped hasMore=${_queueHasMorePages.value} loadingMore=${_queueLoadingMore.value}")
+            return
+        }
         // Use tryLock so we skip silently if a full reload holds the mutex.
-        if (!queueLoadMutex.tryLock()) return
+        if (!queueLoadMutex.tryLock()) {
+            if (BuildConfig.DEBUG) Log.d(QUEUE_DEBUG_TAG, "loadMore: mutex busy, skipping")
+            return
+        }
+        if (BuildConfig.DEBUG) Log.d(QUEUE_DEBUG_TAG, "loadMore: starting offset=${queueServerFetchedCount}")
         viewModelScope.launch {
             try {
                 _queueLoadingMore.value = true
@@ -2072,17 +2100,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     offset = offset,
                     limit = ApiClient.QUEUE_LOAD_MORE_LIMIT,
                 )
+                val fetchedCount = result.payload.items.size
                 val newItems = applyFavoriteOverrides(result.payload.items)
                 val existingIds = _queueItems.value.mapTo(linkedSetOf()) { it.itemId }
                 val deduplicated = newItems.filter { it.itemId !in existingIds }
+                if (BuildConfig.DEBUG) Log.d(QUEUE_DEBUG_TAG, "loadMore: offset=$offset fetched=$fetchedCount new=${deduplicated.size} totalCount=${result.payload.totalCount}")
                 if (deduplicated.isNotEmpty()) {
                     _queueItems.value = _queueItems.value + deduplicated
                 }
-                queueServerFetchedCount = offset + result.payload.items.size
+                queueServerFetchedCount = offset + fetchedCount
                 _queueTotalCount.value = result.payload.totalCount
-                _queueHasMorePages.value = queueServerFetchedCount < result.payload.totalCount
-            } catch (_: Exception) {
-                // Best-effort: ignore load-more failures silently.
+                _queueHasMorePages.value = if (result.payload.totalCount > 0) {
+                    queueServerFetchedCount < result.payload.totalCount
+                } else {
+                    fetchedCount >= ApiClient.QUEUE_LOAD_MORE_LIMIT
+                }
+            } catch (e: Exception) {
+                if (BuildConfig.DEBUG) Log.e(QUEUE_DEBUG_TAG, "loadMore: failed", e)
             } finally {
                 _queueLoadingMore.value = false
                 queueLoadMutex.unlock()

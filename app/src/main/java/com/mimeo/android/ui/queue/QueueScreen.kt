@@ -393,7 +393,7 @@ fun QueueScreen(
 
     LaunchedEffect(Unit) {
         vm.refreshPlaylists()
-        vm.loadQueue()
+        vm.loadQueueIfNotRecent()
         vm.flushPendingProgress()
     }
 
@@ -1180,6 +1180,7 @@ fun QueueScreen(
                 }
             }
             LaunchedEffect(listState, queueHasMorePages) {
+                if (BuildConfig.DEBUG) Log.d("MimeoQueueFetch", "scroll-trigger LaunchedEffect started hasMore=$queueHasMorePages")
                 snapshotFlow {
                     val layoutInfo = listState.layoutInfo
                     val totalItems = layoutInfo.totalItemsCount
@@ -1188,6 +1189,7 @@ fun QueueScreen(
                 }
                     .distinctUntilChanged()
                     .collect { (lastVisible, total) ->
+                        if (BuildConfig.DEBUG) Log.d("MimeoQueueFetch", "scroll pos: last=$lastVisible total=$total hasMore=$queueHasMorePages threshold=${total - 5}")
                         if (queueHasMorePages && total > 0 && lastVisible >= total - 5) {
                             vm.loadMoreQueueItems()
                         }
