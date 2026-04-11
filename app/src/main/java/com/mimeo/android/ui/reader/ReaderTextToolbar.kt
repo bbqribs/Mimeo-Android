@@ -29,19 +29,12 @@ internal class ReaderTextToolbar(
     // Updated each showMenu call; onGetContentRect reads it for smooth repositioning.
     private var currentRect = Rect.Zero
     private var onCopyRequested: (() -> Unit)? = null
-    private var onSelectAllRequested: (() -> Unit)? = null
 
-    // Edge-scroll state. PlayerScreen polls this at ~60fps and calls scrollBy.
     // Non-zero when the selection rect is within the edge zone (top or bottom).
+    // PlayerScreen polls this at ~60fps and calls scrollBy.
     @Volatile var edgeScrollSpeed: Float = 0f
         private set
 
-    // Overlay occlusion in pixels. Set by PlayerScreen via SideEffect so the edge zone
-    // is computed against the visible reader area, not the raw ComposeView bounds.
-    @Volatile var topOcclusionPx: Float = 0f
-    @Volatile var bottomOcclusionPx: Float = 0f
-
-    private val edgePx = 80f * context.resources.displayMetrics.density
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var edgeResetJob: Job? = null
 
@@ -56,7 +49,6 @@ internal class ReaderTextToolbar(
     ) {
         currentRect = rect
         this.onCopyRequested = onCopyRequested
-        this.onSelectAllRequested = onSelectAllRequested
 
         updateEdgeScroll(rect)
 
@@ -75,10 +67,6 @@ internal class ReaderTextToolbar(
                     }
                     menu.add(Menu.NONE, ITEM_SHARE, 1, "Share")
                         .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                    if (this@ReaderTextToolbar.onSelectAllRequested != null) {
-                        menu.add(Menu.NONE, ITEM_SELECT_ALL, 2, android.R.string.selectAll)
-                            .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                    }
                     return true
                 }
 
@@ -98,10 +86,6 @@ internal class ReaderTextToolbar(
                             val text = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
                             if (!text.isNullOrBlank()) onShare(text)
                             mode.finish()
-                            true
-                        }
-                        ITEM_SELECT_ALL -> {
-                            this@ReaderTextToolbar.onSelectAllRequested?.invoke()
                             true
                         }
                         else -> false
@@ -139,22 +123,20 @@ internal class ReaderTextToolbar(
 
     private fun updateEdgeScroll(rect: Rect) {
         val viewH = view.height.toFloat()
-        val visibleTop = topOcclusionPx
-        val visibleBottom = viewH - bottomOcclusionPx
+        // Simple screen-fraction threshold: avoids the coordinate-space mismatch in
+        // Compose's getSelectionToolbarLocation() which mixes local/root rect coordinates.
         val speed = when {
-            rect.bottom > visibleBottom - edgePx ->
-                ((rect.bottom - (visibleBottom - edgePx)) / edgePx).coerceIn(0f, 1f) * 14f
-            rect.top < visibleTop + edgePx ->
-                -(((visibleTop + edgePx) - rect.top) / edgePx).coerceIn(0f, 1f) * 14f
+            rect.bottom > viewH * 0.80f -> 14f
+            rect.top < viewH * 0.20f -> -14f
             else -> 0f
         }
         edgeScrollSpeed = speed
 
-        // After 300ms without a showMenu update, assume the finger lifted and stop scrolling.
         edgeResetJob?.cancel()
         if (speed != 0f) {
+            // 1-second window: 14 px/frame × ~62 frames ≈ 870 px of scroll.
             edgeResetJob = scope.launch {
-                delay(300L)
+                delay(1000L)
                 edgeScrollSpeed = 0f
             }
         }
@@ -163,6 +145,5 @@ internal class ReaderTextToolbar(
     companion object {
         private const val ITEM_COPY = 1
         private const val ITEM_SHARE = 2
-        private const val ITEM_SELECT_ALL = 3
     }
 }

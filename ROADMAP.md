@@ -154,5 +154,7 @@
 - [ ] Audio focus/media session polish.
 - [ ] Better conflict handling for stale cached versions during long offline sessions.
 - [ ] Replace dev cleartext dependence with HTTPS-friendly transport story for hosted/mobile use.
+- [ ] Scrollbars for Up Next and Settings: non-draggable visual indicator for Settings (same `drawWithContent` approach as reader); draggable scrollbar for Up Next LazyColumn (touch overlay maps drag Y → `lazyListState.scrollToItem`; useful for long queues).
+- [ ] Compose BOM migration to 1.10.x: bump `compose-bom` from `2024.06.00`, fix any Material3/API deprecations; no architectural changes expected; do as a standalone session after current branch is merged.
 
 

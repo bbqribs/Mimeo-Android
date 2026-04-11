@@ -84,7 +84,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.SideEffect
@@ -921,10 +920,6 @@ fun PlayerScreen(
     }
     DisposableEffect(textToolbar) {
         onDispose { textToolbar.dispose() }
-    }
-    SideEffect {
-        textToolbar.topOcclusionPx = locusTopOverlayHeightPx.toFloat()
-        textToolbar.bottomOcclusionPx = locusBottomOverlayHeightPx.toFloat()
     }
     fun clearActiveSelection() {
         textToolbar.hide()
