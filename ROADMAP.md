@@ -67,6 +67,13 @@
 - [x] App-shell recomposition pressure follow-up shipped (bounded): removed root collection of high-churn playback engine state in `MimeoApp`, shifted playback-in-progress checks to local usage points, and preserved existing navigation/playback behavior without broad state architecture refactors.
 - [x] Playback-owner state correctness pass shipped: Locus title ownership now follows true playback owner (engine/session) with bounded preview override rules, and Up Next row markers now distinguish actively playing vs ready-to-resume owner states.
 - [x] In-article link preservation (Android v2 slice) shipped: reader/Locus now render preserved HTTP/HTTPS in-article links as clickable spans using backend `content_blocks.links` metadata with safe fallback behavior when metadata is absent/invalid, and taps open externally via Android `Intent.ACTION_VIEW`.
+- [x] Up Next infinite scroll shipped: `/playback/queue` offset pagination with scroll-trigger appending, pull-to-refresh reset, and stable scroll position across Locus navigation.
+- [x] Settings collapsible row descriptions shipped: toggle help text is collapsible with inline info icon, Material icons for copy/share/use actions, and connection test results persist in panel with share/copy affordances.
+- [x] Connection defaults v1 stage 2 shipped: Local/LAN/Remote mode defaults and guidance updated.
+- [x] Item actions v1 shipped: Share URL + Open in browser in Up Next and Locus overflows; long-press on Up Next rows opens bottom-sheet action menu; canonical overflow order per `docs/ANDROID_ITEM_ACTIONS_SPEC.md`.
+- [x] Reader text actions shipped: custom floating selection toolbar (Copy + Share selected text); Copy article text + Share article text in Locus overflow with conditional citation block (title/source/URL); `buildArticleShareText` unit tests.
+- [x] Reader scrollbar shipped: non-draggable visual scroll indicator on reader right edge via `drawWithContent`; thumb height and position track scroll fraction.
+- [x] Reader selection edge-scroll shipped: after releasing a selection handle near top/bottom edge (screen-fraction threshold), reader auto-scrolls ~870 px over 1 s; driven by `edgeScrollSpeed` polled at ~60 fps in PlayerScreen.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
@@ -91,18 +98,13 @@
 - [x] Username/password sign-in flow — shipped per `docs/ANDROID_AUTH_PHASE3_SPEC.md` slice plan (gate, recovery, sign-out, settings coexistence).
 
 ### Next tickets
-1. [x] In-Locus problem-report flow implementation (Android v1): `Report a problem` is now available from Locus overflow with online submit to `/feedback/problem-report`, category + required note + optional URL edit/clear, and bounded success/error/auth handling that preserves form state on failed submit.
-2. [~] Problem reports v2 attachment contract (CONTRACT CHANGE): Android opt-in UI/payload path is now implemented (default-OFF in-dialog attachment checkboxes for title/text + compact privacy hint + bounded attachment payload fields); backend persistence/export contract work remains pending per `docs/PROBLEM_REPORT_ATTACHMENT_V2_CONTRACT_SPEC.md`.
+1. [~] Problem reports v2 attachment contract (CONTRACT CHANGE): Android opt-in UI/payload path is now implemented (default-OFF in-dialog attachment checkboxes for title/text + compact privacy hint + bounded attachment payload fields); backend persistence/export contract work remains pending per `docs/PROBLEM_REPORT_ATTACHMENT_V2_CONTRACT_SPEC.md`.
    - Current backend limitation until contract lands: v1 persisted/exported report shape remains the authoritative operator record.
-3. [x] Item actions UX pass (spec only): unified action model for Up Next, Locus, Archive, and Bin views defined in `docs/ANDROID_ITEM_ACTIONS_SPEC.md`; establishes share URL, open in browser, long-press, and canonical overflow order.
-4. [ ] Item actions implementation: wire Share URL + Open in browser into Up Next and Locus overflows, add long-press-to-menu on Up Next rows, per `docs/ANDROID_ITEM_ACTIONS_SPEC.md` implementation order.
-5. [x] Reader text actions spec: copy/share model for selected text and whole-article text defined in `docs/ANDROID_READER_TEXT_ACTIONS_SPEC.md`; selected-text via native SelectionContainer (already live); whole-article via two new Locus overflow items with citation block on share.
-6. [x] Reader text actions implementation: `Copy article text` + `Share article text` added to Locus overflow; citation block (title/source/URL, each conditional + generic-label filtered) on share, bare text on copy; `buildArticleShareText` unit tests added; native selection toolbar unchanged.
-7. [ ] Cross-repo source metadata unification: align backend + extension/web on the same provenance/origin contract and rendering precedence shipped on Android (no body-link source inference).
-6. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.
-7. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
-8. [ ] Keep-screen-on/session UX follow-up: refine “active session” heuristics and user copy for reader-only vs speaking states without changing playback ownership.
-9. [ ] Offline action queueing follow-up: expand deferred-sync coverage beyond favourite/archive to remaining item lifecycle actions where local-first behavior is valuable.
+2. [ ] Cross-repo source metadata unification: align backend + extension/web on the same provenance/origin contract and rendering precedence shipped on Android (no body-link source inference).
+3. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.
+4. [ ] Offline action queueing follow-up: expand deferred-sync coverage beyond favourite/archive to remaining item lifecycle actions where local-first behavior is valuable.
+5. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
+6. [ ] Keep-screen-on/session UX follow-up: refine “active session” heuristics and user copy for reader-only vs speaking states without changing playback ownership.
 
 ## Reader/Player UX fidelity + state persistence backlog
 
@@ -134,7 +136,7 @@
 7. [cancelled] Move playback speed into pinned PlayerBar. Superseded by docs/decision-playback-speed-location.md; keep speed local to the expanded Locus header and avoid expanding shared PlayerBar scope.
 8. [x] Collections baseline: special collections + named playlist browser under the redesign shell.
 9. [x] Phase 6.2: local playlist folders (create/rename/delete + assign playlists within Collections).
-10. [~] Phase 6.3: folder detail view + counts + remove-from-folder inside Collections.
+10. [x] Phase 6.3: folder detail view with playlist counts and remove-from-folder shipped.
 11. [ ] Next: folder badges in playlist list and optional nested folders.
 12. [x] Locus expand/collapse on `main`: explicit buttons only, collapsed tab entry, expanded resume/direct entry, title ellipsis fix, and TESTING.md invariants checklist.
 13. [ ] Player completion icon follow-up: evaluate open-book/closed-book completion iconography for Locus as a separate ticket after the current player banding work settles.
@@ -154,7 +156,7 @@
 - [ ] Audio focus/media session polish.
 - [ ] Better conflict handling for stale cached versions during long offline sessions.
 - [ ] Replace dev cleartext dependence with HTTPS-friendly transport story for hosted/mobile use.
-- [ ] Scrollbars for Up Next and Settings: non-draggable visual indicator for Settings (same `drawWithContent` approach as reader); draggable scrollbar for Up Next LazyColumn (touch overlay maps drag Y → `lazyListState.scrollToItem`; useful for long queues).
-- [ ] Compose BOM migration to 1.10.x: bump `compose-bom` from `2024.06.00`, fix any Material3/API deprecations; no architectural changes expected; do as a standalone session after current branch is merged.
+- [ ] Scrollbars for Up Next and Settings: non-draggable `drawWithContent` indicator for Settings; draggable scrollbar for Up Next LazyColumn (touch overlay maps drag Y → `lazyListState.scrollToItem`; useful for long queues).
+- [ ] Compose BOM migration to 1.10.x: bump `compose-bom` from `2024.06.00`, fix any Material3/API deprecations; no architectural changes expected; do as a standalone session. (Also unblocks `onSelectAllRequested` in reader selection toolbar.)
 
 
