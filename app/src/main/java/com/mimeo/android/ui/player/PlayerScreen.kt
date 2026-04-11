@@ -17,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -83,15 +84,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.input.pointer.pointerInput
@@ -126,6 +128,12 @@ import com.mimeo.android.player.SOURCE_CUE_CHUNK_INDEX
 import com.mimeo.android.player.TITLE_INTRO_CHUNK_INDEX
 import com.mimeo.android.player.TtsController
 import com.mimeo.android.ui.common.locusCapturePresentation
+import com.mimeo.android.ui.common.copyItemText
+import com.mimeo.android.ui.common.openItemInBrowser
+import com.mimeo.android.ui.common.shareItemText
+import com.mimeo.android.ui.common.shareItemUrl
+import com.mimeo.android.ui.common.shareSelectedText
+import com.mimeo.android.ui.reader.ReaderTextToolbar
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
@@ -767,6 +775,7 @@ fun PlayerScreen(
     onChevronSnapChange: (PlayerChevronSnapEdge) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val engineState by vm.playbackEngineState.collectAsState()
     val currentItemId = if (engineState.currentItemId > 0) engineState.currentItemId else initialItemId
     var resolvedInitial by rememberSaveable(initialItemId) { mutableStateOf(false) }
@@ -875,7 +884,12 @@ fun PlayerScreen(
     )
     val currentPosition = engineState.currentPosition
     val actionScope = rememberCoroutineScope()
-    val textToolbar = LocalTextToolbar.current
+    val view = LocalView.current
+    val textToolbar = remember(view) {
+        ReaderTextToolbar(view, context) { selectedText ->
+            shareSelectedText(context, selectedText)
+        }
+    }
     val hasActiveSelection = textToolbar.status == TextToolbarStatus.Shown
     val chevronSide = remember(chevronSnapEdge) {
         when (chevronSnapEdge) {
@@ -896,6 +910,16 @@ fun PlayerScreen(
                 selectionClearArmed = true
             }
         }
+    }
+    LaunchedEffect(textToolbar) {
+        while (true) {
+            val speed = textToolbar.edgeScrollSpeed
+            if (speed != 0f) readerScrollState.scrollBy(speed)
+            delay(16L)
+        }
+    }
+    DisposableEffect(textToolbar) {
+        onDispose { textToolbar.dispose() }
     }
     fun clearActiveSelection() {
         textToolbar.hide()
@@ -1471,6 +1495,9 @@ fun PlayerScreen(
             articleText = displayPayload?.text?.takeIf { it.isNotBlank() },
         )
     }
+    val locusItemUrl = reportContext.url.orEmpty()
+    val locusItemTitle = reportContext.articleTitle
+    val locusHasUrl = locusItemUrl.isNotBlank()
     var showProblemReportDialog by remember { mutableStateOf(false) }
     var reportCategory by remember { mutableStateOf(ProblemReportCategory.CONTENT_PROBLEM) }
     var reportUserNote by remember { mutableStateOf("") }
@@ -2023,6 +2050,25 @@ fun PlayerScreen(
                                         showPlaylistPicker = true
                                     },
                                     canReportProblem = settings.apiToken.isNotBlank(),
+                                    hasUrl = locusHasUrl,
+                                    onOpenInBrowser = {
+                                        overflowExpanded = false
+                                        openItemInBrowser(context, locusItemUrl)
+                                    },
+                                    onShareUrl = {
+                                        overflowExpanded = false
+                                        shareItemUrl(context, locusItemUrl, locusItemTitle)
+                                    },
+                                    hasArticleText = displayReaderText.isNotBlank(),
+                                    onCopyArticleText = {
+                                        overflowExpanded = false
+                                        copyItemText(context, displayReaderText)
+                                        onShowSnackbar("Article text copied", null, null)
+                                    },
+                                    onShareArticleText = {
+                                        overflowExpanded = false
+                                        shareItemText(context, displayReaderText, locusItemTitle, currentSourceLabel, locusItemUrl.takeIf { locusHasUrl })
+                                    },
                                     isExpanded = isExpanded,
                                     onToggleExpanded = {
                                         overflowExpanded = false
@@ -2074,44 +2120,46 @@ fun PlayerScreen(
                                             toggleReaderMode()
                                         }
                                     }
-                                },
+                                }
                         ) {
-                            ReaderBody(
-                                fullText = displayPayload?.text,
-                                chunks = displayChunks,
-                                preservedLinks = preservedReaderLinks,
-                                currentChunkIndex = if (previewModeActive) 0 else safePosition.chunkIndex,
-                                currentChunkOffsetInChars = if (previewModeActive) 0 else safePosition.offsetInChunkChars,
-                                activeRangeInChunk = if (previewModeActive) null else activeChunkRange,
-                                searchHighlightRangesByChunk = locusSearchRangesByChunk,
-                                searchFocusChunkIndex = activeLocusSearchMatch?.chunkIndex,
-                                searchFocusRangeInChunk = activeLocusSearchMatch?.rangeInChunk,
-                                searchFocusTriggerSignal = locusSearchScrollTriggerSignal,
-                                scrollTriggerSignal = readerScrollTriggerSignal,
-                                autoScrollWhileListening = !previewModeActive &&
-                                    settings.autoScrollWhileListening &&
-                                    (isSpeaking || isAutoPlaying),
-                                readingFontSizeSp = settings.readingFontSizeSp,
-                                readingFontOption = settings.readingFontOption,
-                                readingLineHeightPercent = settings.readingLineHeightPercent,
-                                readingMaxWidthDp = settings.readingMaxWidthDp,
-                                paragraphSpacing = settings.readingParagraphSpacing,
-                                selectionResetSignal = readerSelectionResetSignal,
-                                scrollState = readerScrollState,
-                                showEmptyPlaceholder = transitionSettled && !isLoading,
-                                topOverlayOcclusionPx = locusTopOverlayHeightPx,
-                                bottomOverlayOcclusionPx = locusBottomOverlayHeightPx,
-                                onNonLinkTap = {
-                                    if (textToolbar.status == TextToolbarStatus.Shown || selectionClearArmed) {
-                                        clearActiveSelection()
-                                    } else {
-                                        toggleReaderMode()
-                                    }
-                                },
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .graphicsLayer { alpha = bodyContentAlpha },
-                            )
+                            CompositionLocalProvider(LocalTextToolbar provides textToolbar) {
+                                ReaderBody(
+                                    fullText = displayPayload?.text,
+                                    chunks = displayChunks,
+                                    preservedLinks = preservedReaderLinks,
+                                    currentChunkIndex = if (previewModeActive) 0 else safePosition.chunkIndex,
+                                    currentChunkOffsetInChars = if (previewModeActive) 0 else safePosition.offsetInChunkChars,
+                                    activeRangeInChunk = if (previewModeActive) null else activeChunkRange,
+                                    searchHighlightRangesByChunk = locusSearchRangesByChunk,
+                                    searchFocusChunkIndex = activeLocusSearchMatch?.chunkIndex,
+                                    searchFocusRangeInChunk = activeLocusSearchMatch?.rangeInChunk,
+                                    searchFocusTriggerSignal = locusSearchScrollTriggerSignal,
+                                    scrollTriggerSignal = readerScrollTriggerSignal,
+                                    autoScrollWhileListening = !previewModeActive &&
+                                        settings.autoScrollWhileListening &&
+                                        (isSpeaking || isAutoPlaying),
+                                    readingFontSizeSp = settings.readingFontSizeSp,
+                                    readingFontOption = settings.readingFontOption,
+                                    readingLineHeightPercent = settings.readingLineHeightPercent,
+                                    readingMaxWidthDp = settings.readingMaxWidthDp,
+                                    paragraphSpacing = settings.readingParagraphSpacing,
+                                    selectionResetSignal = readerSelectionResetSignal,
+                                    scrollState = readerScrollState,
+                                    showEmptyPlaceholder = transitionSettled && !isLoading,
+                                    topOverlayOcclusionPx = locusTopOverlayHeightPx,
+                                    bottomOverlayOcclusionPx = locusBottomOverlayHeightPx,
+                                    onNonLinkTap = {
+                                        if (textToolbar.status == TextToolbarStatus.Shown || selectionClearArmed) {
+                                            clearActiveSelection()
+                                        } else {
+                                            toggleReaderMode()
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer { alpha = bodyContentAlpha },
+                                )
+                            }
                             androidx.compose.animation.AnimatedVisibility(
                                 visible = showLocusTopBar,
                                 enter = slideInVertically(
@@ -2309,6 +2357,25 @@ fun PlayerScreen(
                                                 showPlaylistPicker = true
                                             },
                                             canReportProblem = settings.apiToken.isNotBlank(),
+                                            hasUrl = locusHasUrl,
+                                            onOpenInBrowser = {
+                                                overflowExpanded = false
+                                                openItemInBrowser(context, locusItemUrl)
+                                            },
+                                            onShareUrl = {
+                                                overflowExpanded = false
+                                                shareItemUrl(context, locusItemUrl, locusItemTitle)
+                                            },
+                                            hasArticleText = displayReaderText.isNotBlank(),
+                                            onCopyArticleText = {
+                                                overflowExpanded = false
+                                                copyItemText(context, displayReaderText)
+                                                onShowSnackbar("Article text copied", null, null)
+                                            },
+                                            onShareArticleText = {
+                                                overflowExpanded = false
+                                                shareItemText(context, displayReaderText, locusItemTitle, currentSourceLabel, locusItemUrl.takeIf { locusHasUrl })
+                                            },
                                             isExpanded = isExpanded,
                                             onToggleExpanded = {
                                                 overflowExpanded = false
@@ -3298,6 +3365,12 @@ private fun LocusOverflowMenuItems(
     onMoveToBin: () -> Unit,
     onOpenPlaylists: () -> Unit,
     canReportProblem: Boolean,
+    hasUrl: Boolean,
+    onOpenInBrowser: () -> Unit,
+    onShareUrl: () -> Unit,
+    hasArticleText: Boolean,
+    onCopyArticleText: () -> Unit,
+    onShareArticleText: () -> Unit,
     isExpanded: Boolean,
     onToggleExpanded: () -> Unit,
 ) {
@@ -3309,6 +3382,26 @@ private fun LocusOverflowMenuItems(
         text = { Text("Playlists...") },
         onClick = onOpenPlaylists,
     )
+    if (hasUrl) {
+        DropdownMenuItem(
+            text = { Text("Open in browser") },
+            onClick = onOpenInBrowser,
+        )
+        DropdownMenuItem(
+            text = { Text("Share URL") },
+            onClick = onShareUrl,
+        )
+    }
+    if (hasArticleText) {
+        DropdownMenuItem(
+            text = { Text("Copy article text") },
+            onClick = onCopyArticleText,
+        )
+        DropdownMenuItem(
+            text = { Text("Share article text") },
+            onClick = onShareArticleText,
+        )
+    }
     if (canReportProblem) {
         DropdownMenuItem(
             text = { Text("Report problem") },

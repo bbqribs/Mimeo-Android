@@ -96,7 +96,9 @@
    - Current backend limitation until contract lands: v1 persisted/exported report shape remains the authoritative operator record.
 3. [x] Item actions UX pass (spec only): unified action model for Up Next, Locus, Archive, and Bin views defined in `docs/ANDROID_ITEM_ACTIONS_SPEC.md`; establishes share URL, open in browser, long-press, and canonical overflow order.
 4. [ ] Item actions implementation: wire Share URL + Open in browser into Up Next and Locus overflows, add long-press-to-menu on Up Next rows, per `docs/ANDROID_ITEM_ACTIONS_SPEC.md` implementation order.
-5. [ ] Cross-repo source metadata unification: align backend + extension/web on the same provenance/origin contract and rendering precedence shipped on Android (no body-link source inference).
+5. [x] Reader text actions spec: copy/share model for selected text and whole-article text defined in `docs/ANDROID_READER_TEXT_ACTIONS_SPEC.md`; selected-text via native SelectionContainer (already live); whole-article via two new Locus overflow items with citation block on share.
+6. [x] Reader text actions implementation: `Copy article text` + `Share article text` added to Locus overflow; citation block (title/source/URL, each conditional + generic-label filtered) on share, bare text on copy; `buildArticleShareText` unit tests added; native selection toolbar unchanged.
+7. [ ] Cross-repo source metadata unification: align backend + extension/web on the same provenance/origin contract and rendering precedence shipped on Android (no body-link source inference).
 6. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.
 7. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
 8. [ ] Keep-screen-on/session UX follow-up: refine “active session” heuristics and user copy for reader-only vs speaking states without changing playback ownership.
@@ -152,5 +154,7 @@
 - [ ] Audio focus/media session polish.
 - [ ] Better conflict handling for stale cached versions during long offline sessions.
 - [ ] Replace dev cleartext dependence with HTTPS-friendly transport story for hosted/mobile use.
+- [ ] Scrollbars for Up Next and Settings: non-draggable visual indicator for Settings (same `drawWithContent` approach as reader); draggable scrollbar for Up Next LazyColumn (touch overlay maps drag Y → `lazyListState.scrollToItem`; useful for long queues).
+- [ ] Compose BOM migration to 1.10.x: bump `compose-bom` from `2024.06.00`, fix any Material3/API deprecations; no architectural changes expected; do as a standalone session after current branch is merged.
 
 
