@@ -36,6 +36,11 @@ internal class ReaderTextToolbar(
     @Volatile var edgeScrollSpeed: Float = 0f
         private set
 
+    // Overlay occlusion in pixels. Set by PlayerScreen via SideEffect so the edge zone
+    // is computed against the visible reader area, not the raw ComposeView bounds.
+    @Volatile var topOcclusionPx: Float = 0f
+    @Volatile var bottomOcclusionPx: Float = 0f
+
     private val edgePx = 80f * context.resources.displayMetrics.density
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var edgeResetJob: Job? = null
@@ -134,11 +139,13 @@ internal class ReaderTextToolbar(
 
     private fun updateEdgeScroll(rect: Rect) {
         val viewH = view.height.toFloat()
+        val visibleTop = topOcclusionPx
+        val visibleBottom = viewH - bottomOcclusionPx
         val speed = when {
-            rect.bottom > viewH - edgePx ->
-                ((rect.bottom - (viewH - edgePx)) / edgePx).coerceIn(0f, 1f) * 14f
-            rect.top < edgePx ->
-                -((edgePx - rect.top) / edgePx).coerceIn(0f, 1f) * 14f
+            rect.bottom > visibleBottom - edgePx ->
+                ((rect.bottom - (visibleBottom - edgePx)) / edgePx).coerceIn(0f, 1f) * 14f
+            rect.top < visibleTop + edgePx ->
+                -(((visibleTop + edgePx) - rect.top) / edgePx).coerceIn(0f, 1f) * 14f
             else -> 0f
         }
         edgeScrollSpeed = speed

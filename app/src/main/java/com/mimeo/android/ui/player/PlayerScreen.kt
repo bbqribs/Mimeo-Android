@@ -87,6 +87,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
@@ -920,6 +921,10 @@ fun PlayerScreen(
     }
     DisposableEffect(textToolbar) {
         onDispose { textToolbar.dispose() }
+    }
+    SideEffect {
+        textToolbar.topOcclusionPx = locusTopOverlayHeightPx.toFloat()
+        textToolbar.bottomOcclusionPx = locusBottomOverlayHeightPx.toFloat()
     }
     fun clearActiveSelection() {
         textToolbar.hide()
