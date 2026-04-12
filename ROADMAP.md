@@ -114,12 +114,12 @@
 3. [x] Reader/Locus paragraph formatting fidelity: paragraph spacing and clickable links shipped.
 4. [x] Reader/Locus clickable links: render links as tappable in-body spans with safe external-open behavior, while preserving current selection and playback UX.
 5. [x] Locus bottom-gap transition issue: Scaffold content insets removed to eliminate bottom vacated gap.
-6. [ ] Progress/player scroll jerk during drag: smooth seek-drag + scroll coupling so seek interaction does not cause abrupt jump/jitter in reader scroll position.
-7. [ ] Collapsible pending-item section in Up Next: make pending rows collapsible/expandable with persisted collapsed state to reduce queue noise without hiding failures.
+6. [x] Progress/player scroll jerk during drag: player slider drag stabilized against live progress updates to prevent jump/jitter in reader scroll position.
+7. [x] Collapsible pending-item section in Up Next: pending saves moved to a dedicated filter chip (rather than a collapsible section), achieving the same queue-noise reduction goal.
 
 ### Spec/design-first items (clarify behavior before coding)
-1. [ ] Auto-archive toggle at end of article: define exact interaction between completion cue, continue-to-next, and archive/bin semantics (including playlist-scoped sessions).
-2. [ ] Undo last article archive/delete: define one-step undo scope, timeout, and cross-surface behavior for archive/bin actions (including active-item actions in Locus).
+1. [x] Auto-archive toggle at end of article: shipped — configurable toggle archives item on playback completion (PR #164).
+2. [x] Undo last article archive/delete: shipped — undo snackbar for last archive/bin action with backend unarchive call (PR #165).
 3. [ ] Start-in-full-screen toggle for Locus: define launch rules vs remembered player mode and explicit user overrides.
 4. [x] Full-text/default-open behavior spec finalized: see `docs/ANDROID_LOCUS_FULLTEXT_DEFAULT_OPEN_SPEC.md` (decision-only; implementation remains a follow-up ticket).
 
