@@ -5060,7 +5060,6 @@ private fun MimeoApp(vm: AppViewModel) {
                             },
                             initialItemId = requestedPlayerItemId,
                             requestedItemId = requestedPlayerItemId,
-                            startExpanded = isOnLocusRoute && routeItemId != null,
                             locusTapSignal = locusTabTapSignal,
                             openRequestSignal = playerOpenRequestSignal,
                             onOpenItem = { nextId ->

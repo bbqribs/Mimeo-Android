@@ -1,106 +1,44 @@
 # Android Locus Start-in-Full-Screen Spec
 
-Status: Approved for implementation
-Scope: Launch/display rules for Locus expanded state only. No playback ownership changes.
+Status: Implemented
+Scope: Locus `isExpanded` expand/collapse mechanism removed entirely.
 
 ---
 
-## 1. Recommendation up front
+## 1. Decision
 
-**Do not add a user-facing settings toggle.**
-
-The only correct behavior is: explicit item opens always expand Locus. This is a one-rule behavioral fix, not a preference. A toggle that lets users suppress expansion on item open serves no real use case and adds unnecessary settings surface.
+The "Collapse player" option in the Locus overflow dropdown was the only way to set `isExpanded = false`. It served no real use case — the collapsed state is just a mini peek card with no meaningful function distinct from the expanded reader. The feature was eliminated entirely rather than patched.
 
 ---
 
-## 2. What "full screen" means here
+## 2. What was removed
 
-Locus has two distinct visual dimensions that are often conflated:
-
-| Dimension | States | Where stored |
-|---|---|---|
-| **Reader panel** | Expanded (reader visible) / Collapsed (mini player only) | `isExpanded` — `rememberSaveable`, no key |
-| **Chrome visibility** | Visible / Hidden (immersive, tap to reveal) | `readerChromeHidden`, derived from `immersiveReaderMode` + `isExpanded` |
-
-"Start in full screen" refers to **Dimension 1** only: the reader panel should be expanded when the user opens an item. Dimension 2 (immersive/chrome-hidden mode) is not changed by this spec — chrome starts visible on every open.
-
-`PlayerControlsMode` (FULL / MINIMAL / NUB) is a third, orthogonal dimension covering which controls overlay is shown inside the expanded reader. This spec does not change how it behaves.
-
----
-
-## 3. Current behavior and the gap
-
-`isExpanded` is initialised as `rememberSaveable { mutableStateOf(true) }` with no key. This means:
-
-- **First entry into Locus**: correctly starts expanded.
-- **User collapses Locus, then taps a different item in Up Next**: `openRequestSignal` fires, content reloads, but `isExpanded` remains `false` because `rememberSaveable` preserved the collapsed state. The reader panel stays collapsed even though the user explicitly asked to view an item. **This is the bug.**
-
-`startExpanded: Boolean` is a dead parameter in `PlayerScreen.kt` — declared at line 758, never referenced anywhere in the function body. It has no effect.
+| Item | Location |
+|---|---|
+| `isExpanded` state (`rememberSaveable`) | `PlayerScreen.kt` |
+| Collapsed branch (`!isExpanded` UI: `LocusPeekCard` + `ExpandedPlayerTopBar` peek variant) | `PlayerScreen.kt` |
+| `startExpanded: Boolean` dead parameter | `PlayerScreen.kt` |
+| `isExpanded` + `onToggleExpanded` parameters | `LocusOverflowMenuItems` |
+| "Collapse player" / "Expand player" `DropdownMenuItem` | `LocusOverflowMenuItems` |
+| `LocusPeekCard` composable | `PlayerScreen.kt` |
+| `startExpanded = ...` call-site argument | `MainActivity.kt` |
+| `&& isExpanded` guard on `readerChromeHidden` | `PlayerScreen.kt` |
+| `&& isExpanded` guard on `BackHandler` | `PlayerScreen.kt` |
 
 ---
 
-## 4. Rules
+## 3. What does NOT change
 
-### 4a. Explicit item open → always expand
-
-**Rule**: Any explicit item-open action forces `isExpanded = true`.
-
-Explicit item-open actions include:
-- Tapping an item row in Up Next, Archive, Bin, or Favourites.
-- Tapping a search result that navigates to Locus.
-- Any navigation that increments `openRequestSignal` in PlayerScreen.
-
-**Implementation**: Add `isExpanded = true` inside the `openRequestSignal` `LaunchedEffect` (PlayerScreen.kt ~line 1182), after `lastHandledOpenRequestSignal = openRequestSignal`.
-
-### 4b. Autoplay continuation → preserve current state
-
-**Rule**: Autoplay continue-to-next does NOT reset `isExpanded`. Whatever state the user left it in is preserved.
-
-Rationale: The user is passively listening. Forcing expansion during autoplay would be jarring if they had deliberately collapsed the panel.
-
-The existing `autoPlayAfterLoad` early-return in the `openRequestSignal` effect already handles this correctly — no change needed.
-
-### 4c. App restart / fresh Locus entry
-
-**Rule**: On the first Locus entry after app launch, `isExpanded` is `true` (the `rememberSaveable` default). No change needed.
-
-### 4d. PlayerControlsMode is independent
-
-**Rule**: `PlayerControlsMode` (FULL / MINIMAL / NUB) is not affected by this spec. The remembered mode continues to be restored from settings.
-
-### 4e. Locus tab tap (return-to-now-playing behavior)
-
-**Rule**: Tapping the Locus tab to return to the now-playing item should also expand (`locusTapSignal` handling). Already correctly triggered via tab tap → `isExpanded` should be set to `true` here too if it is not already.
-
----
-
-## 5. What does NOT change
-
-- `locusContentMode` (Full-text vs Playback-focused) — governed by existing spec (`ANDROID_LOCUS_FULLTEXT_DEFAULT_OPEN_SPEC.md`). Unaffected.
-- Chrome visibility / immersive mode — user-triggered, not reset on open.
-- `PlayerControlsMode` remembered state — unaffected.
+- `locusContentMode` (Full-text vs Playback-focused) — governed by `docs/ANDROID_LOCUS_FULLTEXT_DEFAULT_OPEN_SPEC.md`.
+- Chrome visibility / immersive mode — user-triggered, unchanged.
+- `PlayerControlsMode` (FULL / MINIMAL / NUB) — controls the player controls overlay; unchanged.
 - Playback ownership rules — unaffected.
-- Preview-vs-playing item semantics — unaffected.
+- `locusTapSignal` / `openRequestSignal` handling — unaffected (Locus is always expanded, so no forced-expand logic needed).
 
 ---
 
-## 6. Implementation order
+## 4. Prior analysis (for historical context)
 
-1. **Wire `isExpanded = true` into `openRequestSignal` LaunchedEffect** (`PlayerScreen.kt` ~line 1182). This is the core fix — one line.
-2. **Wire `isExpanded = true` into `locusTapSignal` handling** if `isExpanded` is not already forced there.
-3. **Remove or wire `startExpanded` parameter** — either delete it (it's dead) or wire it to set `isExpanded` at initial composition if a caller ever needs to pass `false` (currently none do; deletion is cleaner).
-4. **Manual smoke test**:
-   - Open item → Locus expands ✓
-   - Collapse Locus → tap different item → Locus expands ✓
-   - Collapse Locus → wait for autoplay to advance → Locus stays collapsed ✓
-   - App restart → Locus tab entry → Locus expanded ✓
-   - Locus tab tap → Locus expands ✓
+The original spec proposed fixing the `rememberSaveable`-without-key bug by adding `isExpanded = true` inside the `openRequestSignal` LaunchedEffect. After reviewing the code, the decision was upgraded: since the only way to collapse Locus was a single overflow option with no practical value, the entire collapse mechanism was removed instead of patched.
 
----
-
-## 7. Non-goals
-
-- No Settings toggle.
-- No "start in immersive/chrome-hidden" mode.
-- No change to how `PlayerControlsMode` is remembered or applied.
-- No new persistence layer — `isExpanded` remains session-local `rememberSaveable`.
+`startExpanded: Boolean = false` had been declared as a parameter in `PlayerScreen` but was never referenced in the function body — a dead parameter. It was deleted as part of this cleanup.
