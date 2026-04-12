@@ -104,16 +104,16 @@
 3. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.
 4. [ ] Offline action queueing follow-up: expand deferred-sync coverage beyond favourite/archive to remaining item lifecycle actions where local-first behavior is valuable.
 5. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
-6. [ ] Keep-screen-on/session UX follow-up: refine “active session” heuristics and user copy for reader-only vs speaking states without changing playback ownership.
+6. [x] Keep-screen-on/session UX follow-up: shipped — screen stays on during active playback or manual reader mode sessions (PR #167).
 
 ## Reader/Player UX fidelity + state persistence backlog
 
 ### Near-term implementation candidates (ranked)
-1. [ ] Search within Locus: in-article text search with next/previous result navigation, visible match count, and preservation of active playback highlight behavior.
+1. [x] Search within Locus: in-article text search with next/previous result navigation, visible match count, and preservation of active playback highlight behavior (PR #162).
 2. [x] Scroll-level persistence across tabs (Locus rules): per-item reader scroll offsets now persist/restore; Locus-tab return from preview now reattaches to now-playing item using a Settings toggle for either last reader position (default) or live playback pointer.
-3. [ ] Reader/Locus paragraph formatting fidelity: preserve paragraph breaks/spacing consistently between fetched text and rendered Locus body, including edge cases from manual/excerpt saves.
+3. [x] Reader/Locus paragraph formatting fidelity: paragraph spacing and clickable links shipped.
 4. [x] Reader/Locus clickable links: render links as tappable in-body spans with safe external-open behavior, while preserving current selection and playback UX.
-5. [ ] Locus bottom-gap transition issue: remove the intermittent bottom-gap/blank-space artifact during Locus open/close and mode transitions.
+5. [x] Locus bottom-gap transition issue: Scaffold content insets removed to eliminate bottom vacated gap.
 6. [ ] Progress/player scroll jerk during drag: smooth seek-drag + scroll coupling so seek interaction does not cause abrupt jump/jitter in reader scroll position.
 7. [ ] Collapsible pending-item section in Up Next: make pending rows collapsible/expandable with persisted collapsed state to reduce queue noise without hiding failures.
 
@@ -139,9 +139,9 @@
 10. [x] Phase 6.3: folder detail view with playlist counts and remove-from-folder shipped.
 11. [ ] Next: folder badges in playlist list and optional nested folders.
 12. [x] Locus expand/collapse on `main`: explicit buttons only, collapsed tab entry, expanded resume/direct entry, title ellipsis fix, and TESTING.md invariants checklist.
-13. [ ] Player completion icon follow-up: evaluate open-book/closed-book completion iconography for Locus as a separate ticket after the current player banding work settles.
+13. [x] Player completion icon follow-up: completion iconography shipped (PR #58).
 14. [ ] Shared pinned PlayerBar on `main` remains a separate architecture ticket, not part of playback-speed follow-up.
-15. [~] Player screen banding foundation: TopAppBar + reader body + pinned controls above bottom nav are shipped; ongoing polish is focused on chrome density/behavior only.
+15. [x] Player screen banding foundation: TopAppBar + reader body + pinned controls above bottom nav shipped (PR #56).
 16. [x] Reader highlight progression: sentence-level highlighting with range-level (TTS `onRangeStart`) support and sentence fallback.
 17. [x] Player chrome compression slice: persistent title strip + 3-state controls with chevron mode transitions and persisted settings.
 18. [x] Header action polish: refresh visual states unified and speed control updated to compact panel styling with preserved speed semantics.
