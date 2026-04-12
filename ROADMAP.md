@@ -120,7 +120,7 @@
 ### Spec/design-first items (clarify behavior before coding)
 1. [x] Auto-archive toggle at end of article: shipped — configurable toggle archives item on playback completion (PR #164).
 2. [x] Undo last article archive/delete: shipped — undo snackbar for last archive/bin action with backend unarchive call (PR #165).
-3. [ ] Start-in-full-screen toggle for Locus: define launch rules vs remembered player mode and explicit user overrides.
+3. [x] Start-in-full-screen toggle for Locus: spec approved — no toggle; explicit item opens always expand, autoplay preserves state. See `docs/ANDROID_LOCUS_START_FULLSCREEN_SPEC.md`. Implementation is a one-line fix in `openRequestSignal` LaunchedEffect.
 4. [x] Full-text/default-open behavior spec finalized: see `docs/ANDROID_LOCUS_FULLTEXT_DEFAULT_OPEN_SPEC.md` (decision-only; implementation remains a follow-up ticket).
 
 ### Later / exploratory
