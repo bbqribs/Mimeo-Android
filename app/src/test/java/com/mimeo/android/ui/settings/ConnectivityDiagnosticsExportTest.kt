@@ -94,7 +94,7 @@ class ConnectivityDiagnosticsExportTest {
 
         val text = buildConnectivityDiagnosticsExportText(
             mode = ConnectionMode.REMOTE,
-            baseUrl = "http://beh-dec2022.taildacac5.ts.net:8000",
+            baseUrl = "http://100.84.13.10:8000",
             rows = rows,
             lastError = "Timeout/no route (probable tailnet-path failure).",
             exportedAt = "2026-03-23T15:10:10Z",
