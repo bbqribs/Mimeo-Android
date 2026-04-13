@@ -755,7 +755,6 @@ fun PlayerScreen(
     onShowSnackbar: (String, String?, String?) -> Unit,
     initialItemId: Int,
     requestedItemId: Int? = null,
-    startExpanded: Boolean = false,
     locusTapSignal: Int = 0,
     openRequestSignal: Int = 0,
     onOpenItem: (Int) -> Unit,
@@ -809,7 +808,6 @@ fun PlayerScreen(
     val lastOpenDiagnostics = engineState.lastOpenDiagnostics
     var lastObservedPercent by remember { mutableIntStateOf(-1) }
     var nearEndForcedForItemId by remember { mutableIntStateOf(-1) }
-    var isExpanded by rememberSaveable { mutableStateOf(true) }
     val queueOffline by vm.queueOffline.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val settings by vm.settings.collectAsState()
@@ -903,7 +901,7 @@ fun PlayerScreen(
         PlayerControlsMode.MINIMAL -> "Expand player controls. Long press to hide player controls"
         PlayerControlsMode.NUB -> "Restore player controls"
     }
-    val readerChromeHidden = !compactControlsOnly && isExpanded && immersiveReaderMode
+    val readerChromeHidden = !compactControlsOnly && immersiveReaderMode
     LaunchedEffect(textToolbar) {
         snapshotFlow { textToolbar.status }.collect { status ->
             if (status == TextToolbarStatus.Shown) {
@@ -926,7 +924,7 @@ fun PlayerScreen(
         readerSelectionResetSignal += 1
         selectionClearArmed = false
     }
-    BackHandler(enabled = !compactControlsOnly && isExpanded) {
+    BackHandler(enabled = !compactControlsOnly) {
         if (selectionClearArmed || hasActiveSelection) {
             clearActiveSelection()
         } else {
@@ -1862,236 +1860,6 @@ fun PlayerScreen(
                     .weight(1f, fill = true),
                 verticalArrangement = Arrangement.Top,
             ) {
-                if (!isExpanded) {
-                    AnimatedVisibility(
-                        visible = !actionBarHiddenByMode,
-                        enter = slideInVertically(initialOffsetY = { -it / 2 }) + fadeIn(animationSpec = tween(150)),
-                        exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(animationSpec = tween(120)),
-                    ) {
-                        ExpandedPlayerTopBar(
-                            title = locusActionBarTitle,
-                            playbackSpeed = settings.playbackSpeed,
-                            overflowExpanded = overflowExpanded,
-                            canMarkDone = displayPayload != null,
-                            isDone = showCompleted,
-                            refreshState = refreshActionState,
-                            showConnectivityIssue = hasRefreshProblem,
-                            isFavorited = isLocusItemFavorited,
-                            isArchived = isLocusItemArchived,
-                            onRefresh = {
-                                if (refreshActionState == RefreshActionVisualState.Refreshing) return@ExpandedPlayerTopBar
-                                actionScope.launch {
-                                    refreshActionState = RefreshActionVisualState.Refreshing
-                                    val refreshResult = vm.refreshCurrentPlayerItem(locusActionItemId)
-                                        .onSuccess {
-                                            localDonePercentOverride = -1
-                                            preserveVisibleContentOnReload = true
-                                            vm.playbackReloadCurrentItem(PlaybackOpenIntent.ManualOpen)
-                                            hasRefreshProblem = false
-                                        }
-                                        .onFailure { error ->
-                                            if (error is CancellationException) return@onFailure
-                                            val failureMessage = friendlyRefreshFailureMessage(error)
-                                            val (actionLabel, actionKey) = refreshFailureAction(failureMessage)
-                                            hasRefreshProblem = true
-                                            onShowSnackbar(failureMessage, actionLabel, actionKey)
-                                        }
-                                    refreshActionState = if (refreshResult.isSuccess) {
-                                        RefreshActionVisualState.Success
-                                    } else {
-                                        RefreshActionVisualState.Failure
-                                    }
-                                    delay(700)
-                                    if (
-                                        refreshActionState == RefreshActionVisualState.Success ||
-                                        refreshActionState == RefreshActionVisualState.Failure
-                                    ) {
-                                        refreshActionState = RefreshActionVisualState.Idle
-                                    }
-                                }
-                            },
-                            onMarkDone = {
-                                actionScope.launch {
-                                    val markDone = !showCompleted
-                                    val targetPercent = if (markDone) 100 else 97
-                                    val resumePercent = if (markDone) currentPercent else undoDonePercent
-                                    vm.toggleCompletion(locusActionItemId, markDone = markDone, resumePercent = resumePercent)
-                                        .onSuccess {
-                                            localDonePercentOverride = targetPercent
-                                            val toggleMessage = when {
-                                                showCompleted -> "Marked not done"
-                                                else -> "Marked done"
-                                            }
-                                            onShowSnackbar(toggleMessage, null, null)
-                                            if (showCompleted && chunks.isNotEmpty()) {
-                                                nearEndForcedForItemId = -1
-                                                lastObservedPercent = targetPercent
-                                            }
-                                        }
-                                        .onFailure { error ->
-                                            if (error is CancellationException) return@onFailure
-                                            uiMessage = error.message ?: "Completion update failed"
-                                            onShowSnackbar(uiMessage.orEmpty(), "Diagnostics", "open_diagnostics")
-                                    }
-                                }
-                            },
-                            onSpeedChange = { speed -> vm.savePlaybackSpeed(speed) },
-                            searchActive = locusSearchActive,
-                            searchQuery = locusSearchQuery,
-                            searchSummary = locusSearchSummary,
-                            onSearchToggle = { locusSearchActive = !locusSearchActive },
-                            onSearchQueryChange = { locusSearchQuery = it },
-                            onSearchNext = { moveLocusSearchMatch(1) },
-                            onSearchPrevious = { moveLocusSearchMatch(-1) },
-                            onToggleFavorite = {
-                                actionScope.launch {
-                                            vm.setItemFavorited(locusItemId, favorited = !isLocusItemFavorited)
-                                        .onSuccess {
-                                            val message = if (isLocusItemFavorited) "Removed from favourites" else "Added to favourites"
-                                            onShowSnackbar(message, null, null)
-                                        }
-                                        .onFailure { error ->
-                                            if (error is CancellationException) return@onFailure
-                                            onShowSnackbar("Couldn't update favourite", "Diagnostics", "open_diagnostics")
-                                        }
-                                }
-                            },
-                            onArchive = {
-                                actionScope.launch {
-                                    if (isLocusItemArchived) {
-                                        vm.unarchiveItem(locusActionItemId)
-                                            .onSuccess {
-                                                onShowSnackbar("Unarchived", null, null)
-                                            }
-                                            .onFailure { error ->
-                                                if (error is CancellationException) return@onFailure
-                                                onShowSnackbar("Couldn't unarchive item", "Diagnostics", "open_diagnostics")
-                                            }
-                                    } else {
-                                        val nextItemId = nextSessionItemIdForArchive(locusActionItemId)
-                                        vm.archiveItem(
-                                            locusActionItemId,
-                                            source = ArchiveActionSource.LOCUS,
-                                        )
-                                            .onSuccess {
-                                                onShowSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
-                                                val archivedActivePlaybackItem =
-                                                    locusActionItemId == currentItemId &&
-                                                        (isSpeaking || isAutoPlaying || autoPlayAfterLoad)
-                                                if (archivedActivePlaybackItem) {
-                                                    // Keep playback continuity for the currently playing item.
-                                                    Unit
-                                                } else if (locusActionItemId != currentItemId && currentItemId > 0) {
-                                                    onOpenItem(currentItemId)
-                                                } else if (nextItemId != null) {
-                                                    vm.startNowPlayingSession(startItemId = nextItemId)
-                                                    vm.playbackOpenItem(
-                                                        itemId = nextItemId,
-                                                        intent = PlaybackOpenIntent.ManualOpen,
-                                                        autoPlayAfterLoad = false,
-                                                    )
-                                                    onOpenItem(nextItemId)
-                                                } else {
-                                                    onRequestBack()
-                                                }
-                                            }
-                                            .onFailure { error ->
-                                                if (error is CancellationException) return@onFailure
-                                                onShowSnackbar("Couldn't archive item", "Diagnostics", "open_diagnostics")
-                                            }
-                                    }
-                                }
-                            },
-                            onOverflowExpandedChange = { expanded -> overflowExpanded = expanded },
-                            overflowMenuContent = {
-                                LocusOverflowMenuItems(
-                                    onPlayCurrentItem = {
-                                        overflowExpanded = false
-                                        playLocusItem()
-                                    },
-                                    onReportProblem = {
-                                        overflowExpanded = false
-                                        openProblemReport()
-                                    },
-                                    onMoveToBin = {
-                                        overflowExpanded = false
-                                        actionScope.launch {
-                                            val nextItemId = nextSessionItemIdForArchive(locusActionItemId)
-                                            vm.moveItemToBin(
-                                                locusActionItemId,
-                                                refreshQueue = false,
-                                                source = ArchiveActionSource.LOCUS,
-                                            )
-                                                .onSuccess {
-                                                    onShowSnackbar("Moved to Bin (14 days)", "Undo", ACTION_KEY_UNDO_ARCHIVE)
-                                                    if (locusActionItemId != currentItemId && currentItemId > 0) {
-                                                        onOpenItem(currentItemId)
-                                                    } else if (nextItemId != null) {
-                                                        vm.startNowPlayingSession(startItemId = nextItemId)
-                                                        vm.playbackOpenItem(
-                                                            itemId = nextItemId,
-                                                            intent = PlaybackOpenIntent.ManualOpen,
-                                                            autoPlayAfterLoad = false,
-                                                        )
-                                                        onOpenItem(nextItemId)
-                                                    } else {
-                                                        onRequestBack()
-                                                    }
-                                                }
-                                                .onFailure { error ->
-                                                    if (error is CancellationException) return@onFailure
-                                                    onShowSnackbar("Couldn't move item to Bin", "Diagnostics", "open_diagnostics")
-                                                }
-                                        }
-                                    },
-                                    onOpenPlaylists = {
-                                        overflowExpanded = false
-                                        vm.refreshPlaylists()
-                                        showPlaylistPicker = true
-                                    },
-                                    canReportProblem = settings.apiToken.isNotBlank(),
-                                    hasUrl = locusHasUrl,
-                                    onOpenInBrowser = {
-                                        overflowExpanded = false
-                                        openItemInBrowser(context, locusItemUrl)
-                                    },
-                                    onShareUrl = {
-                                        overflowExpanded = false
-                                        shareItemUrl(context, locusItemUrl, locusItemTitle)
-                                    },
-                                    hasArticleText = displayReaderText.isNotBlank(),
-                                    onCopyArticleText = {
-                                        overflowExpanded = false
-                                        copyItemText(context, displayReaderText)
-                                        onShowSnackbar("Article text copied", null, null)
-                                    },
-                                    onShareArticleText = {
-                                        overflowExpanded = false
-                                        shareItemText(context, displayReaderText, locusItemTitle, currentSourceLabel, locusItemUrl.takeIf { locusHasUrl })
-                                    },
-                                    isExpanded = isExpanded,
-                                    onToggleExpanded = {
-                                        overflowExpanded = false
-                                        isExpanded = !isExpanded
-                                    },
-                                )
-                            },
-                        )
-                    }
-                    val locusStatusLine = listOfNotNull(
-                        currentSourceLabel?.takeIf { it.isNotBlank() },
-                        "Sync $syncBadgeText",
-                        chunkLabel,
-                    ).joinToString("  -  ")
-                    LocusPeekCard(
-                        title = locusActionBarTitle,
-                        statusLine = locusStatusLine,
-                        overflowExpanded = overflowExpanded,
-                        overflowMenuContent = {
-                            Spacer(modifier = Modifier)
-                        },
-                    )
-                } else {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2376,11 +2144,6 @@ fun PlayerScreen(
                                                 overflowExpanded = false
                                                 shareItemText(context, displayReaderText, locusItemTitle, currentSourceLabel, locusItemUrl.takeIf { locusHasUrl })
                                             },
-                                            isExpanded = isExpanded,
-                                            onToggleExpanded = {
-                                                overflowExpanded = false
-                                                isExpanded = !isExpanded
-                                            },
                                         )
                                     },
                                 )
@@ -2403,19 +2166,6 @@ fun PlayerScreen(
                             }
                         }
                     }
-                }
-                if (!isExpanded) {
-                    AnimatedVisibility(
-                        visible = !playerDockHiddenByMode && transitionSettled,
-                        enter = slideInVertically(
-                            initialOffsetY = { it / 2 },
-                            animationSpec = tween(durationMillis = 140, delayMillis = 40),
-                        ) + fadeIn(animationSpec = tween(durationMillis = 120, delayMillis = 40)),
-                        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
-                    ) {
-                        renderPlayerDock()
-                    }
-                }
                 if (BuildConfig.DEBUG && settings.showPlaybackDiagnostics) {
                     PlaybackObservabilityStrip(
                         lines = playbackObservabilityLines(observabilityUiState),
@@ -3093,35 +2843,6 @@ private fun SpeedStepperButton(
     }
 }
 
-@Composable
-private fun LocusPeekCard(
-    title: String,
-    statusLine: String,
-    overflowExpanded: Boolean,
-    overflowMenuContent: @Composable () -> Unit,
-) {
-    ElevatedCard(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text = title,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = statusLine,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
 
 @Composable
 private fun LocusOverflowMenu(
@@ -3371,8 +3092,6 @@ private fun LocusOverflowMenuItems(
     hasArticleText: Boolean,
     onCopyArticleText: () -> Unit,
     onShareArticleText: () -> Unit,
-    isExpanded: Boolean,
-    onToggleExpanded: () -> Unit,
 ) {
     DropdownMenuItem(
         text = { Text("Play this item") },
@@ -3411,10 +3130,6 @@ private fun LocusOverflowMenuItems(
     DropdownMenuItem(
         text = { Text("Move to Bin (14 days)") },
         onClick = onMoveToBin,
-    )
-    DropdownMenuItem(
-        text = { Text(if (isExpanded) "Collapse player" else "Expand player") },
-        onClick = onToggleExpanded,
     )
 }
 

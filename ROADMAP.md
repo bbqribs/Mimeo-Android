@@ -120,7 +120,7 @@
 ### Spec/design-first items (clarify behavior before coding)
 1. [x] Auto-archive toggle at end of article: shipped — configurable toggle archives item on playback completion (PR #164).
 2. [x] Undo last article archive/delete: shipped — undo snackbar for last archive/bin action with backend unarchive call (PR #165).
-3. [ ] Start-in-full-screen toggle for Locus: define launch rules vs remembered player mode and explicit user overrides.
+3. [x] Start-in-full-screen / Locus collapse removal shipped: `isExpanded` mechanism and "Collapse player" overflow option removed entirely; `LocusPeekCard` and dead `startExpanded` parameter deleted. Locus is always expanded. See `docs/ANDROID_LOCUS_START_FULLSCREEN_SPEC.md`.
 4. [x] Full-text/default-open behavior spec finalized: see `docs/ANDROID_LOCUS_FULLTEXT_DEFAULT_OPEN_SPEC.md` (decision-only; implementation remains a follow-up ticket).
 
 ### Later / exploratory
@@ -128,7 +128,7 @@
 
 ## Android Redesign v1.1
 1. [~] Foundation: 4-tab nav shell (Up Next / Locus / Collections / Settings) plus black/purple theme foundations.
-2. [x] Mini control panel (collapsed Locus peek) for active playback/session continuity.
+2. [x] Mini control panel (collapsed Locus peek) for active playback/session continuity. [Later removed: collapsed peek and `isExpanded` mechanism eliminated — Locus is always expanded.]
 3. [x] Up Next skeleton: playlist dropdown, search affordance, filter chips, and grouped queue sections.
 4. [x] Typography preferences pass: reading fonts, line height, and display density controls.
 5. [x] Playback speed control in Locus with persisted preference.
