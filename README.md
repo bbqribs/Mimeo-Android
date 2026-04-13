@@ -85,7 +85,7 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 - Current Stage 2 defaults/presets:
   - `Local`: `http://10.0.2.2:8000`
   - `LAN`: `http://192.168.68.124:8000`
-  - `Remote`: `http://beh-dec2022.taildacac5.ts.net:8000`
+  - `Remote`: `http://100.84.13.10:8000`
 
 ## Remote mode (Tailscale / off-LAN)
 Use this when your phone is not on the same home LAN as the backend host.

@@ -5,7 +5,7 @@ import java.util.Locale
 
 internal const val DEFAULT_LOCAL_HOST = "10.0.2.2:8000"
 internal const val DEFAULT_LAN_HOST = "192.168.68.124:8000"
-internal const val DEFAULT_REMOTE_HOST = "beh-dec2022.taildacac5.ts.net:8000"
+internal const val DEFAULT_REMOTE_HOST = "100.84.13.10:8000"
 
 internal const val DEFAULT_LOCAL_BASE_URL = "http://$DEFAULT_LOCAL_HOST"
 internal const val DEFAULT_LAN_BASE_URL = "http://$DEFAULT_LAN_HOST"
