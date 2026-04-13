@@ -1,9 +1,31 @@
 # Mimeo Redesign v2 — Product + Architecture Plan
 
-**Version:** 0.1 (planning draft)
+**Version:** 0.3 (planning draft)
 **Status:** Pre-implementation planning
 **Date:** 2026-04-10
 **Scope:** Android, backend, and web
+
+**Changes in 0.3:**
+- Removed remaining stale "Smart Queue" references (was missed in 0.2 in §3.3 and §9.2).
+- Fixed Section 2 entity table and critical-distinction paragraph: Up Next is no longer described as a live mirror of a playlist.
+- Settled re-seed trigger: explicit user action only; pull-to-refresh on Up Next does NOT auto-re-seed.
+- Added Section 6: Playlist playback context rule (tap / Play playlist / Play from here / dirty-Up-Next definition).
+- Fixed Section 5 screen map and "Reaching Up Next": Up Next is a drawer destination on day one (settled in 0.2 but screen map was not updated).
+- Clarified Section 6 "Adding to playlist" terminology: "Play Next"/"Play Last" insert into Up Next only; playlist-add actions use "End of playlist"/"Top of playlist".
+- Fixed Section 9.2 note: removed "Smart Queue" reference.
+- Fixed Section 10.4: removed "manual cursor" language; offset/limit is v1 pagination.
+- Fixed risk numbering (was 1–8, 11–12, 9–10 due to insertion order).
+- Removed settled "Product decision required" markers from §3.1 and §3.2.
+
+**Changes in 0.2:**
+- Up Next is device-local in v1 (was: synced as system playlist). Sync is a v2+ enhancement.
+- Dropped "Smart Queue" terminology. Replaced with explicit seed-source model.
+- Added "seed source" rule: Up Next edits never mutate any source playlist. No "active playlist" with live link.
+- Playlist folders cut entirely (was: deferred).
+- Pagination simplified to offset/limit for v1 (was: cursor-based).
+- Undo promises tightened: v1 restores archive/favorite flags only, not playlist membership or list position.
+- Added playlist visibility from Phase 2 to close the gap between Collections removal and full playlist management in Phase 5.
+- Up Next moved into drawer on day one.
 
 ---
 
@@ -17,11 +39,18 @@ The approach is incremental. Hard-won playback, reader, offline, and progress be
 
 **Key shifts:**
 - Bottom nav bar → side drawer navigation
-- Collections tab → eliminated; playlists move to drawer
+- Collections tab → eliminated; playlists move to drawer (visible from Phase 2 onward; full management in Phase 5)
 - Up Next remains, but is no longer the implicit home screen for all users
+- Up Next is modeled as a device-local persistent ordered list with a "seed source" (v1); cross-device sync deferred to v2+
 - Inbox becomes a first-class library view matching web semantics
 - Multi-select and batch actions become available across list views
 - Locus/player moves from a nav tab to a persistent mini-player + expandable surface
+
+**Key product rules that shape the architecture:**
+- Inbox/Favorites/Archive/Bin are **views** (filtered projections), not collections. They are sort-controlled, not manually reorderable.
+- Playlists are **persistent ordered collections** owned by the user.
+- Up Next is **the device's single playback queue**. It is not a user playlist.
+- **Up Next edits never mutate the source playlist.** The source is an informational label, not a live link. Avoid the phrase "active playlist."
 
 ---
 
@@ -56,7 +85,7 @@ The approach is incremental. Hard-won playback, reader, offline, and progress be
 | **Archive** | View: archived items | View only (toggle archive flag) | Sort-controlled |
 | **Bin** | View: soft-deleted items | View only (bin/restore/purge actions) | Recency only |
 | **Playlist** | Explicit, persistent, user-managed ordered collection | Yes (CRUD, reorder, add/remove) | Position-ordered |
-| **Up Next** | The active playback queue; may be backed by a playlist or auto-generated | Yes (reorder, add, remove, skip) | Position-ordered |
+| **Up Next** | The device's single playback queue; persistent device-local list with a seed source | Yes (reorder, add, remove) | Position-ordered |
 | **Locus** | The integrated reading + listening surface for one item | N/A (it is a view, not a collection) | N/A |
 | **Player** | The persistent playback state: mini-player bar + expanded Locus | N/A (it is a mode, not a destination) | N/A |
 
@@ -66,7 +95,7 @@ Inbox, Favorites, Archive, and Bin are **views** — filtered projections of the
 
 Playlists are **collections** — explicit, user-managed membership with ordering. An item can be in zero, one, or many playlists simultaneously. Playlist membership is orthogonal to archive/favorite/bin state (with policy rules about what happens to membership on state transitions).
 
-Up Next is a **playback construct** — it may be backed by a playlist (in which case it reflects that playlist's order) or it may be an ephemeral auto-generated queue (e.g., "play all inbox items sorted by recency"). It is the thing the playback engine consumes.
+Up Next is a **playback construct** — a single device-local ordered list. It is seeded from a source (Inbox or a user playlist) and then owned independently. Edits to Up Next do not affect the source. See Section 6 for full semantics.
 
 ---
 
@@ -78,33 +107,42 @@ Up Next is a **playback construct** — it may be backed by a playlist (in which
 
 **Recommendation:** Keep them separate. Inbox is always sort-controlled (the user picks a sort mode; items cannot be manually dragged). Up Next is always position-ordered (the user can drag-reorder). If the user wants a reorderable inbox-like list, they create a playlist. This is the cleanest model and avoids a hybrid that is neither a good view nor a good list.
 
-**Product decision required:** Confirm that Inbox is sort-only, not manually reorderable.
+**Settled:** Inbox is sort-only, not manually reorderable.
 
-### 3.2 Up Next identity: ephemeral queue or durable playlist?
+### 3.2 Up Next identity: the seed-source model
 
-**Tension:** If Up Next is "just a playlist," it should be createable, renameable, persistable. If it is an ephemeral playback queue, it can be volatile and auto-generated. The user wants it to be "editable and reorderable" but also "a playback queue."
+**Tension:** Up Next needs to be editable, reorderable, and persistent across app restarts — but it is conceptually distinct from a user playlist. If you just call it "a playlist," you blur the distinction. If you call it "ephemeral," you lose user edits on restart.
 
-**Recommendation:** Model Up Next as a **special system playlist** that behaves like a queue. Specifically:
-- Up Next is backed by a real playlist row in the database (with a system flag, not user-renameable or deletable)
-- It can be populated automatically (e.g., "fill from Inbox, sorted by recency") or manually (user adds items)
-- It can be reordered by drag
-- Playing from a user playlist copies that playlist's items into Up Next (or sets Up Next's source to that playlist)
-- Up Next is what the playback engine reads from; other playlists are organizational
+**Recommendation:** Up Next is **a single, persistent, device-local ordered list**. It is NOT a user playlist. It is not renameable, createable, or deletable by the user. It has exactly one instance per device.
 
-This gives Up Next durable ordering, reorderability, and queue semantics without making every playlist a queue.
+Up Next has an informational `seed_source` field describing where its current contents came from. Values look like:
+- `"Inbox (newest first)"` — seeded from an Inbox query
+- `"Playlist: Podcasts"` — seeded from the user's "Podcasts" playlist
+- `"Custom"` — sufficiently edited that the seed relationship is no longer meaningful
 
-**Alternative considered:** Up Next is purely ephemeral (lives only in app memory / local DB, never synced). This is simpler but means cross-device queue state is lost. Given that the user wants Android-web alignment, a server-side Up Next is preferable.
+**Edits to Up Next mutate Up Next and only Up Next.** Adding, removing, or reordering items in Up Next never propagates to any other playlist. The seed source is a historical label, not a live link.
 
-**Product decision required:** Is Up Next synced cross-device, or is it device-local?
+**Re-seeding:** The user can explicitly "Re-seed from Inbox" or "Re-seed from [playlist]" via a menu action on the Up Next surface. Re-seeding wipes the current Up Next contents and replaces them with the new source's items. This is a destructive action and confirms if Up Next has unsaved user edits.
 
-### 3.3 "Default Up Next source" vs home screen
+**Storage:** Up Next is stored in the Android Room database in v1. It survives app restart and process death. It is NOT synced to the server in v1. Cross-device Up Next sync is a v2+ enhancement (would require a server-side system playlist, which is currently out of scope).
 
-**Tension:** The user distinguishes "default home surface" (Inbox or Up Next) from "default Up Next source" (which playlist/queue feeds Up Next). These are independent settings, but the combinatorics create UX complexity:
-- Home=Inbox, Source=Smart Queue → user lands on library, playback draws from auto-queue
-- Home=Up Next, Source=Podcast Playlist → user lands on a specific playlist's playback queue
-- Home=Inbox, Source=Podcast Playlist → user sees library but plays from podcast playlist
+**Why this is cleaner than the "system playlist on server" model:**
+- No backend work for v1 (persistence is local, which Room already handles well)
+- No sync conflicts to resolve
+- The model is transparent: edits obviously only affect Up Next because it is demonstrably a separate object
 
-**Recommendation:** For v1, support two home options (Inbox, Up Next) and one Up Next source setting (Smart Queue vs specific playlist). The Smart Queue auto-populates Up Next from eligible unarchived items sorted by the user's preferred sort. Specific playlist mode copies a playlist's contents into Up Next. This is two settings, four combinations, manageable.
+**Settled decisions:**
+- Up Next is device-local in v1 (cross-device sync is v2+).
+- Edits in Up Next never mutate the source playlist.
+- Re-seed trigger: **explicit user action only** via Up Next overflow menu. Pull-to-refresh on Up Next does NOT auto-re-seed — it may refresh the items' metadata (titles, progress, status) but does not wipe or replace queue contents. This matters: auto-re-seed on refresh would silently destroy user edits.
+
+### 3.3 Default home surface vs default Up Next seed source
+
+These are two independent settings:
+- **Default home surface:** Inbox (default) or Up Next (user preference in Settings).
+- **Default Up Next seed source:** Inbox newest-first (default). User can re-seed from any user playlist at any time via explicit action.
+
+For v1, these are two simple settings. The seed source does not need to be configurable at install time — Up Next just starts empty and is seeded from Inbox on first open. The user can re-seed from a playlist later.
 
 ### 3.4 Duplicate items in playlists
 
@@ -118,9 +156,13 @@ This gives Up Next durable ordering, reorderability, and queue semantics without
 
 ### 3.6 Archive removes from playlists — but what about Up Next?
 
-**Tension:** If archiving removes items from playlists, and Up Next is a playlist, then archiving an item removes it from Up Next. But the user may want to archive after listening (auto-archive on completion) without disrupting the queue. If the currently-playing item gets removed from Up Next mid-playback, that is disruptive.
+**Note:** Up Next is NOT a user playlist (see 3.2). So "archive removes from playlists" does not automatically apply to Up Next. We make a separate decision for each:
 
-**Recommendation:** Archive-while-playing behavior already has careful handling (deferred cleanup). Extend this: archiving an item marks it archived but does not remove it from Up Next until the current session ends or the user refreshes. For regular playlists, archiving removes the item immediately (with undo). A future per-playlist "include archived items" flag would allow archived items to remain visible.
+**User playlists:** Archiving an item removes it from all user playlists (deferred v2: per-playlist "include archived" option would override this).
+
+**Up Next:** Archiving an item marks it archived but does not remove it from Up Next until the current playback session ends or the user refreshes/re-seeds. This preserves the "archive as I listen" pattern without disrupting the queue.
+
+The existing deferred-cleanup logic for archive-while-playing already handles this for the currently-playing item. Non-playing archived items in Up Next are harder to justify — they are visible but not re-addable to a user playlist. Tentative v1 behavior: non-playing archived items in Up Next are shown with a muted/archived indicator and can be manually removed by the user but are not auto-removed.
 
 ### 3.7 Library-first but Locus is the crown jewel
 
@@ -137,15 +179,18 @@ This gives Up Next durable ordering, reorderability, and queue semantics without
 | # | Decision | Recommendation | Type |
 |---|----------|---------------|------|
 | 1 | Is Inbox sort-only or manually reorderable? | Sort-only | Product |
-| 2 | Is Up Next synced cross-device? | Yes, as a system playlist | Product |
+| 2 | Is Up Next synced cross-device in v1? | No — device-local only. Sync is v2+. | Product |
 | 3 | Home screen default? | Inbox (with Up Next as option in settings) | Product |
-| 4 | Default Up Next source? | Smart Queue (auto from inbox, configurable) | Product |
-| 5 | Multi-select gesture? | Long-press to select; drag handles for reorder | Product + UX |
-| 6 | Batch API: backend-first or client-side loop? | Backend batch endpoints (new contract) | Engineering |
-| 7 | Pagination strategy? | Cursor-based for new endpoints; keep offset for web compat | Engineering |
-| 8 | ViewModel extraction before or during? | Before; extract ViewModel from MainActivity first | Engineering |
-| 9 | Playlist folders: keep or cut? | Defer to v2+ (not in initial redesign scope) | Product |
-| 10 | Web nav redesign: now or later? | Later; web keeps top tabs, Android gets drawer | Product |
+| 4 | Default Up Next seed source? | Inbox, newest-first. User can re-seed from any user playlist. | Product |
+| 5 | Do edits in Up Next mutate the source playlist? | No. Edits affect Up Next only. Source is informational. | Product (critical) |
+| 6 | Multi-select gesture? | Long-press to select; drag handles for reorder | Product + UX |
+| 7 | Batch API: backend-first or client-side loop? | Backend batch endpoints (new contract) | Engineering |
+| 8 | Pagination strategy? | Offset/limit for v1. Cursor-based deferred unless library size pressures it. | Engineering |
+| 9 | ViewModel extraction before or during? | Before. Extract ViewModel from MainActivity as Phase 0. | Engineering |
+| 10 | Playlist folders: keep or cut? | Cut entirely. Not in v1, not in v2 plan. | Product |
+| 11 | Web nav redesign: now or later? | Later. Web keeps top tabs; Android gets drawer. | Product |
+| 12 | Is Up Next a drawer destination on day one? | Yes. Visible in drawer from Phase 2 onward. | Product |
+| 13 | Is there playlist visibility during Phase 2-4 (before Phase 5 ships full playlist mgmt)? | Yes. Minimal playlist list + existing detail screen wired into drawer from Phase 2. | Product |
 
 ### Defer to v2+
 
@@ -153,7 +198,10 @@ This gives Up Next durable ordering, reorderability, and queue semantics without
 - Playlist-level "include archived items" option
 - Global cross-view search (v1 has per-view search only)
 - Grouped drag reorder (multi-select + reorder simultaneously)
+- Cross-device Up Next sync (server-side system playlist)
+- Playlist membership restoration on undo
 - Web sidebar/drawer redesign
+- Web playlist management (CRUD + reorder)
 - Light mode (dark-only for now)
 
 ---
@@ -170,6 +218,8 @@ This gives Up Next durable ordering, reorderability, and queue semantics without
 │ ▸ Favorites           (7) │
 │ ▸ Archive           (128) │
 │ ▸ Bin                 (3) │
+│                           │
+│ ▸ Up Next             (8) │  ← playback queue, visually distinct
 │                           │
 │ ─── Playlists ─────────── │
 │ ▸ Podcast Queue      (12) │
@@ -199,11 +249,11 @@ Drawer destinations:
   Favorites ──────── library list view (filtered)
   Archive ─────────── library list view (filtered)
   Bin ────────────── library list view (different action set)
-  Playlist [name] ── ordered list view (reorderable)
+  Up Next ─────────── playback queue (visually distinct from library views)
+  Playlist [name] ── ordered list view (reorderable; Phase 5+)
   Settings ────────── separate screen tree
 
 Non-drawer surfaces:
-  Up Next ─────────── playback queue (reached via mini-player or explicit action)
   Locus ──────────── reader/player (reached via item tap or mini-player expand)
   Sign In ─────────── auth gate (shown before everything else)
 ```
@@ -230,33 +280,15 @@ Non-drawer surfaces:
 └──────────────────────────────┘
 ```
 
-The mini-player is a persistent bar at the bottom of all library screens (above where the old nav bar was). Tapping it expands to Locus. Locus can also be entered by tapping an item in any list (which starts/loads that item and opens Locus).
+The mini-player is a persistent bar at the bottom of all library screens (above where the old nav bar was). Tapping it expands to Locus.
+
+Locus is also entered by tapping an item in any list. In library views (Inbox, Favorites, Archive, Bin), tapping opens the item in reader-only mode. In Up Next, tapping starts or resumes playback. See Section 7 for the full entry-point table.
 
 When no playback session is active, the mini-player is hidden. Library screens extend to full height.
 
 ### Reaching Up Next
 
-Up Next is not a drawer destination by default. It is reached by:
-1. Tapping the mini-player's queue icon (if present)
-2. Long-pressing the mini-player to see "Up Next" option
-3. A dedicated button/icon in the expanded Locus header
-
-**Product decision:** Should Up Next also appear in the drawer? Tentative recommendation: yes, below the library views and above playlists, as a special entry. This makes it always findable.
-
-Revised drawer with Up Next:
-
-```
-│ ▸ Inbox              (42) │
-│ ▸ Favorites           (7) │
-│ ▸ Archive           (128) │
-│ ▸ Bin                 (3) │
-│                           │
-│ ▸ Up Next             (8) │  ← playback queue, visually distinct
-│                           │
-│ ─── Playlists ─────────── │
-│ ▸ Podcast Queue      (12) │
-│ ...                       │
-```
+Up Next is a drawer destination. It appears in the drawer between the library views (Inbox / Favorites / Archive / Bin) and the Playlists section. It is also reachable via the queue icon in the mini-player.
 
 ### Landing screen
 
@@ -306,11 +338,11 @@ Playlists are:
 Playlist entries store `(playlist_id, article_id, position)`. The `article_id` is not unique within a playlist — duplicates are allowed at the data layer. The `position` field determines display and playback order.
 
 **Adding to playlist:**
-- From any library view: overflow menu → "Add to Playlist..." → picker
+- From any library view: overflow menu → "Add to Playlist..." → picker sheet listing all user playlists
 - From Locus: overflow → "Add to Playlist..."
 - From batch selection: batch action bar → "Add to Playlist..."
-- Position options: "Play Next" (insert after current position) or "Play Last" (append to end)
-- Default: Play Last
+- Position within the target playlist: "Top of playlist" or "End of playlist" (default: End)
+- Note: "Play Next" and "Play Last" are separate actions that insert into Up Next, not into user playlists. Do not conflate these.
 
 **Removing from playlist:**
 - From playlist view: overflow menu → "Remove from Playlist"
@@ -319,31 +351,108 @@ Playlist entries store `(playlist_id, article_id, position)`. The `article_id` i
 
 ### Up Next semantics
 
-Up Next is the active playback queue. It is modeled as a special system playlist with additional behaviors:
+Up Next is the active playback queue. It is **a single, persistent, device-local ordered list** — NOT a user playlist. See Section 3.2 for the conceptual model.
 
-**Population modes:**
-1. **Smart Queue** (default): auto-populated from eligible inbox items using a configurable sort (default: recency). Refreshed on pull-to-refresh. Smart Queue is read-only in terms of ordering — the sort determines order.
-2. **Playlist-backed**: Up Next mirrors a specific user playlist. Changes to the playlist are reflected in Up Next. Reordering Up Next reorders the backing playlist.
-3. **Manual additions**: user can add items to Up Next from any library view ("Play Next" / "Play Last"). These insert into the current Up Next regardless of mode.
+**Storage:**
+- Stored in the Android Room database
+- Survives app restart and process death
+- Not synced to the server in v1 (cross-device sync is v2+)
+
+**Contents:**
+- An ordered list of item IDs (with positions)
+- A `seed_source` metadata field (informational): `"Inbox (newest first)"`, `"Playlist: Podcasts"`, or `"Custom"`
+- A `seeded_at` timestamp (for "last updated from source" display)
+
+**Seed behavior:**
+- Default seed source: Inbox, sorted newest-first
+- Initial seed happens on first app launch or first time the user opens Up Next with an empty queue
+- Re-seeding is an explicit user action via an Up Next overflow/menu item: "Re-seed from Inbox" or "Re-seed from [playlist name]"
+- Re-seeding wipes the current Up Next contents and replaces them
+- If Up Next has user edits (ordering differs from what the source would produce, or items have been added/removed), re-seeding prompts for confirmation
+
+**Edit rules (CRITICAL):**
+- **Edits to Up Next never mutate the source playlist or Inbox.** Period.
+- Drag-reorder within Up Next: updates Up Next positions only
+- Remove from Up Next: removes the entry in Up Next only; item remains in its source playlist and Inbox
+- Add to Up Next (via "Play Next" / "Play Last"): inserts into Up Next only; source playlist is unchanged
+
+**Manual insertion actions:**
+- **Play Next:** insert at position `current_playing_index + 1`
+- **Play Last:** append to end
+- Both available from any library item's overflow menu and from Locus overflow
 
 **Playback interaction:**
-- Playing an item from any list loads it in Locus and sets Up Next context (if not already set)
-- "Play Next" from a library item inserts it into Up Next at position current+1
-- "Play Last" from a library item appends it to the end of Up Next
+- Playing an item from Up Next starts playback at that item
+- Playing an item from a library list opens Locus in reader-only mode; does not modify Up Next
+- Playing an item from a user playlist starts playback using that playlist as the playback context; when the session context requires a queue, Up Next is re-seeded from the playlist (with confirmation if dirty)
 - Completing an item in Up Next advances to the next item (auto-advance, if enabled)
 
-### Archive/Bin interactions with playlists
+**Avoid the term "active playlist."** Use "seed source" or "playing from" when describing the relationship between Up Next and its origin. There is no live link — Up Next is a copy.
 
-| Action | Effect on playlists | Effect on Up Next |
-|--------|-------------------|------------------|
-| Archive item | Remove from all playlists | Remove from Up Next (deferred if currently playing) |
-| Bin item | Remove from all playlists immediately | Remove from Up Next immediately (stop playback if active) |
-| Restore from bin | Does NOT restore playlist membership | Does NOT restore Up Next position |
-| Unarchive item | Does NOT restore playlist membership | Does NOT restore Up Next position |
+### Playlist playback context rule (v1)
 
-**Rationale:** Restoring playlist/queue membership on undo/restore is desirable but complex (the position may no longer exist, the playlist may have been reordered). For v1, restoration is limited to the item's library state (archive flag, favorite flag). Playlist membership restoration is a v2 goal tied to richer undo snapshots.
+This rule defines what happens when the user interacts with items inside a **user playlist detail view**.
 
-**Exception for undo:** Snackbar undo (within ~5 seconds of archiving/binning) SHOULD restore playlist membership if feasible, because the undo snapshot can capture the entry IDs and positions. This is a "best effort" restoration — if the playlist was modified between action and undo, the item goes to the end.
+#### Tap item (default)
+
+Opens the item in Locus in **reader-only mode**. Does not modify Up Next. Does not start playback. This is identical to tapping an item in any library view: the user is browsing, not committing to a play session.
+
+Rationale: tapping a playlist item to read it should not replace an active Up Next queue. The user may be mid-listen and just checking something.
+
+#### "Play playlist"
+
+Initiates playback starting from the first item in the playlist. Behavior:
+1. If Up Next is **dirty** (see definition below): show confirmation dialog "This will replace your current Up Next."
+2. Re-seed Up Next from the full playlist in playlist order.
+3. Open Locus at the first item and start playback.
+
+#### "Play from here"
+
+Initiates playback starting from a specific item within the playlist, while loading the full playlist into Up Next. Behavior:
+1. If Up Next is **dirty**: show confirmation dialog "This will replace your current Up Next."
+2. Re-seed Up Next from the full playlist in playlist order.
+3. Open Locus at the selected item and start playback from that position.
+
+The full playlist is loaded (not just from the chosen item to the end), so the user can rewind to earlier items without another re-seed.
+
+#### "Play Next" / "Play Last" (from playlist item overflow)
+
+**Do not replace Up Next.** Insert the item into Up Next at position `current+1` or at the end, respectively. This is additive, not a re-seed. No confirmation needed.
+
+#### Definition of "dirty Up Next"
+
+Up Next is **dirty** if the user has made at least one explicit edit since the most recent seed. Explicit edits are:
+- Adding an item via "Play Next" or "Play Last"
+- Removing an item via swipe-to-dismiss or overflow "Remove from Up Next"
+- Reordering an item by drag
+
+Up Next is **clean** immediately after any re-seed, and again after an initial seed (even if the Inbox items have changed since seeding). Changes to the Inbox or source playlist after the last seed do **not** make Up Next dirty — they make the seed stale, but that is displayed via `seeded_at` timestamp, not a dirty flag.
+
+#### Where these actions live
+
+| Action | Surface |
+|--------|---------|
+| Tap item | Default row tap |
+| Play playlist | Toolbar action or overflow menu at the top of the playlist detail screen |
+| Play from here | Per-item overflow menu inside the playlist detail screen |
+| Play Next / Play Last | Per-item overflow menu (same as from library views) |
+
+#### Implementation phase
+
+These behaviors are part of **Phase 3** (Locus restructure / tap-entry-point differentiation) and **Phase 5** (full playlist management). The Phase 2 playlist detail screen uses the current tap behavior; the new rules take effect when Phase 3 lands.
+
+### Archive/Bin interactions with playlists and Up Next
+
+| Action | Effect on user playlists | Effect on Up Next |
+|--------|-------------------------|------------------|
+| Archive item | Remove from all user playlists | Item remains in Up Next but shows muted/archived indicator; currently-playing item uses existing deferred cleanup; user can manually remove |
+| Bin item | Remove from all user playlists immediately | Remove from Up Next immediately (stop playback if this was the active item) |
+| Restore from bin | Does NOT restore user playlist membership | Does NOT restore Up Next position |
+| Unarchive item | Does NOT restore user playlist membership | Does NOT restore Up Next position |
+
+**Rationale:** Restoring playlist/queue membership on restore/unarchive is complex (positions may have shifted, playlists may have been reordered) and is deferred to v2+ when richer undo snapshots are implemented.
+
+**Undo scope for v1:** Snackbar undo within the undo window (~8 seconds) reverses only the archive or bin flag change. It does NOT restore playlist membership. It does NOT restore Up Next position. See Section 8 for full undo semantics.
 
 ---
 
@@ -530,20 +639,26 @@ Option A is the best default for v1 because:
 - Snackbar message: if all succeed, "N items archived" with Undo; if mixed, "N archived, M failed" with Undo for successes
 - Failed items remain selected for retry or individual inspection
 
-### Undo for batch actions
+### Undo for batch actions (v1 scope)
 
-Undo snackbar appears for batch archive, batch unarchive, and batch bin. Undo for purge is NOT available (purge is permanent, requires confirmation dialog).
+Undo snackbar appears for batch archive, batch unarchive, batch bin, and batch restore-from-bin. Undo for purge is NOT available (purge is permanent; requires confirmation dialog).
 
-**Undo snapshot captures:**
-- List of affected item IDs
-- Per-item: previous archive state, favorite state, playlist entry IDs + positions
-- Source view (for restoring position context)
+**What v1 undo DOES restore:**
+- `archived_at` flag (reverses archive → unarchive or unarchive → archive)
+- `trashed_at` flag (reverses bin → restore or restore → bin)
+- Favorite flag (reverses favorite → unfavorite)
 
-**Undo behavior:**
-- Reverses the action for all successfully-affected items
-- Best-effort playlist membership restoration (items go to end if original position is no longer valid)
-- Undo is available for ~8 seconds (snackbar duration)
-- Undo survives navigation within the app (the snapshot is held in ViewModel, not tied to a composable)
+**What v1 undo does NOT restore:**
+- Playlist membership (if archiving removed the item from playlists, undo does not re-add it)
+- Up Next position (if the item was removed from Up Next, undo does not re-insert it)
+- List scroll position or selection state
+- Original list position (sort order may have shifted)
+
+**Undo window:** ~8 seconds (snackbar duration). Undo survives in-session navigation but NOT app process kill.
+
+**Partial-failure handling:** If a batch archive succeeds for 8/10 items, the undo reverses only the 8 successes. Failed items remain in their original state.
+
+**Why this scope:** Playlist membership restoration requires capturing entry IDs and positions at action time, then reconciling against the possibly-mutated playlist at undo time. This is a meaningful feature that deserves its own design pass. v2 will expand undo to include playlist/queue restoration.
 
 ---
 
@@ -594,7 +709,7 @@ GET /library?view=inbox&...
 
 **Recommendation:** Option A — extend `GET /items` with a `view` query parameter. The items endpoint already exists and supports filtered queries. Adding `view=inbox|archived|favorites|trash` as a convenience filter avoids a new endpoint while providing the semantics the client needs. The response format matches the existing items list format.
 
-**Note:** The existing `/playback/queue` endpoint remains for playback-specific use (Up Next Smart Queue population). The library list endpoint is separate and returns all items regardless of playback eligibility.
+**Note:** The existing `/playback/queue` endpoint remains for playback-specific use (initial Up Next seed from Inbox, which applies playback-eligibility filtering). The library list endpoint (`GET /items?view=...`) is separate and returns all items regardless of playback eligibility.
 
 #### 9.3 Playlist reorder (already exists)
 
@@ -612,14 +727,11 @@ POST /playlists/{playlist_id}/items/batch
 
 Per-item results (some may already be in playlist, some may not exist).
 
-#### 9.5 Up Next as system playlist (if cross-device sync is chosen)
+#### 9.5 Up Next server-side representation (DEFERRED to v2+)
 
-If Up Next is synced, it needs a server-side representation. Options:
-- A system playlist with a `is_system=true` flag and `type="up_next"`
-- Created automatically per user on first use
-- Standard playlist CRUD applies, but rename/delete are blocked for system playlists
+**Not in v1 scope.** Up Next is device-local in v1 (stored in Room). No backend work required for Up Next in v1.
 
-This can be deferred if Up Next stays device-local for v1.
+When cross-device Up Next sync is added (v2+), a system playlist on the server will back it. That work is a future contract change and not part of this redesign's backend scope.
 
 #### 9.6 Search endpoint formalization
 
@@ -633,10 +745,12 @@ FTS is already implemented in the backend (with ILIKE fallback). No new backend 
 
 ### Backend sequencing
 
-1. **Phase 0:** `GET /items?view=...` query parameter support (extend existing endpoint)
-2. **Phase 1:** `POST /items/batch` batch actions endpoint
-3. **Phase 2:** `POST /playlists/{id}/items/batch` batch playlist add
-4. **Phase 3 (if needed):** Up Next system playlist support
+1. **Backend phase 1:** `GET /items?view=...` query parameter support (extend existing endpoint). Blocks Android Phase 2.
+2. **Backend phase 2:** `POST /items/batch` batch actions endpoint. Blocks Android Phase 4.
+3. **Backend phase 3:** `POST /playlists/{id}/items/batch` batch playlist add. Blocks the batch-to-playlist UX in Android Phase 4.
+4. **Deferred:** Up Next server-side support (v2+ when cross-device sync is prioritized).
+
+**"Backend-first" scope clarification:** Backend work is a prerequisite only for contract-dependent Android features. Android-internal work (ViewModel extraction, drawer shell, mini-player, Locus restructure) does not block on backend changes and can proceed in parallel.
 
 ---
 
@@ -673,10 +787,10 @@ Library views (Inbox, Favorites, Archive, Bin) share the same list UI with diffe
 
 #### 10.4 Pagination
 
-Replace the current "fetch everything at once" pattern with paginated loading:
-- Use Jetpack Paging 3 or a simpler manual cursor approach
-- Library views load 25 items initially, load more on scroll
-- Up Next and playlists may load fully (typically smaller collections)
+Replace the current "fetch everything at once" pattern with simple offset/limit pagination:
+- Library views (`GET /items?view=...`) use `limit=25&offset=0` for the initial load; a "Load more" button or scroll-triggered next-page load appends items using `offset=N`
+- No Jetpack Paging 3 required for v1 — a manual offset counter per screen is sufficient
+- Up Next and playlists load fully (typically small collections; no pagination needed)
 
 #### 10.5 Mini-player
 
@@ -700,7 +814,7 @@ New `SelectionManager` (or state holder within ViewModel):
 - New `LibraryRepository` (or extend existing) for `GET /items?view=...` calls
 - New `BatchActionRepository` for `POST /items/batch` calls
 - Extend `PlaylistRepository` with `reorderEntries()` and `batchAddItems()`
-- Pagination support in repository layer (Paging 3 `PagingSource` or manual)
+- Pagination support in repository layer (simple offset counter per view; no Paging 3 required for v1)
 
 ### What is preserved exactly as-is
 
@@ -760,6 +874,7 @@ If warranted, move the web app from top tabs to a sidebar layout matching Androi
 | **Bin** | Optimistic local remove + queue | Pending action, flushed on reconnect | Server authoritative |
 | **Playlist add/remove** | Optimistic local apply + queue | New `PendingPlaylistAction` queue | Server reconcile (add is idempotent; remove is idempotent) |
 | **Playlist reorder** | Optimistic local apply + queue | New `PendingPlaylistReorder` — stores full position array | Last-write-wins on full position set |
+| **Up Next edits** | Local-only in v1 — no server sync | Stored in Room; no pending-action queue needed | N/A (device is authoritative) |
 | **Progress sync** | Debounced local → server | Existing `PendingProgressEntity` + WorkManager | Monotonic (server keeps higher percent) |
 
 ### Batch offline detail
@@ -1015,29 +1130,34 @@ All pass WCAG AA (4.5:1 for normal text, 3:1 for large text).
 
 **CONTRACT CHANGE:** Yes. Label all PRs. Android can begin consuming once merged.
 
-### Phase 2: Drawer navigation + library views
+### Phase 2: Drawer navigation + library views + basic playlist visibility
 
-**Goal:** Replace bottom nav with drawer. Ship Inbox, Favorites, Archive, Bin as library views.
+**Goal:** Replace bottom nav with drawer. Ship Inbox, Favorites, Archive, Bin as library views. Keep playlists visible and navigable from day one of the drawer.
 
 **Scope:**
 1. Implement `ModalNavigationDrawer` shell with all destinations
 2. Implement shared `LibraryListScreen` composable
 3. Wire Inbox view to `GET /items?view=inbox` (replacing `/playback/queue` as the home data source)
 4. Wire Favorites, Archive, Bin views to their respective queries
-5. Implement sort controls per view
+5. Implement sort controls per view (per-view persistence via DataStore)
 6. Implement search per view
-7. Implement per-view sort/filter persistence (DataStore)
-8. Remove bottom navigation bar
-9. Remove Collections tab and screen
-10. Preserve Up Next as a drawer destination (still uses `/playback/queue`)
-11. Preserve Settings as a drawer destination
-12. Handle non-ready items in Inbox (status pills, tap behavior, collapsible Pending section)
+7. Remove bottom navigation bar
+8. Remove Collections tab and screen
+9. **Up Next as drawer destination** (from day one, visible below library views and above playlists section)
+10. **Playlists section in drawer** (read-only list: names and counts, tap navigates to existing playlist detail screen)
+11. "New Playlist" entry point at the bottom of the playlists section (opens existing create-playlist dialog)
+12. Preserve Settings as a drawer destination
+13. Handle non-ready items in Inbox (status pills, tap behavior, collapsible Pending section)
 
-**What is NOT in this phase:** Multi-select, batch actions, mini-player, Locus changes, playlist management in drawer.
+**What is NOT in this phase:**
+- Multi-select or batch actions (Phase 4)
+- Mini-player or Locus restructure (Phase 3)
+- Playlist reorder, rename-in-drawer, delete (Phase 5)
+- Up Next reorder from within the Up Next drawer destination (Phase 6 — Phase 2 uses the existing Up Next UI behind the new drawer entry)
 
-**Transition strategy:** The old Collections screen is removed. Its playlist functionality will be restored in Phase 4. Users who relied on Collections for playlist access will use the drawer instead (once Phase 4 ships). There may be a brief gap where playlist management is less discoverable.
+**Transition strategy:** The old Collections screen is removed in this phase, but the existing playlist detail screen is preserved and wired into the drawer. Users do not lose the ability to view or play from their playlists — only the Collections tab aggregation is removed. Full playlist management (reorder, CRUD from drawer) arrives in Phase 5.
 
-**Gate:** All library views display correct items with correct filtering. Sort and search work. Navigation via drawer works. Up Next still works for playback. No playback regressions.
+**Gate:** All library views display correct items with correct filtering. Sort and search work. Navigation via drawer works. Playlist detail screen opens from drawer. Up Next still works for playback. No playback regressions.
 
 ### Phase 3: Mini-player + Locus restructure
 
@@ -1074,43 +1194,46 @@ All pass WCAG AA (4.5:1 for normal text, 3:1 for large text).
 
 **Gate:** Multi-select works in all list views. Batch archive, bin, favorite, unfavorite, add-to-playlist all work. Undo works. Partial failure displays correctly.
 
-### Phase 5: Playlist management in drawer + reorder
+### Phase 5: Full playlist management + reorder
 
-**Goal:** Full playlist management accessible from the drawer, including reorder.
-
-**Scope:**
-1. Playlists section in drawer with list of user playlists
-2. "New Playlist" action in drawer
-3. Playlist detail view (ordered list of items, same row style as library)
-4. Drag-to-reorder in playlist detail view (drag handles)
-5. Wire reorder to `PUT /playlists/{id}/entries/reorder`
-6. Rename playlist (from drawer long-press or playlist detail overflow)
-7. Delete playlist (with confirmation dialog)
-8. Multi-select within playlist view (long-press to select, batch remove)
-9. "Play Next" / "Play Last" actions from library item overflow menus
-10. Extend offline sync for playlist reorder (`PendingPlaylistReorder`)
-
-**Gate:** Playlist CRUD works end-to-end. Reorder persists to server. Offline reorder syncs on reconnect. Multi-select within playlists works.
-
-### Phase 6: Up Next refinement
-
-**Goal:** Finalize Up Next as a distinct playback queue surface.
+**Goal:** Full playlist management including rename, delete, and drag-to-reorder within playlists.
 
 **Scope:**
-1. Up Next shows in drawer with queue icon, visually distinct from playlists
-2. Up Next reorderable (drag handles, same as playlists)
-3. "Default Up Next source" setting (Smart Queue or specific playlist)
-4. Smart Queue auto-population logic (from inbox items, sorted by user preference)
-5. "Play Next" / "Play Last" insert into Up Next from any surface
-6. Up Next inherits selection + batch actions from Phase 4
-7. Move-up / move-down accessibility actions for reorder
+1. Upgrade drawer playlist entries to show inline rename/delete affordances (via long-press or detail-screen overflow)
+2. Drag-to-reorder in playlist detail view (drag handles)
+3. Wire reorder to `PUT /playlists/{id}/entries/reorder`
+4. Rename playlist (confirmation input)
+5. Delete playlist (confirmation dialog; does not delete items, only the playlist container)
+6. "Play Next" / "Play Last" actions from library item overflow menus (these insert into Up Next, not into user playlists)
+7. Extend offline sync for playlist reorder (new `PendingPlaylistReorder` action type that stores full position array)
 
-**Gate:** Up Next functions as a reorderable playback queue. Smart Queue populates correctly. Play Next/Play Last work from all surfaces.
+**What is NOT in this phase:**
+- Up Next reorder UI (that's Phase 6 as part of finalizing Up Next)
+- Multi-select within playlists (inherited from Phase 4)
+
+**Gate:** Playlist rename/delete work end-to-end. Reorder persists to server. Offline reorder syncs on reconnect.
+
+### Phase 6: Up Next finalization
+
+**Goal:** Finalize Up Next as a distinct, device-local, reorderable playback queue with seed-source semantics.
+
+**Scope:**
+1. Up Next drawer destination gets the refined queue UI (reorderable, drag handles)
+2. Up Next stored in Room with ordered entries + `seed_source` + `seeded_at` metadata
+3. Initial seed on first use from Inbox newest-first
+4. "Re-seed from Inbox" and "Re-seed from [playlist]" actions in Up Next overflow menu
+5. Re-seed confirmation dialog when Up Next has user edits
+6. "Play Next" / "Play Last" actions (from Phase 5) fully integrated as insertion points
+7. Up Next inherits selection + batch actions from Phase 4
+8. Move-up / move-down accessibility actions for reorder (non-drag alternative)
+9. Visual indicator: "Playing from: [seed source]" label at the top of Up Next (informational only)
+
+**Gate:** Up Next functions as a reorderable playback queue. Edits persist across app restart. Seed/re-seed flows work. Edits to Up Next do not affect source playlists (verified by inspection and test).
 
 ### Later phases (v2+)
 
 - **Grouped drag reorder** (select multiple items, drag as group)
-- **Playlist folders** (re-introduce organizational layer above playlists)
+- **Playlist folders** (not in current plan; would need fresh product decision)
 - **Playlist-level "include archived items"** option
 - **Cross-device Up Next sync** (system playlist on server)
 - **Global search** across all views (single search bar that searches everywhere)
@@ -1162,14 +1285,24 @@ All pass WCAG AA (4.5:1 for normal text, 3:1 for large text).
 ### Risk 8: Undo complexity explodes
 
 **Risk:** Multi-item undo with playlist membership restoration and cross-surface undo creates a combinatorial explosion of snapshot/restore logic.
-**Mitigation:** v1 undo is scoped: snackbar undo reverses archive/bin state for affected items. Playlist membership restoration on undo is best-effort (items go to end of playlist if original position is invalid). Cross-navigation undo (undo after leaving the screen) holds the snapshot in ViewModel state but does not persist it to disk. If the app is killed, undo is lost. This is acceptable.
+**Mitigation:** v1 undo is explicitly scoped: snackbar undo reverses only the archive/favorite/bin flag changes for affected items. It does NOT restore playlist membership, Up Next position, or list scroll state. Cross-navigation undo holds the snapshot in ViewModel state but does not persist it to disk. If the app is killed, undo is lost. This is acceptable. Playlist membership restoration is a v2 feature with its own design pass.
 
-### Risk 9: Drag handles feel ugly
+### Risk 9: "Active playlist" ambiguity
+
+**Risk:** The phrase "active playlist" suggests a live mirror between Up Next and a user playlist. Users or implementers could assume that reordering Up Next reorders the source playlist, or that deleting from Up Next removes from the source playlist. This would cause data surprise: "I dragged something in my queue and it disappeared from my Podcasts playlist."
+**Mitigation:** The product rule is explicit (Section 6): **Up Next edits never mutate the source playlist.** The source is informational only. Avoid the phrase "active playlist" in UI, docs, and code. Use "seed source" or "playing from" instead. The implementation should make this impossible by construction — Up Next is its own table, its own ordered list, and its mutation path does not touch the playlists table.
+
+### Risk 10: Re-seed data loss
+
+**Risk:** A user has carefully curated their Up Next over time. They accidentally tap "Re-seed from Inbox." Their curation is wiped.
+**Mitigation:** Re-seeding is a destructive action. When Up Next has user edits (detected by comparing current contents against what the seed source would produce, or simply by a dirty bit set on any user edit), the re-seed action prompts for confirmation: "This will replace your current Up Next. Continue?" This is similar to the Bin purge confirmation pattern.
+
+### Risk 11: Drag handles feel ugly
 
 **Risk:** Permanent drag handles on every row in ordered lists add visual noise and conflict with the "minimalist" aesthetic.
 **Mitigation:** Make handles visually recessive (small, `onSurfaceVariant`, not prominent). They appear only in ordered lists (Up Next, playlists), not in library views. Consider showing handles only when the list has >1 item. If handles prove too noisy, v2 can explore an "Edit" mode that reveals handles on demand — but start with always-visible handles because they are more discoverable and accessible.
 
-### Risk 10: Progress model confusion when opening items from library vs Up Next
+### Risk 12: Progress model confusion when opening items from library vs Up Next
 
 **Risk:** Opening an item from Inbox (reader-only mode) vs Up Next (playback mode) creates two different progress update paths for the same item, potentially causing progress to jump or regress.
 **Mitigation:** Progress update rules are consistent regardless of entry point (see Section 7). Canonical percent is monotonic. Reader-only scroll updates progress just like playback does. The difference is only in whether TTS starts automatically. The progress model does not change — only the default mode on entry changes.
