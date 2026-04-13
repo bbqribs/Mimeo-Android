@@ -75,6 +75,17 @@
 - [x] Reader scrollbar shipped: non-draggable visual scroll indicator on reader right edge via `drawWithContent`; thumb height and position track scroll fraction.
 - [x] Reader selection edge-scroll shipped: after releasing a selection handle near top/bottom edge (screen-fraction threshold), reader auto-scrolls ~870 px over 1 s; driven by `edgeScrollSpeed` polled at ~60 fps in PlayerScreen.
 
+## Redesign v2 execution track
+- Source of truth: `docs/REDESIGN_V2_PLAN.md` (product + architecture plan). Drift guard: `docs/REDESIGN_V2_DECISION_SNAPSHOT.md`.
+- Guardrail: playback semantics must not change during Phase 0 and Phase 2 unless an explicit ticket says so.
+- Phase 0: `MainActivity` and root state extraction into dedicated ViewModel/navigation-state units (no user-visible behavior change).
+- Phase 2 substrate: drawer shell, library routes (`Inbox/Favorites/Archive/Bin`), Up Next drawer destination, and playlist visibility path (playlist list + existing detail route).
+- Phase 3: persistent mini-player plus Locus restructure (Locus no longer a drawer destination; expansion from mini-player and item entry points).
+- Phase 4: multi-select and batch actions across list surfaces, including partial-failure and narrow undo behavior.
+- Phase 5: playlist management and reorder (rename/delete/reorder and related offline sync for reorder actions).
+- Phase 6: Up Next local queue finalization (device-local ordered queue, seed-source model, explicit re-seed only).
+- Non-goals for this track: no playlist folders, no cross-device Up Next sync in v1, no auto re-seed on pull-to-refresh.
+
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
 
