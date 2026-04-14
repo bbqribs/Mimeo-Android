@@ -759,6 +759,7 @@ fun PlayerScreen(
     openRequestSignal: Int = 0,
     onOpenItem: (Int) -> Unit,
     onRequestBack: () -> Unit = {},
+    onExpandToLocus: () -> Unit = {},
     onOpenDiagnostics: () -> Unit,
     stopPlaybackOnDispose: Boolean = false,
     compactControlsOnly: Boolean = false,
@@ -1839,6 +1840,7 @@ fun PlayerScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickable { onExpandToLocus() }
                     .then(modifier),
             ) {
                 renderPlayerDock()

@@ -551,25 +551,10 @@ private fun MimeoApp(vm: AppViewModel) {
     var pendingLocusItemId by rememberSaveable { mutableIntStateOf(-1) }
     val sessionNowPlayingItemId = vm.currentNowPlayingItemId()
     val openItemInLocus: (Int) -> Unit = { itemId ->
-        val activeNowPlayingItemId = sessionNowPlayingItemId?.takeIf { it > 0 }
-        val playbackInProgress = vm.hasPlaybackInProgressForSessionItem(activeNowPlayingItemId)
-        if (playbackInProgress && activeNowPlayingItemId != null && activeNowPlayingItemId != itemId) {
-            pendingLocusOpen = true
-            pendingLocusItemId = itemId
-            vm.showSnackbar(
-                "Viewing item while playback continues. Use long-press Play or 'Play this item' to switch.",
-                null,
-                null,
-            )
-            nav.navigate("$ROUTE_LOCUS/$itemId") {
-                launchSingleTop = true
-            }
-        } else {
-            pendingLocusOpen = true
-            pendingLocusItemId = itemId
-            nav.navigate("$ROUTE_LOCUS/$itemId") {
-                launchSingleTop = true
-            }
+        pendingLocusOpen = true
+        pendingLocusItemId = itemId
+        nav.navigate("$ROUTE_LOCUS/$itemId") {
+            launchSingleTop = true
         }
     }
     val routeItemId = navBackStack?.arguments?.let { args ->
@@ -638,7 +623,7 @@ private fun MimeoApp(vm: AppViewModel) {
             },
         )
     }
-    val showCompactControls = settings.persistentPlayerEnabled
+    val showCompactControls = sessionNowPlayingItemId != null
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var upNextTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var playerOpenRequestSignal by rememberSaveable { mutableIntStateOf(0) }
@@ -955,7 +940,7 @@ private fun MimeoApp(vm: AppViewModel) {
                         onDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                     )
                 }
-                if (!requiresSignIn) {
+                if (!requiresSignIn && nowPlayingSession?.currentItem != null && !presentingLocus) {
                     PersistentNowPlayingStrip(
                         title = nowPlayingStripTitle,
                         domain = nowPlayingStripDomain,
@@ -1212,10 +1197,12 @@ private fun MimeoApp(vm: AppViewModel) {
                                 }
                             },
                             onRequestBack = {
-                                nav.navigate(ROUTE_UP_NEXT) {
-                                    popUpTo(ROUTE_LOCUS) { inclusive = true }
-                                    launchSingleTop = true
+                                if (!nav.popBackStack()) {
+                                    nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
                                 }
+                            },
+                            onExpandToLocus = {
+                                nav.navigate("$ROUTE_LOCUS/$requestedPlayerItemId") { launchSingleTop = true }
                             },
                             onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                             stopPlaybackOnDispose = true,
