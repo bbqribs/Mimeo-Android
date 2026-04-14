@@ -237,6 +237,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val archivedItems: StateFlow<List<PlaybackQueueItem>> = _archivedItems.asStateFlow()
     private val _binItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
     val binItems: StateFlow<List<PlaybackQueueItem>> = _binItems.asStateFlow()
+
+    private val _inboxSort = MutableStateFlow(com.mimeo.android.ui.library.LibrarySortOption.NEWEST)
+    val inboxSort: StateFlow<com.mimeo.android.ui.library.LibrarySortOption> = _inboxSort.asStateFlow()
+    private val _favoritesSort = MutableStateFlow(com.mimeo.android.ui.library.LibrarySortOption.NEWEST)
+    val favoritesSort: StateFlow<com.mimeo.android.ui.library.LibrarySortOption> = _favoritesSort.asStateFlow()
+    private val _archiveSort = MutableStateFlow(com.mimeo.android.ui.library.LibrarySortOption.ARCHIVED_AT)
+    val archiveSort: StateFlow<com.mimeo.android.ui.library.LibrarySortOption> = _archiveSort.asStateFlow()
+    private val _binSort = MutableStateFlow(com.mimeo.android.ui.library.LibrarySortOption.TRASHED_AT)
+    val binSort: StateFlow<com.mimeo.android.ui.library.LibrarySortOption> = _binSort.asStateFlow()
+
+    private val _inboxSearchQuery = MutableStateFlow("")
+    val inboxSearchQuery: StateFlow<String> = _inboxSearchQuery.asStateFlow()
+    private val _favoritesSearchQuery = MutableStateFlow("")
+    val favoritesSearchQuery: StateFlow<String> = _favoritesSearchQuery.asStateFlow()
+    private val _archiveSearchQuery = MutableStateFlow("")
+    val archiveSearchQuery: StateFlow<String> = _archiveSearchQuery.asStateFlow()
+    private val _binSearchQuery = MutableStateFlow("")
+    val binSearchQuery: StateFlow<String> = _binSearchQuery.asStateFlow()
     private val _pendingManualSaves = MutableStateFlow<List<PendingManualSaveItem>>(emptyList())
     val pendingManualSaves: StateFlow<List<PendingManualSaveItem>> = _pendingManualSaves.asStateFlow()
     private val _pendingItemActions = MutableStateFlow<List<PendingItemAction>>(emptyList())
@@ -402,6 +420,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         bindPlaybackService()
+        viewModelScope.launch {
+            _inboxSort.value = loadPersistedLibrarySort("inbox")
+            _favoritesSort.value = loadPersistedLibrarySort("favorites")
+            _archiveSort.value = loadPersistedLibrarySort("archive")
+            _binSort.value = loadPersistedLibrarySort("bin")
+        }
         PlaybackServiceBridge.onPlay = {
             playbackPlay()
         }
@@ -3221,13 +3245,70 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private suspend fun loadPersistedLibrarySort(viewKey: String): com.mimeo.android.ui.library.LibrarySortOption {
+        val default = when (viewKey) {
+            "archive" -> com.mimeo.android.ui.library.LibrarySortOption.ARCHIVED_AT
+            "bin" -> com.mimeo.android.ui.library.LibrarySortOption.TRASHED_AT
+            else -> com.mimeo.android.ui.library.LibrarySortOption.NEWEST
+        }
+        val name = settingsStore.loadLibraryViewSort(viewKey) ?: return default
+        return com.mimeo.android.ui.library.LibrarySortOption.entries.firstOrNull { it.name == name } ?: default
+    }
+
+    fun setInboxSort(sort: com.mimeo.android.ui.library.LibrarySortOption) {
+        _inboxSort.value = sort
+        viewModelScope.launch {
+            settingsStore.saveLibraryViewSort("inbox", sort.name)
+            loadInboxItems()
+        }
+    }
+
+    fun setFavoritesSort(sort: com.mimeo.android.ui.library.LibrarySortOption) {
+        _favoritesSort.value = sort
+        viewModelScope.launch {
+            settingsStore.saveLibraryViewSort("favorites", sort.name)
+            loadFavoriteItems()
+        }
+    }
+
+    fun setArchiveSort(sort: com.mimeo.android.ui.library.LibrarySortOption) {
+        _archiveSort.value = sort
+        viewModelScope.launch {
+            settingsStore.saveLibraryViewSort("archive", sort.name)
+            loadArchivedItems()
+        }
+    }
+
+    fun setBinSort(sort: com.mimeo.android.ui.library.LibrarySortOption) {
+        _binSort.value = sort
+        viewModelScope.launch {
+            settingsStore.saveLibraryViewSort("bin", sort.name)
+            loadBinItems()
+        }
+    }
+
+    fun setInboxSearchQuery(query: String) { _inboxSearchQuery.value = query }
+    fun setFavoritesSearchQuery(query: String) { _favoritesSearchQuery.value = query }
+    fun setArchiveSearchQuery(query: String) { _archiveSearchQuery.value = query }
+    fun setBinSearchQuery(query: String) { _binSearchQuery.value = query }
+
+    fun submitInboxSearch() { viewModelScope.launch { loadInboxItems() } }
+    fun submitFavoritesSearch() { viewModelScope.launch { loadFavoriteItems() } }
+    fun submitArchiveSearch() { viewModelScope.launch { loadArchivedItems() } }
+    fun submitBinSearch() { viewModelScope.launch { loadBinItems() } }
+
     suspend fun loadBinItems(): Result<Unit> {
         val current = settings.value
+        val sort = _binSort.value
+        val query = _binSearchQuery.value
         return try {
             val trashed = repository.listItemsByView(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
                 view = ApiClient.ItemsView.TRASH,
+                sort = sort.sortField,
+                dir = sort.sortDir,
+                q = query.takeIf { it.isNotBlank() },
             )
             _binItems.value = trashed.map { it.toPlaybackQueueItem() }
             _queueOffline.value = false
@@ -3248,24 +3329,39 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun loadInboxItems(): Result<Unit> {
-        return loadLibraryItemsView(ApiClient.ItemsView.INBOX) { items ->
-            _inboxItems.value = items
-        }
+        val sort = _inboxSort.value
+        val query = _inboxSearchQuery.value
+        return loadLibraryItemsView(
+            view = ApiClient.ItemsView.INBOX,
+            sort = sort.sortField,
+            dir = sort.sortDir,
+            q = query.takeIf { it.isNotBlank() },
+        ) { items -> _inboxItems.value = items }
     }
 
     suspend fun loadFavoriteItems(): Result<Unit> {
-        return loadLibraryItemsView(ApiClient.ItemsView.FAVORITES) { items ->
-            _favoriteItems.value = items
-        }
+        val sort = _favoritesSort.value
+        val query = _favoritesSearchQuery.value
+        return loadLibraryItemsView(
+            view = ApiClient.ItemsView.FAVORITES,
+            sort = sort.sortField,
+            dir = sort.sortDir,
+            q = query.takeIf { it.isNotBlank() },
+        ) { items -> _favoriteItems.value = items }
     }
 
     suspend fun loadArchivedItems(): Result<Unit> {
         val current = settings.value
+        val sort = _archiveSort.value
+        val query = _archiveSearchQuery.value
         return try {
             val archived = repository.listItemsByView(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
                 view = ApiClient.ItemsView.ARCHIVED,
+                sort = sort.sortField,
+                dir = sort.sortDir,
+                q = query.takeIf { it.isNotBlank() },
             )
             _archivedItems.value = archived.map { it.toPlaybackQueueItem() }
             val combined = (_queueItems.value + _archivedItems.value).distinctBy { item -> item.itemId }
@@ -3295,6 +3391,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun loadLibraryItemsView(
         view: ApiClient.ItemsView,
+        sort: String? = null,
+        dir: String? = null,
+        q: String? = null,
         onLoaded: (List<PlaybackQueueItem>) -> Unit,
     ): Result<Unit> {
         val current = settings.value
@@ -3303,6 +3402,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
                 view = view,
+                sort = sort,
+                dir = dir,
+                q = q,
             ).map { it.toPlaybackQueueItem() }
             onLoaded(items)
             _queueOffline.value = false

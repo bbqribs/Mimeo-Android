@@ -119,6 +119,14 @@ class SettingsStore(private val context: Context) {
         stringPreferencesKey("pending_item_actions_json")
     private val connectionTestSuccessJsonKey: Preferences.Key<String> =
         stringPreferencesKey("connection_test_success_json")
+    private val libSortInboxKey: Preferences.Key<String> =
+        stringPreferencesKey("lib_sort_inbox")
+    private val libSortFavoritesKey: Preferences.Key<String> =
+        stringPreferencesKey("lib_sort_favorites")
+    private val libSortArchiveKey: Preferences.Key<String> =
+        stringPreferencesKey("lib_sort_archive")
+    private val libSortBinKey: Preferences.Key<String> =
+        stringPreferencesKey("lib_sort_bin")
     private val json = Json { ignoreUnknownKeys = true }
     private val authTokenStorage = AuthTokenStorage(context)
 
@@ -832,6 +840,24 @@ class SettingsStore(private val context: Context) {
         return runCatching {
             json.decodeFromString<ConnectionTestSuccessState>(raw).records
         }.getOrDefault(emptyList())
+    }
+
+    suspend fun saveLibraryViewSort(viewKey: String, sortName: String) {
+        val key = libSortKeyFor(viewKey) ?: return
+        context.dataStore.edit { prefs -> prefs[key] = sortName }
+    }
+
+    suspend fun loadLibraryViewSort(viewKey: String): String? {
+        val key = libSortKeyFor(viewKey) ?: return null
+        return context.dataStore.data.first()[key]
+    }
+
+    private fun libSortKeyFor(viewKey: String): Preferences.Key<String>? = when (viewKey) {
+        "inbox" -> libSortInboxKey
+        "favorites" -> libSortFavoritesKey
+        "archive" -> libSortArchiveKey
+        "bin" -> libSortBinKey
+        else -> null
     }
 
     companion object {

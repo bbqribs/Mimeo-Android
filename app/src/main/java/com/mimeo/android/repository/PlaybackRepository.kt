@@ -204,8 +204,11 @@ class PlaybackRepository(
         baseUrl: String,
         token: String,
         view: ApiClient.ItemsView,
+        sort: String? = null,
+        dir: String? = null,
+        q: String? = null,
     ): List<ArticleSummary> {
-        return apiClient.getItemsByView(baseUrl, token, view)
+        return apiClient.getItemsByView(baseUrl, token, view, sort = sort, dir = dir, q = q)
     }
 
     suspend fun createPlaylist(baseUrl: String, token: String, name: String): PlaylistSummary {

@@ -153,6 +153,7 @@ import com.mimeo.android.ui.collections.FolderDetailScreen
 import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.library.LibraryItemsScreen
+import com.mimeo.android.ui.library.LibrarySortOption
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
 import com.mimeo.android.ui.settings.ConnectionTestMessageResolver
 import com.mimeo.android.ui.settings.PasswordChangeState
@@ -525,6 +526,14 @@ private fun MimeoApp(vm: AppViewModel) {
     val favoriteItems by vm.favoriteItems.collectAsState()
     val archivedItems by vm.archivedItems.collectAsState()
     val binItems by vm.binItems.collectAsState()
+    val inboxSort by vm.inboxSort.collectAsState()
+    val favoritesSort by vm.favoritesSort.collectAsState()
+    val archiveSort by vm.archiveSort.collectAsState()
+    val binSort by vm.binSort.collectAsState()
+    val inboxSearchQuery by vm.inboxSearchQuery.collectAsState()
+    val favoritesSearchQuery by vm.favoritesSearchQuery.collectAsState()
+    val archiveSearchQuery by vm.archiveSearchQuery.collectAsState()
+    val binSearchQuery by vm.binSearchQuery.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val pendingNavigationRoute by vm.pendingNavigationRoute.collectAsState()
@@ -884,6 +893,13 @@ private fun MimeoApp(vm: AppViewModel) {
                                 items = inboxItems,
                                 loading = loading,
                                 emptyMessage = "No inbox items.",
+                                sortOption = inboxSort,
+                                availableSorts = LibrarySortOption.INBOX_SORTS,
+                                searchQuery = inboxSearchQuery,
+                                isInbox = true,
+                                onSortChange = { vm.setInboxSort(it) },
+                                onSearchQueryChange = { vm.setInboxSearchQuery(it) },
+                                onSearchSubmit = { vm.submitInboxSearch() },
                                 onRefresh = {
                                     coroutineScope.launch {
                                         loading = true
@@ -906,6 +922,12 @@ private fun MimeoApp(vm: AppViewModel) {
                                 items = favoriteItems,
                                 loading = loading,
                                 emptyMessage = "No favorites yet.",
+                                sortOption = favoritesSort,
+                                availableSorts = LibrarySortOption.FAVORITES_SORTS,
+                                searchQuery = favoritesSearchQuery,
+                                onSortChange = { vm.setFavoritesSort(it) },
+                                onSearchQueryChange = { vm.setFavoritesSearchQuery(it) },
+                                onSearchSubmit = { vm.submitFavoritesSearch() },
                                 onRefresh = {
                                     coroutineScope.launch {
                                         loading = true
@@ -928,6 +950,12 @@ private fun MimeoApp(vm: AppViewModel) {
                                 items = archivedItems,
                                 loading = loading,
                                 emptyMessage = "No archived items.",
+                                sortOption = archiveSort,
+                                availableSorts = LibrarySortOption.ARCHIVE_SORTS,
+                                searchQuery = archiveSearchQuery,
+                                onSortChange = { vm.setArchiveSort(it) },
+                                onSearchQueryChange = { vm.setArchiveSearchQuery(it) },
+                                onSearchSubmit = { vm.submitArchiveSearch() },
                                 onRefresh = {
                                     coroutineScope.launch {
                                         loading = true
@@ -950,6 +978,12 @@ private fun MimeoApp(vm: AppViewModel) {
                                 items = binItems,
                                 loading = loading,
                                 emptyMessage = "Bin is empty.",
+                                sortOption = binSort,
+                                availableSorts = LibrarySortOption.BIN_SORTS,
+                                searchQuery = binSearchQuery,
+                                onSortChange = { vm.setBinSort(it) },
+                                onSearchQueryChange = { vm.setBinSearchQuery(it) },
+                                onSearchSubmit = { vm.submitBinSearch() },
                                 onRefresh = {
                                     coroutineScope.launch {
                                         loading = true
