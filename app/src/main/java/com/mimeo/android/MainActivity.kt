@@ -546,12 +546,13 @@ private fun MimeoApp(vm: AppViewModel) {
     val queueOffline by vm.queueOffline.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val pendingNavigationRoute by vm.pendingNavigationRoute.collectAsState()
-    val playerCurrentItemId by vm.playerCurrentItemId.collectAsState()
+    val lastLocusItemId by vm.lastLocusItemId.collectAsState()
     val requiresSignIn = settings.apiToken.isBlank()
     var pendingLocusOpen by rememberSaveable { mutableStateOf(false) }
     var pendingLocusItemId by rememberSaveable { mutableIntStateOf(-1) }
     val sessionNowPlayingItemId = vm.currentNowPlayingItemId()
     val openItemInLocus: (Int) -> Unit = { itemId ->
+        vm.setLastLocusItem(itemId)
         pendingLocusOpen = true
         pendingLocusItemId = itemId
         nav.navigate("$ROUTE_LOCUS/$itemId") {
@@ -565,7 +566,7 @@ private fun MimeoApp(vm: AppViewModel) {
         routeItemId
             ?: pendingLocusItemId.takeIf { pendingLocusOpen && it > 0 }
             ?: sessionNowPlayingItemId
-            ?: playerCurrentItemId.takeIf { it > 0 }
+            ?: lastLocusItemId.takeIf { it > 0 }
     var playbackActive by rememberSaveable { mutableStateOf(false) }
     var manualReadingActive by rememberSaveable { mutableStateOf(false) }
     val keepScreenOnForSession = shouldKeepScreenOnForSession(
@@ -625,7 +626,7 @@ private fun MimeoApp(vm: AppViewModel) {
             },
         )
     }
-    val showCompactControls = playerCurrentItemId > 0
+    val showCompactControls = lastLocusItemId > 0 || sessionNowPlayingItemId != null
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var upNextTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var playerOpenRequestSignal by rememberSaveable { mutableIntStateOf(0) }
