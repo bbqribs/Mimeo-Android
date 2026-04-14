@@ -395,6 +395,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _nowPlayingSession = MutableStateFlow<NowPlayingSession?>(null)
     val nowPlayingSession: StateFlow<NowPlayingSession?> = _nowPlayingSession.asStateFlow()
+    // Direct signal: set when the user explicitly opens an item in Locus. Drives mini-player
+    // visibility on library screens. Cleared when ViewModel is destroyed (activity finish).
+    private val _lastLocusItemId = MutableStateFlow(-1)
+    val lastLocusItemId: StateFlow<Int> = _lastLocusItemId.asStateFlow()
+
+    fun setLastLocusItem(itemId: Int) {
+        _lastLocusItemId.value = itemId
+    }
     private val _sessionIssueMessage = MutableStateFlow<String?>(null)
     val sessionIssueMessage: StateFlow<String?> = _sessionIssueMessage.asStateFlow()
     private val _pendingNavigationRoute = MutableStateFlow<String?>(null)
