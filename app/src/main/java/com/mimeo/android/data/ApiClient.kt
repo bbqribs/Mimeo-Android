@@ -589,10 +589,19 @@ class ApiClient(
         token: String,
         view: ItemsView,
         limit: Int = 100,
+        sort: String? = null,
+        dir: String? = null,
+        q: String? = null,
     ): List<ArticleSummary> = withContext(Dispatchers.IO) {
         val boundedLimit = limit.coerceIn(1, 100)
+        val url = buildString {
+            append(resolveUrl(baseUrl, "/items?view=${view.queryValue}&limit=$boundedLimit"))
+            if (sort != null) append("&sort=$sort")
+            if (dir != null) append("&dir=$dir")
+            if (!q.isNullOrBlank()) append("&q=${java.net.URLEncoder.encode(q, "UTF-8")}")
+        }
         val request = Request.Builder()
-            .url(resolveUrl(baseUrl, "/items?view=${view.queryValue}&limit=$boundedLimit"))
+            .url(url)
             .header("Authorization", "Bearer $token")
             .get()
             .build()
