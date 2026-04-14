@@ -395,6 +395,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _nowPlayingSession = MutableStateFlow<NowPlayingSession?>(null)
     val nowPlayingSession: StateFlow<NowPlayingSession?> = _nowPlayingSession.asStateFlow()
+    // Low-churn signal: ID of the item currently loaded in the PlaybackEngine (>0 = loaded, -1 = none).
+    // Changes only when an item is opened or the engine resets — safe to collect in the app shell.
+    private val _playerCurrentItemId = MutableStateFlow(-1)
+    val playerCurrentItemId: StateFlow<Int> = _playerCurrentItemId.asStateFlow()
     private val _sessionIssueMessage = MutableStateFlow<String?>(null)
     val sessionIssueMessage: StateFlow<String?> = _sessionIssueMessage.asStateFlow()
     private val _pendingNavigationRoute = MutableStateFlow<String?>(null)
@@ -446,6 +450,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             playbackEngineState.collect {
                 pushPlaybackServiceSnapshot()
+            }
+        }
+        viewModelScope.launch {
+            var tracked = -1
+            playbackEngineState.collect { state ->
+                val id = if (state.currentItemId > 0) state.currentItemId else -1
+                if (id != tracked) {
+                    tracked = id
+                    _playerCurrentItemId.value = id
+                }
             }
         }
         viewModelScope.launch {
