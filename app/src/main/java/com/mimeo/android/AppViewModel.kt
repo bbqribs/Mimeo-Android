@@ -242,9 +242,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val inboxSort: StateFlow<com.mimeo.android.ui.library.LibrarySortOption> = _inboxSort.asStateFlow()
     private val _favoritesSort = MutableStateFlow(com.mimeo.android.ui.library.LibrarySortOption.NEWEST)
     val favoritesSort: StateFlow<com.mimeo.android.ui.library.LibrarySortOption> = _favoritesSort.asStateFlow()
-    private val _archiveSort = MutableStateFlow(com.mimeo.android.ui.library.LibrarySortOption.NEWEST)
+    private val _archiveSort = MutableStateFlow(com.mimeo.android.ui.library.LibrarySortOption.ARCHIVED_AT)
     val archiveSort: StateFlow<com.mimeo.android.ui.library.LibrarySortOption> = _archiveSort.asStateFlow()
-    private val _binSort = MutableStateFlow(com.mimeo.android.ui.library.LibrarySortOption.NEWEST)
+    private val _binSort = MutableStateFlow(com.mimeo.android.ui.library.LibrarySortOption.TRASHED_AT)
     val binSort: StateFlow<com.mimeo.android.ui.library.LibrarySortOption> = _binSort.asStateFlow()
 
     private val _inboxSearchQuery = MutableStateFlow("")
@@ -3246,9 +3246,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun loadPersistedLibrarySort(viewKey: String): com.mimeo.android.ui.library.LibrarySortOption {
-        val name = settingsStore.loadLibraryViewSort(viewKey) ?: return com.mimeo.android.ui.library.LibrarySortOption.NEWEST
-        return com.mimeo.android.ui.library.LibrarySortOption.entries.firstOrNull { it.name == name }
-            ?: com.mimeo.android.ui.library.LibrarySortOption.NEWEST
+        val default = when (viewKey) {
+            "archive" -> com.mimeo.android.ui.library.LibrarySortOption.ARCHIVED_AT
+            "bin" -> com.mimeo.android.ui.library.LibrarySortOption.TRASHED_AT
+            else -> com.mimeo.android.ui.library.LibrarySortOption.NEWEST
+        }
+        val name = settingsStore.loadLibraryViewSort(viewKey) ?: return default
+        return com.mimeo.android.ui.library.LibrarySortOption.entries.firstOrNull { it.name == name } ?: default
     }
 
     fun setInboxSort(sort: com.mimeo.android.ui.library.LibrarySortOption) {

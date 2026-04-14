@@ -50,6 +50,7 @@ fun LibraryItemsScreen(
     loading: Boolean,
     emptyMessage: String,
     sortOption: LibrarySortOption,
+    availableSorts: List<LibrarySortOption> = LibrarySortOption.entries,
     searchQuery: String,
     isInbox: Boolean = false,
     onSortChange: (LibrarySortOption) -> Unit,
@@ -58,7 +59,7 @@ fun LibraryItemsScreen(
     onRefresh: () -> Unit,
     onOpenItem: (Int) -> Unit,
 ) {
-    var pendingExpanded by rememberSaveable { mutableStateOf(true) }
+    var pendingExpanded by rememberSaveable { mutableStateOf(false) }
 
     val pendingItems = if (isInbox) items.filter { it.status in PENDING_STATUSES } else emptyList()
     val readyItems = if (isInbox) items.filter { it.status !in PENDING_STATUSES } else items
@@ -109,7 +110,7 @@ fun LibraryItemsScreen(
                 .padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            LibrarySortOption.entries.forEach { option ->
+            availableSorts.forEach { option ->
                 FilterChip(
                     selected = option == sortOption,
                     onClick = { onSortChange(option) },

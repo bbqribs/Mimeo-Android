@@ -5,8 +5,18 @@ enum class LibrarySortOption(
     val sortField: String,
     val sortDir: String,
 ) {
-    NEWEST("Newest", "added_at", "desc"),
-    OLDEST("Oldest", "added_at", "asc"),
-    TITLE("Title", "title", "asc"),
-    PROGRESS("Progress", "progress_percent", "desc"),
+    NEWEST("Newest", "created", "desc"),
+    OLDEST("Oldest", "created", "asc"),
+    OPENED("Opened", "opened", "desc"),
+    PROGRESS("Progress", "progress", "desc"),
+    ARCHIVED_AT("Archived", "archived", "desc"),
+    TRASHED_AT("Trashed", "trashed", "desc"),
+    ;
+
+    companion object {
+        val INBOX_SORTS = listOf(NEWEST, OLDEST, OPENED, PROGRESS)
+        val FAVORITES_SORTS = listOf(NEWEST, OLDEST, OPENED, PROGRESS)
+        val ARCHIVE_SORTS = listOf(ARCHIVED_AT, NEWEST, OLDEST, OPENED)
+        val BIN_SORTS = listOf(TRASHED_AT, NEWEST, OLDEST, OPENED)
+    }
 }

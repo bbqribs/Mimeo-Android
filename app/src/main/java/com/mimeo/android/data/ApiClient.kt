@@ -598,7 +598,7 @@ class ApiClient(
             append(resolveUrl(baseUrl, "/items?view=${view.queryValue}&limit=$boundedLimit"))
             if (sort != null) append("&sort=$sort")
             if (dir != null) append("&dir=$dir")
-            if (!q.isNullOrBlank()) append("&q=${java.net.URLEncoder.encode(q, "UTF-8")}")
+            if (!q.isNullOrBlank()) append("&q=${java.net.URLEncoder.encode(q, "UTF-8").replace("+", "%20")}")
         }
         val request = Request.Builder()
             .url(url)
