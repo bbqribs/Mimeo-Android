@@ -83,6 +83,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -517,9 +524,11 @@ private fun MimeoApp(vm: AppViewModel) {
         DrawerDestination(ROUTE_ARCHIVE, "Archive"),
         DrawerDestination(ROUTE_BIN, "Bin"),
         DrawerDestination(ROUTE_UP_NEXT, "Up Next"),
-        DrawerDestination(ROUTE_SETTINGS, "Settings"),
     )
     val settings by vm.settings.collectAsState()
+    val playlists by vm.playlists.collectAsState()
+    var showNewPlaylistDialog by remember { mutableStateOf(false) }
+    var newPlaylistDialogName by remember { mutableStateOf("") }
     val signInState by vm.signInState.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val inboxItems by vm.inboxItems.collectAsState()
@@ -603,7 +612,10 @@ private fun MimeoApp(vm: AppViewModel) {
     val selectedDrawerRoute = when {
         currentRoute.startsWith(ROUTE_SETTINGS_DIAGNOSTICS) -> ROUTE_SETTINGS
         currentRoute.startsWith(ROUTE_SETTINGS) -> ROUTE_SETTINGS
-        currentRoute.startsWith(ROUTE_UP_NEXT) -> ROUTE_UP_NEXT
+        currentRoute.startsWith(ROUTE_UP_NEXT) -> {
+            val pid = settings.selectedPlaylistId
+            if (pid != null) "playlist/$pid" else ROUTE_UP_NEXT
+        }
         currentRoute.startsWith(ROUTE_ARCHIVE) -> ROUTE_ARCHIVE
         currentRoute.startsWith(ROUTE_BIN) -> ROUTE_BIN
         currentRoute.startsWith(ROUTE_FAVORITES) -> ROUTE_FAVORITES
@@ -780,20 +792,96 @@ private fun MimeoApp(vm: AppViewModel) {
         drawerContent = {
             if (libraryShellVisible) {
                 ModalDrawerSheet {
-                    Text(
-                        text = "Mimeo",
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    drawerItems.forEach { destination ->
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                        Text(
+                            text = "Mimeo",
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        drawerItems.forEach { destination ->
+                            NavigationDrawerItem(
+                                label = { Text(destination.label) },
+                                selected = selectedDrawerRoute == destination.route,
+                                onClick = {
+                                    if (destination.route == ROUTE_UP_NEXT && selectedDrawerRoute == ROUTE_UP_NEXT) {
+                                        upNextTabTapSignal += 1
+                                    }
+                                    if (destination.route == ROUTE_UP_NEXT) {
+                                        vm.selectPlaylist(null)
+                                    }
+                                    nav.navigate(destination.route) { launchSingleTop = true }
+                                    coroutineScope.launch { drawerState.close() }
+                                },
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                                colors = NavigationDrawerItemDefaults.colors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                ),
+                            )
+                        }
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        )
+                        Text(
+                            text = "Playlists",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp),
+                        )
+                        playlists.forEach { playlist ->
+                            val count = playlist.entries.size
+                            NavigationDrawerItem(
+                                label = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        Text(
+                                            text = playlist.name,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        if (count > 0) {
+                                            Text(
+                                                text = "($count)",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(start = 4.dp),
+                                            )
+                                        }
+                                    }
+                                },
+                                selected = selectedDrawerRoute == "playlist/${playlist.id}",
+                                onClick = {
+                                    vm.selectPlaylist(playlist.id)
+                                    nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
+                                    coroutineScope.launch { drawerState.close() }
+                                },
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                                colors = NavigationDrawerItemDefaults.colors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                ),
+                            )
+                        }
                         NavigationDrawerItem(
-                            label = { Text(destination.label) },
-                            selected = selectedDrawerRoute == destination.route,
+                            label = { Text("+ New Playlist") },
+                            selected = false,
                             onClick = {
-                                if (destination.route == ROUTE_UP_NEXT && selectedDrawerRoute == ROUTE_UP_NEXT) {
-                                    upNextTabTapSignal += 1
-                                }
-                                nav.navigate(destination.route) { launchSingleTop = true }
+                                coroutineScope.launch { drawerState.close() }
+                                showNewPlaylistDialog = true
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        )
+                        NavigationDrawerItem(
+                            label = { Text("Settings") },
+                            selected = selectedDrawerRoute == ROUTE_SETTINGS,
+                            onClick = {
+                                nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true }
                                 coroutineScope.launch { drawerState.close() }
                             },
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
@@ -807,6 +895,43 @@ private fun MimeoApp(vm: AppViewModel) {
             }
         },
     ) {
+        if (showNewPlaylistDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    showNewPlaylistDialog = false
+                    newPlaylistDialogName = ""
+                },
+                title = { Text("New Playlist") },
+                text = {
+                    OutlinedTextField(
+                        value = newPlaylistDialogName,
+                        onValueChange = { newPlaylistDialogName = it },
+                        label = { Text("Name") },
+                        singleLine = true,
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val trimmed = newPlaylistDialogName.trim()
+                            if (trimmed.isNotEmpty()) {
+                                vm.createPlaylist(trimmed)
+                            }
+                            showNewPlaylistDialog = false
+                            newPlaylistDialogName = ""
+                        },
+                    ) { Text("Create") }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showNewPlaylistDialog = false
+                            newPlaylistDialogName = ""
+                        },
+                    ) { Text("Cancel") }
+                },
+            )
+        }
         Scaffold(
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
         ) { innerPadding ->
@@ -853,7 +978,7 @@ private fun MimeoApp(vm: AppViewModel) {
                             Text("☰", style = MaterialTheme.typography.titleMedium)
                         }
                         Text(
-                            text = drawerRouteLabel(selectedDrawerRoute),
+                            text = drawerRouteLabel(selectedDrawerRoute, playlists),
                             style = MaterialTheme.typography.titleMedium,
                         )
                     }
@@ -1250,13 +1375,17 @@ private fun NoNowPlayingScreen(onGoQueue: () -> Unit) {
     }
 }
 
-private fun drawerRouteLabel(route: String): String = when (route) {
-    ROUTE_INBOX -> "Inbox"
-    ROUTE_FAVORITES -> "Favorites"
-    ROUTE_ARCHIVE -> "Archive"
-    ROUTE_BIN -> "Bin"
-    ROUTE_UP_NEXT -> "Up Next"
-    ROUTE_SETTINGS -> "Settings"
+private fun drawerRouteLabel(route: String, playlists: List<PlaylistSummary>): String = when {
+    route == ROUTE_INBOX -> "Inbox"
+    route == ROUTE_FAVORITES -> "Favorites"
+    route == ROUTE_ARCHIVE -> "Archive"
+    route == ROUTE_BIN -> "Bin"
+    route == ROUTE_UP_NEXT -> "Up Next"
+    route == ROUTE_SETTINGS -> "Settings"
+    route.startsWith("playlist/") -> {
+        val id = route.removePrefix("playlist/").toIntOrNull()
+        playlists.firstOrNull { it.id == id }?.name ?: "Playlist"
+    }
     else -> "Mimeo"
 }
 
