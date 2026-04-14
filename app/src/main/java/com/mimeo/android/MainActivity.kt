@@ -51,10 +51,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -71,6 +75,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -204,6 +209,10 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 internal const val DONE_PERCENT_THRESHOLD = 98
+internal const val ROUTE_INBOX = "inbox"
+internal const val ROUTE_FAVORITES = "favorites"
+internal const val ROUTE_ARCHIVE = "archive"
+internal const val ROUTE_BIN = "bin"
 internal const val ROUTE_UP_NEXT = "upNext"
 internal const val ROUTE_SIGN_IN = "signIn"
 internal const val ROUTE_LOCUS = "locus"
@@ -260,7 +269,7 @@ internal fun shouldSkipShareRefreshBurst(
     return (nowMs - lastExecutedAtMs) < dedupeWindowMs
 }
 
-private data class BottomNavDestination(
+private data class DrawerDestination(
     val route: String,
     val label: String,
 )
@@ -497,12 +506,16 @@ private fun MimeoApp(vm: AppViewModel) {
     val nav = rememberNavController()
     val navBackStack by nav.currentBackStackEntryAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val currentRoute = navBackStack?.destination?.route.orEmpty()
-    val navItems = listOf(
-        BottomNavDestination(ROUTE_UP_NEXT, "Up Next"),
-        BottomNavDestination(ROUTE_LOCUS, "Locus"),
-        BottomNavDestination(ROUTE_COLLECTIONS, "Collections"),
-        BottomNavDestination(ROUTE_SETTINGS, "Settings"),
+    val drawerItems = listOf(
+        DrawerDestination(ROUTE_INBOX, "Inbox"),
+        DrawerDestination(ROUTE_FAVORITES, "Favorites"),
+        DrawerDestination(ROUTE_ARCHIVE, "Archive"),
+        DrawerDestination(ROUTE_BIN, "Bin"),
+        DrawerDestination(ROUTE_UP_NEXT, "Up Next"),
+        DrawerDestination(ROUTE_SETTINGS, "Settings"),
     )
     val settings by vm.settings.collectAsState()
     val signInState by vm.signInState.collectAsState()
@@ -551,10 +564,14 @@ private fun MimeoApp(vm: AppViewModel) {
                 "handoffPending=$pendingLocusOpen handoffTarget=$pendingLocusItemId",
         )
     }
-    val selectedTab = when {
-        currentRoute.startsWith(ROUTE_LOCUS) -> ROUTE_LOCUS
-        currentRoute.startsWith(ROUTE_COLLECTIONS) -> ROUTE_COLLECTIONS
+    val selectedDrawerRoute = when {
+        currentRoute.startsWith(ROUTE_SETTINGS_DIAGNOSTICS) -> ROUTE_SETTINGS
         currentRoute.startsWith(ROUTE_SETTINGS) -> ROUTE_SETTINGS
+        currentRoute.startsWith(ROUTE_UP_NEXT) -> ROUTE_UP_NEXT
+        currentRoute.startsWith(ROUTE_ARCHIVE) -> ROUTE_ARCHIVE
+        currentRoute.startsWith(ROUTE_BIN) -> ROUTE_BIN
+        currentRoute.startsWith(ROUTE_FAVORITES) -> ROUTE_FAVORITES
+        currentRoute.startsWith(ROUTE_INBOX) -> ROUTE_INBOX
         else -> ROUTE_UP_NEXT
     }
     val isOnLocusRoute = currentRoute.startsWith(ROUTE_LOCUS)
@@ -580,8 +597,8 @@ private fun MimeoApp(vm: AppViewModel) {
     var offlineBannerVisible by rememberSaveable { mutableStateOf(false) }
     val presentingLocus = isOnLocusRoute
     val compactControlsOnly = !isOnLocusRoute
-    val bottomNavVisible = !requiresSignIn && !(presentingLocus && readerChromeHidden)
-    val bottomNavClearance = if (bottomNavVisible) 68.dp else 0.dp
+    val libraryShellVisible = !requiresSignIn && !presentingLocus
+    val shellBottomClearance = if (libraryShellVisible) 12.dp else 0.dp
     var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
     val nowPlayingPresentation = nowPlayingCapturePresentation(nowPlayingSession?.currentItem)
     val nowPlayingStripTitle = nowPlayingPresentation.title.ifBlank { "No active playback" }
@@ -721,9 +738,42 @@ private fun MimeoApp(vm: AppViewModel) {
         }
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-    ) { innerPadding ->
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = libraryShellVisible,
+        drawerContent = {
+            if (libraryShellVisible) {
+                ModalDrawerSheet {
+                    Text(
+                        text = "Mimeo",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    drawerItems.forEach { destination ->
+                        NavigationDrawerItem(
+                            label = { Text(destination.label) },
+                            selected = selectedDrawerRoute == destination.route,
+                            onClick = {
+                                if (destination.route == ROUTE_UP_NEXT && selectedDrawerRoute == ROUTE_UP_NEXT) {
+                                    upNextTabTapSignal += 1
+                                }
+                                nav.navigate(destination.route) { launchSingleTop = true }
+                                coroutineScope.launch { drawerState.close() }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                            colors = NavigationDrawerItemDefaults.colors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    }
+                }
+            }
+        },
+    ) {
+        Scaffold(
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -758,6 +808,20 @@ private fun MimeoApp(vm: AppViewModel) {
                         },
                     )
                 }
+                if (libraryShellVisible) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
+                            Text("☰", style = MaterialTheme.typography.titleMedium)
+                        }
+                        Text(
+                            text = drawerRouteLabel(selectedDrawerRoute),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -779,6 +843,30 @@ private fun MimeoApp(vm: AppViewModel) {
                                 onAutoDownloadChanged = vm::saveAutoDownloadSavedArticles,
                                 onOpenAdvancedSettings = { nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true } },
                                 onClearError = vm::clearSignInError,
+                            )
+                        }
+                        composable(ROUTE_INBOX) {
+                            LibraryRoutePlaceholderScreen(
+                                title = "Inbox",
+                                detail = "Library route scaffold (Phase 2A). Data/query wiring lands in Phase 2B.",
+                            )
+                        }
+                        composable(ROUTE_FAVORITES) {
+                            LibraryRoutePlaceholderScreen(
+                                title = "Favorites",
+                                detail = "Library route scaffold (Phase 2A). Data/query wiring lands in Phase 2B.",
+                            )
+                        }
+                        composable(ROUTE_ARCHIVE) {
+                            LibraryRoutePlaceholderScreen(
+                                title = "Archive",
+                                detail = "Library route scaffold (Phase 2A). Data/query wiring lands in Phase 2B.",
+                            )
+                        }
+                        composable(ROUTE_BIN) {
+                            LibraryRoutePlaceholderScreen(
+                                title = "Bin",
+                                detail = "Library route scaffold (Phase 2A). Data/query wiring lands in Phase 2B.",
                             )
                         }
                         composable(ROUTE_COLLECTIONS) {
@@ -888,7 +976,7 @@ private fun MimeoApp(vm: AppViewModel) {
                             locusTapSignal = locusTabTapSignal,
                             openRequestSignal = playerOpenRequestSignal,
                             onOpenItem = { nextId ->
-                                if (selectedTab == ROUTE_LOCUS && currentRoute.startsWith(ROUTE_LOCUS)) {
+                                if (currentRoute.startsWith(ROUTE_LOCUS)) {
                                     nav.navigate("$ROUTE_LOCUS/$nextId") {
                                         launchSingleTop = true
                                     }
@@ -928,12 +1016,12 @@ private fun MimeoApp(vm: AppViewModel) {
                             modifier = if (compactControlsOnly) {
                                 Modifier
                                     .align(Alignment.BottomCenter)
-                                    .padding(bottom = bottomNavClearance)
+                                    .padding(bottom = shellBottomClearance)
                                     .fillMaxWidth()
                             } else {
                                 Modifier
                                     .fillMaxSize()
-                                    .padding(bottom = bottomNavClearance)
+                                    .padding(bottom = shellBottomClearance)
                             },
                         )
                     }
@@ -945,47 +1033,11 @@ private fun MimeoApp(vm: AppViewModel) {
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.ime)
-                    .padding(bottom = if (presentingLocus && readerChromeHidden) 12.dp else 76.dp),
+                    .padding(bottom = if (presentingLocus && readerChromeHidden) 12.dp else 16.dp),
             )
-
-            AnimatedVisibility(
-                visible = bottomNavVisible,
-                enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(150)),
-                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(120)),
-                modifier = Modifier.align(Alignment.BottomCenter),
-            ) {
-                NavigationBar(
-                    modifier = Modifier.height(68.dp),
-                    tonalElevation = 0.dp,
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                ) {
-                    navItems.forEach { destination ->
-                        NavigationBarItem(
-                            selected = selectedTab == destination.route,
-                            onClick = {
-                                if (destination.route == ROUTE_LOCUS) {
-                                    locusTabTapSignal += 1
-                                } else if (destination.route == ROUTE_UP_NEXT && selectedTab == ROUTE_UP_NEXT) {
-                                    upNextTabTapSignal += 1
-                                }
-                                nav.navigate(destination.route) { launchSingleTop = true }
-                            },
-                            label = { Text(destination.label) },
-                            icon = {},
-                            alwaysShowLabel = true,
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.36f),
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            ),
-                        )
-                    }
-                }
-            }
         }
     }
+}
 }
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
@@ -1092,6 +1144,32 @@ private fun NoNowPlayingScreen(onGoQueue: () -> Unit) {
             Text("Go to Up Next")
         }
     }
+}
+
+@Composable
+private fun LibraryRoutePlaceholderScreen(
+    title: String,
+    detail: String,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+private fun drawerRouteLabel(route: String): String = when (route) {
+    ROUTE_INBOX -> "Inbox"
+    ROUTE_FAVORITES -> "Favorites"
+    ROUTE_ARCHIVE -> "Archive"
+    ROUTE_BIN -> "Bin"
+    ROUTE_UP_NEXT -> "Up Next"
+    ROUTE_SETTINGS -> "Settings"
+    else -> "Mimeo"
 }
 
 
