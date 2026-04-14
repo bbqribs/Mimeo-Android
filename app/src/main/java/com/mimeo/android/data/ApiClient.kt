@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
@@ -594,14 +595,17 @@ class ApiClient(
         q: String? = null,
     ): List<ArticleSummary> = withContext(Dispatchers.IO) {
         val boundedLimit = limit.coerceIn(1, 100)
-        val url = buildString {
-            append(resolveUrl(baseUrl, "/items?view=${view.queryValue}&limit=$boundedLimit"))
-            if (sort != null) append("&sort=$sort")
-            if (dir != null) append("&dir=$dir")
-            if (!q.isNullOrBlank()) append("&q=${java.net.URLEncoder.encode(q, "UTF-8").replace("+", "%20")}")
-        }
+        val httpUrl = resolveUrl(baseUrl, "/items").toHttpUrl().newBuilder()
+            .addQueryParameter("view", view.queryValue)
+            .addQueryParameter("limit", boundedLimit.toString())
+            .apply {
+                if (sort != null) addQueryParameter("sort", sort)
+                if (dir != null) addQueryParameter("dir", dir)
+                if (!q.isNullOrBlank()) addQueryParameter("q", q)
+            }
+            .build()
         val request = Request.Builder()
-            .url(url)
+            .url(httpUrl)
             .header("Authorization", "Bearer $token")
             .get()
             .build()

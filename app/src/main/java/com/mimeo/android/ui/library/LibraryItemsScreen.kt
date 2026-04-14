@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -61,8 +62,21 @@ fun LibraryItemsScreen(
 ) {
     var pendingExpanded by rememberSaveable { mutableStateOf(false) }
 
-    val pendingItems = if (isInbox) items.filter { it.status in PENDING_STATUSES } else emptyList()
-    val readyItems = if (isInbox) items.filter { it.status !in PENDING_STATUSES } else items
+    val sortedItems = remember(items, sortOption) {
+        when (sortOption) {
+            LibrarySortOption.NEWEST -> items.sortedByDescending { it.createdAt }
+            LibrarySortOption.OLDEST -> items.sortedBy { it.createdAt }
+            LibrarySortOption.OPENED -> items.sortedWith(
+                compareByDescending<PlaybackQueueItem> { it.lastOpenedAt != null }
+                    .thenByDescending { it.lastOpenedAt }
+            )
+            LibrarySortOption.PROGRESS -> items.sortedByDescending { it.progressPercent }
+            else -> items // ARCHIVED_AT, TRASHED_AT — server-side only
+        }
+    }
+
+    val pendingItems = if (isInbox) sortedItems.filter { it.status in PENDING_STATUSES } else emptyList()
+    val readyItems = if (isInbox) sortedItems.filter { it.status !in PENDING_STATUSES } else sortedItems
 
     Column(
         modifier = Modifier.fillMaxWidth(),
