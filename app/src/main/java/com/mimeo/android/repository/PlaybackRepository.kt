@@ -200,6 +200,14 @@ class PlaybackRepository(
         return apiClient.getArchivedItems(baseUrl, token)
     }
 
+    suspend fun listItemsByView(
+        baseUrl: String,
+        token: String,
+        view: ApiClient.ItemsView,
+    ): List<ArticleSummary> {
+        return apiClient.getItemsByView(baseUrl, token, view)
+    }
+
     suspend fun createPlaylist(baseUrl: String, token: String, name: String): PlaylistSummary {
         return apiClient.createPlaylist(baseUrl, token, name)
     }

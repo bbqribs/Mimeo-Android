@@ -98,6 +98,7 @@ import com.mimeo.android.data.NoActiveContentStore
 import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.AutoDownloadDiagnostics
+import com.mimeo.android.model.ArticleSummary
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
 import com.mimeo.android.model.ConnectionMode
@@ -228,6 +229,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _queueItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
     val queueItems: StateFlow<List<PlaybackQueueItem>> = _queueItems.asStateFlow()
+    private val _inboxItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
+    val inboxItems: StateFlow<List<PlaybackQueueItem>> = _inboxItems.asStateFlow()
+    private val _favoriteItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
+    val favoriteItems: StateFlow<List<PlaybackQueueItem>> = _favoriteItems.asStateFlow()
     private val _archivedItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
     val archivedItems: StateFlow<List<PlaybackQueueItem>> = _archivedItems.asStateFlow()
     private val _binItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
@@ -463,6 +468,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     initialPostSignInHydrationJob?.cancel()
                     initialPostSignInHydrationJob = null
                     _queueItems.value = emptyList()
+                    _inboxItems.value = emptyList()
+                    _favoriteItems.value = emptyList()
                     _archivedItems.value = emptyList()
                     _binItems.value = emptyList()
                     _cachedItemIds.value = emptySet()
@@ -3217,23 +3224,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun loadBinItems(): Result<Unit> {
         val current = settings.value
         return try {
-            val trashed = repository.listTrashedItems(current.baseUrl, current.apiToken)
-            _binItems.value = trashed.map { item ->
-                PlaybackQueueItem(
-                    itemId = item.id,
-                    title = item.title,
-                    url = item.url,
-                    host = item.siteName,
-                    status = item.status,
-                    lastReadPercent = item.lastReadPercent,
-                    resumeReadPercent = item.resumeReadPercent,
-                    apiProgressPercent = item.progressPercent,
-                    apiFurthestPercent = item.furthestPercent,
-                    lastOpenedAt = item.lastOpenedAt,
-                    createdAt = item.createdAt,
-                    isFavorited = item.isFavorited,
-                )
-            }
+            val trashed = repository.listItemsByView(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                view = ApiClient.ItemsView.TRASH,
+            )
+            _binItems.value = trashed.map { it.toPlaybackQueueItem() }
             _queueOffline.value = false
             updateSyncBadgeState()
             Result.success(Unit)
@@ -3251,26 +3247,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    suspend fun loadInboxItems(): Result<Unit> {
+        return loadLibraryItemsView(ApiClient.ItemsView.INBOX) { items ->
+            _inboxItems.value = items
+        }
+    }
+
+    suspend fun loadFavoriteItems(): Result<Unit> {
+        return loadLibraryItemsView(ApiClient.ItemsView.FAVORITES) { items ->
+            _favoriteItems.value = items
+        }
+    }
+
     suspend fun loadArchivedItems(): Result<Unit> {
         val current = settings.value
         return try {
-            val archived = repository.listArchivedItems(current.baseUrl, current.apiToken)
-            _archivedItems.value = archived.map { item ->
-                PlaybackQueueItem(
-                    itemId = item.id,
-                    title = item.title,
-                    url = item.url,
-                    host = item.siteName,
-                    status = item.status,
-                    lastReadPercent = item.lastReadPercent,
-                    resumeReadPercent = item.resumeReadPercent,
-                    apiProgressPercent = item.progressPercent,
-                    apiFurthestPercent = item.furthestPercent,
-                    lastOpenedAt = item.lastOpenedAt,
-                    createdAt = item.createdAt,
-                    isFavorited = item.isFavorited,
-                )
-            }
+            val archived = repository.listItemsByView(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                view = ApiClient.ItemsView.ARCHIVED,
+            )
+            _archivedItems.value = archived.map { it.toPlaybackQueueItem() }
             val combined = (_queueItems.value + _archivedItems.value).distinctBy { item -> item.itemId }
             val offlineReadyIds = resolveOfflineReadyIds(combined)
             _cachedItemIds.update { previous -> previous + offlineReadyIds }
@@ -3294,6 +3291,52 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             Result.failure(error)
         }
+    }
+
+    private suspend fun loadLibraryItemsView(
+        view: ApiClient.ItemsView,
+        onLoaded: (List<PlaybackQueueItem>) -> Unit,
+    ): Result<Unit> {
+        val current = settings.value
+        return try {
+            val items = repository.listItemsByView(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                view = view,
+            ).map { it.toPlaybackQueueItem() }
+            onLoaded(items)
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+            }
+            Result.failure(error)
+        }
+    }
+
+    private fun ArticleSummary.toPlaybackQueueItem(): PlaybackQueueItem {
+        return PlaybackQueueItem(
+            itemId = id,
+            title = title,
+            url = url,
+            host = siteName,
+            status = status,
+            lastReadPercent = lastReadPercent,
+            resumeReadPercent = resumeReadPercent,
+            apiProgressPercent = progressPercent,
+            apiFurthestPercent = furthestPercent,
+            lastOpenedAt = lastOpenedAt,
+            createdAt = createdAt,
+            isFavorited = isFavorited,
+        )
     }
 
     suspend fun unarchiveItem(itemId: Int): Result<Unit> {

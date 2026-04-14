@@ -74,6 +74,7 @@
 - [x] Reader text actions shipped: custom floating selection toolbar (Copy + Share selected text); Copy article text + Share article text in Locus overflow with conditional citation block (title/source/URL); `buildArticleShareText` unit tests.
 - [x] Reader scrollbar shipped: non-draggable visual scroll indicator on reader right edge via `drawWithContent`; thumb height and position track scroll fraction.
 - [x] Reader selection edge-scroll shipped: after releasing a selection handle near top/bottom edge (screen-fraction threshold), reader auto-scrolls ~870 px over 1 s; driven by `edgeScrollSpeed` polled at ~60 fps in PlayerScreen.
+- [x] Redesign v2 Phase 2B shipped (bounded data wiring): Inbox/Favorites/Archive/Bin drawer routes now load real library data from `GET /items?view=inbox|favorites|archived|trash` with shared route list rendering, while preserving Up Next/Locus/playback semantics.
 
 ## Redesign v2 execution track
 - Source of truth: `docs/REDESIGN_V2_PLAN.md` (product + architecture plan). Drift guard: `docs/REDESIGN_V2_DECISION_SNAPSHOT.md`.

@@ -152,6 +152,7 @@ import com.mimeo.android.ui.collections.CollectionsScreen
 import com.mimeo.android.ui.collections.FolderDetailScreen
 import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.components.StatusBanner
+import com.mimeo.android.ui.library.LibraryItemsScreen
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
 import com.mimeo.android.ui.settings.ConnectionTestMessageResolver
 import com.mimeo.android.ui.settings.PasswordChangeState
@@ -520,6 +521,10 @@ private fun MimeoApp(vm: AppViewModel) {
     val settings by vm.settings.collectAsState()
     val signInState by vm.signInState.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
+    val inboxItems by vm.inboxItems.collectAsState()
+    val favoriteItems by vm.favoriteItems.collectAsState()
+    val archivedItems by vm.archivedItems.collectAsState()
+    val binItems by vm.binItems.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val pendingNavigationRoute by vm.pendingNavigationRoute.collectAsState()
@@ -527,6 +532,28 @@ private fun MimeoApp(vm: AppViewModel) {
     var pendingLocusOpen by rememberSaveable { mutableStateOf(false) }
     var pendingLocusItemId by rememberSaveable { mutableIntStateOf(-1) }
     val sessionNowPlayingItemId = vm.currentNowPlayingItemId()
+    val openItemInLocus: (Int) -> Unit = { itemId ->
+        val activeNowPlayingItemId = sessionNowPlayingItemId?.takeIf { it > 0 }
+        val playbackInProgress = vm.hasPlaybackInProgressForSessionItem(activeNowPlayingItemId)
+        if (playbackInProgress && activeNowPlayingItemId != null && activeNowPlayingItemId != itemId) {
+            pendingLocusOpen = true
+            pendingLocusItemId = itemId
+            vm.showSnackbar(
+                "Viewing item while playback continues. Use long-press Play or 'Play this item' to switch.",
+                null,
+                null,
+            )
+            nav.navigate("$ROUTE_LOCUS/$itemId") {
+                launchSingleTop = true
+            }
+        } else {
+            pendingLocusOpen = true
+            pendingLocusItemId = itemId
+            nav.navigate("$ROUTE_LOCUS/$itemId") {
+                launchSingleTop = true
+            }
+        }
+    }
     val routeItemId = navBackStack?.arguments?.let { args ->
         if (args.containsKey("itemId")) args.getInt("itemId").takeIf { it > 0 } else null
     }
@@ -846,27 +873,91 @@ private fun MimeoApp(vm: AppViewModel) {
                             )
                         }
                         composable(ROUTE_INBOX) {
-                            LibraryRoutePlaceholderScreen(
+                            var loading by rememberSaveable { mutableStateOf(false) }
+                            LaunchedEffect(Unit) {
+                                loading = true
+                                vm.loadInboxItems()
+                                loading = false
+                            }
+                            LibraryItemsScreen(
                                 title = "Inbox",
-                                detail = "Library route scaffold (Phase 2A). Data/query wiring lands in Phase 2B.",
+                                items = inboxItems,
+                                loading = loading,
+                                emptyMessage = "No inbox items.",
+                                onRefresh = {
+                                    coroutineScope.launch {
+                                        loading = true
+                                        vm.loadInboxItems()
+                                        loading = false
+                                    }
+                                },
+                                onOpenItem = openItemInLocus,
                             )
                         }
                         composable(ROUTE_FAVORITES) {
-                            LibraryRoutePlaceholderScreen(
+                            var loading by rememberSaveable { mutableStateOf(false) }
+                            LaunchedEffect(Unit) {
+                                loading = true
+                                vm.loadFavoriteItems()
+                                loading = false
+                            }
+                            LibraryItemsScreen(
                                 title = "Favorites",
-                                detail = "Library route scaffold (Phase 2A). Data/query wiring lands in Phase 2B.",
+                                items = favoriteItems,
+                                loading = loading,
+                                emptyMessage = "No favorites yet.",
+                                onRefresh = {
+                                    coroutineScope.launch {
+                                        loading = true
+                                        vm.loadFavoriteItems()
+                                        loading = false
+                                    }
+                                },
+                                onOpenItem = openItemInLocus,
                             )
                         }
                         composable(ROUTE_ARCHIVE) {
-                            LibraryRoutePlaceholderScreen(
+                            var loading by rememberSaveable { mutableStateOf(false) }
+                            LaunchedEffect(Unit) {
+                                loading = true
+                                vm.loadArchivedItems()
+                                loading = false
+                            }
+                            LibraryItemsScreen(
                                 title = "Archive",
-                                detail = "Library route scaffold (Phase 2A). Data/query wiring lands in Phase 2B.",
+                                items = archivedItems,
+                                loading = loading,
+                                emptyMessage = "No archived items.",
+                                onRefresh = {
+                                    coroutineScope.launch {
+                                        loading = true
+                                        vm.loadArchivedItems()
+                                        loading = false
+                                    }
+                                },
+                                onOpenItem = openItemInLocus,
                             )
                         }
                         composable(ROUTE_BIN) {
-                            LibraryRoutePlaceholderScreen(
+                            var loading by rememberSaveable { mutableStateOf(false) }
+                            LaunchedEffect(Unit) {
+                                loading = true
+                                vm.loadBinItems()
+                                loading = false
+                            }
+                            LibraryItemsScreen(
                                 title = "Bin",
-                                detail = "Library route scaffold (Phase 2A). Data/query wiring lands in Phase 2B.",
+                                items = binItems,
+                                loading = loading,
+                                emptyMessage = "Bin is empty.",
+                                onRefresh = {
+                                    coroutineScope.launch {
+                                        loading = true
+                                        vm.loadBinItems()
+                                        loading = false
+                                    }
+                                },
+                                onOpenItem = openItemInLocus,
                             )
                         }
                         composable(ROUTE_COLLECTIONS) {
@@ -932,28 +1023,7 @@ private fun MimeoApp(vm: AppViewModel) {
                                 },
                                 focusItemId = focusItemId,
                                 upNextTabTapSignal = upNextTabTapSignal,
-                                onOpenPlayer = { itemId ->
-                                    val activeNowPlayingItemId = sessionNowPlayingItemId?.takeIf { it > 0 }
-                                    val playbackInProgress = vm.hasPlaybackInProgressForSessionItem(activeNowPlayingItemId)
-                                    if (playbackInProgress && activeNowPlayingItemId != null && activeNowPlayingItemId != itemId) {
-                                        pendingLocusOpen = true
-                                        pendingLocusItemId = itemId
-                                        vm.showSnackbar(
-                                            "Viewing item while playback continues. Use long-press Play or 'Play this item' to switch.",
-                                            null,
-                                            null,
-                                        )
-                                        nav.navigate("$ROUTE_LOCUS/$itemId") {
-                                            launchSingleTop = true
-                                        }
-                                        return@QueueScreen
-                                    }
-                                    pendingLocusOpen = true
-                                    pendingLocusItemId = itemId
-                                    nav.navigate("$ROUTE_LOCUS/$itemId") {
-                                        launchSingleTop = true
-                                    }
-                                },
+                                onOpenPlayer = openItemInLocus,
                                 onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                             )
                         }
@@ -1143,22 +1213,6 @@ private fun NoNowPlayingScreen(onGoQueue: () -> Unit) {
         Button(onClick = onGoQueue) {
             Text("Go to Up Next")
         }
-    }
-}
-
-@Composable
-private fun LibraryRoutePlaceholderScreen(
-    title: String,
-    detail: String,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(title, style = MaterialTheme.typography.titleMedium)
-        Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

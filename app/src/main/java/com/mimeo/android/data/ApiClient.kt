@@ -113,6 +113,13 @@ class ApiClient(
     private val okHttpClient: OkHttpClient = OkHttpClient(),
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) {
+    enum class ItemsView(val queryValue: String) {
+        INBOX("inbox"),
+        FAVORITES("favorites"),
+        ARCHIVED("archived"),
+        TRASH("trash"),
+    }
+
     companion object {
         private const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
         private const val DEBUG_TARGET_ITEM_ID = 409
@@ -569,6 +576,23 @@ class ApiClient(
     suspend fun getArchivedItems(baseUrl: String, token: String, limit: Int = 100): List<ArticleSummary> = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(resolveUrl(baseUrl, "/items?archived=true&limit=$limit"))
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        executeJson(request) { payload ->
+            json.decodeFromString(ListSerializer(ArticleSummary.serializer()), payload)
+        }
+    }
+
+    suspend fun getItemsByView(
+        baseUrl: String,
+        token: String,
+        view: ItemsView,
+        limit: Int = 100,
+    ): List<ArticleSummary> = withContext(Dispatchers.IO) {
+        val boundedLimit = limit.coerceIn(1, 100)
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/items?view=${view.queryValue}&limit=$boundedLimit"))
             .header("Authorization", "Bearer $token")
             .get()
             .build()
