@@ -159,8 +159,15 @@ import com.mimeo.android.ui.collections.CollectionsScreen
 import com.mimeo.android.ui.collections.FolderDetailScreen
 import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.components.StatusBanner
+import com.mimeo.android.ui.library.LibraryBatchAction
 import com.mimeo.android.ui.library.LibraryItemsScreen
 import com.mimeo.android.ui.library.LibrarySortOption
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Unarchive
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
 import com.mimeo.android.ui.settings.ConnectionTestMessageResolver
 import com.mimeo.android.ui.settings.PasswordChangeState
@@ -234,6 +241,7 @@ internal const val ROUTE_SETTINGS_DIAGNOSTICS = "settings/diagnostics"
 internal const val ACTION_KEY_OPEN_DIAGNOSTICS = "open_diagnostics"
 internal const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
 internal const val ACTION_KEY_UNDO_ARCHIVE = "undo_archive"
+internal const val ACTION_KEY_UNDO_BATCH = "undo_batch"
 internal const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
 internal const val DEBUG_TARGET_ITEM_ID = 409
 internal const val INITIAL_SIGN_IN_HYDRATION_DEBUG_TAG = "MimeoSignInHydration"
@@ -722,6 +730,11 @@ private fun MimeoApp(vm: AppViewModel) {
                                 vm.showSnackbar("Couldn't undo last action", "Diagnostics", ACTION_KEY_OPEN_DIAGNOSTICS)
                             }
                     }
+                    ACTION_KEY_UNDO_BATCH -> {
+                        vm.undoLastBatch()
+                            .onSuccess { vm.showSnackbar("Undone") }
+                            .onFailure { vm.showSnackbar("Couldn't undo", "Diagnostics", ACTION_KEY_OPEN_DIAGNOSTICS) }
+                    }
                 }
             }
         }
@@ -1022,6 +1035,11 @@ private fun MimeoApp(vm: AppViewModel) {
                                 availableSorts = LibrarySortOption.INBOX_SORTS,
                                 searchQuery = inboxSearchQuery,
                                 isInbox = true,
+                                batchActions = listOf(
+                                    LibraryBatchAction("Archive", Icons.Default.Archive, "archive"),
+                                    LibraryBatchAction("Move to Bin", Icons.Default.Delete, "bin"),
+                                    LibraryBatchAction("Favorite", Icons.Default.FavoriteBorder, "favorite_toggle"),
+                                ),
                                 onSortChange = { vm.setInboxSort(it) },
                                 onSearchQueryChange = { vm.setInboxSearchQuery(it) },
                                 onSearchSubmit = { vm.submitInboxSearch() },
@@ -1033,6 +1051,14 @@ private fun MimeoApp(vm: AppViewModel) {
                                     }
                                 },
                                 onOpenItem = openItemInLocus,
+                                onBatchAction = { action, itemIds ->
+                                    coroutineScope.launch {
+                                        vm.batchLibraryItems(action, itemIds.toList(), ACTION_KEY_UNDO_BATCH)
+                                        loading = true
+                                        vm.loadInboxItems()
+                                        loading = false
+                                    }
+                                },
                             )
                         }
                         composable(ROUTE_FAVORITES) {
@@ -1050,6 +1076,11 @@ private fun MimeoApp(vm: AppViewModel) {
                                 sortOption = favoritesSort,
                                 availableSorts = LibrarySortOption.FAVORITES_SORTS,
                                 searchQuery = favoritesSearchQuery,
+                                batchActions = listOf(
+                                    LibraryBatchAction("Archive", Icons.Default.Archive, "archive"),
+                                    LibraryBatchAction("Move to Bin", Icons.Default.Delete, "bin"),
+                                    LibraryBatchAction("Unfavorite", Icons.Default.FavoriteBorder, "favorite_toggle"),
+                                ),
                                 onSortChange = { vm.setFavoritesSort(it) },
                                 onSearchQueryChange = { vm.setFavoritesSearchQuery(it) },
                                 onSearchSubmit = { vm.submitFavoritesSearch() },
@@ -1061,6 +1092,14 @@ private fun MimeoApp(vm: AppViewModel) {
                                     }
                                 },
                                 onOpenItem = openItemInLocus,
+                                onBatchAction = { action, itemIds ->
+                                    coroutineScope.launch {
+                                        vm.batchLibraryItems(action, itemIds.toList(), ACTION_KEY_UNDO_BATCH)
+                                        loading = true
+                                        vm.loadFavoriteItems()
+                                        loading = false
+                                    }
+                                },
                             )
                         }
                         composable(ROUTE_ARCHIVE) {
@@ -1078,6 +1117,10 @@ private fun MimeoApp(vm: AppViewModel) {
                                 sortOption = archiveSort,
                                 availableSorts = LibrarySortOption.ARCHIVE_SORTS,
                                 searchQuery = archiveSearchQuery,
+                                batchActions = listOf(
+                                    LibraryBatchAction("Unarchive", Icons.Default.Unarchive, "unarchive"),
+                                    LibraryBatchAction("Move to Bin", Icons.Default.Delete, "bin"),
+                                ),
                                 onSortChange = { vm.setArchiveSort(it) },
                                 onSearchQueryChange = { vm.setArchiveSearchQuery(it) },
                                 onSearchSubmit = { vm.submitArchiveSearch() },
@@ -1089,6 +1132,14 @@ private fun MimeoApp(vm: AppViewModel) {
                                     }
                                 },
                                 onOpenItem = openItemInLocus,
+                                onBatchAction = { action, itemIds ->
+                                    coroutineScope.launch {
+                                        vm.batchLibraryItems(action, itemIds.toList(), ACTION_KEY_UNDO_BATCH)
+                                        loading = true
+                                        vm.loadArchivedItems()
+                                        loading = false
+                                    }
+                                },
                             )
                         }
                         composable(ROUTE_BIN) {
@@ -1106,6 +1157,9 @@ private fun MimeoApp(vm: AppViewModel) {
                                 sortOption = binSort,
                                 availableSorts = LibrarySortOption.BIN_SORTS,
                                 searchQuery = binSearchQuery,
+                                batchActions = listOf(
+                                    LibraryBatchAction("Restore", Icons.Default.Restore, "restore"),
+                                ),
                                 onSortChange = { vm.setBinSort(it) },
                                 onSearchQueryChange = { vm.setBinSearchQuery(it) },
                                 onSearchSubmit = { vm.submitBinSearch() },
@@ -1117,6 +1171,14 @@ private fun MimeoApp(vm: AppViewModel) {
                                     }
                                 },
                                 onOpenItem = openItemInLocus,
+                                onBatchAction = { action, itemIds ->
+                                    coroutineScope.launch {
+                                        vm.batchLibraryItems(action, itemIds.toList(), ACTION_KEY_UNDO_BATCH)
+                                        loading = true
+                                        vm.loadBinItems()
+                                        loading = false
+                                    }
+                                },
                             )
                         }
                         composable(ROUTE_COLLECTIONS) {

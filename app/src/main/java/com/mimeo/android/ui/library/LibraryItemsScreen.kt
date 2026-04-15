@@ -19,14 +19,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Unarchive
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -49,6 +56,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.model.PlaybackQueueItem
 
+data class LibraryBatchAction(
+    val label: String,
+    val icon: ImageVector,
+    val action: String,
+)
+
 private val PENDING_STATUSES = setOf("extracting", "saved", "failed", "blocked")
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -62,11 +75,13 @@ fun LibraryItemsScreen(
     availableSorts: List<LibrarySortOption> = LibrarySortOption.entries,
     searchQuery: String,
     isInbox: Boolean = false,
+    batchActions: List<LibraryBatchAction> = emptyList(),
     onSortChange: (LibrarySortOption) -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSearchSubmit: () -> Unit,
     onRefresh: () -> Unit,
     onOpenItem: (Int) -> Unit,
+    onBatchAction: (action: String, itemIds: Set<Int>) -> Unit = { _, _ -> },
 ) {
     var pendingExpanded by rememberSaveable { mutableStateOf(false) }
 
@@ -122,8 +137,6 @@ fun LibraryItemsScreen(
     ) {
         if (selectionActive) {
             // Contextual action bar — replaces search/sort row while in selection mode.
-            // TODO Phase 4B: add archive / bin / restore / favorite action icon buttons here,
-            //   wired to POST /items/batch. Buttons differ per view (see spec §8 batch actions).
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -141,6 +154,38 @@ fun LibraryItemsScreen(
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
+                batchActions.forEach { batchAction ->
+                    // "favorite_toggle" is resolved at render time based on selected items' state.
+                    val resolvedAction = if (batchAction.action == "favorite_toggle") {
+                        val allFavorited = selectedIds.isNotEmpty() &&
+                            selectedIds.all { id -> items.firstOrNull { it.itemId == id }?.isFavorited == true }
+                        if (allFavorited) "unfavorite" else "favorite"
+                    } else {
+                        batchAction.action
+                    }
+                    val resolvedIcon = if (batchAction.action == "favorite_toggle") {
+                        if (resolvedAction == "unfavorite") Icons.Default.Favorite else Icons.Default.FavoriteBorder
+                    } else {
+                        batchAction.icon
+                    }
+                    val resolvedLabel = if (batchAction.action == "favorite_toggle") {
+                        if (resolvedAction == "unfavorite") "Unfavorite" else "Favorite"
+                    } else {
+                        batchAction.label
+                    }
+                    IconButton(
+                        onClick = {
+                            onBatchAction(resolvedAction, selectedIds)
+                            clearSelection()
+                        },
+                        enabled = selectedIds.isNotEmpty(),
+                    ) {
+                        Icon(
+                            imageVector = resolvedIcon,
+                            contentDescription = resolvedLabel,
+                        )
+                    }
+                }
             }
         } else {
             // Search row

@@ -92,6 +92,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mimeo.android.data.ApiClient
 import com.mimeo.android.data.ApiException
+import com.mimeo.android.data.ItemBatchResponse
 import com.mimeo.android.data.AutoDownloadStatusStore
 import com.mimeo.android.data.AppDatabase
 import com.mimeo.android.data.NoActiveContentStore
@@ -3592,6 +3593,89 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
             runCatching { loadArchivedItems() }
+            Result.failure(error)
+        }
+    }
+
+    // Stores the last successful batch action for undo. Overwritten on each new batch dispatch.
+    private var lastBatchAction: String = ""
+    private var lastBatchItemIds: List<Int> = emptyList()
+
+    private fun batchReverseAction(action: String) = when (action) {
+        "archive" -> "unarchive"
+        "unarchive" -> "archive"
+        "bin" -> "restore"
+        "restore" -> "bin"
+        "favorite" -> "unfavorite"
+        "unfavorite" -> "favorite"
+        else -> null
+    }
+
+    suspend fun batchLibraryItems(
+        action: String,
+        itemIds: List<Int>,
+        actionKeyUndo: String,
+    ): Result<ItemBatchResponse> {
+        val current = settings.value
+        return try {
+            val response = repository.batchItemAction(current.baseUrl, current.apiToken, action, itemIds)
+            if (response.successCount > 0) {
+                lastBatchAction = action
+                lastBatchItemIds = response.results.filter { it.ok }.map { it.itemId }
+            }
+            val msg = when {
+                response.failureCount == 0 -> "${response.successCount} item(s) moved"
+                response.successCount == 0 -> "Action failed for all ${response.failureCount} item(s)"
+                else -> "${response.successCount} moved, ${response.failureCount} failed"
+            }
+            val canUndo = response.successCount > 0 && batchReverseAction(action) != null
+            showSnackbar(
+                message = msg,
+                actionLabel = if (canUndo) "Undo" else null,
+                actionKey = if (canUndo) actionKeyUndo else null,
+            )
+            Result.success(response)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            showSnackbar("Batch action failed")
+            Result.failure(error)
+        }
+    }
+
+    suspend fun undoLastBatch(): Result<Unit> {
+        val originalAction = lastBatchAction
+        val reverse = batchReverseAction(originalAction) ?: return Result.failure(Exception("Nothing to undo"))
+        val ids = lastBatchItemIds
+        if (ids.isEmpty()) return Result.failure(Exception("Nothing to undo"))
+        return try {
+            val current = settings.value
+            repository.batchItemAction(current.baseUrl, current.apiToken, reverse, ids)
+            lastBatchAction = ""
+            lastBatchItemIds = emptyList()
+            // Refresh the source view so items reappear without a manual pull-to-refresh.
+            when (originalAction) {
+                "archive" -> runCatching { loadInboxItems() }
+                "unarchive" -> runCatching { loadArchivedItems() }
+                "bin" -> {
+                    runCatching { loadInboxItems() }
+                    runCatching { loadArchivedItems() }
+                    runCatching { loadFavoriteItems() }
+                }
+                "restore" -> runCatching { loadBinItems() }
+                "favorite" -> runCatching { loadInboxItems() }
+                "unfavorite" -> {
+                    runCatching { loadFavoriteItems() }
+                    runCatching { loadInboxItems() }
+                }
+            }
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
             Result.failure(error)
         }
     }

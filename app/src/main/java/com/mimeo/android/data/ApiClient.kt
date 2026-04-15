@@ -99,6 +99,28 @@ private data class FavoriteUpdatePayload(
 )
 
 @Serializable
+private data class ItemBatchRequest(
+    val action: String,
+    @kotlinx.serialization.SerialName("item_ids") val itemIds: List<Int>,
+)
+
+@Serializable
+data class ItemBatchResult(
+    @kotlinx.serialization.SerialName("item_id") val itemId: Int,
+    val ok: Boolean,
+    @kotlinx.serialization.SerialName("status_code") val statusCode: Int,
+    val detail: String? = null,
+)
+
+@Serializable
+data class ItemBatchResponse(
+    val action: String,
+    @kotlinx.serialization.SerialName("success_count") val successCount: Int,
+    @kotlinx.serialization.SerialName("failure_count") val failureCount: Int,
+    val results: List<ItemBatchResult>,
+)
+
+@Serializable
 private data class ItemDetailLitePayload(
     @kotlinx.serialization.SerialName("extracted_content")
     val extractedContent: ExtractedContentLitePayload? = null,
@@ -670,6 +692,22 @@ class ApiClient(
             .put(body)
             .build()
         executeNoBody(request)
+    }
+
+    suspend fun batchItemAction(
+        baseUrl: String,
+        token: String,
+        action: String,
+        itemIds: List<Int>,
+    ): ItemBatchResponse = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(ItemBatchRequest(action = action, itemIds = itemIds))
+            .toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/items/batch"))
+            .header("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<ItemBatchResponse>(payload) }
     }
 
     suspend fun postProblemReport(
