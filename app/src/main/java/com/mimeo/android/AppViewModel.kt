@@ -3597,47 +3597,43 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Stores the last successful batch action for undo. Overwritten on each new batch dispatch.
+    private var lastBatchAction: String = ""
+    private var lastBatchItemIds: List<Int> = emptyList()
+
+    private fun batchReverseAction(action: String) = when (action) {
+        "archive" -> "unarchive"
+        "unarchive" -> "archive"
+        "bin" -> "restore"
+        "restore" -> "bin"
+        "favorite" -> "unfavorite"
+        "unfavorite" -> "favorite"
+        else -> null
+    }
+
     suspend fun batchLibraryItems(
         action: String,
         itemIds: List<Int>,
+        actionKeyUndo: String,
     ): Result<ItemBatchResponse> {
         val current = settings.value
         return try {
             val response = repository.batchItemAction(current.baseUrl, current.apiToken, action, itemIds)
+            if (response.successCount > 0) {
+                lastBatchAction = action
+                lastBatchItemIds = response.results.filter { it.ok }.map { it.itemId }
+            }
             val msg = when {
-                response.failureCount == 0 -> "${response.successCount} item(s) $action"
+                response.failureCount == 0 -> "${response.successCount} item(s) moved"
                 response.successCount == 0 -> "Action failed for all ${response.failureCount} item(s)"
-                else -> "${response.successCount} succeeded, ${response.failureCount} failed"
+                else -> "${response.successCount} moved, ${response.failureCount} failed"
             }
-            _statusMessage.value = msg
-            // Refresh relevant lists based on action
-            when (action) {
-                "archive" -> {
-                    loadQueueOnce(autoRetryPendingSaves = false)
-                    runCatching { loadArchivedItems() }
-                }
-                "unarchive" -> {
-                    runCatching { loadArchivedItems() }
-                    loadQueueOnce(autoRetryPendingSaves = false)
-                }
-                "bin" -> {
-                    loadQueueOnce(autoRetryPendingSaves = false)
-                    runCatching { loadArchivedItems() }
-                    runCatching { loadBinItems() }
-                }
-                "restore" -> {
-                    runCatching { loadBinItems() }
-                    loadQueueOnce(autoRetryPendingSaves = false)
-                }
-                "favorite" -> {
-                    loadQueueOnce(autoRetryPendingSaves = false)
-                    runCatching { loadFavoriteItems() }
-                }
-                "unfavorite" -> {
-                    runCatching { loadFavoriteItems() }
-                    loadQueueOnce(autoRetryPendingSaves = false)
-                }
-            }
+            val canUndo = response.successCount > 0 && batchReverseAction(action) != null
+            showSnackbar(
+                message = msg,
+                actionLabel = if (canUndo) "Undo" else null,
+                actionKey = if (canUndo) actionKeyUndo else null,
+            )
             Result.success(response)
         } catch (error: CancellationException) {
             throw error
@@ -3645,7 +3641,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (handleAuthFailureIfNeeded(error)) {
                 return Result.failure(error)
             }
-            _statusMessage.value = "Batch action failed"
+            showSnackbar("Batch action failed")
+            Result.failure(error)
+        }
+    }
+
+    suspend fun undoLastBatch(): Result<Unit> {
+        val reverse = batchReverseAction(lastBatchAction) ?: return Result.failure(Exception("Nothing to undo"))
+        val ids = lastBatchItemIds
+        if (ids.isEmpty()) return Result.failure(Exception("Nothing to undo"))
+        return try {
+            val current = settings.value
+            repository.batchItemAction(current.baseUrl, current.apiToken, reverse, ids)
+            lastBatchAction = ""
+            lastBatchItemIds = emptyList()
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
             Result.failure(error)
         }
     }

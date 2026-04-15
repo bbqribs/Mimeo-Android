@@ -155,16 +155,34 @@ fun LibraryItemsScreen(
                     modifier = Modifier.weight(1f),
                 )
                 batchActions.forEach { batchAction ->
+                    // "favorite_toggle" is resolved at render time based on selected items' state.
+                    val resolvedAction = if (batchAction.action == "favorite_toggle") {
+                        val allFavorited = selectedIds.isNotEmpty() &&
+                            selectedIds.all { id -> items.firstOrNull { it.itemId == id }?.isFavorited == true }
+                        if (allFavorited) "unfavorite" else "favorite"
+                    } else {
+                        batchAction.action
+                    }
+                    val resolvedIcon = if (batchAction.action == "favorite_toggle") {
+                        if (resolvedAction == "unfavorite") Icons.Default.Favorite else Icons.Default.FavoriteBorder
+                    } else {
+                        batchAction.icon
+                    }
+                    val resolvedLabel = if (batchAction.action == "favorite_toggle") {
+                        if (resolvedAction == "unfavorite") "Unfavorite" else "Favorite"
+                    } else {
+                        batchAction.label
+                    }
                     IconButton(
                         onClick = {
-                            onBatchAction(batchAction.action, selectedIds)
+                            onBatchAction(resolvedAction, selectedIds)
                             clearSelection()
                         },
                         enabled = selectedIds.isNotEmpty(),
                     ) {
                         Icon(
-                            imageVector = batchAction.icon,
-                            contentDescription = batchAction.label,
+                            imageVector = resolvedIcon,
+                            contentDescription = resolvedLabel,
                         )
                     }
                 }
