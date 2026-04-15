@@ -49,14 +49,16 @@ import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackQueueItem
 import kotlinx.coroutines.launch
 import kotlin.math.abs
-import kotlin.math.roundToInt
 
 /**
  * Ordered list of playlist entries with drag-to-reorder support.
  *
  * Each row has an explicit drag handle (≡) on the left. Touch and drag the handle
- * vertically; items swap in real time as the dragged item crosses their midpoints.
+ * vertically; items shift in real time as the dragged item crosses their midpoints.
  * On drop the new order is persisted via PUT /playlists/{id}/entries/reorder.
+ *
+ * During drag, `localEntries` is NOT mutated — only visual offsets change.
+ * The actual list reorder happens only on drop, preventing the "text-swap" artifact.
  */
 @Composable
 fun PlaylistDetailScreen(
@@ -74,11 +76,10 @@ fun PlaylistDetailScreen(
     val loading by vm.queueLoading.collectAsState()
     val actionScope = rememberCoroutineScope()
 
-    // selectPlaylist() already starts an async queue load; we also load archived items
-    // so playlist entries that have been archived show their titles here.
     LaunchedEffect(playlistId) {
         vm.refreshPlaylists()
         vm.loadArchivedItems()
+        vm.loadBinItems()
     }
 
     val playlist = playlists.firstOrNull { it.id == playlistId }
@@ -92,7 +93,7 @@ fun PlaylistDetailScreen(
             .associateBy { it.itemId }
     }
 
-    // Local mutable list that gets swapped in real time during drag.
+    // Local mutable list reordered only on drop (not during drag).
     val localEntries = remember(serverEntries) { serverEntries.toMutableStateList() }
 
     // Per-item Y positions in the Column for drag hit-testing.
@@ -130,32 +131,29 @@ fun PlaylistDetailScreen(
     }
 
     /**
-     * During drag: swap items if the drag has moved enough to cross a neighbour's midpoint.
-     * Adjusts dragOffsetY after each swap so the item visually stays under the finger.
+     * Compute the visual Y offset for a non-dragged item at [index].
+     * Items between [from] and [target] are shifted by the dragged item's height
+     * to visually make room (or fill the gap) without mutating localEntries.
      */
-    fun maybeSwap() {
-        val from = draggingIndex
-        if (from < 0) return
-        val target = computeTargetIndex(from, dragOffsetY)
-        if (target == from) return
-
-        val direction = if (target > from) 1 else -1
-        val steps = abs(target - from)
-        val moved = localEntries.removeAt(from)
-        localEntries.add(target, moved)
-
-        // Compensate dragOffsetY so the item's visual position stays stable after the swap.
-        val compensate = (1..steps).sumOf { step ->
-            val neighbourIndex = if (direction > 0) from + step - 1 else from - step
-            (itemHeights[neighbourIndex] ?: avgItemHeight()).toDouble()
-        }.toFloat()
-        dragOffsetY -= direction * compensate
-
-        draggingIndex = target
+    fun visualOffsetForItem(index: Int, from: Int, target: Int): Float {
+        if (from < 0 || from == target || index == from) return 0f
+        val draggedHeight = itemHeights[from] ?: avgItemHeight()
+        return when {
+            target > from && index in (from + 1)..target -> -draggedHeight
+            target < from && index in target until from  ->  draggedHeight
+            else -> 0f
+        }
     }
 
     fun onDragEnd() {
-        if (draggingIndex < 0) return
+        val from = draggingIndex
+        if (from < 0) return
+        val target = computeTargetIndex(from, dragOffsetY)
+        // Commit the reorder into localEntries now (only on drop).
+        if (target != from) {
+            val moved = localEntries.removeAt(from)
+            localEntries.add(target, moved)
+        }
         val entryIds = localEntries.map { it.id }
         draggingIndex = -1
         dragOffsetY = 0f
@@ -166,6 +164,10 @@ fun PlaylistDetailScreen(
             isSaving = false
         }
     }
+
+    // Derived during composition so every recompose reflects the current drag position.
+    val currentTargetIndex = if (draggingIndex >= 0)
+        computeTargetIndex(draggingIndex, dragOffsetY) else -1
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -233,11 +235,15 @@ fun PlaylistDetailScreen(
                     localEntries.forEachIndexed { index, entry ->
                         val queueItem = allItemsMap[entry.articleId]
                         val isDragging = draggingIndex == index
+                        val itemVisualOffsetY = when {
+                            isDragging -> dragOffsetY
+                            else -> visualOffsetForItem(index, draggingIndex, currentTargetIndex)
+                        }
                         PlaylistDetailRow(
                             entry = entry,
                             queueItem = queueItem,
                             isDragging = isDragging,
-                            dragOffsetY = if (isDragging) dragOffsetY else 0f,
+                            visualOffsetY = itemVisualOffsetY,
                             onPositioned = { top, height ->
                                 itemTopOffsets[index] = top
                                 itemHeights[index] = height
@@ -248,7 +254,6 @@ fun PlaylistDetailScreen(
                             },
                             onDrag = { dy ->
                                 dragOffsetY += dy
-                                maybeSwap()
                             },
                             onDragEnd = { onDragEnd() },
                             index = index,
@@ -272,7 +277,7 @@ private fun PlaylistDetailRow(
     entry: PlaylistEntrySummary,
     queueItem: PlaybackQueueItem?,
     isDragging: Boolean,
-    dragOffsetY: Float,
+    visualOffsetY: Float,
     onPositioned: (top: Float, height: Float) -> Unit,
     onDragStart: (index: Int) -> Unit,
     onDrag: (dy: Float) -> Unit,
@@ -285,7 +290,7 @@ private fun PlaylistDetailRow(
         modifier = Modifier
             .fillMaxWidth()
             .zIndex(if (isDragging) 1f else 0f)
-            .graphicsLayer { translationY = dragOffsetY }
+            .graphicsLayer { translationY = visualOffsetY }
             .onGloballyPositioned { coords ->
                 onPositioned(coords.positionInParent().y, coords.size.height.toFloat())
             },
