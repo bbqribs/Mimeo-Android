@@ -1,7 +1,10 @@
 package com.mimeo.android.ui.library
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,9 +19,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.FilterChip
@@ -29,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +51,7 @@ import com.mimeo.android.model.PlaybackQueueItem
 
 private val PENDING_STATUSES = setOf("extracting", "saved", "failed", "blocked")
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LibraryItemsScreen(
     title: String,
@@ -61,6 +69,36 @@ fun LibraryItemsScreen(
     onOpenItem: (Int) -> Unit,
 ) {
     var pendingExpanded by rememberSaveable { mutableStateOf(false) }
+
+    // Selection state — local, ephemeral. Clears automatically when the composable
+    // leaves the back stack (drawer navigation away, etc.). No ViewModel needed for
+    // Phase 4A; will elevate if batch-action dispatching requires it in Phase 4B.
+    var selectionActive by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf(emptySet<Int>()) }
+
+    fun enterSelectionMode(itemId: Int) {
+        selectionActive = true
+        selectedIds = setOf(itemId)
+    }
+
+    fun toggleSelection(itemId: Int) {
+        val next = if (itemId in selectedIds) selectedIds - itemId else selectedIds + itemId
+        selectedIds = next
+        if (next.isEmpty()) selectionActive = false
+    }
+
+    fun clearSelection() {
+        selectionActive = false
+        selectedIds = emptySet()
+    }
+
+    // Exit selection mode on sort or search change (spec §8 "filter/search change → exit").
+    // Calling clearSelection() when already inactive is a no-op (same-value state write).
+    LaunchedEffect(sortOption) { clearSelection() }
+    LaunchedEffect(searchQuery) { clearSelection() }
+
+    // Exit selection mode on back press.
+    BackHandler(enabled = selectionActive) { clearSelection() }
 
     val sortedItems = remember(items, sortOption) {
         when (sortOption) {
@@ -82,54 +120,78 @@ fun LibraryItemsScreen(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        // Search row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = onSearchQueryChange,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Search $title…") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = {
-                            onSearchQueryChange("")
-                            onSearchSubmit()
-                        }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear search")
-                        }
-                    }
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { onSearchSubmit() }),
-                shape = RoundedCornerShape(8.dp),
-            )
-            IconButton(onClick = onRefresh) {
-                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-            }
-        }
-
-        // Sort chips row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            availableSorts.forEach { option ->
-                FilterChip(
-                    selected = option == sortOption,
-                    onClick = { onSortChange(option) },
-                    label = { Text(option.label) },
+        if (selectionActive) {
+            // Contextual action bar — replaces search/sort row while in selection mode.
+            // TODO Phase 4B: add archive / bin / restore / favorite action icon buttons here,
+            //   wired to POST /items/batch. Buttons differ per view (see spec §8 batch actions).
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = ::clearSelection) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Exit selection mode",
+                    )
+                }
+                Text(
+                    text = "${selectedIds.size} selected",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
                 )
+            }
+        } else {
+            // Search row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Search $title…") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = {
+                                onSearchQueryChange("")
+                                onSearchSubmit()
+                            }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { onSearchSubmit() }),
+                    shape = RoundedCornerShape(8.dp),
+                )
+                IconButton(onClick = onRefresh) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                }
+            }
+
+            // Sort chips row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                availableSorts.forEach { option ->
+                    FilterChip(
+                        selected = option == sortOption,
+                        onClick = { onSortChange(option) },
+                        label = { Text(option.label) },
+                    )
+                }
             }
         }
 
@@ -165,7 +227,14 @@ fun LibraryItemsScreen(
                         }
                         if (pendingExpanded) {
                             items(items = pendingItems, key = { "p_${it.itemId}" }) { item ->
-                                LibraryItemRow(item = item, onOpen = { onOpenItem(item.itemId) })
+                                LibraryItemRow(
+                                    item = item,
+                                    isSelectionActive = selectionActive,
+                                    isSelected = item.itemId in selectedIds,
+                                    onOpen = { onOpenItem(item.itemId) },
+                                    onToggleSelect = { toggleSelection(item.itemId) },
+                                    onEnterSelection = { enterSelectionMode(item.itemId) },
+                                )
                                 HorizontalDivider(
                                     modifier = Modifier.padding(horizontal = 12.dp),
                                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
@@ -176,7 +245,14 @@ fun LibraryItemsScreen(
 
                     // Ready / main items
                     items(items = readyItems, key = { it.itemId }) { item ->
-                        LibraryItemRow(item = item, onOpen = { onOpenItem(item.itemId) })
+                        LibraryItemRow(
+                            item = item,
+                            isSelectionActive = selectionActive,
+                            isSelected = item.itemId in selectedIds,
+                            onOpen = { onOpenItem(item.itemId) },
+                            onToggleSelect = { toggleSelection(item.itemId) },
+                            onEnterSelection = { enterSelectionMode(item.itemId) },
+                        )
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 12.dp),
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
@@ -215,44 +291,76 @@ private fun PendingSectionHeader(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LibraryItemRow(
     item: PlaybackQueueItem,
+    isSelectionActive: Boolean,
+    isSelected: Boolean,
     onOpen: () -> Unit,
+    onToggleSelect: () -> Unit,
+    onEnterSelection: () -> Unit,
 ) {
     val title = item.title?.takeIf { it.isNotBlank() } ?: item.url
     val source = item.host?.takeIf { it.isNotBlank() } ?: item.url
     val progress = item.progressPercent.coerceIn(0, 100)
     val progressLabel = if (progress > 0) " · $progress%" else ""
 
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onOpen)
+            .then(
+                if (isSelected) {
+                    Modifier.background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+                } else {
+                    Modifier
+                },
+            )
+            .combinedClickable(
+                onClick = if (isSelectionActive) onToggleSelect else onOpen,
+                onLongClick = if (!isSelectionActive) onEnterSelection else null,
+            )
             .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        if (isSelectionActive) {
+            Icon(
+                imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                contentDescription = if (isSelected) "Selected" else "Not selected",
+                tint = if (isSelected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
-                text = "$source$progressLabel",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
             )
-            val status = item.status
-            if (status != null && status != "ready") {
-                StatusPill(status = status)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = "$source$progressLabel",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                val status = item.status
+                if (status != null && status != "ready") {
+                    StatusPill(status = status)
+                }
             }
         }
     }
