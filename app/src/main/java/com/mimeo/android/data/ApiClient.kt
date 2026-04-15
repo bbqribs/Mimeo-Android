@@ -127,8 +127,9 @@ private data class PlaylistBatchAddRequest(
 )
 
 @Serializable
-private data class PlaylistReorderPayload(
-    @kotlinx.serialization.SerialName("entry_ids") val entryIds: List<Int>,
+private data class PlaylistReorderItem(
+    @kotlinx.serialization.SerialName("entry_id") val entryId: Int,
+    val position: Float,
 )
 
 @Serializable
@@ -499,7 +500,10 @@ class ApiClient(
         playlistId: Int,
         entryIds: List<Int>,
     ) = withContext(Dispatchers.IO) {
-        val body = json.encodeToString(PlaylistReorderPayload(entryIds))
+        val payload = entryIds.mapIndexed { idx, entryId ->
+            PlaylistReorderItem(entryId = entryId, position = idx.toFloat())
+        }
+        val body = json.encodeToString(ListSerializer(PlaylistReorderItem.serializer()), payload)
             .toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
             .url(resolveUrl(baseUrl, "/playlists/$playlistId/entries/reorder"))

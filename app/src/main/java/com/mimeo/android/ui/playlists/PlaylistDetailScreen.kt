@@ -48,11 +48,15 @@ import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackQueueItem
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Ordered list of playlist entries with drag-to-reorder support.
- * Each row shows a drag handle (≡) on the left; touch and drag vertically to reorder.
- * Reorder is persisted to the server via PUT /playlists/{id}/entries/reorder on drop.
+ *
+ * Each row has an explicit drag handle (≡) on the left. Touch and drag the handle
+ * vertically; items swap in real time as the dragged item crosses their midpoints.
+ * On drop the new order is persisted via PUT /playlists/{id}/entries/reorder.
  */
 @Composable
 fun PlaylistDetailScreen(
@@ -70,11 +74,11 @@ fun PlaylistDetailScreen(
     val loading by vm.queueLoading.collectAsState()
     val actionScope = rememberCoroutineScope()
 
-    // selectPlaylist() already triggers loadQueue() asynchronously; refreshPlaylists() ensures
-    // entries/positions are current. We don't call loadQueueIfNotRecent() here because the
-    // playlist switch may have been very recent and that call would skip on stale items.
+    // selectPlaylist() already starts an async queue load; we also load archived items
+    // so playlist entries that have been archived show their titles here.
     LaunchedEffect(playlistId) {
         vm.refreshPlaylists()
+        vm.loadArchivedItems()
     }
 
     val playlist = playlists.firstOrNull { it.id == playlistId }
@@ -82,60 +86,83 @@ fun PlaylistDetailScreen(
         playlist?.entries?.sortedBy { it.position ?: Double.MAX_VALUE } ?: emptyList()
     }
 
-    // Build a lookup map from all currently-loaded item sources.
-    // This lets us show titles for archived/bin items if those views have been opened.
+    // Unified lookup across all item sources loaded in this session.
     val allItemsMap = remember(queueItems, inboxItems, archivedItems, favoriteItems, binItems) {
         (queueItems + inboxItems + archivedItems + favoriteItems + binItems)
             .associateBy { it.itemId }
     }
 
-    // Local reorderable list; reset whenever server state changes (e.g. after a refresh).
+    // Local mutable list that gets swapped in real time during drag.
     val localEntries = remember(serverEntries) { serverEntries.toMutableStateList() }
 
-    // Per-item Y positions within the scrollable Column for drag hit-testing.
-    val itemTopOffsets = remember { mutableMapOf<Int, Float>() }  // index -> top px
-    val itemHeights = remember { mutableMapOf<Int, Float>() }      // index -> height px
+    // Per-item Y positions in the Column for drag hit-testing.
+    val itemTopOffsets = remember { mutableMapOf<Int, Float>() }
+    val itemHeights = remember { mutableMapOf<Int, Float>() }
 
     // Drag state
     var draggingIndex by remember { mutableIntStateOf(-1) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var isSaving by remember { mutableStateOf(false) }
 
-    fun computeTargetIndex(fromIndex: Int, currentOffsetY: Float): Int {
-        if (localEntries.isEmpty()) return fromIndex
-        val draggedHeight = itemHeights[fromIndex] ?: 72f
-        val fromTop = itemTopOffsets[fromIndex] ?: (fromIndex * draggedHeight)
-        val draggedMidY = fromTop + draggedHeight / 2f + currentOffsetY
-        var best = fromIndex
+    /** Average measured item height; falls back to a reasonable default. */
+    fun avgItemHeight(): Float =
+        if (itemHeights.isEmpty()) 72f else itemHeights.values.average().toFloat()
+
+    /**
+     * Compute which index the dragged item's visual midpoint is nearest to.
+     * Uses measured top-offsets when available; falls back to index × avgHeight.
+     */
+    fun computeTargetIndex(from: Int, offsetY: Float): Int {
+        if (localEntries.size <= 1) return from
+        val h = itemHeights[from] ?: avgItemHeight()
+        val top = itemTopOffsets[from] ?: (from * avgItemHeight())
+        val midY = top + h / 2f + offsetY
+        var best = from
         var bestDist = Float.MAX_VALUE
         localEntries.indices.forEach { i ->
-            val top = itemTopOffsets[i] ?: (i * (itemHeights[i] ?: 72f))
-            val h = itemHeights[i] ?: 72f
-            val mid = top + h / 2f
-            val dist = kotlin.math.abs(draggedMidY - mid)
-            if (dist < bestDist) {
-                bestDist = dist
-                best = i
-            }
+            val t = itemTopOffsets[i] ?: (i * avgItemHeight())
+            val iH = itemHeights[i] ?: avgItemHeight()
+            val iMid = t + iH / 2f
+            val d = abs(midY - iMid)
+            if (d < bestDist) { bestDist = d; best = i }
         }
         return best.coerceIn(0, localEntries.lastIndex)
     }
 
-    fun onDragEnd() {
+    /**
+     * During drag: swap items if the drag has moved enough to cross a neighbour's midpoint.
+     * Adjusts dragOffsetY after each swap so the item visually stays under the finger.
+     */
+    fun maybeSwap() {
         val from = draggingIndex
         if (from < 0) return
         val target = computeTargetIndex(from, dragOffsetY)
-        if (target != from) {
-            val moved = localEntries.removeAt(from)
-            localEntries.add(target, moved)
-        }
+        if (target == from) return
+
+        val direction = if (target > from) 1 else -1
+        val steps = abs(target - from)
+        val moved = localEntries.removeAt(from)
+        localEntries.add(target, moved)
+
+        // Compensate dragOffsetY so the item's visual position stays stable after the swap.
+        val compensate = (1..steps).sumOf { step ->
+            val neighbourIndex = if (direction > 0) from + step - 1 else from - step
+            (itemHeights[neighbourIndex] ?: avgItemHeight()).toDouble()
+        }.toFloat()
+        dragOffsetY -= direction * compensate
+
+        draggingIndex = target
+    }
+
+    fun onDragEnd() {
+        if (draggingIndex < 0) return
         val entryIds = localEntries.map { it.id }
         draggingIndex = -1
         dragOffsetY = 0f
         isSaving = true
         actionScope.launch {
             vm.reorderPlaylistEntries(playlistId, entryIds)
-                .onFailure { onShowSnackbar("Couldn't save order. Pull to refresh.", null, null) }
+                .onFailure { onShowSnackbar("Couldn't save order.", null, null) }
             isSaving = false
         }
     }
@@ -144,7 +171,6 @@ fun PlaylistDetailScreen(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        // Header card
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
@@ -179,7 +205,7 @@ fun PlaylistDetailScreen(
                     elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
                 ) {
                     Text(
-                        text = "Playlist not found.",
+                        "Playlist not found.",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                     )
@@ -192,7 +218,7 @@ fun PlaylistDetailScreen(
                     elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
                 ) {
                     Text(
-                        text = "No items in this playlist yet.",
+                        "No items in this playlist yet.",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                     )
@@ -203,7 +229,6 @@ fun PlaylistDetailScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
                     localEntries.forEachIndexed { index, entry ->
                         val queueItem = allItemsMap[entry.articleId]
@@ -217,24 +242,24 @@ fun PlaylistDetailScreen(
                                 itemTopOffsets[index] = top
                                 itemHeights[index] = height
                             },
-                            onDragStart = { localIndex ->
-                                draggingIndex = localIndex
+                            onDragStart = { idx ->
+                                draggingIndex = idx
                                 dragOffsetY = 0f
                             },
-                            onDrag = { dy -> dragOffsetY += dy },
+                            onDrag = { dy ->
+                                dragOffsetY += dy
+                                maybeSwap()
+                            },
                             onDragEnd = { onDragEnd() },
                             index = index,
-                            // Always open by article ID — archived items still have readable content.
                             onTap = { onOpenPlayer(entry.articleId) },
                         )
-                        if (index < localEntries.lastIndex) {
-                            Spacer(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(1.dp)
-                                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
-                            )
-                        }
+                        Spacer(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                        )
                     }
                 }
             }
@@ -255,7 +280,6 @@ private fun PlaylistDetailRow(
     index: Int,
     onTap: () -> Unit,
 ) {
-    val elevation = if (isDragging) 8.dp else 0.dp
     ElevatedCard(
         onClick = onTap,
         modifier = Modifier
@@ -268,7 +292,9 @@ private fun PlaylistDetailRow(
         colors = CardDefaults.elevatedCardColors(
             containerColor = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else Color.Black,
         ),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = elevation),
+        elevation = CardDefaults.elevatedCardElevation(
+            defaultElevation = if (isDragging) 8.dp else 0.dp,
+        ),
     ) {
         Row(
             modifier = Modifier
@@ -277,7 +303,6 @@ private fun PlaylistDetailRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Drag handle — touch here to start dragging.
             Icon(
                 imageVector = Icons.Default.DragHandle,
                 contentDescription = "Drag to reorder",
@@ -299,7 +324,7 @@ private fun PlaylistDetailRow(
                     ?: queueItem?.host
                     ?: queueItem?.url
                 Text(
-                    text = title ?: "Loading…",
+                    text = title ?: "Loading\u2026",
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (title == null) MaterialTheme.colorScheme.onSurfaceVariant
                             else MaterialTheme.colorScheme.onSurface,
