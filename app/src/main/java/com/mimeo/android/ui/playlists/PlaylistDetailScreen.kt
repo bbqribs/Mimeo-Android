@@ -48,7 +48,6 @@ import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackQueueItem
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 /**
  * Ordered list of playlist entries with drag-to-reorder support.
@@ -64,25 +63,37 @@ fun PlaylistDetailScreen(
 ) {
     val playlists by vm.playlists.collectAsState()
     val queueItems by vm.queueItems.collectAsState()
+    val inboxItems by vm.inboxItems.collectAsState()
+    val archivedItems by vm.archivedItems.collectAsState()
+    val favoriteItems by vm.favoriteItems.collectAsState()
+    val binItems by vm.binItems.collectAsState()
     val loading by vm.queueLoading.collectAsState()
     val actionScope = rememberCoroutineScope()
 
+    // selectPlaylist() already triggers loadQueue() asynchronously; refreshPlaylists() ensures
+    // entries/positions are current. We don't call loadQueueIfNotRecent() here because the
+    // playlist switch may have been very recent and that call would skip on stale items.
     LaunchedEffect(playlistId) {
         vm.refreshPlaylists()
-        vm.loadQueueIfNotRecent()
     }
 
     val playlist = playlists.firstOrNull { it.id == playlistId }
     val serverEntries = remember(playlist) {
         playlist?.entries?.sortedBy { it.position ?: Double.MAX_VALUE } ?: emptyList()
     }
-    val queueItemMap = remember(queueItems) { queueItems.associateBy { it.itemId } }
 
-    // Local reorderable list; reset whenever server state changes (e.g. after a load).
+    // Build a lookup map from all currently-loaded item sources.
+    // This lets us show titles for archived/bin items if those views have been opened.
+    val allItemsMap = remember(queueItems, inboxItems, archivedItems, favoriteItems, binItems) {
+        (queueItems + inboxItems + archivedItems + favoriteItems + binItems)
+            .associateBy { it.itemId }
+    }
+
+    // Local reorderable list; reset whenever server state changes (e.g. after a refresh).
     val localEntries = remember(serverEntries) { serverEntries.toMutableStateList() }
 
-    // Per-item Y positions (top offset within the scrollable Column) for hit-testing during drag.
-    val itemTopOffsets = remember { mutableMapOf<Int, Float>() }  // index -> top px in column
+    // Per-item Y positions within the scrollable Column for drag hit-testing.
+    val itemTopOffsets = remember { mutableMapOf<Int, Float>() }  // index -> top px
     val itemHeights = remember { mutableMapOf<Int, Float>() }      // index -> height px
 
     // Drag state
@@ -92,12 +103,9 @@ fun PlaylistDetailScreen(
 
     fun computeTargetIndex(fromIndex: Int, currentOffsetY: Float): Int {
         if (localEntries.isEmpty()) return fromIndex
-        // Midpoint of the dragged item in column-local coords
         val draggedHeight = itemHeights[fromIndex] ?: 72f
         val fromTop = itemTopOffsets[fromIndex] ?: (fromIndex * draggedHeight)
         val draggedMidY = fromTop + draggedHeight / 2f + currentOffsetY
-
-        // Find the item whose midpoint is closest to dragged midpoint.
         var best = fromIndex
         var bestDist = Float.MAX_VALUE
         localEntries.indices.forEach { i ->
@@ -124,14 +132,11 @@ fun PlaylistDetailScreen(
         val entryIds = localEntries.map { it.id }
         draggingIndex = -1
         dragOffsetY = 0f
-        if (target != from || true) {
-            // Always persist so the server stays in sync.
-            isSaving = true
-            actionScope.launch {
-                vm.reorderPlaylistEntries(playlistId, entryIds)
-                    .onFailure { onShowSnackbar("Couldn't save order. Pull to refresh to retry.", null, null) }
-                isSaving = false
-            }
+        isSaving = true
+        actionScope.launch {
+            vm.reorderPlaylistEntries(playlistId, entryIds)
+                .onFailure { onShowSnackbar("Couldn't save order. Pull to refresh.", null, null) }
+            isSaving = false
         }
     }
 
@@ -160,26 +165,34 @@ fun PlaylistDetailScreen(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                if (isSaving) {
+                if (isSaving || (loading && localEntries.isEmpty())) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 }
             }
         }
 
         when {
-            loading && localEntries.isEmpty() -> {
-                Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                }
-            }
-            localEntries.isEmpty() -> {
+            playlist == null -> {
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
                     elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
                 ) {
                     Text(
-                        text = if (playlist == null) "Playlist not found." else "No items in this playlist yet.",
+                        text = "Playlist not found.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    )
+                }
+            }
+            localEntries.isEmpty() && !loading -> {
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
+                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+                ) {
+                    Text(
+                        text = "No items in this playlist yet.",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                     )
@@ -193,7 +206,7 @@ fun PlaylistDetailScreen(
                     verticalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
                     localEntries.forEachIndexed { index, entry ->
-                        val queueItem = queueItemMap[entry.articleId]
+                        val queueItem = allItemsMap[entry.articleId]
                         val isDragging = draggingIndex == index
                         PlaylistDetailRow(
                             entry = entry,
@@ -211,7 +224,8 @@ fun PlaylistDetailScreen(
                             onDrag = { dy -> dragOffsetY += dy },
                             onDragEnd = { onDragEnd() },
                             index = index,
-                            onTap = { queueItem?.let { onOpenPlayer(it.itemId) } },
+                            // Always open by article ID — archived items still have readable content.
+                            onTap = { onOpenPlayer(entry.articleId) },
                         )
                         if (index < localEntries.lastIndex) {
                             Spacer(
@@ -252,11 +266,7 @@ private fun PlaylistDetailRow(
                 onPositioned(coords.positionInParent().y, coords.size.height.toFloat())
             },
         colors = CardDefaults.elevatedCardColors(
-            containerColor = if (isDragging) {
-                MaterialTheme.colorScheme.surfaceVariant
-            } else {
-                Color.Black
-            },
+            containerColor = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else Color.Black,
         ),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = elevation),
     ) {
@@ -267,7 +277,7 @@ private fun PlaylistDetailRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Drag handle
+            // Drag handle — touch here to start dragging.
             Icon(
                 imageVector = Icons.Default.DragHandle,
                 contentDescription = "Drag to reorder",
@@ -288,16 +298,18 @@ private fun PlaylistDetailRow(
                 val title = queueItem?.title?.ifBlank { null }
                     ?: queueItem?.host
                     ?: queueItem?.url
-                    ?: "Item ${entry.articleId}"
                 Text(
-                    text = title,
+                    text = title ?: "Loading…",
                     style = MaterialTheme.typography.bodyMedium,
+                    color = if (title == null) MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (queueItem?.host != null && queueItem.title != null) {
+                val host = queueItem?.host?.takeIf { queueItem.title != null }
+                if (host != null) {
                     Text(
-                        text = queueItem.host,
+                        text = host,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
