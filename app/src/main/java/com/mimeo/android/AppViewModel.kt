@@ -92,6 +92,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mimeo.android.data.ApiClient
 import com.mimeo.android.data.ApiException
+import com.mimeo.android.data.ItemBatchResponse
 import com.mimeo.android.data.AutoDownloadStatusStore
 import com.mimeo.android.data.AppDatabase
 import com.mimeo.android.data.NoActiveContentStore
@@ -3592,6 +3593,59 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
             runCatching { loadArchivedItems() }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun batchLibraryItems(
+        action: String,
+        itemIds: List<Int>,
+    ): Result<ItemBatchResponse> {
+        val current = settings.value
+        return try {
+            val response = repository.batchItemAction(current.baseUrl, current.apiToken, action, itemIds)
+            val msg = when {
+                response.failureCount == 0 -> "${response.successCount} item(s) $action"
+                response.successCount == 0 -> "Action failed for all ${response.failureCount} item(s)"
+                else -> "${response.successCount} succeeded, ${response.failureCount} failed"
+            }
+            _statusMessage.value = msg
+            // Refresh relevant lists based on action
+            when (action) {
+                "archive" -> {
+                    loadQueueOnce(autoRetryPendingSaves = false)
+                    runCatching { loadArchivedItems() }
+                }
+                "unarchive" -> {
+                    runCatching { loadArchivedItems() }
+                    loadQueueOnce(autoRetryPendingSaves = false)
+                }
+                "bin" -> {
+                    loadQueueOnce(autoRetryPendingSaves = false)
+                    runCatching { loadArchivedItems() }
+                    runCatching { loadBinItems() }
+                }
+                "restore" -> {
+                    runCatching { loadBinItems() }
+                    loadQueueOnce(autoRetryPendingSaves = false)
+                }
+                "favorite" -> {
+                    loadQueueOnce(autoRetryPendingSaves = false)
+                    runCatching { loadFavoriteItems() }
+                }
+                "unfavorite" -> {
+                    runCatching { loadFavoriteItems() }
+                    loadQueueOnce(autoRetryPendingSaves = false)
+                }
+            }
+            Result.success(response)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            _statusMessage.value = "Batch action failed"
             Result.failure(error)
         }
     }
