@@ -3647,7 +3647,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun undoLastBatch(): Result<Unit> {
-        val reverse = batchReverseAction(lastBatchAction) ?: return Result.failure(Exception("Nothing to undo"))
+        val originalAction = lastBatchAction
+        val reverse = batchReverseAction(originalAction) ?: return Result.failure(Exception("Nothing to undo"))
         val ids = lastBatchItemIds
         if (ids.isEmpty()) return Result.failure(Exception("Nothing to undo"))
         return try {
@@ -3655,6 +3656,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             repository.batchItemAction(current.baseUrl, current.apiToken, reverse, ids)
             lastBatchAction = ""
             lastBatchItemIds = emptyList()
+            // Refresh the source view so items reappear without a manual pull-to-refresh.
+            when (originalAction) {
+                "archive" -> runCatching { loadInboxItems() }
+                "unarchive" -> runCatching { loadArchivedItems() }
+                "bin" -> {
+                    runCatching { loadInboxItems() }
+                    runCatching { loadArchivedItems() }
+                    runCatching { loadFavoriteItems() }
+                }
+                "restore" -> runCatching { loadBinItems() }
+                "favorite" -> runCatching { loadInboxItems() }
+                "unfavorite" -> {
+                    runCatching { loadFavoriteItems() }
+                    runCatching { loadInboxItems() }
+                }
+            }
             Result.success(Unit)
         } catch (error: CancellationException) {
             throw error
