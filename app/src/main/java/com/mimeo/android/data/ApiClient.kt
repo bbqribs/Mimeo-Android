@@ -121,6 +121,29 @@ data class ItemBatchResponse(
 )
 
 @Serializable
+private data class PlaylistBatchAddRequest(
+    @kotlinx.serialization.SerialName("item_ids") val itemIds: List<Int>,
+    val insert: String = "end",
+)
+
+@Serializable
+data class PlaylistBatchAddResult(
+    @kotlinx.serialization.SerialName("item_id") val itemId: Int,
+    val ok: Boolean,
+    @kotlinx.serialization.SerialName("status_code") val statusCode: Int,
+    val detail: String? = null,
+)
+
+@Serializable
+data class PlaylistBatchAddResponse(
+    @kotlinx.serialization.SerialName("playlist_id") val playlistId: Int,
+    val insert: String,
+    @kotlinx.serialization.SerialName("success_count") val successCount: Int,
+    @kotlinx.serialization.SerialName("failure_count") val failureCount: Int,
+    val results: List<PlaylistBatchAddResult>,
+)
+
+@Serializable
 private data class ItemDetailLitePayload(
     @kotlinx.serialization.SerialName("extracted_content")
     val extractedContent: ExtractedContentLitePayload? = null,
@@ -447,6 +470,22 @@ class ApiClient(
             .delete()
             .build()
         executeNoBody(request)
+    }
+
+    suspend fun batchAddItemsToPlaylist(
+        baseUrl: String,
+        token: String,
+        playlistId: Int,
+        itemIds: List<Int>,
+    ): PlaylistBatchAddResponse = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(PlaylistBatchAddRequest(itemIds = itemIds))
+            .toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/playlists/$playlistId/items/batch"))
+            .header("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<PlaylistBatchAddResponse>(payload) }
     }
 
     suspend fun getDebugPython(baseUrl: String, token: String): DebugPythonResponse = withContext(Dispatchers.IO) {

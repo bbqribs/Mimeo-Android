@@ -54,7 +54,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.filled.PlaylistAdd
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.model.PlaylistSummary
+import com.mimeo.android.ui.playlists.BatchPlaylistPickerDialog
 
 data class LibraryBatchAction(
     val label: String,
@@ -76,6 +79,8 @@ fun LibraryItemsScreen(
     searchQuery: String,
     isInbox: Boolean = false,
     batchActions: List<LibraryBatchAction> = emptyList(),
+    playlists: List<PlaylistSummary> = emptyList(),
+    onBatchAddToPlaylist: ((playlistId: Int, playlistName: String, itemIds: Set<Int>) -> Unit)? = null,
     onSortChange: (LibrarySortOption) -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSearchSubmit: () -> Unit,
@@ -84,6 +89,10 @@ fun LibraryItemsScreen(
     onBatchAction: (action: String, itemIds: Set<Int>) -> Unit = { _, _ -> },
 ) {
     var pendingExpanded by rememberSaveable { mutableStateOf(false) }
+
+    // Batch add-to-playlist dialog state. Captures selected IDs before selection is cleared.
+    var batchPlaylistPickerIds by remember { mutableStateOf(emptySet<Int>()) }
+    var showBatchPlaylistPicker by remember { mutableStateOf(false) }
 
     // Selection state — local, ephemeral. Clears automatically when the composable
     // leaves the back stack (drawer navigation away, etc.). No ViewModel needed for
@@ -183,6 +192,21 @@ fun LibraryItemsScreen(
                         Icon(
                             imageVector = resolvedIcon,
                             contentDescription = resolvedLabel,
+                        )
+                    }
+                }
+                if (onBatchAddToPlaylist != null) {
+                    IconButton(
+                        onClick = {
+                            batchPlaylistPickerIds = selectedIds
+                            showBatchPlaylistPicker = true
+                            clearSelection()
+                        },
+                        enabled = selectedIds.isNotEmpty(),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlaylistAdd,
+                            contentDescription = "Add to Playlist",
                         )
                     }
                 }
@@ -306,6 +330,22 @@ fun LibraryItemsScreen(
                 }
             }
         }
+    }
+
+    if (showBatchPlaylistPicker && onBatchAddToPlaylist != null) {
+        BatchPlaylistPickerDialog(
+            itemCount = batchPlaylistPickerIds.size,
+            playlists = playlists,
+            onDismiss = {
+                showBatchPlaylistPicker = false
+                batchPlaylistPickerIds = emptySet()
+            },
+            onSelectPlaylist = { playlist ->
+                onBatchAddToPlaylist(playlist.id, playlist.name, batchPlaylistPickerIds)
+                showBatchPlaylistPicker = false
+                batchPlaylistPickerIds = emptySet()
+            },
+        )
     }
 }
 

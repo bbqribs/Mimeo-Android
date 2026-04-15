@@ -3646,6 +3646,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    suspend fun batchAddToPlaylist(
+        playlistId: Int,
+        playlistName: String,
+        itemIds: List<Int>,
+    ): Result<Unit> {
+        val current = settings.value
+        return try {
+            val response = repository.batchAddItemsToPlaylist(current.baseUrl, current.apiToken, playlistId, itemIds)
+            val msg = when {
+                response.failureCount == 0 -> "Added ${response.successCount} to \u201c$playlistName\u201d"
+                response.successCount == 0 -> "Failed to add all ${response.failureCount} item(s) to \u201c$playlistName\u201d"
+                else -> "Added ${response.successCount} to \u201c$playlistName\u201d, ${response.failureCount} failed"
+            }
+            showSnackbar(message = msg)
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (handleAuthFailureIfNeeded(e)) return Result.failure(e)
+            showSnackbar("Failed to add to playlist: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
     suspend fun undoLastBatch(): Result<Unit> {
         val originalAction = lastBatchAction
         val reverse = batchReverseAction(originalAction) ?: return Result.failure(Exception("Nothing to undo"))
