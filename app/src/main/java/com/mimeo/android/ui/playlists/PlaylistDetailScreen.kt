@@ -3,7 +3,6 @@ package com.mimeo.android.ui.playlists
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -57,8 +56,10 @@ import kotlin.math.abs
  * vertically; items shift in real time as the dragged item crosses their midpoints.
  * On drop the new order is persisted via PUT /playlists/{id}/entries/reorder.
  *
- * During drag, `localEntries` is NOT mutated — only visual offsets change.
+ * During drag, [localEntries] is NOT mutated — only visual offsets change.
  * The actual list reorder happens only on drop, preventing the "text-swap" artifact.
+ * [currentTargetIndex] is maintained as Compose state updated on every onDrag event,
+ * so onDragEnd reads a pre-computed value rather than recomputing from scratch.
  */
 @Composable
 fun PlaylistDetailScreen(
@@ -93,7 +94,7 @@ fun PlaylistDetailScreen(
             .associateBy { it.itemId }
     }
 
-    // Local mutable list reordered only on drop (not during drag).
+    // Local mutable list — only mutated on drop, not during drag.
     val localEntries = remember(serverEntries) { serverEntries.toMutableStateList() }
 
     // Per-item Y positions in the Column for drag hit-testing.
@@ -103,6 +104,8 @@ fun PlaylistDetailScreen(
     // Drag state
     var draggingIndex by remember { mutableIntStateOf(-1) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    // Cached target index — updated on every onDrag so onDragEnd can read it reliably.
+    var currentTargetIndex by remember { mutableIntStateOf(-1) }
     var isSaving by remember { mutableStateOf(false) }
 
     /** Average measured item height; falls back to a reasonable default. */
@@ -111,7 +114,6 @@ fun PlaylistDetailScreen(
 
     /**
      * Compute which index the dragged item's visual midpoint is nearest to.
-     * Uses measured top-offsets when available; falls back to index × avgHeight.
      */
     fun computeTargetIndex(from: Int, offsetY: Float): Int {
         if (localEntries.size <= 1) return from
@@ -131,9 +133,9 @@ fun PlaylistDetailScreen(
     }
 
     /**
-     * Compute the visual Y offset for a non-dragged item at [index].
-     * Items between [from] and [target] are shifted by the dragged item's height
-     * to visually make room (or fill the gap) without mutating localEntries.
+     * Visual Y offset for a non-dragged item at [index], given the current drag
+     * from [from] toward [target].  Items between from and target are shifted to
+     * visually make room without mutating localEntries.
      */
     fun visualOffsetForItem(index: Int, from: Int, target: Int): Float {
         if (from < 0 || from == target || index == from) return 0f
@@ -147,16 +149,17 @@ fun PlaylistDetailScreen(
 
     fun onDragEnd() {
         val from = draggingIndex
+        val target = currentTargetIndex   // read the pre-computed, cached value
+        draggingIndex = -1
+        dragOffsetY = 0f
+        currentTargetIndex = -1
         if (from < 0) return
-        val target = computeTargetIndex(from, dragOffsetY)
         // Commit the reorder into localEntries now (only on drop).
-        if (target != from) {
+        if (target >= 0 && target != from) {
             val moved = localEntries.removeAt(from)
             localEntries.add(target, moved)
         }
         val entryIds = localEntries.map { it.id }
-        draggingIndex = -1
-        dragOffsetY = 0f
         isSaving = true
         actionScope.launch {
             vm.reorderPlaylistEntries(playlistId, entryIds)
@@ -164,10 +167,6 @@ fun PlaylistDetailScreen(
             isSaving = false
         }
     }
-
-    // Derived during composition so every recompose reflects the current drag position.
-    val currentTargetIndex = if (draggingIndex >= 0)
-        computeTargetIndex(draggingIndex, dragOffsetY) else -1
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -237,7 +236,10 @@ fun PlaylistDetailScreen(
                         val isDragging = draggingIndex == index
                         val itemVisualOffsetY = when {
                             isDragging -> dragOffsetY
-                            else -> visualOffsetForItem(index, draggingIndex, currentTargetIndex)
+                            draggingIndex >= 0 -> visualOffsetForItem(
+                                index, draggingIndex, currentTargetIndex
+                            )
+                            else -> 0f
                         }
                         PlaylistDetailRow(
                             entry = entry,
@@ -251,9 +253,14 @@ fun PlaylistDetailScreen(
                             onDragStart = { idx ->
                                 draggingIndex = idx
                                 dragOffsetY = 0f
+                                currentTargetIndex = idx
                             },
                             onDrag = { dy ->
                                 dragOffsetY += dy
+                                val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
+                                if (newTarget != currentTargetIndex) {
+                                    currentTargetIndex = newTarget
+                                }
                             },
                             onDragEnd = { onDragEnd() },
                             index = index,
