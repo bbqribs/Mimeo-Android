@@ -389,6 +389,13 @@ class PlaybackRepository(
         itemIds: List<Int>,
     ) = apiClient.batchItemAction(baseUrl, token, action, itemIds)
 
+    suspend fun batchAddItemsToPlaylist(
+        baseUrl: String,
+        token: String,
+        playlistId: Int,
+        itemIds: List<Int>,
+    ) = apiClient.batchAddItemsToPlaylist(baseUrl, token, playlistId, itemIds)
+
     suspend fun flushPendingProgress(baseUrl: String, token: String): FlushProgressResult {
         val dao = database.pendingProgressDao()
         val pending = dao.listPending()

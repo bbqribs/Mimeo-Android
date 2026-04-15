@@ -1040,6 +1040,12 @@ private fun MimeoApp(vm: AppViewModel) {
                                     LibraryBatchAction("Move to Bin", Icons.Default.Delete, "bin"),
                                     LibraryBatchAction("Favorite", Icons.Default.FavoriteBorder, "favorite_toggle"),
                                 ),
+                                playlists = playlists,
+                                onBatchAddToPlaylist = { playlistId, playlistName, itemIds ->
+                                    coroutineScope.launch {
+                                        vm.batchAddToPlaylist(playlistId, playlistName, itemIds.toList())
+                                    }
+                                },
                                 onSortChange = { vm.setInboxSort(it) },
                                 onSearchQueryChange = { vm.setInboxSearchQuery(it) },
                                 onSearchSubmit = { vm.submitInboxSearch() },
@@ -1081,6 +1087,12 @@ private fun MimeoApp(vm: AppViewModel) {
                                     LibraryBatchAction("Move to Bin", Icons.Default.Delete, "bin"),
                                     LibraryBatchAction("Unfavorite", Icons.Default.FavoriteBorder, "favorite_toggle"),
                                 ),
+                                playlists = playlists,
+                                onBatchAddToPlaylist = { playlistId, playlistName, itemIds ->
+                                    coroutineScope.launch {
+                                        vm.batchAddToPlaylist(playlistId, playlistName, itemIds.toList())
+                                    }
+                                },
                                 onSortChange = { vm.setFavoritesSort(it) },
                                 onSearchQueryChange = { vm.setFavoritesSearchQuery(it) },
                                 onSearchSubmit = { vm.submitFavoritesSearch() },
@@ -1121,6 +1133,12 @@ private fun MimeoApp(vm: AppViewModel) {
                                     LibraryBatchAction("Unarchive", Icons.Default.Unarchive, "unarchive"),
                                     LibraryBatchAction("Move to Bin", Icons.Default.Delete, "bin"),
                                 ),
+                                playlists = playlists,
+                                onBatchAddToPlaylist = { playlistId, playlistName, itemIds ->
+                                    coroutineScope.launch {
+                                        vm.batchAddToPlaylist(playlistId, playlistName, itemIds.toList())
+                                    }
+                                },
                                 onSortChange = { vm.setArchiveSort(it) },
                                 onSearchQueryChange = { vm.setArchiveSearchQuery(it) },
                                 onSearchSubmit = { vm.submitArchiveSearch() },
