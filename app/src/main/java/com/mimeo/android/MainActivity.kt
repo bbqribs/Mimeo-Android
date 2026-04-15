@@ -559,24 +559,6 @@ private fun MimeoApp(vm: AppViewModel) {
             launchSingleTop = true
         }
     }
-    // Up Next taps open Locus and immediately start/resume TTS playback (spec §7).
-    // Pre-calling playbackOpenItem with autoPlayAfterLoad=true ensures the engine
-    // is primed before PlayerScreen renders, so shouldSkipInitialReopen fires and
-    // the LaunchedEffect respects the autoPlay intent rather than overwriting it.
-    val openUpNextItemInLocus: (Int) -> Unit = { itemId ->
-        val intent = if (vm.isItemCompletedForPlaybackStart(itemId)) {
-            PlaybackOpenIntent.Replay
-        } else {
-            PlaybackOpenIntent.ManualOpen
-        }
-        vm.setLastLocusItem(itemId)
-        vm.playbackOpenItem(itemId, intent, autoPlayAfterLoad = true)
-        pendingLocusOpen = true
-        pendingLocusItemId = itemId
-        nav.navigate("$ROUTE_LOCUS/$itemId") {
-            launchSingleTop = true
-        }
-    }
     val routeItemId = navBackStack?.arguments?.let { args ->
         if (args.containsKey("itemId")) args.getInt("itemId").takeIf { it > 0 } else null
     }
@@ -1188,7 +1170,7 @@ private fun MimeoApp(vm: AppViewModel) {
                                 },
                                 focusItemId = focusItemId,
                                 upNextTabTapSignal = upNextTabTapSignal,
-                                onOpenPlayer = openUpNextItemInLocus,
+                                onOpenPlayer = openItemInLocus,
                                 onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                             )
                         }
