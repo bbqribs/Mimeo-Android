@@ -1217,25 +1217,36 @@ All pass WCAG AA (4.5:1 for normal text, 3:1 for large text).
 
 **Goal:** Finalize Up Next as a distinct, device-local, reorderable playback queue with seed-source semantics.
 
-**Scope:**
-1. Up Next drawer destination gets the refined queue UI (reorderable, drag handles)
-2. Up Next stored in Room with ordered entries + `seed_source` + `seeded_at` metadata
-3. Initial seed on first use from Inbox newest-first
-4. "Re-seed from Inbox" and "Re-seed from [playlist]" actions in Up Next overflow menu
-5. Re-seed confirmation dialog when Up Next has user edits
-6. "Play Next" / "Play Last" actions (from Phase 5) fully integrated as insertion points
-7. Up Next inherits selection + batch actions from Phase 4
-8. Move-up / move-down accessibility actions for reorder (non-drag alternative)
-9. Visual indicator: "Playing from: [seed source]" label at the top of Up Next (informational only)
+#### Phase 6A — shipped (device-local session queue substrate)
 
-**Gate:** Up Next functions as a reorderable playback queue. Edits persist across app restart. Seed/re-seed flows work. Edits to Up Next do not affect source playlists (verified by inspection and test).
+- [x] Remove-from-session per row in the session panel (non-current items only).
+- [x] Clear-session button in the session panel header.
+- [x] Duplicate-move semantics for Play Next / Play Last: existing session item is moved to the new position rather than duplicated; currently-playing item is a no-op.
+- [x] "From: [playlist name]" seed-source label in the session panel header when `sourcePlaylistId` resolves to a known playlist.
+- [x] Snackbar feedback for Play Next / Play Last mutations (distinguishes "queued" vs "moved").
+- [x] Session-preserve guard: tapping a queue row that is already in the active session navigates to the item without replacing the session or moving the current-item pointer. Pointer advances only when playback starts.
+- [x] Session persists across navigation, app restart, and library-view browsing. Opening an item from a library view (Inbox, Archive, etc.) does not modify the session.
+
+#### Phase 6 remaining scope
+
+1. Up Next drawer destination gets refined queue UI with drag-to-reorder and drag handles.
+2. Move-up / move-down accessibility actions for reorder (non-drag alternative).
+3. "Re-seed from Inbox" and "Re-seed from [playlist]" actions in Up Next overflow menu.
+4. Re-seed confirmation dialog when Up Next has user edits.
+5. Up Next inherits selection + batch actions from Phase 4.
+
+**Gate:** Up Next functions as a reorderable playback queue. Edits persist across app restart. Seed/re-seed flows work. Edits to Up Next do not affect source playlists.
+
+**Cross-device sync direction:** The shipped implementation is device-local (Room). The long-term direction is cross-device continuity — when playback resumes on a second device, Up Next should resume in the same order. This requires a dedicated backend API contract for session queue persistence and is a CONTRACT CHANGE that must be coordinated with the Mimeo backend repo before any Android sync work begins.
+
+**Deferred player-chrome ticket:** The persistent top title bar tied to currently-playing content should be replaced by a smaller scrolling title attached to the player controls, with the article-level title treatment attached to the item open in reader view. This is a standalone UI ticket, not part of Phase 6.
 
 ### Later phases (v2+)
 
+- **Cross-device Up Next sync** (requires backend contract; see Phase 6 note above)
 - **Grouped drag reorder** (select multiple items, drag as group)
 - **Playlist folders** (not in current plan; would need fresh product decision)
 - **Playlist-level "include archived items"** option
-- **Cross-device Up Next sync** (system playlist on server)
 - **Global search** across all views (single search bar that searches everywhere)
 - **Web playlist management** (CRUD + reorder in web UI)
 - **Web nav modernization** (sidebar to match Android drawer)
