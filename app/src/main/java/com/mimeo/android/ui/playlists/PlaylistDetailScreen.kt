@@ -84,6 +84,8 @@ fun PlaylistDetailScreen(
     val favoriteItems by vm.favoriteItems.collectAsState()
     val binItems by vm.binItems.collectAsState()
     val loading by vm.queueLoading.collectAsState()
+    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
+    val playbackEngineState by vm.playbackEngineState.collectAsState()
     val actionScope = rememberCoroutineScope()
 
     LaunchedEffect(playlistId) {
@@ -330,7 +332,16 @@ fun PlaylistDetailScreen(
                                 },
                                 onDragEnd = { onDragEnd() },
                                 index = index,
-                                onTap = { onOpenPlayer(entry.articleId) },
+                                onTap = {
+                                    val sessionItemId = nowPlayingSession?.currentItem?.itemId ?: -1
+                                    val playbackActive = playbackEngineState.isSpeaking || playbackEngineState.isAutoPlaying
+                                    val shouldStartSession = entry.articleId > 0 &&
+                                        (sessionItemId <= 0 || entry.articleId == sessionItemId || !playbackActive)
+                                    if (shouldStartSession) {
+                                        vm.startNowPlayingSession(startItemId = entry.articleId)
+                                    }
+                                    onOpenPlayer(entry.articleId)
+                                },
                             )
                             if (!isDragging) {
                                 Spacer(
