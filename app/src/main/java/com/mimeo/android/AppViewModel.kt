@@ -4007,7 +4007,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val session = repository.insertItemAfterCurrent(item) ?: return@launch
             applySessionSnapshot(session)
-            _statusMessage.value = if (alreadyInSession) "$label moved to Play Next." else "$label queued as Play Next."
+            showSnackbar(if (alreadyInSession) "$label moved to Play Next." else "$label queued as Play Next.")
         }
     }
 
@@ -4019,7 +4019,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val session = repository.appendItemToSession(item) ?: return@launch
             applySessionSnapshot(session)
-            _statusMessage.value = if (alreadyInSession) "$label moved to end of session." else "$label queued at end of session."
+            showSnackbar(if (alreadyInSession) "$label moved to end of session." else "$label queued at end of session.")
         }
     }
 
