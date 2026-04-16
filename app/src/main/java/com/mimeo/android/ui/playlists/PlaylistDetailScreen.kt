@@ -342,6 +342,8 @@ fun PlaylistDetailScreen(
                                     }
                                     onOpenPlayer(entry.articleId)
                                 },
+                                onPlayNext = { vm.playNext(entry.articleId) },
+                                onPlayLast = { vm.playLast(entry.articleId) },
                             )
                             if (!isDragging) {
                                 Spacer(
@@ -428,7 +430,11 @@ private fun PlaylistDetailRow(
     onDragEnd: () -> Unit,
     index: Int,
     onTap: () -> Unit,
+    onPlayNext: () -> Unit,
+    onPlayLast: () -> Unit,
 ) {
+    var rowMenuExpanded by remember { mutableStateOf(false) }
+
     ElevatedCard(
         onClick = onTap,
         modifier = Modifier.fillMaxWidth(),
@@ -482,6 +488,38 @@ private fun PlaylistDetailRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Box {
+                IconButton(
+                    onClick = { rowMenuExpanded = true },
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "More options",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                DropdownMenu(
+                    expanded = rowMenuExpanded,
+                    onDismissRequest = { rowMenuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Play Next") },
+                        onClick = {
+                            rowMenuExpanded = false
+                            onPlayNext()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Play Last") },
+                        onClick = {
+                            rowMenuExpanded = false
+                            onPlayLast()
+                        },
                     )
                 }
             }

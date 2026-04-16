@@ -3999,6 +3999,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun playNext(itemId: Int) {
+        val allItems = queueItems.value + inboxItems.value + archivedItems.value + favoriteItems.value + binItems.value
+        val item = allItems.firstOrNull { it.itemId == itemId } ?: return
+        viewModelScope.launch {
+            val session = repository.insertItemAfterCurrent(item) ?: return@launch
+            applySessionSnapshot(session)
+            _statusMessage.value = "\"${item.title?.take(40) ?: "Item"}\" added as Play Next."
+        }
+    }
+
+    fun playLast(itemId: Int) {
+        val allItems = queueItems.value + inboxItems.value + archivedItems.value + favoriteItems.value + binItems.value
+        val item = allItems.firstOrNull { it.itemId == itemId } ?: return
+        viewModelScope.launch {
+            val session = repository.appendItemToSession(item) ?: return@launch
+            applySessionSnapshot(session)
+            _statusMessage.value = "\"${item.title?.take(40) ?: "Item"}\" added as Play Last."
+        }
+    }
+
     fun restartNowPlayingSession() {
         viewModelScope.launch {
             val restarted = repository.restartSession()

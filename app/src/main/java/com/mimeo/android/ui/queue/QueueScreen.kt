@@ -71,7 +71,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import com.mimeo.android.repository.NowPlayingSession
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -1160,6 +1166,12 @@ fun QueueScreen(
                 )
             }
         }
+        nowPlayingSession?.let { session ->
+            NowPlayingSessionPanel(
+                session = session,
+                onOpenItem = { itemId -> onOpenPlayer(itemId) },
+            )
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -1384,6 +1396,12 @@ fun QueueScreen(
                                                 onShowSnackbar("Couldn't purge item", "Diagnostics", "open_diagnostics")
                                             }
                                     }
+                                },
+                                onPlayNext = {
+                                    vm.playNext(item.itemId)
+                                },
+                                onPlayLast = {
+                                    vm.playLast(item.itemId)
                                 },
                                 onShareUrl = {
                                     shareItemUrl(context, item.url, item.title)
@@ -2423,6 +2441,8 @@ private fun QueueItemCard(
     onUnarchive: () -> Unit,
     onPurgeFromBin: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onPlayNext: () -> Unit,
+    onPlayLast: () -> Unit,
     onShareUrl: () -> Unit,
     onOpenInBrowser: () -> Unit,
     isMenuExpanded: Boolean,
@@ -2595,6 +2615,20 @@ private fun QueueItemCard(
                                 },
                             )
                         } else {
+                            DropdownMenuItem(
+                                text = { Text("Play Next") },
+                                onClick = {
+                                    onDismissMenu()
+                                    onPlayNext()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Play Last") },
+                                onClick = {
+                                    onDismissMenu()
+                                    onPlayLast()
+                                },
+                            )
                             if (!cached) {
                                 DropdownMenuItem(
                                     text = {
@@ -2745,6 +2779,85 @@ private fun ActionHintTooltip(
         state = rememberTooltipState(),
     ) {
         content()
+    }
+}
+
+@Composable
+private fun NowPlayingSessionPanel(
+    session: NowPlayingSession,
+    onOpenItem: (Int) -> Unit,
+) {
+    var expanded by rememberSaveable { mutableStateOf(true) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = "Session queue · ${session.items.size}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = if (expanded) "Collapse session queue" else "Expand session queue",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        if (expanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 192.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                session.items.forEachIndexed { index, item ->
+                    val isCurrent = index == session.currentIndex
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenItem(item.itemId) }
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(
+                                    if (isCurrent) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.outlineVariant,
+                                    RoundedCornerShape(50),
+                                ),
+                        )
+                        Text(
+                            text = item.title?.ifBlank { null } ?: item.host ?: item.url,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isCurrent) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (index < session.items.lastIndex) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        )
+                    }
+                }
+            }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
     }
 }
 

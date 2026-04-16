@@ -702,6 +702,77 @@ class PlaybackRepository(
         return updatedRow.toSession(reconciled)
     }
 
+    suspend fun insertItemAfterCurrent(item: PlaybackQueueItem): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson).toMutableList()
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        val insertIndex = row.currentIndex + 1
+        val newItem = StoredNowPlayingItem(
+            itemId = item.itemId,
+            title = item.title,
+            url = item.url,
+            host = item.host,
+            sourceType = item.sourceType,
+            sourceLabel = item.sourceLabel,
+            sourceUrl = item.sourceUrl,
+            captureKind = item.captureKind,
+            sourceAppPackage = item.sourceAppPackage,
+            status = item.status,
+            activeContentVersionId = item.activeContentVersionId,
+            lastReadPercent = item.lastReadPercent,
+            chunkIndex = 0,
+            offsetInChunkChars = 0,
+            readerScrollOffset = 0,
+        )
+        stored.add(insertIndex.coerceIn(0, stored.size), newItem)
+        val updatedAt = System.currentTimeMillis()
+        val updatedRow = row.copy(
+            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(stored)
+    }
+
+    suspend fun appendItemToSession(item: PlaybackQueueItem): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson).toMutableList()
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        val newItem = StoredNowPlayingItem(
+            itemId = item.itemId,
+            title = item.title,
+            url = item.url,
+            host = item.host,
+            sourceType = item.sourceType,
+            sourceLabel = item.sourceLabel,
+            sourceUrl = item.sourceUrl,
+            captureKind = item.captureKind,
+            sourceAppPackage = item.sourceAppPackage,
+            status = item.status,
+            activeContentVersionId = item.activeContentVersionId,
+            lastReadPercent = item.lastReadPercent,
+            chunkIndex = 0,
+            offsetInChunkChars = 0,
+            readerScrollOffset = 0,
+        )
+        stored.add(newItem)
+        val updatedAt = System.currentTimeMillis()
+        val updatedRow = row.copy(
+            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(stored)
+    }
+
     suspend fun clearSession() {
         database.nowPlayingDao().clear()
     }

@@ -75,6 +75,7 @@
 - [x] Reader scrollbar shipped: non-draggable visual scroll indicator on reader right edge via `drawWithContent`; thumb height and position track scroll fraction.
 - [x] Reader selection edge-scroll shipped: after releasing a selection handle near top/bottom edge (screen-fraction threshold), reader auto-scrolls ~870 px over 1 s; driven by `edgeScrollSpeed` polled at ~60 fps in PlayerScreen.
 - [x] Redesign v2 Phase 2B shipped (bounded data wiring): Inbox/Favorites/Archive/Bin drawer routes now load real library data from `GET /items?view=inbox|favorites|archived|trash` with shared route list rendering, while preserving Up Next/Locus/playback semantics.
+- [x] Phase 5C shipped: Play Next / Play Last from QueueScreen item overflow, PlaylistDetailScreen per-row overflow (new), and Locus player overflow; basic collapsible session-queue panel in QueueScreen shows current session order with current-item indicator. Cross-device sync deferred to Phase 6.
 
 ## Redesign v2 execution track
 - Source of truth: `docs/REDESIGN_V2_PLAN.md` (product + architecture plan). Drift guard: `docs/REDESIGN_V2_DECISION_SNAPSHOT.md`.
@@ -83,9 +84,10 @@
 - Phase 2 substrate: drawer shell, library routes (`Inbox/Favorites/Archive/Bin`), Up Next drawer destination, and playlist visibility path (playlist list + existing detail route).
 - Phase 3: persistent mini-player plus Locus restructure (Locus no longer a drawer destination; expansion from mini-player and item entry points).
 - Phase 4: multi-select and batch actions across list surfaces, including partial-failure and narrow undo behavior.
-- Phase 5: playlist management and reorder (rename/delete/reorder and related offline sync for reorder actions).
-- Phase 6: Up Next local queue finalization (device-local ordered queue, seed-source model, explicit re-seed only).
-- Non-goals for this track: no playlist folders, no cross-device Up Next sync in v1, no auto re-seed on pull-to-refresh.
+- Phase 5: playlist management and reorder (rename/delete/reorder, Play Next/Play Last insertion, and related offline sync for reorder actions).
+- Phase 6: Up Next session queue panel + management (collapsible session-order view in QueueScreen, reorder/remove within session, eventual cross-device sync via backend API — see Phase 6 notes below).
+- Non-goals for this track: no playlist folders, no auto re-seed on pull-to-refresh.
+- Phase 6 sync note: cross-device Up Next sync is a planned later-phase goal (requires a backend API contract for session queue persistence). The initial implementation is device-local (Room). Sync layer will be added when the backend contract is defined — this is a CONTRACT CHANGE that requires coordination with the Mimeo backend repo.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
