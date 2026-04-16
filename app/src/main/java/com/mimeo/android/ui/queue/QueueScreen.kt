@@ -1280,10 +1280,7 @@ fun QueueScreen(
                                     )
                                     vm.warmItemTextForPlayer(item.itemId)
                                     val itemAlreadyInSession = nowPlayingSession?.items?.any { it.itemId == item.itemId } == true
-                                    if (itemAlreadyInSession) {
-                                        // Item is already in the session — jump to it without replacing the session.
-                                        actionScope.launch { vm.setNowPlayingCurrentItem(item.itemId) }
-                                    } else if (
+                                    if (!itemAlreadyInSession &&
                                         shouldStartNewSessionOnQueueOpen(
                                             tappedItemId = item.itemId,
                                             sessionCurrentItemId = nowPlayingSession?.currentItem?.itemId ?: -1,
