@@ -72,6 +72,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.HorizontalDivider
@@ -103,6 +104,7 @@ import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.extractFirstHttpUrl
 import com.mimeo.android.share.isRetryablePendingSaveResult
@@ -1169,7 +1171,10 @@ fun QueueScreen(
         nowPlayingSession?.let { session ->
             NowPlayingSessionPanel(
                 session = session,
+                playlists = playlists,
                 onOpenItem = { itemId -> onOpenPlayer(itemId) },
+                onRemoveItem = { itemId -> vm.removeItemFromSession(itemId) },
+                onClearSession = { vm.clearNowPlayingSession() },
             )
         }
         Column(
@@ -2785,30 +2790,58 @@ private fun ActionHintTooltip(
 @Composable
 private fun NowPlayingSessionPanel(
     session: NowPlayingSession,
+    playlists: List<PlaylistSummary>,
     onOpenItem: (Int) -> Unit,
+    onRemoveItem: (Int) -> Unit,
+    onClearSession: () -> Unit,
 ) {
     var expanded by rememberSaveable { mutableStateOf(true) }
+
+    val seedLabel: String? = session.sourcePlaylistId?.let { pid ->
+        playlists.firstOrNull { it.id == pid }?.name
+    }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { expanded = !expanded }
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(
-                text = "Session queue · ${session.items.size}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f),
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Session queue · ${session.items.size}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                if (seedLabel != null) {
+                    Text(
+                        text = "From: $seedLabel",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            IconButton(
+                onClick = onClearSession,
+                modifier = Modifier.size(32.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Clear session queue",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
             Icon(
                 imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                 contentDescription = if (expanded) "Collapse session queue" else "Expand session queue",
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(16.dp).padding(end = 4.dp),
             )
         }
         if (expanded) {
@@ -2824,9 +2857,9 @@ private fun NowPlayingSessionPanel(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onOpenItem(item.itemId) }
-                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                            .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Box(
                             modifier = Modifier
@@ -2845,7 +2878,21 @@ private fun NowPlayingSessionPanel(
                                     else MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
                         )
+                        if (!isCurrent) {
+                            IconButton(
+                                onClick = { onRemoveItem(item.itemId) },
+                                modifier = Modifier.size(28.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Remove from session",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(14.dp),
+                                )
+                            }
+                        }
                     }
                     if (index < session.items.lastIndex) {
                         HorizontalDivider(
