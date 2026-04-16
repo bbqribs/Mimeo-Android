@@ -1689,7 +1689,7 @@ fun PlayerScreen(
         PlayerControlBar(
             progressPercent = currentPercent,
             minimal = controlsMode == PlayerControlsMode.MINIMAL,
-            nowPlayingTitle = nowPlayingTitle,
+            nowPlayingTitle = if (compactControlsOnly || previewModeActive) nowPlayingTitle else "",
             continuousMarquee = settings.continuousNowPlayingMarquee,
             canSeek = chunks.isNotEmpty(),
             canMoveBackward = chunks.isNotEmpty(),
@@ -1868,7 +1868,7 @@ fun PlayerScreen(
                             .fillMaxWidth()
                             .weight(1f, fill = true),
                     ) {
-                        val showLocusTopBar = (!actionBarHiddenByMode || locusSearchActive) && transitionSettled
+                        val showLocusTopBar = transitionSettled
                         val showReaderDockOverlay = !playerDockHiddenByMode && transitionSettled
                         LaunchedEffect(showLocusTopBar) {
                             if (!showLocusTopBar) {
@@ -1947,10 +1947,12 @@ fun PlayerScreen(
                             ) {
                                 ExpandedPlayerTopBar(
                                     title = locusActionBarTitle,
+                                    titleDomain = capturePresentation.sourceLabel,
+                                    titleSourceUrl = capturePresentation.sourceUrl,
                                     continuousMarquee = settings.continuousNowPlayingMarquee,
                                     playbackSpeed = settings.playbackSpeed,
                                     overflowExpanded = overflowExpanded,
-                                    showTopBar = !(readerChromeHidden && locusSearchActive),
+                                    showTopBar = !actionBarHiddenByMode || locusSearchActive,
                                     canMarkDone = displayPayload != null,
                                     isDone = showCompleted,
                                     refreshState = refreshActionState,
@@ -2328,6 +2330,8 @@ private fun PlaybackObservabilityStrip(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 private fun ExpandedPlayerTopBar(
     title: String,
+    titleDomain: String?,
+    titleSourceUrl: String?,
     continuousMarquee: Boolean,
     playbackSpeed: Float,
     overflowExpanded: Boolean,
@@ -2353,7 +2357,54 @@ private fun ExpandedPlayerTopBar(
     onOverflowExpandedChange: (Boolean) -> Unit,
     overflowMenuContent: @Composable () -> Unit,
 ) {
+    val context = LocalContext.current
     Column(modifier = Modifier.fillMaxWidth()) {
+        // Locus title strip — always visible when ExpandedPlayerTopBar is shown
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.Black)
+                .padding(horizontal = 2.dp, vertical = 2.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = title.ifBlank { "" },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 1.dp)
+                    .basicMarquee(iterations = if (continuousMarquee) Int.MAX_VALUE else 1),
+                maxLines = 1,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+            )
+            if (!titleDomain.isNullOrBlank()) {
+                val domainModifier = if (!titleSourceUrl.isNullOrBlank()) {
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                        .clickable { openItemInBrowser(context, titleSourceUrl) }
+                } else {
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                }
+                Text(
+                    text = titleDomain,
+                    modifier = domainModifier,
+                    maxLines = 1,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontStyle = FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.primary,
+                    ),
+                )
+            }
+            Spacer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp)
+                    .height(1.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
+            )
+        }
         AnimatedVisibility(visible = showTopBar) {
             TopAppBar(
                 modifier = Modifier.height(48.dp),
@@ -2436,18 +2487,6 @@ private fun ExpandedPlayerTopBar(
                         )
                     }
                 },
-            )
-        }
-        if (title.isNotBlank()) {
-            Text(
-                text = title,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.Black)
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
-                    .basicMarquee(iterations = if (continuousMarquee) Int.MAX_VALUE else 1),
-                maxLines = 1,
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
             )
         }
         AnimatedVisibility(visible = searchActive) {
@@ -3403,18 +3442,31 @@ private fun PlayerControlBar(
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         if (nowPlayingTitle.isNotBlank()) {
-            Text(
-                text = "❯ $nowPlayingTitle",
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                    .basicMarquee(iterations = if (continuousMarquee) Int.MAX_VALUE else 1),
-                maxLines = 1,
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = FontWeight.SemiBold,
-                    fontStyle = FontStyle.Italic,
-                ),
-            )
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "❯ ",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontStyle = FontStyle.Italic,
+                    ),
+                )
+                Text(
+                    text = nowPlayingTitle,
+                    modifier = Modifier
+                        .weight(1f)
+                        .basicMarquee(iterations = if (continuousMarquee) Int.MAX_VALUE else 1),
+                    maxLines = 1,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontStyle = FontStyle.Italic,
+                    ),
+                )
+            }
         }
         if (!minimal) {
             Box(
