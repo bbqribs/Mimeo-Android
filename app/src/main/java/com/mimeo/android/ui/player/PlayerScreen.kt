@@ -1946,7 +1946,7 @@ fun PlayerScreen(
                                     },
                             ) {
                                 ExpandedPlayerTopBar(
-                                    title = locusActionBarTitle,
+                                    title = currentTitle,
                                     titleDomain = capturePresentation.sourceLabel,
                                     titleSourceUrl = capturePresentation.sourceUrl,
                                     continuousMarquee = settings.continuousNowPlayingMarquee,
@@ -2358,6 +2358,7 @@ private fun ExpandedPlayerTopBar(
     overflowMenuContent: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
+    var titleExpanded by remember(title) { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxWidth()) {
         // Locus title strip — always visible when ExpandedPlayerTopBar is shown
         Column(
@@ -2372,8 +2373,9 @@ private fun ExpandedPlayerTopBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 1.dp)
-                    .basicMarquee(iterations = if (continuousMarquee) Int.MAX_VALUE else 1),
-                maxLines = 1,
+                    .clickable { titleExpanded = !titleExpanded }
+                    .let { if (!titleExpanded) it.basicMarquee(iterations = if (continuousMarquee) Int.MAX_VALUE else 1) else it },
+                maxLines = if (titleExpanded) 3 else 1,
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
             )
             if (!titleDomain.isNullOrBlank()) {
@@ -3445,7 +3447,7 @@ private fun PlayerControlBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                    .padding(horizontal = 2.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
