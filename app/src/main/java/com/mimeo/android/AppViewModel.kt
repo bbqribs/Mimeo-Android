@@ -2702,6 +2702,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    suspend fun reorderPlaylistEntries(playlistId: Int, orderedEntryIds: List<Int>): Result<Unit> {
+        val current = settings.value
+        if (current.apiToken.isBlank()) return Result.failure(IllegalStateException("Token required"))
+        return try {
+            repository.reorderPlaylistEntries(current.baseUrl, current.apiToken, playlistId, orderedEntryIds)
+            // No _playlists cache update here: PlaylistDetailScreen manages its own localEntries
+            // list and updating _playlists here would change serverEntries, which previously caused
+            // a post-drop flicker by replacing localEntries via remember(serverEntries).
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (handleAuthFailureIfNeeded(e)) return Result.failure(e)
+            Result.failure(e)
+        }
+    }
+
     fun runConnectivityDiagnostics(isPhysicalDevice: Boolean) {
         val current = settings.value
         val baseUrl = current.baseUrl.trim().trimEnd('/')

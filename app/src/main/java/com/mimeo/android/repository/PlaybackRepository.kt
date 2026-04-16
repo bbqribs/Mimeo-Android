@@ -389,6 +389,10 @@ class PlaybackRepository(
         itemIds: List<Int>,
     ) = apiClient.batchItemAction(baseUrl, token, action, itemIds)
 
+    suspend fun reorderPlaylistEntries(baseUrl: String, token: String, playlistId: Int, entryIds: List<Int>) {
+        apiClient.reorderPlaylistEntries(baseUrl, token, playlistId, entryIds)
+    }
+
     suspend fun batchAddItemsToPlaylist(
         baseUrl: String,
         token: String,

@@ -184,6 +184,7 @@ import com.mimeo.android.ui.player.PlaybackEngineState
 import com.mimeo.android.ui.player.PlaybackOpenIntent
 import com.mimeo.android.ui.player.buildPlaybackChunks
 import com.mimeo.android.ui.common.nowPlayingCapturePresentation
+import com.mimeo.android.ui.playlists.PlaylistDetailScreen
 import com.mimeo.android.ui.playlists.PlaylistsScreen
 import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.ui.signin.SignInScreen
@@ -235,6 +236,7 @@ internal const val ROUTE_LOCUS = "locus"
 internal const val ROUTE_LOCUS_ITEM = "locus/{itemId}"
 internal const val ROUTE_COLLECTIONS = "collections"
 internal const val ROUTE_COLLECTIONS_PLAYLISTS = "collections/playlists"
+internal const val ROUTE_PLAYLIST_DETAIL = "playlist/{playlistId}"
 internal const val ROUTE_COLLECTIONS_FOLDER = "collections/folder/{folderId}"
 internal const val ROUTE_SETTINGS = "settings"
 internal const val ROUTE_SETTINGS_DIAGNOSTICS = "settings/diagnostics"
@@ -620,6 +622,7 @@ private fun MimeoApp(vm: AppViewModel) {
     val selectedDrawerRoute = when {
         currentRoute.startsWith(ROUTE_SETTINGS_DIAGNOSTICS) -> ROUTE_SETTINGS
         currentRoute.startsWith(ROUTE_SETTINGS) -> ROUTE_SETTINGS
+        currentRoute.startsWith("playlist/") -> currentRoute
         currentRoute.startsWith(ROUTE_UP_NEXT) -> {
             val pid = settings.selectedPlaylistId
             if (pid != null) "playlist/$pid" else ROUTE_UP_NEXT
@@ -868,7 +871,7 @@ private fun MimeoApp(vm: AppViewModel) {
                                 selected = selectedDrawerRoute == "playlist/${playlist.id}",
                                 onClick = {
                                     vm.selectPlaylist(playlist.id)
-                                    nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
+                                    nav.navigate("playlist/${playlist.id}") { launchSingleTop = true }
                                     coroutineScope.launch { drawerState.close() }
                                 },
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
@@ -1226,6 +1229,20 @@ private fun MimeoApp(vm: AppViewModel) {
                         composable(ROUTE_COLLECTIONS_PLAYLISTS) {
                             PlaylistsScreen(vm = vm)
                         }
+                        composable(
+                            ROUTE_PLAYLIST_DETAIL,
+                            arguments = listOf(navArgument("playlistId") { type = NavType.IntType }),
+                        ) { backStack ->
+                            val playlistId = backStack.arguments?.getInt("playlistId") ?: return@composable
+                            PlaylistDetailScreen(
+                                playlistId = playlistId,
+                                vm = vm,
+                                onOpenPlayer = openItemInLocus,
+                                onShowSnackbar = { message, actionLabel, actionKey ->
+                                    vm.showSnackbar(message, actionLabel, actionKey)
+                                },
+                            )
+                        }
                         composable(ROUTE_SETTINGS) {
                             SettingsScreen(
                                 vm = vm,
@@ -1292,9 +1309,10 @@ private fun MimeoApp(vm: AppViewModel) {
                                 }
                             },
                             onRequestBack = {
-                                nav.navigate(ROUTE_UP_NEXT) {
-                                    popUpTo(ROUTE_LOCUS) { inclusive = true }
-                                    launchSingleTop = true
+                                // Pop back to wherever the user came from (playlist detail,
+                                // Up Next, Inbox, etc.) rather than always jumping to Up Next.
+                                if (!nav.popBackStack()) {
+                                    nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
                                 }
                             },
                             onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },

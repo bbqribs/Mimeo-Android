@@ -127,6 +127,12 @@ private data class PlaylistBatchAddRequest(
 )
 
 @Serializable
+private data class PlaylistReorderItem(
+    @kotlinx.serialization.SerialName("entry_id") val entryId: Int,
+    val position: Float,
+)
+
+@Serializable
 data class PlaylistBatchAddResult(
     @kotlinx.serialization.SerialName("item_id") val itemId: Int,
     val ok: Boolean,
@@ -486,6 +492,25 @@ class ApiClient(
             .post(body)
             .build()
         executeJson(request) { payload -> json.decodeFromString<PlaylistBatchAddResponse>(payload) }
+    }
+
+    suspend fun reorderPlaylistEntries(
+        baseUrl: String,
+        token: String,
+        playlistId: Int,
+        entryIds: List<Int>,
+    ) = withContext(Dispatchers.IO) {
+        val payload = entryIds.mapIndexed { idx, entryId ->
+            PlaylistReorderItem(entryId = entryId, position = idx.toFloat())
+        }
+        val body = json.encodeToString(ListSerializer(PlaylistReorderItem.serializer()), payload)
+            .toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/playlists/$playlistId/entries/reorder"))
+            .header("Authorization", "Bearer $token")
+            .put(body)
+            .build()
+        executeNoBody(request)
     }
 
     suspend fun getDebugPython(baseUrl: String, token: String): DebugPythonResponse = withContext(Dispatchers.IO) {
