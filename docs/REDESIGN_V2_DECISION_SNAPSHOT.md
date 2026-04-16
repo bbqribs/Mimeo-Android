@@ -19,6 +19,8 @@ Behavioral source of truth remains `docs/REDESIGN_V2_PLAN.md`.
 10. Library views (`Inbox/Favorites/Archive/Bin`) are projections, not collections.
 11. Playlists are explicit ordered collections; Up Next is a separate playback queue construct.
 12. During Phase 0 and Phase 2, playback semantics stay unchanged unless a ticket explicitly authorizes behavior changes.
+13. The session current-item pointer advances only when playback starts on an item, not when the user navigates to or browses an item. Tapping a queue row that is already in the active session must not move the pointer.
+14. Cross-device Up Next sync requires an explicit backend API contract (CONTRACT CHANGE). No Android sync work may begin before that contract is defined and coordinated with the Mimeo backend repo.
 
 ## Use
 

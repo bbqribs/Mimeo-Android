@@ -76,6 +76,7 @@
 - [x] Reader selection edge-scroll shipped: after releasing a selection handle near top/bottom edge (screen-fraction threshold), reader auto-scrolls ~870 px over 1 s; driven by `edgeScrollSpeed` polled at ~60 fps in PlayerScreen.
 - [x] Redesign v2 Phase 2B shipped (bounded data wiring): Inbox/Favorites/Archive/Bin drawer routes now load real library data from `GET /items?view=inbox|favorites|archived|trash` with shared route list rendering, while preserving Up Next/Locus/playback semantics.
 - [x] Phase 5C shipped: Play Next / Play Last from QueueScreen item overflow, PlaylistDetailScreen per-row overflow (new), and Locus player overflow; basic collapsible session-queue panel in QueueScreen shows current session order with current-item indicator. Cross-device sync deferred to Phase 6.
+- [x] Phase 6A shipped: Up Next local session queue finalization substrate — remove-from-session per row, clear-session button, duplicate-move semantics for Play Next/Play Last (existing item moved rather than duplicated), seed-source "From: [playlist]" label in session panel, snackbar feedback for queue mutations, and session-preserve guard when tapping a queue row that is already in the active session.
 
 ## Redesign v2 execution track
 - Source of truth: `docs/REDESIGN_V2_PLAN.md` (product + architecture plan). Drift guard: `docs/REDESIGN_V2_DECISION_SNAPSHOT.md`.
@@ -87,7 +88,8 @@
 - Phase 5: playlist management and reorder (rename/delete/reorder, Play Next/Play Last insertion, and related offline sync for reorder actions).
 - Phase 6: Up Next session queue panel + management (collapsible session-order view in QueueScreen, reorder/remove within session, eventual cross-device sync via backend API — see Phase 6 notes below).
 - Non-goals for this track: no playlist folders, no auto re-seed on pull-to-refresh.
-- Phase 6 sync note: cross-device Up Next sync is a planned later-phase goal (requires a backend API contract for session queue persistence). The initial implementation is device-local (Room). Sync layer will be added when the backend contract is defined — this is a CONTRACT CHANGE that requires coordination with the Mimeo backend repo.
+- Phase 6 sync note: the shipped Up Next implementation is device-local (Room). Cross-device sync is the planned long-term direction: when playback continues on a second device, Up Next should resume in the same order. This requires a dedicated backend API contract for session queue persistence and is a CONTRACT CHANGE that must be coordinated with the Mimeo backend repo before any Android sync work begins.
+- Deferred UI ticket: the persistent top title bar tied to currently-playing content should be replaced by a smaller scrolling title attached to the player controls, with the article-level title treatment attached to the item open in reader view. This is a standalone player-chrome redesign ticket, not part of Phase 6A.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
