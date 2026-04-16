@@ -150,15 +150,16 @@ fun PlaylistDetailScreen(
     fun onDragEnd() {
         val from = draggingIndex
         val target = currentTargetIndex   // read the pre-computed, cached value
+        // Mutate localEntries BEFORE clearing drag state so both changes land in the
+        // same Compose snapshot batch — avoids a frame where items snap back then re-settle.
+        if (from >= 0 && target >= 0 && target != from) {
+            val moved = localEntries.removeAt(from)
+            localEntries.add(target, moved)
+        }
         draggingIndex = -1
         dragOffsetY = 0f
         currentTargetIndex = -1
         if (from < 0) return
-        // Commit the reorder into localEntries now (only on drop).
-        if (target >= 0 && target != from) {
-            val moved = localEntries.removeAt(from)
-            localEntries.add(target, moved)
-        }
         val entryIds = localEntries.map { it.id }
         isSaving = true
         actionScope.launch {
