@@ -1947,6 +1947,7 @@ fun PlayerScreen(
                             ) {
                                 ExpandedPlayerTopBar(
                                     title = locusActionBarTitle,
+                                    continuousMarquee = settings.continuousNowPlayingMarquee,
                                     playbackSpeed = settings.playbackSpeed,
                                     overflowExpanded = overflowExpanded,
                                     showTopBar = !(readerChromeHidden && locusSearchActive),
@@ -2324,9 +2325,10 @@ private fun PlaybackObservabilityStrip(
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 private fun ExpandedPlayerTopBar(
     title: String,
+    continuousMarquee: Boolean,
     playbackSpeed: Float,
     overflowExpanded: Boolean,
     showTopBar: Boolean = true,
@@ -2357,16 +2359,7 @@ private fun ExpandedPlayerTopBar(
                 modifier = Modifier.height(48.dp),
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black),
-                title = {
-                    if (title.isNotBlank()) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                },
+                title = {},
                 actions = {
                     ActionHintTooltip(label = if (isDone) "Mark as not done" else "Mark as done") {
                         IconToggleButton(
@@ -2443,6 +2436,18 @@ private fun ExpandedPlayerTopBar(
                         )
                     }
                 },
+            )
+        }
+        if (title.isNotBlank()) {
+            Text(
+                text = title,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.Black)
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                    .basicMarquee(iterations = if (continuousMarquee) Int.MAX_VALUE else 1),
+                maxLines = 1,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
             )
         }
         AnimatedVisibility(visible = searchActive) {
@@ -3399,13 +3404,16 @@ private fun PlayerControlBar(
     ) {
         if (nowPlayingTitle.isNotBlank()) {
             Text(
-                text = nowPlayingTitle,
+                text = "❯ $nowPlayingTitle",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = CHEVRON_RESERVED_SPACE, vertical = 2.dp)
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
                     .basicMarquee(iterations = if (continuousMarquee) Int.MAX_VALUE else 1),
                 maxLines = 1,
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    fontStyle = FontStyle.Italic,
+                ),
             )
         }
         if (!minimal) {
