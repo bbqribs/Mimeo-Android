@@ -32,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,7 +96,16 @@ fun PlaylistDetailScreen(
     }
 
     // Local mutable list — only mutated on drop, not during drag.
-    val localEntries = remember(serverEntries) { serverEntries.toMutableStateList() }
+    // Keyed by entry IDs rather than the full serverEntries list so that position-only
+    // changes from refreshPlaylists do NOT reset localEntries and cause a post-drop flicker.
+    val localEntries = remember { mutableStateListOf<PlaylistEntrySummary>() }
+    val serverEntryIds = remember(serverEntries) { serverEntries.map { it.id } }
+    LaunchedEffect(serverEntryIds) {
+        if (localEntries.map { it.id } != serverEntryIds) {
+            localEntries.clear()
+            localEntries.addAll(serverEntries)
+        }
+    }
 
     // Per-item Y positions in the Column for drag hit-testing.
     val itemTopOffsets = remember { mutableMapOf<Int, Float>() }

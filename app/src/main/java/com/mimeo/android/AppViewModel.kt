@@ -2707,21 +2707,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (current.apiToken.isBlank()) return Result.failure(IllegalStateException("Token required"))
         return try {
             repository.reorderPlaylistEntries(current.baseUrl, current.apiToken, playlistId, orderedEntryIds)
-            // Update local entry order so the UI reflects the new positions immediately.
-            _playlists.update { rows ->
-                rows.map { p ->
-                    if (p.id != playlistId) p
-                    else {
-                        val entryMap = p.entries.associateBy { it.id }
-                        val reordered = orderedEntryIds.mapIndexedNotNull { idx, entryId ->
-                            entryMap[entryId]?.copy(position = idx.toDouble())
-                        }
-                        // Append any entries not in the ordered list (shouldn't happen, but safe).
-                        val remaining = p.entries.filter { it.id !in orderedEntryIds }
-                        p.copy(entries = reordered + remaining)
-                    }
-                }
-            }
+            // No _playlists cache update here: PlaylistDetailScreen manages its own localEntries
+            // list and updating _playlists here would change serverEntries, which previously caused
+            // a post-drop flicker by replacing localEntries via remember(serverEntries).
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
