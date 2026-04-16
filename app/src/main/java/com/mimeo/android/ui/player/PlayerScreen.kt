@@ -2084,6 +2084,14 @@ fun PlayerScreen(
                                                 overflowExpanded = false
                                                 playLocusItem()
                                             },
+                                            onPlayNext = {
+                                                overflowExpanded = false
+                                                vm.playNext(locusActionItemId)
+                                            },
+                                            onPlayLast = {
+                                                overflowExpanded = false
+                                                vm.playLast(locusActionItemId)
+                                            },
                                             onReportProblem = {
                                                 overflowExpanded = false
                                                 openProblemReport()
@@ -3082,6 +3090,8 @@ private fun LocusProblemReportDialog(
 @Composable
 private fun LocusOverflowMenuItems(
     onPlayCurrentItem: () -> Unit,
+    onPlayNext: () -> Unit,
+    onPlayLast: () -> Unit,
     onReportProblem: () -> Unit,
     onMoveToBin: () -> Unit,
     onOpenPlaylists: () -> Unit,
@@ -3096,6 +3106,14 @@ private fun LocusOverflowMenuItems(
     DropdownMenuItem(
         text = { Text("Play this item") },
         onClick = onPlayCurrentItem,
+    )
+    DropdownMenuItem(
+        text = { Text("Play Next") },
+        onClick = onPlayNext,
+    )
+    DropdownMenuItem(
+        text = { Text("Play Last") },
+        onClick = onPlayLast,
     )
     DropdownMenuItem(
         text = { Text("Playlists...") },

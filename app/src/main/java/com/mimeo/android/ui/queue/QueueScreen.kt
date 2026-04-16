@@ -1385,6 +1385,12 @@ fun QueueScreen(
                                             }
                                     }
                                 },
+                                onPlayNext = {
+                                    vm.playNext(item.itemId)
+                                },
+                                onPlayLast = {
+                                    vm.playLast(item.itemId)
+                                },
                                 onShareUrl = {
                                     shareItemUrl(context, item.url, item.title)
                                 },
@@ -2423,6 +2429,8 @@ private fun QueueItemCard(
     onUnarchive: () -> Unit,
     onPurgeFromBin: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onPlayNext: () -> Unit,
+    onPlayLast: () -> Unit,
     onShareUrl: () -> Unit,
     onOpenInBrowser: () -> Unit,
     isMenuExpanded: Boolean,
@@ -2595,6 +2603,20 @@ private fun QueueItemCard(
                                 },
                             )
                         } else {
+                            DropdownMenuItem(
+                                text = { Text("Play Next") },
+                                onClick = {
+                                    onDismissMenu()
+                                    onPlayNext()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Play Last") },
+                                onClick = {
+                                    onDismissMenu()
+                                    onPlayLast()
+                                },
+                            )
                             if (!cached) {
                                 DropdownMenuItem(
                                     text = {
