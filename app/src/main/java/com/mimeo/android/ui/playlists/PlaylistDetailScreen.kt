@@ -3,6 +3,7 @@ package com.mimeo.android.ui.playlists
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,12 +17,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -67,6 +75,7 @@ fun PlaylistDetailScreen(
     vm: AppViewModel,
     onOpenPlayer: (Int) -> Unit,
     onShowSnackbar: (String, String?, String?) -> Unit,
+    onNavigateBack: () -> Unit = {},
 ) {
     val playlists by vm.playlists.collectAsState()
     val queueItems by vm.queueItems.collectAsState()
@@ -116,6 +125,12 @@ fun PlaylistDetailScreen(
     // Cached target index — updated on every onDrag so onDragEnd can read it reliably.
     var currentTargetIndex by remember { mutableIntStateOf(-1) }
     var isSaving by remember { mutableStateOf(false) }
+
+    // Rename/delete dialog state
+    var showOverflowMenu by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var renameText by remember { mutableStateOf("") }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     /** Average measured item height; falls back to a reasonable default. */
     fun avgItemHeight(): Float =
@@ -190,7 +205,7 @@ fun PlaylistDetailScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                    .padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
@@ -204,6 +219,41 @@ fun PlaylistDetailScreen(
                 )
                 if (isSaving || (loading && localEntries.isEmpty())) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                }
+                if (playlist != null) {
+                    Box {
+                        IconButton(
+                            onClick = { showOverflowMenu = true },
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "Playlist options",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showOverflowMenu,
+                            onDismissRequest = { showOverflowMenu = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Rename") },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    renameText = playlist.name
+                                    showRenameDialog = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Delete") },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    showDeleteDialog = true
+                                },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -297,6 +347,63 @@ fun PlaylistDetailScreen(
                 }
             }
         }
+    }
+
+    if (showRenameDialog && playlist != null) {
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = { Text("Rename playlist") },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val trimmed = renameText.trim()
+                        if (trimmed.isNotEmpty()) {
+                            vm.renamePlaylist(playlist.id, trimmed)
+                        }
+                        showRenameDialog = false
+                    },
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (showDeleteDialog && playlist != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete playlist?") },
+            text = { Text("Delete \u2018${playlist.name}\u2019 and remove its item links.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.deletePlaylist(playlist.id)
+                        showDeleteDialog = false
+                        onNavigateBack()
+                    },
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 

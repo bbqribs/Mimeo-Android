@@ -1241,6 +1241,7 @@ private fun MimeoApp(vm: AppViewModel) {
                                 onShowSnackbar = { message, actionLabel, actionKey ->
                                     vm.showSnackbar(message, actionLabel, actionKey)
                                 },
+                                onNavigateBack = { nav.popBackStack() },
                             )
                         }
                         composable(ROUTE_SETTINGS) {
