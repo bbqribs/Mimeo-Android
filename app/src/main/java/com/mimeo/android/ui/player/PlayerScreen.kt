@@ -11,6 +11,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -1688,6 +1689,8 @@ fun PlayerScreen(
         PlayerControlBar(
             progressPercent = currentPercent,
             minimal = controlsMode == PlayerControlsMode.MINIMAL,
+            nowPlayingTitle = nowPlayingTitle,
+            continuousMarquee = settings.continuousNowPlayingMarquee,
             canSeek = chunks.isNotEmpty(),
             canMoveBackward = chunks.isNotEmpty(),
             canMoveForward = nextSentencePosition != null,
@@ -2354,7 +2357,16 @@ private fun ExpandedPlayerTopBar(
                 modifier = Modifier.height(48.dp),
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black),
-                title = {},
+                title = {
+                    if (title.isNotBlank()) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                },
                 actions = {
                     ActionHintTooltip(label = if (isDone) "Mark as not done" else "Mark as done") {
                         IconToggleButton(
@@ -3356,6 +3368,8 @@ private fun PlayerChromeChevron(
 private fun PlayerControlBar(
     progressPercent: Int,
     minimal: Boolean,
+    nowPlayingTitle: String,
+    continuousMarquee: Boolean,
     canSeek: Boolean,
     canMoveBackward: Boolean,
     canMoveForward: Boolean,
@@ -3383,6 +3397,17 @@ private fun PlayerControlBar(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
+        if (nowPlayingTitle.isNotBlank()) {
+            Text(
+                text = nowPlayingTitle,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = CHEVRON_RESERVED_SPACE, vertical = 2.dp)
+                    .basicMarquee(iterations = if (continuousMarquee) Int.MAX_VALUE else 1),
+                maxLines = 1,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+            )
+        }
         if (!minimal) {
             Box(
                 modifier = Modifier
