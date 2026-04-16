@@ -33,7 +33,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -252,37 +251,46 @@ fun PlaylistDetailScreen(
                             )
                             else -> 0f
                         }
-                        PlaylistDetailRow(
-                            entry = entry,
-                            queueItem = queueItem,
-                            isDragging = isDragging,
-                            visualOffsetY = itemVisualOffsetY,
-                            onPositioned = { top, height ->
-                                itemTopOffsets[index] = top
-                                itemHeights[index] = height
-                            },
-                            onDragStart = { idx ->
-                                draggingIndex = idx
-                                dragOffsetY = 0f
-                                currentTargetIndex = idx
-                            },
-                            onDrag = { dy ->
-                                dragOffsetY += dy
-                                val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
-                                if (newTarget != currentTargetIndex) {
-                                    currentTargetIndex = newTarget
-                                }
-                            },
-                            onDragEnd = { onDragEnd() },
-                            index = index,
-                            onTap = { onOpenPlayer(entry.articleId) },
-                        )
-                        Spacer(
+                        // Wrap card + divider together so the divider moves with its card.
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(1.dp)
-                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
-                        )
+                                .zIndex(if (isDragging) 1f else 0f)
+                                .graphicsLayer { translationY = itemVisualOffsetY }
+                                .onGloballyPositioned { coords ->
+                                    itemTopOffsets[index] = coords.positionInParent().y
+                                    itemHeights[index] = coords.size.height.toFloat()
+                                },
+                        ) {
+                            PlaylistDetailRow(
+                                entry = entry,
+                                queueItem = queueItem,
+                                isDragging = isDragging,
+                                onDragStart = { idx ->
+                                    draggingIndex = idx
+                                    dragOffsetY = 0f
+                                    currentTargetIndex = idx
+                                },
+                                onDrag = { dy ->
+                                    dragOffsetY += dy
+                                    val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
+                                    if (newTarget != currentTargetIndex) {
+                                        currentTargetIndex = newTarget
+                                    }
+                                },
+                                onDragEnd = { onDragEnd() },
+                                index = index,
+                                onTap = { onOpenPlayer(entry.articleId) },
+                            )
+                            Spacer(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                    ),
+                            )
+                        }
                     }
                 }
             }
@@ -295,8 +303,6 @@ private fun PlaylistDetailRow(
     entry: PlaylistEntrySummary,
     queueItem: PlaybackQueueItem?,
     isDragging: Boolean,
-    visualOffsetY: Float,
-    onPositioned: (top: Float, height: Float) -> Unit,
     onDragStart: (index: Int) -> Unit,
     onDrag: (dy: Float) -> Unit,
     onDragEnd: () -> Unit,
@@ -305,13 +311,7 @@ private fun PlaylistDetailRow(
 ) {
     ElevatedCard(
         onClick = onTap,
-        modifier = Modifier
-            .fillMaxWidth()
-            .zIndex(if (isDragging) 1f else 0f)
-            .graphicsLayer { translationY = visualOffsetY }
-            .onGloballyPositioned { coords ->
-                onPositioned(coords.positionInParent().y, coords.size.height.toFloat())
-            },
+        modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.elevatedCardColors(
             containerColor = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else Color.Black,
         ),
