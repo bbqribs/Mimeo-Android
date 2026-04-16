@@ -282,14 +282,16 @@ fun PlaylistDetailScreen(
                                 index = index,
                                 onTap = { onOpenPlayer(entry.articleId) },
                             )
-                            Spacer(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(1.dp)
-                                    .background(
-                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                                    ),
-                            )
+                            if (!isDragging) {
+                                Spacer(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(1.dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                        ),
+                                )
+                            }
                         }
                     }
                 }
