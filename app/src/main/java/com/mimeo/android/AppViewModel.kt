@@ -4002,20 +4002,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun playNext(itemId: Int) {
         val allItems = queueItems.value + inboxItems.value + archivedItems.value + favoriteItems.value + binItems.value
         val item = allItems.firstOrNull { it.itemId == itemId } ?: return
+        val label = "\"${item.title?.take(40) ?: "Item"}\""
+        val alreadyInSession = nowPlayingSession.value?.items?.any { it.itemId == itemId } == true
         viewModelScope.launch {
             val session = repository.insertItemAfterCurrent(item) ?: return@launch
             applySessionSnapshot(session)
-            _statusMessage.value = "\"${item.title?.take(40) ?: "Item"}\" added as Play Next."
+            showSnackbar(if (alreadyInSession) "$label moved to Play Next." else "$label queued as Play Next.")
         }
     }
 
     fun playLast(itemId: Int) {
         val allItems = queueItems.value + inboxItems.value + archivedItems.value + favoriteItems.value + binItems.value
         val item = allItems.firstOrNull { it.itemId == itemId } ?: return
+        val label = "\"${item.title?.take(40) ?: "Item"}\""
+        val alreadyInSession = nowPlayingSession.value?.items?.any { it.itemId == itemId } == true
         viewModelScope.launch {
             val session = repository.appendItemToSession(item) ?: return@launch
             applySessionSnapshot(session)
-            _statusMessage.value = "\"${item.title?.take(40) ?: "Item"}\" added as Play Last."
+            showSnackbar(if (alreadyInSession) "$label moved to end of session." else "$label queued at end of session.")
+        }
+    }
+
+    fun removeItemFromSession(itemId: Int) {
+        viewModelScope.launch {
+            val session = repository.removeItemFromSession(itemId)
+            _nowPlayingSession.value = session
+            if (session == null) {
+                _playbackPositionByItem.value = emptyMap()
+                _sessionIssueMessage.value = null
+            }
         }
     }
 

@@ -710,7 +710,15 @@ class PlaybackRepository(
             dao.clear()
             return null
         }
-        val insertIndex = row.currentIndex + 1
+        // Remove any existing occurrence so we don't accumulate duplicates.
+        val existingIdx = stored.indexOfFirst { it.itemId == item.itemId }
+        if (existingIdx >= 0 && existingIdx != row.currentIndex) {
+            stored.removeAt(existingIdx)
+        } else if (existingIdx == row.currentIndex) {
+            // Item is currently playing — no-op for Play Next.
+            return row.toSession(stored)
+        }
+        val insertIndex = (row.currentIndex + 1).coerceIn(0, stored.size)
         val newItem = StoredNowPlayingItem(
             itemId = item.itemId,
             title = item.title,
@@ -728,7 +736,7 @@ class PlaybackRepository(
             offsetInChunkChars = 0,
             readerScrollOffset = 0,
         )
-        stored.add(insertIndex.coerceIn(0, stored.size), newItem)
+        stored.add(insertIndex, newItem)
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
             queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
@@ -745,6 +753,14 @@ class PlaybackRepository(
         if (stored.isEmpty()) {
             dao.clear()
             return null
+        }
+        // Remove any existing occurrence so we don't accumulate duplicates.
+        val existingIdx = stored.indexOfFirst { it.itemId == item.itemId }
+        if (existingIdx >= 0 && existingIdx != row.currentIndex) {
+            stored.removeAt(existingIdx)
+        } else if (existingIdx == row.currentIndex) {
+            // Item is currently playing — already at end semantically; no-op.
+            return row.toSession(stored)
         }
         val newItem = StoredNowPlayingItem(
             itemId = item.itemId,
@@ -767,6 +783,36 @@ class PlaybackRepository(
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
             queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(stored)
+    }
+
+    suspend fun removeItemFromSession(itemId: Int): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson).toMutableList()
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        val removeIdx = stored.indexOfFirst { it.itemId == itemId }
+        if (removeIdx < 0) return row.toSession(stored)
+        stored.removeAt(removeIdx)
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        // Adjust currentIndex if needed so it still points to a valid item.
+        val newCurrentIndex = when {
+            removeIdx < row.currentIndex -> (row.currentIndex - 1).coerceAtLeast(0)
+            else -> row.currentIndex.coerceIn(0, stored.lastIndex)
+        }
+        val updatedAt = System.currentTimeMillis()
+        val updatedRow = row.copy(
+            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            currentIndex = newCurrentIndex,
             updatedAt = updatedAt,
         )
         dao.upsert(updatedRow)
