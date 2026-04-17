@@ -1,50 +1,38 @@
 # Mimeo Android - Claude Instructions
 
-## Multi-agent concurrency policy (Codex + Claude + humans)
-
-- **Parallelism allowed**: Codex and Claude may both implement tickets, including code changes, in either repo.
+## Multi-agent workflow (Codex + Claude + humans)
+- **Lane model**: Claude is the primary implementer for Mimeo-Android. Codex is secondary in this repo unless explicitly assigned an Android ticket.
+- **Cross-repo writes**: Claude may inspect backend code for contract verification, but must require explicit cross-repo authorization before making backend changes.
 - **Single-writer per PR/branch**: Exactly one agent may push commits to a given PR branch. No tag-team pushing.
-- **Merge authority**: Only Codex may merge PRs (or perform the final "merge step" for the session).
+- **Merge authority**: The agent owning the ticket/branch may merge its PR.
 - **Serialized merges**: Only one merge operation may happen at a time across BOTH repos (Mimeo + Mimeo-Android).
 - **No history rewrites**: No rebases or force-pushes by agents. Additive commits only.
-- **Contract-change flag**: Any PR that changes backend/API semantics must be labeled "CONTRACT CHANGE" and coordinated; dependent client work must not assume the new contract until merged.
-- **Local safety**: If agents share a machine, do not share a working directory; avoid stash-based workflows; tracked local modifications => STOP.
-- **Precedence**: CLAUDE.md is authoritative for Claude behavior; CODEX_PROMPTS.md is authoritative for Codex behavior.
+- **Contract-change flag**: Any PR changing backend/API semantics must be labeled "CONTRACT CHANGE"; dependent Android work must not assume the change until merged.
+- **Local safety**: If agents share a machine, do not share a working directory; avoid stash workflows; tracked local modifications => STOP.
+- **Precedence**: `CLAUDE.md` is authoritative for Claude behavior in this repo; `CODEX_PROMPTS.md` is authoritative for Codex behavior in this repo.
 
 ## Project context
-
-Mimeo Android is the mobile client for the Mimeo "read later" system. It communicates with a backend API running on a local or LAN-accessible server.
+Mimeo Android is the mobile client for the Mimeo "read later" system.
 
 ## Backend connection
-
 - **Emulator**: Use `baseUrl=http://10.0.2.2:8000`
-- **Physical device (LAN)**: Use `baseUrl=http://<your-PC-LAN-IP>:8000` or `https://` if TLS is configured
-- **Per-device tokens**: Prefer creating device tokens over sharing the legacy `API_TOKEN`
+- **Physical device (LAN)**: Use `baseUrl=http://<your-PC-LAN-IP>:8000` or `https://` if TLS is configured.
+- **Auth**: Prefer per-device tokens over the legacy shared `API_TOKEN`.
 
 ## Build and test
-
 ```bash
 .\gradlew.bat :app:assembleDebug
 .\gradlew.bat :app:testDebugUnitTest
 ```
 
 ## Context hygiene
-
-- Treat one ticket as one working session by default.
-- Prefer a fresh Claude session for a new ticket rather than carrying forward prior ticket discussion.
-- Stay in the same session while finishing the same ticket, including implementation, test iteration, report drafting, and merge cleanup.
-- If the same-ticket session gets noisy or drifts through rejected approaches, use `/compact` and preserve only: objective, branch, files changed, accepted decisions, current failures, manual-test findings, and exact next step.
-- When switching to a different ticket, start a fresh session. Use `/clear` only when staying in the same terminal/session is materially more convenient.
-- Do not rely on old chat history for project rules; rely on `CLAUDE.md`, the repo, and the current ticket.
-- Prefer subagents for broad repo exploration, multi-file tracing, comparison work, or "find all places this is handled" tasks, so the main session stays lean.
-- For large files, avoid unnecessary full-file rereads; inspect only the relevant section or function when possible.
+- Treat one ticket as one working session.
+- Start a fresh session when switching tickets.
+- Do not rely on stale chat history for repo policy; rely on this file, the repo, and the active ticket.
+- Prefer focused file reads and targeted search over broad full-repo scans when context is already known.
 
 ## Current focus
-
-See `ROADMAP.md` for next tickets and project priorities.
+See `ROADMAP.md` for active priorities.
 
 ## Related repo
-
 Backend + extension + scripts: `C:\Users\brend\Documents\Coding\Mimeo`
-
-Backend contract changes that affect Android (API additions, response format changes, playback endpoints) will be labeled "CONTRACT CHANGE" in the backend repo.
