@@ -1701,7 +1701,7 @@ fun PlayerScreen(
         PlayerControlBar(
             progressPercent = currentPercent,
             minimal = controlsMode == PlayerControlsMode.MINIMAL,
-            nowPlayingTitle = nowPlayingTitle,
+            nowPlayingTitle = if (compactControlsOnly || previewModeActive) nowPlayingTitle else "",
             continuousMarquee = settings.continuousNowPlayingMarquee,
             onOpenLocusForItem = {
                 val locusTargetId = resolveLocusOpenTargetId()
@@ -1969,6 +1969,10 @@ fun PlayerScreen(
                                     },
                             ) {
                                 ExpandedPlayerTopBar(
+                                    title = currentTitle,
+                                    titleDomain = capturePresentation.sourceLabel,
+                                    titleSourceUrl = capturePresentation.sourceUrl,
+                                    continuousMarquee = settings.continuousNowPlayingMarquee,
                                     playbackSpeed = settings.playbackSpeed,
                                     overflowExpanded = overflowExpanded,
                                     showTopBar = !actionBarHiddenByMode || locusSearchActive,
@@ -2348,6 +2352,10 @@ private fun PlaybackObservabilityStrip(
 @Composable
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 private fun ExpandedPlayerTopBar(
+    title: String,
+    titleDomain: String?,
+    titleSourceUrl: String?,
+    continuousMarquee: Boolean,
     playbackSpeed: Float,
     overflowExpanded: Boolean,
     showTopBar: Boolean = true,
@@ -2372,7 +2380,66 @@ private fun ExpandedPlayerTopBar(
     onOverflowExpandedChange: (Boolean) -> Unit,
     overflowMenuContent: @Composable () -> Unit,
 ) {
+    val context = LocalContext.current
+    var titleExpanded by remember(title) { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxWidth()) {
+        // Locus title strip — always visible when ExpandedPlayerTopBar is shown
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.Black)
+                .padding(horizontal = 2.dp, vertical = 2.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = title.ifBlank { "" },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 1.dp)
+                    .clickable { titleExpanded = !titleExpanded }
+                    .let {
+                        if (!titleExpanded) {
+                            it.basicMarquee(
+                                iterations = if (continuousMarquee) Int.MAX_VALUE else 1,
+                                initialDelayMillis = 3_000,
+                                delayMillis = 5_000,
+                            )
+                        } else {
+                            it
+                        }
+                    },
+                maxLines = if (titleExpanded) 3 else 1,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+            )
+            if (!titleDomain.isNullOrBlank()) {
+                val domainModifier = if (!titleSourceUrl.isNullOrBlank()) {
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                        .clickable { openItemInBrowser(context, titleSourceUrl) }
+                } else {
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                }
+                Text(
+                    text = titleDomain,
+                    modifier = domainModifier,
+                    maxLines = 1,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontStyle = FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.primary,
+                    ),
+                )
+            }
+            Spacer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp)
+                    .height(1.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
+            )
+        }
         AnimatedVisibility(visible = showTopBar) {
             TopAppBar(
                 modifier = Modifier.height(48.dp),
@@ -3442,10 +3509,18 @@ private fun PlayerControlBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                    .padding(horizontal = 2.dp, vertical = 2.dp)
                     .clickable(onClick = onOpenLocusForItem),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Text(
+                    text = "❯ ",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontStyle = FontStyle.Italic,
+                        fontSize = (MaterialTheme.typography.labelMedium.fontSize.value + 1f).sp,
+                    ),
+                )
                 Text(
                     text = nowPlayingTitle,
                     modifier = Modifier
@@ -3456,10 +3531,10 @@ private fun PlayerControlBar(
                             delayMillis = 5_000,
                         ),
                     maxLines = 1,
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
                         fontStyle = FontStyle.Italic,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = (MaterialTheme.typography.labelMedium.fontSize.value + 1f).sp,
                     ),
                 )
             }
