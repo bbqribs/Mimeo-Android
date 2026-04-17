@@ -468,6 +468,7 @@ fun QueueScreen(
     val selectedPlaylistName = settings.selectedPlaylistId?.let { id ->
         playlists.firstOrNull { it.id == id }?.name
     } ?: "Smart queue"
+    val canReseedFromCurrentSource = !loading
     val sessionSeedPresentation = nowPlayingSession?.let { session ->
         resolveSessionSeedSourcePresentation(
             sessionSourcePlaylistId = session.sourcePlaylistId,
@@ -476,6 +477,10 @@ fun QueueScreen(
         )
     }
     suspend fun executeReseedFromCurrentSource() {
+        if (!canReseedFromCurrentSource) {
+            onShowSnackbar("Queue is still loading. Wait, then re-seed.", null, null)
+            return
+        }
         vm.reseedNowPlayingSessionFromCurrentSource()
             .onSuccess { result ->
                 if (result.rebuiltItemCount > 0) {
@@ -1006,6 +1011,7 @@ fun QueueScreen(
                                                 },
                                             )
                                         },
+                                        enabled = canReseedFromCurrentSource,
                                         onClick = {
                                             topActionsMenuExpanded = false
                                             if (shouldConfirmReseedFromCurrentSource(
@@ -1279,6 +1285,7 @@ fun QueueScreen(
                 },
                 onRemoveItem = { itemId -> vm.removeItemFromSession(itemId) },
                 onClearSession = { vm.clearNowPlayingSession() },
+                reseedEnabled = canReseedFromCurrentSource,
                 onReseed = {
                     if (shouldConfirmReseedFromCurrentSource(
                             session = nowPlayingSession,
@@ -2941,6 +2948,7 @@ private fun NowPlayingSessionPanel(
     onMoveItemDown: (Int) -> Unit,
     onRemoveItem: (Int) -> Unit,
     onClearSession: () -> Unit,
+    reseedEnabled: Boolean,
     onReseed: () -> Unit,
 ) {
     var expanded by rememberSaveable { mutableStateOf(true) }
@@ -2978,7 +2986,10 @@ private fun NowPlayingSessionPanel(
                     )
                 }
             }
-            TextButton(onClick = onReseed) {
+            TextButton(
+                enabled = reseedEnabled,
+                onClick = onReseed,
+            ) {
                 Text(
                     text = "Re-seed",
                     style = MaterialTheme.typography.labelSmall,
