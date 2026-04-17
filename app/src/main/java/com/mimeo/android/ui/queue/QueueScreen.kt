@@ -97,6 +97,7 @@ import com.mimeo.android.R
 import com.mimeo.android.isPendingProcessingFailureMessage
 import com.mimeo.android.isTerminalPendingProcessingStatus
 import com.mimeo.android.isNoActiveContentError
+import com.mimeo.android.resolveSessionSourcePlaylistId
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.AutoDownloadDiagnostics
 import com.mimeo.android.model.AutoDownloadWorkerState
@@ -186,6 +187,11 @@ internal data class UpNextRestorePosition(
     val offset: Int,
 )
 
+internal data class SessionSeedSourcePresentation(
+    val seededFromLabel: String,
+    val currentSourceLabel: String,
+)
+
 internal fun resolveUpNextRestorePosition(
     currentDisplayedItemIds: List<Int>,
     savedIndex: Int,
@@ -208,6 +214,47 @@ internal fun resolveUpNextRestorePosition(
         0
     }
     return UpNextRestorePosition(index = resolvedIndex, offset = resolvedOffset)
+}
+
+internal fun resolveSessionSeedSourcePresentation(
+    sessionSourcePlaylistId: Int?,
+    selectedPlaylistId: Int?,
+    playlists: List<PlaylistSummary>,
+): SessionSeedSourcePresentation {
+    val seededFrom = if (sessionSourcePlaylistId == null) {
+        "Unknown source"
+    } else {
+        resolveQueueSourceLabel(sessionSourcePlaylistId, playlists)
+    }
+    val currentSource = resolveQueueSourceLabel(
+        selectedPlaylistId = resolveSessionSourcePlaylistId(selectedPlaylistId),
+        playlists = playlists,
+    )
+    return SessionSeedSourcePresentation(
+        seededFromLabel = seededFrom,
+        currentSourceLabel = currentSource,
+    )
+}
+
+internal fun shouldConfirmReseedFromCurrentSource(
+    session: NowPlayingSession?,
+    sourceItems: List<PlaybackQueueItem>,
+    selectedPlaylistId: Int?,
+): Boolean {
+    val activeSession = session ?: return false
+    val sessionItemIds = activeSession.items.map { it.itemId }
+    val sourceItemIds = sourceItems.map { it.itemId }
+    val currentSourceId = resolveSessionSourcePlaylistId(selectedPlaylistId)
+    return activeSession.sourcePlaylistId != currentSourceId || sessionItemIds != sourceItemIds
+}
+
+private fun resolveQueueSourceLabel(
+    selectedPlaylistId: Int,
+    playlists: List<PlaylistSummary>,
+): String {
+    if (selectedPlaylistId < 0) return "Smart queue"
+    return playlists.firstOrNull { it.id == selectedPlaylistId }?.name
+        ?: "Playlist ($selectedPlaylistId)"
 }
 
 internal enum class ManualSaveMode {
@@ -379,6 +426,7 @@ fun QueueScreen(
     var rowMenuItemId by remember { mutableIntStateOf(-1) }
     var playlistPickerItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
     var topActionsMenuExpanded by remember { mutableStateOf(false) }
+    var showReseedConfirmation by remember { mutableStateOf(false) }
     var showPendingSavesHub by remember { mutableStateOf(false) }
     var pendingHubStatusMessage by remember { mutableStateOf<String?>(null) }
     var sortMenuExpanded by remember { mutableStateOf(false) }
@@ -420,6 +468,26 @@ fun QueueScreen(
     val selectedPlaylistName = settings.selectedPlaylistId?.let { id ->
         playlists.firstOrNull { it.id == id }?.name
     } ?: "Smart queue"
+    val sessionSeedPresentation = nowPlayingSession?.let { session ->
+        resolveSessionSeedSourcePresentation(
+            sessionSourcePlaylistId = session.sourcePlaylistId,
+            selectedPlaylistId = settings.selectedPlaylistId,
+            playlists = playlists,
+        )
+    }
+    suspend fun executeReseedFromCurrentSource() {
+        vm.reseedNowPlayingSessionFromCurrentSource()
+            .onSuccess { result ->
+                if (result.rebuiltItemCount > 0) {
+                    onShowSnackbar("Re-seeded Up Next from ${result.sourceLabel}.", null, null)
+                } else {
+                    onShowSnackbar("Cleared Up Next because ${result.sourceLabel} is empty.", null, null)
+                }
+            }
+            .onFailure {
+                onShowSnackbar("Couldn't re-seed Up Next from current source.", "Diagnostics", "open_diagnostics")
+            }
+    }
     val playlistChoices = playlistPickerItem?.let { target ->
         playlists.map { playlist ->
             PlaylistPickerChoice(
@@ -914,22 +982,45 @@ fun QueueScreen(
                                     expanded = topActionsMenuExpanded,
                                     onDismissRequest = { topActionsMenuExpanded = false },
                                 ) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            if (pendingManualSaves.isEmpty()) {
-                                                "Pending saves"
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                if (pendingManualSaves.isEmpty()) {
+                                                    "Pending saves"
+                                                } else {
+                                                    "Pending saves (${pendingManualSaves.size})"
+                                                },
+                                            )
+                                        },
+                                        onClick = {
+                                            showPendingSavesHub = true
+                                            topActionsMenuExpanded = false
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                buildString {
+                                                    append("Re-seed from ")
+                                                    append(selectedPlaylistName)
+                                                },
+                                            )
+                                        },
+                                        onClick = {
+                                            topActionsMenuExpanded = false
+                                            if (shouldConfirmReseedFromCurrentSource(
+                                                    session = nowPlayingSession,
+                                                    sourceItems = items,
+                                                    selectedPlaylistId = settings.selectedPlaylistId,
+                                                )
+                                            ) {
+                                                showReseedConfirmation = true
                                             } else {
-                                                "Pending saves (${pendingManualSaves.size})"
-                                            },
-                                        )
-                                    },
-                                    onClick = {
-                                        showPendingSavesHub = true
-                                        topActionsMenuExpanded = false
-                                    },
-                                )
-                                if (BuildConfig.DEBUG) {
+                                                actionScope.launch { executeReseedFromCurrentSource() }
+                                            }
+                                        },
+                                    )
+                                    if (BuildConfig.DEBUG) {
                                     DropdownMenuItem(
                                         text = {
                                             Text(
@@ -1171,7 +1262,8 @@ fun QueueScreen(
         nowPlayingSession?.let { session ->
             NowPlayingSessionPanel(
                 session = session,
-                playlists = playlists,
+                seededFromLabel = sessionSeedPresentation?.seededFromLabel ?: "Unknown source",
+                currentSourceLabel = sessionSeedPresentation?.currentSourceLabel ?: selectedPlaylistName,
                 onOpenItem = { itemId -> onOpenPlayer(itemId) },
                 onMoveItemUp = { index ->
                     vm.reorderNowPlayingSessionItem(
@@ -1187,6 +1279,18 @@ fun QueueScreen(
                 },
                 onRemoveItem = { itemId -> vm.removeItemFromSession(itemId) },
                 onClearSession = { vm.clearNowPlayingSession() },
+                onReseed = {
+                    if (shouldConfirmReseedFromCurrentSource(
+                            session = nowPlayingSession,
+                            sourceItems = items,
+                            selectedPlaylistId = settings.selectedPlaylistId,
+                        )
+                    ) {
+                        showReseedConfirmation = true
+                    } else {
+                        actionScope.launch { executeReseedFromCurrentSource() }
+                    }
+                },
             )
         }
         Column(
@@ -1451,6 +1555,33 @@ fun QueueScreen(
                 }
             }
         }
+    }
+
+    if (showReseedConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showReseedConfirmation = false },
+            title = { Text("Re-seed Up Next?") },
+            text = {
+                Text(
+                    "This replaces the current local Up Next session with items from \"$selectedPlaylistName\".",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showReseedConfirmation = false
+                        actionScope.launch { executeReseedFromCurrentSource() }
+                    },
+                ) {
+                    Text("Re-seed")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReseedConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 
     playlistPickerItem?.let { target ->
@@ -2803,18 +2934,17 @@ private fun ActionHintTooltip(
 @Composable
 private fun NowPlayingSessionPanel(
     session: NowPlayingSession,
-    playlists: List<PlaylistSummary>,
+    seededFromLabel: String,
+    currentSourceLabel: String,
     onOpenItem: (Int) -> Unit,
     onMoveItemUp: (Int) -> Unit,
     onMoveItemDown: (Int) -> Unit,
     onRemoveItem: (Int) -> Unit,
     onClearSession: () -> Unit,
+    onReseed: () -> Unit,
 ) {
     var expanded by rememberSaveable { mutableStateOf(true) }
-
-    val seedLabel: String? = session.sourcePlaylistId?.let { pid ->
-        playlists.firstOrNull { it.id == pid }?.name
-    }
+    val showCurrentSource = seededFromLabel != currentSourceLabel
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -2831,15 +2961,28 @@ private fun NowPlayingSessionPanel(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                if (seedLabel != null) {
+                Text(
+                    text = "Seeded from: $seededFromLabel",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (showCurrentSource) {
                     Text(
-                        text = "From: $seedLabel",
+                        text = "Current source: $currentSourceLabel",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            }
+            TextButton(onClick = onReseed) {
+                Text(
+                    text = "Re-seed",
+                    style = MaterialTheme.typography.labelSmall,
+                )
             }
             IconButton(
                 onClick = onClearSession,

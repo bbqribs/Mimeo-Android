@@ -207,6 +207,11 @@ import kotlinx.serialization.json.jsonPrimitive
 
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
+    data class SessionReseedResult(
+        val sourceLabel: String,
+        val rebuiltItemCount: Int,
+    )
+
     private val settingsStore = SettingsStore(application.applicationContext)
     private val apiClient = ApiClient()
     private val database = AppDatabase.getInstance(application.applicationContext)
@@ -4023,6 +4028,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    suspend fun reseedNowPlayingSessionFromCurrentSource(): Result<SessionReseedResult> {
+        val sourceLabel = currentSourceContextLabel()
+        return runCatching {
+            val session = repository.reseedSessionFromSource(
+                sourceItems = queueItems.value,
+                preferredCurrentItemId = nowPlayingSession.value?.currentItem?.itemId,
+                sourcePlaylistId = resolveSessionSourcePlaylistId(settings.value.selectedPlaylistId),
+            )
+            if (session == null) {
+                _nowPlayingSession.value = null
+                _playbackPositionByItem.value = emptyMap()
+                _sessionIssueMessage.value = null
+                SessionReseedResult(sourceLabel = sourceLabel, rebuiltItemCount = 0)
+            } else {
+                applySessionSnapshot(session)
+                SessionReseedResult(sourceLabel = sourceLabel, rebuiltItemCount = session.items.size)
+            }
+        }
+    }
+
     fun removeItemFromSession(itemId: Int) {
         viewModelScope.launch {
             val session = repository.removeItemFromSession(itemId)
@@ -4065,6 +4090,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _playbackPositionByItem.value = emptyMap()
         _sessionIssueMessage.value = null
         _statusMessage.value = "Now Playing session cleared."
+    }
+
+    fun currentSourceContextLabel(): String {
+        val selectedPlaylistId = settings.value.selectedPlaylistId
+        if (selectedPlaylistId == null) return "Smart queue"
+        return playlists.value.firstOrNull { it.id == selectedPlaylistId }?.name
+            ?: "Playlist ($selectedPlaylistId)"
     }
 
     fun currentNowPlayingItemId(): Int? = nowPlayingSession.value?.currentItem?.itemId

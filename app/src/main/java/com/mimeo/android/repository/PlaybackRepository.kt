@@ -541,6 +541,25 @@ class PlaybackRepository(
         return row.toSession(stored)
     }
 
+    suspend fun reseedSessionFromSource(
+        sourceItems: List<PlaybackQueueItem>,
+        preferredCurrentItemId: Int?,
+        sourcePlaylistId: Int?,
+    ): NowPlayingSession? {
+        if (sourceItems.isEmpty()) {
+            database.nowPlayingDao().clear()
+            return null
+        }
+        val startItemId = preferredCurrentItemId
+            ?.takeIf { preferredId -> sourceItems.any { it.itemId == preferredId } }
+            ?: sourceItems.first().itemId
+        return startSession(
+            queueItems = sourceItems,
+            startItemId = startItemId,
+            sourcePlaylistId = sourcePlaylistId,
+        )
+    }
+
     suspend fun getSession(): NowPlayingSession? {
         return getSessionLoadResult().session
     }
