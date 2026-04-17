@@ -644,6 +644,12 @@ private fun MimeoApp(vm: AppViewModel) {
     val presentingLocus = isOnLocusRoute
     val compactControlsOnly = !isOnLocusRoute
     val libraryShellVisible = !requiresSignIn && !presentingLocus
+    val playerControlsVisible = !requiresSignIn && requestedPlayerItemId != null && !(presentingLocus && readerChromeHidden)
+    val snackbarBottomPadding = when {
+        playerControlsVisible -> 108.dp
+        presentingLocus && readerChromeHidden -> 12.dp
+        else -> 16.dp
+    }
     val shellBottomClearance = 12.dp
     val baseUrlHint = vm.baseUrlHintForDevice(isLikelyPhysicalDevice())
     val baseAddress = settings.baseUrl.trim().removePrefix("http://").removePrefix("https://")
@@ -1333,7 +1339,7 @@ private fun MimeoApp(vm: AppViewModel) {
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.ime)
-                    .padding(bottom = if (presentingLocus && readerChromeHidden) 12.dp else 16.dp),
+                    .padding(bottom = snackbarBottomPadding),
             )
         }
     }

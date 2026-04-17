@@ -1701,7 +1701,7 @@ fun PlayerScreen(
         PlayerControlBar(
             progressPercent = currentPercent,
             minimal = controlsMode == PlayerControlsMode.MINIMAL,
-            nowPlayingTitle = if (compactControlsOnly || previewModeActive) nowPlayingTitle else "",
+            nowPlayingTitle = nowPlayingTitle,
             continuousMarquee = settings.continuousNowPlayingMarquee,
             onOpenLocusForItem = {
                 val locusTargetId = resolveLocusOpenTargetId()
