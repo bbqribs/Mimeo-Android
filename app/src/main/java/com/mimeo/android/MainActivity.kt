@@ -76,6 +76,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -558,11 +559,6 @@ private fun MimeoApp(vm: AppViewModel) {
         if (playbackInProgress && activeNowPlayingItemId != null && activeNowPlayingItemId != itemId) {
             pendingLocusOpen = true
             pendingLocusItemId = itemId
-            vm.showSnackbar(
-                "Viewing item while playback continues. Use long-press Play or 'Play this item' to switch.",
-                null,
-                null,
-            )
             nav.navigate("$ROUTE_LOCUS/$itemId") {
                 launchSingleTop = true
             }
@@ -649,7 +645,7 @@ private fun MimeoApp(vm: AppViewModel) {
     val presentingLocus = isOnLocusRoute
     val compactControlsOnly = !isOnLocusRoute
     val libraryShellVisible = !requiresSignIn && !presentingLocus
-    val shellBottomClearance = if (libraryShellVisible) 12.dp else 0.dp
+    val shellBottomClearance = 12.dp
     val baseUrlHint = vm.baseUrlHintForDevice(isLikelyPhysicalDevice())
     val baseAddress = settings.baseUrl.trim().removePrefix("http://").removePrefix("https://")
     val statusLooksError = statusMessage?.let { message ->
@@ -1281,6 +1277,11 @@ private fun MimeoApp(vm: AppViewModel) {
                                     }
                                 }
                             },
+                            onOpenLocusForItem = { itemId ->
+                                nav.navigate("$ROUTE_LOCUS/$itemId") {
+                                    launchSingleTop = true
+                                }
+                            },
                             onRequestBack = {
                                 // Pop back to wherever the user came from (playlist detail,
                                 // Up Next, Inbox, etc.) rather than always jumping to Up Next.
@@ -1316,6 +1317,7 @@ private fun MimeoApp(vm: AppViewModel) {
                             modifier = if (compactControlsOnly) {
                                 Modifier
                                     .align(Alignment.BottomCenter)
+                                    .background(Color.Black)
                                     .padding(bottom = shellBottomClearance)
                                     .fillMaxWidth()
                             } else {

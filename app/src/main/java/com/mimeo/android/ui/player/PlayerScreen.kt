@@ -759,6 +759,7 @@ fun PlayerScreen(
     locusTapSignal: Int = 0,
     openRequestSignal: Int = 0,
     onOpenItem: (Int) -> Unit,
+    onOpenLocusForItem: (Int) -> Unit,
     onRequestBack: () -> Unit = {},
     onOpenDiagnostics: () -> Unit,
     stopPlaybackOnDispose: Boolean = false,
@@ -1691,6 +1692,12 @@ fun PlayerScreen(
             minimal = controlsMode == PlayerControlsMode.MINIMAL,
             nowPlayingTitle = if (compactControlsOnly || previewModeActive) nowPlayingTitle else "",
             continuousMarquee = settings.continuousNowPlayingMarquee,
+            onOpenLocusForItem = {
+                val locusTargetId = if (locusItemId > 0) locusItemId else currentItemId
+                if (locusTargetId > 0) {
+                    onOpenLocusForItem(locusTargetId)
+                }
+            },
             canSeek = chunks.isNotEmpty(),
             canMoveBackward = chunks.isNotEmpty(),
             canMoveForward = nextSentencePosition != null,
@@ -1776,6 +1783,12 @@ fun PlayerScreen(
         )
     }
     val renderPlayerDock: @Composable () -> Unit = {
+        val openLocusFromDock = {
+            val locusTargetId = if (locusItemId > 0) locusItemId else currentItemId
+            if (locusTargetId > 0) {
+                onOpenLocusForItem(locusTargetId)
+            }
+        }
         when (controlsMode) {
             PlayerControlsMode.FULL -> FullPlayerDock(
                 chevronSide = chevronSide,
@@ -1784,6 +1797,7 @@ fun PlayerScreen(
                 onChevronTap = handleChevronTap,
                 onChevronLongPress = handleChevronLongPress,
                 onChevronSnap = handleChevronSnap,
+                onBackgroundTap = openLocusFromDock,
                 content = renderPlayerControlBar,
             )
 
@@ -1794,6 +1808,7 @@ fun PlayerScreen(
                 onChevronTap = handleChevronTap,
                 onChevronLongPress = handleChevronLongPress,
                 onChevronSnap = handleChevronSnap,
+                onBackgroundTap = openLocusFromDock,
                 content = renderPlayerControlBar,
             )
 
@@ -1805,6 +1820,7 @@ fun PlayerScreen(
                 onChevronTap = handleChevronTap,
                 onChevronLongPress = handleChevronLongPress,
                 onChevronSnap = handleChevronSnap,
+                onBackgroundTap = openLocusFromDock,
             )
         }
     }
@@ -2374,7 +2390,17 @@ private fun ExpandedPlayerTopBar(
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 1.dp)
                     .clickable { titleExpanded = !titleExpanded }
-                    .let { if (!titleExpanded) it.basicMarquee(iterations = if (continuousMarquee) Int.MAX_VALUE else 1) else it },
+                    .let {
+                        if (!titleExpanded) {
+                            it.basicMarquee(
+                                iterations = if (continuousMarquee) Int.MAX_VALUE else 1,
+                                initialDelayMillis = 3_000,
+                                delayMillis = 5_000,
+                            )
+                        } else {
+                            it
+                        }
+                    },
                 maxLines = if (titleExpanded) 3 else 1,
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
             )
@@ -3225,12 +3251,19 @@ private fun FullPlayerDock(
     onChevronTap: () -> Unit,
     onChevronLongPress: () -> Unit,
     onChevronSnap: (Float) -> Unit,
+    onBackgroundTap: () -> Unit,
     content: @Composable () -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.Black),
+            .background(Color.Black)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onBackgroundTap,
+            ),
     ) {
         content()
         if (showChevron) {
@@ -3263,12 +3296,19 @@ private fun MinimalPlayerDock(
     onChevronTap: () -> Unit,
     onChevronLongPress: () -> Unit,
     onChevronSnap: (Float) -> Unit,
+    onBackgroundTap: () -> Unit,
     content: @Composable () -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.Black),
+            .background(Color.Black)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onBackgroundTap,
+            ),
     ) {
         content()
         if (showChevron) {
@@ -3302,11 +3342,18 @@ private fun NubPlayerDock(
     onChevronTap: () -> Unit,
     onChevronLongPress: () -> Unit,
     onChevronSnap: (Float) -> Unit,
+    onBackgroundTap: () -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(PLAYER_TRANSPORT_ROW_HEIGHT),
+            .height(PLAYER_TRANSPORT_ROW_HEIGHT)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onBackgroundTap,
+            ),
     ) {
         PlayerProgressLine(
             progressPercent = progressPercent,
@@ -3416,6 +3463,7 @@ private fun PlayerControlBar(
     minimal: Boolean,
     nowPlayingTitle: String,
     continuousMarquee: Boolean,
+    onOpenLocusForItem: () -> Unit,
     canSeek: Boolean,
     canMoveBackward: Boolean,
     canMoveForward: Boolean,
@@ -3432,6 +3480,7 @@ private fun PlayerControlBar(
     onNextItem: () -> Unit,
 ) {
     val sliderInteractionSource = remember { MutableInteractionSource() }
+    val controlPanelInteractionSource = remember { MutableInteractionSource() }
     val isDraggingSlider by sliderInteractionSource.collectIsDraggedAsState()
     var sliderValue by remember { mutableFloatStateOf(progressPercent.coerceIn(0, 100) / 100f) }
     LaunchedEffect(progressPercent, isDraggingSlider) {
@@ -3440,14 +3489,21 @@ private fun PlayerControlBar(
         }
     }
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = controlPanelInteractionSource,
+                indication = null,
+                onClick = onOpenLocusForItem,
+            ),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         if (nowPlayingTitle.isNotBlank()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 2.dp, vertical = 2.dp),
+                    .padding(horizontal = 2.dp, vertical = 2.dp)
+                    .clickable(onClick = onOpenLocusForItem),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -3455,17 +3511,23 @@ private fun PlayerControlBar(
                     style = MaterialTheme.typography.labelMedium.copy(
                         fontWeight = FontWeight.SemiBold,
                         fontStyle = FontStyle.Italic,
+                        fontSize = (MaterialTheme.typography.labelMedium.fontSize.value + 1f).sp,
                     ),
                 )
                 Text(
                     text = nowPlayingTitle,
                     modifier = Modifier
                         .weight(1f)
-                        .basicMarquee(iterations = if (continuousMarquee) Int.MAX_VALUE else 1),
+                        .basicMarquee(
+                            iterations = if (continuousMarquee) Int.MAX_VALUE else 1,
+                            initialDelayMillis = 3_000,
+                            delayMillis = 5_000,
+                        ),
                     maxLines = 1,
                     style = MaterialTheme.typography.labelMedium.copy(
                         fontWeight = FontWeight.SemiBold,
                         fontStyle = FontStyle.Italic,
+                        fontSize = (MaterialTheme.typography.labelMedium.fontSize.value + 1f).sp,
                     ),
                 )
             }
