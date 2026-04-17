@@ -76,7 +76,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -1317,7 +1316,6 @@ private fun MimeoApp(vm: AppViewModel) {
                             modifier = if (compactControlsOnly) {
                                 Modifier
                                     .align(Alignment.BottomCenter)
-                                    .background(Color.Black)
                                     .padding(bottom = shellBottomClearance)
                                     .fillMaxWidth()
                             } else {

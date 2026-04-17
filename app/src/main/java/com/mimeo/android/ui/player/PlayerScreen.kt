@@ -1657,6 +1657,17 @@ fun PlayerScreen(
         showProblemReportDialog = true
     }
 
+    fun resolveLocusOpenTargetId(): Int {
+        return listOf(
+            playbackOwnerItemId,
+            locusItemId,
+            currentItemId,
+            sessionCurrentItemId ?: -1,
+            requestedItemId ?: -1,
+            initialItemId,
+        ).firstOrNull { it > 0 } ?: -1
+    }
+
     val renderPlayerControlBar: @Composable () -> Unit = {
         val previousSentencePosition = resolveSentenceJumpPosition(
             chunks = chunks,
@@ -1693,10 +1704,8 @@ fun PlayerScreen(
             nowPlayingTitle = if (compactControlsOnly || previewModeActive) nowPlayingTitle else "",
             continuousMarquee = settings.continuousNowPlayingMarquee,
             onOpenLocusForItem = {
-                val locusTargetId = if (locusItemId > 0) locusItemId else currentItemId
-                if (locusTargetId > 0) {
-                    onOpenLocusForItem(locusTargetId)
-                }
+                val locusTargetId = resolveLocusOpenTargetId()
+                if (locusTargetId > 0) onOpenLocusForItem(locusTargetId)
             },
             canSeek = chunks.isNotEmpty(),
             canMoveBackward = chunks.isNotEmpty(),
@@ -1784,10 +1793,8 @@ fun PlayerScreen(
     }
     val renderPlayerDock: @Composable () -> Unit = {
         val openLocusFromDock = {
-            val locusTargetId = if (locusItemId > 0) locusItemId else currentItemId
-            if (locusTargetId > 0) {
-                onOpenLocusForItem(locusTargetId)
-            }
+            val locusTargetId = resolveLocusOpenTargetId()
+            if (locusTargetId > 0) onOpenLocusForItem(locusTargetId)
         }
         when (controlsMode) {
             PlayerControlsMode.FULL -> FullPlayerDock(
