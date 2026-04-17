@@ -1969,6 +1969,8 @@ fun PlayerScreen(
                                     },
                             ) {
                                 ExpandedPlayerTopBar(
+                                    readerItemTitle = currentTitle,
+                                    readerItemSourceLabel = capturePresentation.sourceLabel,
                                     playbackSpeed = settings.playbackSpeed,
                                     overflowExpanded = overflowExpanded,
                                     showTopBar = !actionBarHiddenByMode || locusSearchActive,
@@ -2348,6 +2350,8 @@ private fun PlaybackObservabilityStrip(
 @Composable
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 private fun ExpandedPlayerTopBar(
+    readerItemTitle: String,
+    readerItemSourceLabel: String?,
     playbackSpeed: Float,
     overflowExpanded: Boolean,
     showTopBar: Boolean = true,
@@ -2373,6 +2377,33 @@ private fun ExpandedPlayerTopBar(
     overflowMenuContent: @Composable () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
+        if (readerItemTitle.isNotBlank()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.Black)
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = readerItemTitle,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                )
+                if (!readerItemSourceLabel.isNullOrBlank()) {
+                    Text(
+                        text = readerItemSourceLabel,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontStyle = FontStyle.Italic,
+                            color = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                }
+            }
+        }
         AnimatedVisibility(visible = showTopBar) {
             TopAppBar(
                 modifier = Modifier.height(48.dp),
