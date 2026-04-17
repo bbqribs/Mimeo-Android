@@ -19,6 +19,20 @@ Mimeo Android is the mobile client for the Mimeo "read later" system.
 - **Physical device (LAN)**: Use `baseUrl=http://<your-PC-LAN-IP>:8000` or `https://` if TLS is configured.
 - **Auth**: Prefer per-device tokens over the legacy shared `API_TOKEN`.
 
+## Conditional remote-backend verification
+- Android tickets remain Android-first by default.
+- Run remote backend checks only when the Android work touched backend behavior/contracts, or explicitly depends on backend changes.
+- In backend-dependent cases, verify against `http://100.84.13.10:8000` (not `127.0.0.1`).
+- If backend deployment verification is needed, run Mimeo repo scripts (not Android-local scripts):
+  - quick sync: `powershell -ExecutionPolicy Bypass -File C:\Users\brend\Documents\Coding\Mimeo\scripts\stage2-runtime-sync.ps1 -Action Install`
+  - full sync when quick sync is insufficient: `powershell -ExecutionPolicy Bypass -File C:\Users\brend\Documents\Coding\Mimeo\scripts\stage2-runtime-sync.ps1 -Action InstallFull`
+- Reference: `C:\Users\brend\Documents\Coding\Mimeo\docs\REMOTE_RUNTIME_VERIFICATION_PROTOCOL.md`
+
+## Operator reporting default
+- Always report explicitly: what changed, what passed, what failed, and exact next step if blocked.
+- Always include plain-English manual verification steps.
+- Include copyable command blocks when commands are relevant.
+
 ## Build and test
 ```bash
 .\gradlew.bat :app:assembleDebug
