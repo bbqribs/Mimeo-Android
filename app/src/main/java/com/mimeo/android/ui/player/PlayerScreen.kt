@@ -11,6 +11,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -758,6 +759,7 @@ fun PlayerScreen(
     locusTapSignal: Int = 0,
     openRequestSignal: Int = 0,
     onOpenItem: (Int) -> Unit,
+    onOpenLocusForItem: (Int) -> Unit,
     onRequestBack: () -> Unit = {},
     onOpenDiagnostics: () -> Unit,
     stopPlaybackOnDispose: Boolean = false,
@@ -1655,6 +1657,17 @@ fun PlayerScreen(
         showProblemReportDialog = true
     }
 
+    fun resolveLocusOpenTargetId(): Int {
+        return listOf(
+            playbackOwnerItemId,
+            locusItemId,
+            currentItemId,
+            sessionCurrentItemId ?: -1,
+            requestedItemId ?: -1,
+            initialItemId,
+        ).firstOrNull { it > 0 } ?: -1
+    }
+
     val renderPlayerControlBar: @Composable () -> Unit = {
         val previousSentencePosition = resolveSentenceJumpPosition(
             chunks = chunks,
@@ -1688,6 +1701,12 @@ fun PlayerScreen(
         PlayerControlBar(
             progressPercent = currentPercent,
             minimal = controlsMode == PlayerControlsMode.MINIMAL,
+            nowPlayingTitle = if (compactControlsOnly || previewModeActive) nowPlayingTitle else "",
+            continuousMarquee = settings.continuousNowPlayingMarquee,
+            onOpenLocusForItem = {
+                val locusTargetId = resolveLocusOpenTargetId()
+                if (locusTargetId > 0) onOpenLocusForItem(locusTargetId)
+            },
             canSeek = chunks.isNotEmpty(),
             canMoveBackward = chunks.isNotEmpty(),
             canMoveForward = nextSentencePosition != null,
@@ -1773,6 +1792,10 @@ fun PlayerScreen(
         )
     }
     val renderPlayerDock: @Composable () -> Unit = {
+        val openLocusFromDock = {
+            val locusTargetId = resolveLocusOpenTargetId()
+            if (locusTargetId > 0) onOpenLocusForItem(locusTargetId)
+        }
         when (controlsMode) {
             PlayerControlsMode.FULL -> FullPlayerDock(
                 chevronSide = chevronSide,
@@ -1781,6 +1804,7 @@ fun PlayerScreen(
                 onChevronTap = handleChevronTap,
                 onChevronLongPress = handleChevronLongPress,
                 onChevronSnap = handleChevronSnap,
+                onBackgroundTap = openLocusFromDock,
                 content = renderPlayerControlBar,
             )
 
@@ -1791,6 +1815,7 @@ fun PlayerScreen(
                 onChevronTap = handleChevronTap,
                 onChevronLongPress = handleChevronLongPress,
                 onChevronSnap = handleChevronSnap,
+                onBackgroundTap = openLocusFromDock,
                 content = renderPlayerControlBar,
             )
 
@@ -1802,6 +1827,7 @@ fun PlayerScreen(
                 onChevronTap = handleChevronTap,
                 onChevronLongPress = handleChevronLongPress,
                 onChevronSnap = handleChevronSnap,
+                onBackgroundTap = openLocusFromDock,
             )
         }
     }
@@ -1865,7 +1891,7 @@ fun PlayerScreen(
                             .fillMaxWidth()
                             .weight(1f, fill = true),
                     ) {
-                        val showLocusTopBar = (!actionBarHiddenByMode || locusSearchActive) && transitionSettled
+                        val showLocusTopBar = transitionSettled
                         val showReaderDockOverlay = !playerDockHiddenByMode && transitionSettled
                         LaunchedEffect(showLocusTopBar) {
                             if (!showLocusTopBar) {
@@ -1943,10 +1969,13 @@ fun PlayerScreen(
                                     },
                             ) {
                                 ExpandedPlayerTopBar(
-                                    title = locusActionBarTitle,
+                                    title = currentTitle,
+                                    titleDomain = capturePresentation.sourceLabel,
+                                    titleSourceUrl = capturePresentation.sourceUrl,
+                                    continuousMarquee = settings.continuousNowPlayingMarquee,
                                     playbackSpeed = settings.playbackSpeed,
                                     overflowExpanded = overflowExpanded,
-                                    showTopBar = !(readerChromeHidden && locusSearchActive),
+                                    showTopBar = !actionBarHiddenByMode || locusSearchActive,
                                     canMarkDone = displayPayload != null,
                                     isDone = showCompleted,
                                     refreshState = refreshActionState,
@@ -2321,9 +2350,12 @@ private fun PlaybackObservabilityStrip(
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 private fun ExpandedPlayerTopBar(
     title: String,
+    titleDomain: String?,
+    titleSourceUrl: String?,
+    continuousMarquee: Boolean,
     playbackSpeed: Float,
     overflowExpanded: Boolean,
     showTopBar: Boolean = true,
@@ -2348,7 +2380,66 @@ private fun ExpandedPlayerTopBar(
     onOverflowExpandedChange: (Boolean) -> Unit,
     overflowMenuContent: @Composable () -> Unit,
 ) {
+    val context = LocalContext.current
+    var titleExpanded by remember(title) { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxWidth()) {
+        // Locus title strip — always visible when ExpandedPlayerTopBar is shown
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.Black)
+                .padding(horizontal = 2.dp, vertical = 2.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = title.ifBlank { "" },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 1.dp)
+                    .clickable { titleExpanded = !titleExpanded }
+                    .let {
+                        if (!titleExpanded) {
+                            it.basicMarquee(
+                                iterations = if (continuousMarquee) Int.MAX_VALUE else 1,
+                                initialDelayMillis = 3_000,
+                                delayMillis = 5_000,
+                            )
+                        } else {
+                            it
+                        }
+                    },
+                maxLines = if (titleExpanded) 3 else 1,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+            )
+            if (!titleDomain.isNullOrBlank()) {
+                val domainModifier = if (!titleSourceUrl.isNullOrBlank()) {
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                        .clickable { openItemInBrowser(context, titleSourceUrl) }
+                } else {
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                }
+                Text(
+                    text = titleDomain,
+                    modifier = domainModifier,
+                    maxLines = 1,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontStyle = FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.primary,
+                    ),
+                )
+            }
+            Spacer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp)
+                    .height(1.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
+            )
+        }
         AnimatedVisibility(visible = showTopBar) {
             TopAppBar(
                 modifier = Modifier.height(48.dp),
@@ -3167,12 +3258,19 @@ private fun FullPlayerDock(
     onChevronTap: () -> Unit,
     onChevronLongPress: () -> Unit,
     onChevronSnap: (Float) -> Unit,
+    onBackgroundTap: () -> Unit,
     content: @Composable () -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.Black),
+            .background(Color.Black)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onBackgroundTap,
+            ),
     ) {
         content()
         if (showChevron) {
@@ -3205,12 +3303,19 @@ private fun MinimalPlayerDock(
     onChevronTap: () -> Unit,
     onChevronLongPress: () -> Unit,
     onChevronSnap: (Float) -> Unit,
+    onBackgroundTap: () -> Unit,
     content: @Composable () -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.Black),
+            .background(Color.Black)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onBackgroundTap,
+            ),
     ) {
         content()
         if (showChevron) {
@@ -3244,11 +3349,18 @@ private fun NubPlayerDock(
     onChevronTap: () -> Unit,
     onChevronLongPress: () -> Unit,
     onChevronSnap: (Float) -> Unit,
+    onBackgroundTap: () -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(PLAYER_TRANSPORT_ROW_HEIGHT),
+            .height(PLAYER_TRANSPORT_ROW_HEIGHT)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onBackgroundTap,
+            ),
     ) {
         PlayerProgressLine(
             progressPercent = progressPercent,
@@ -3356,6 +3468,9 @@ private fun PlayerChromeChevron(
 private fun PlayerControlBar(
     progressPercent: Int,
     minimal: Boolean,
+    nowPlayingTitle: String,
+    continuousMarquee: Boolean,
+    onOpenLocusForItem: () -> Unit,
     canSeek: Boolean,
     canMoveBackward: Boolean,
     canMoveForward: Boolean,
@@ -3372,6 +3487,7 @@ private fun PlayerControlBar(
     onNextItem: () -> Unit,
 ) {
     val sliderInteractionSource = remember { MutableInteractionSource() }
+    val controlPanelInteractionSource = remember { MutableInteractionSource() }
     val isDraggingSlider by sliderInteractionSource.collectIsDraggedAsState()
     var sliderValue by remember { mutableFloatStateOf(progressPercent.coerceIn(0, 100) / 100f) }
     LaunchedEffect(progressPercent, isDraggingSlider) {
@@ -3380,9 +3496,49 @@ private fun PlayerControlBar(
         }
     }
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = controlPanelInteractionSource,
+                indication = null,
+                onClick = onOpenLocusForItem,
+            ),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
+        if (nowPlayingTitle.isNotBlank()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 2.dp, vertical = 2.dp)
+                    .clickable(onClick = onOpenLocusForItem),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "❯ ",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontStyle = FontStyle.Italic,
+                        fontSize = (MaterialTheme.typography.labelMedium.fontSize.value + 1f).sp,
+                    ),
+                )
+                Text(
+                    text = nowPlayingTitle,
+                    modifier = Modifier
+                        .weight(1f)
+                        .basicMarquee(
+                            iterations = if (continuousMarquee) Int.MAX_VALUE else 1,
+                            initialDelayMillis = 3_000,
+                            delayMillis = 5_000,
+                        ),
+                    maxLines = 1,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontStyle = FontStyle.Italic,
+                        fontSize = (MaterialTheme.typography.labelMedium.fontSize.value + 1f).sp,
+                    ),
+                )
+            }
+        }
         if (!minimal) {
             Box(
                 modifier = Modifier

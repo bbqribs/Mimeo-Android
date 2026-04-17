@@ -89,7 +89,7 @@
 - Phase 6: Up Next session queue panel + management (collapsible session-order view in QueueScreen, reorder/remove within session, eventual cross-device sync via backend API — see Phase 6 notes below).
 - Non-goals for this track: no playlist folders, no auto re-seed on pull-to-refresh.
 - Phase 6 sync note: the shipped Up Next implementation is device-local (Room). Cross-device sync is the planned long-term direction: when playback continues on a second device, Up Next should resume in the same order. This requires a dedicated backend API contract for session queue persistence and is a CONTRACT CHANGE that must be coordinated with the Mimeo backend repo before any Android sync work begins.
-- Deferred UI ticket: the persistent top title bar tied to currently-playing content should be replaced by a smaller scrolling title attached to the player controls, with the article-level title treatment attached to the item open in reader view. This is a standalone player-chrome redesign ticket, not part of Phase 6A.
+- [x] Deferred UI ticket shipped: persistent top now-playing title bar removed; player controls now carry a compact scrolling (marquee) title showing currently-playing content; article-level title shown in the reader overlay top bar for the item open in reader view.
 
 ## Priority 0
 - [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.

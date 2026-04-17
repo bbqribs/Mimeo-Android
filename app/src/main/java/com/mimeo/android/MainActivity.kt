@@ -24,17 +24,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -80,9 +76,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -183,7 +176,6 @@ import com.mimeo.android.ui.player.PlaybackEngineSettings
 import com.mimeo.android.ui.player.PlaybackEngineState
 import com.mimeo.android.ui.player.PlaybackOpenIntent
 import com.mimeo.android.ui.player.buildPlaybackChunks
-import com.mimeo.android.ui.common.nowPlayingCapturePresentation
 import com.mimeo.android.ui.playlists.PlaylistDetailScreen
 import com.mimeo.android.ui.playlists.PlaylistsScreen
 import com.mimeo.android.ui.queue.QueueScreen
@@ -566,11 +558,6 @@ private fun MimeoApp(vm: AppViewModel) {
         if (playbackInProgress && activeNowPlayingItemId != null && activeNowPlayingItemId != itemId) {
             pendingLocusOpen = true
             pendingLocusItemId = itemId
-            vm.showSnackbar(
-                "Viewing item while playback continues. Use long-press Play or 'Play this item' to switch.",
-                null,
-                null,
-            )
             nav.navigate("$ROUTE_LOCUS/$itemId") {
                 launchSingleTop = true
             }
@@ -657,13 +644,7 @@ private fun MimeoApp(vm: AppViewModel) {
     val presentingLocus = isOnLocusRoute
     val compactControlsOnly = !isOnLocusRoute
     val libraryShellVisible = !requiresSignIn && !presentingLocus
-    val shellBottomClearance = if (libraryShellVisible) 12.dp else 0.dp
-    var isNowPlayingStripExpanded by rememberSaveable { mutableStateOf(false) }
-    val nowPlayingPresentation = nowPlayingCapturePresentation(nowPlayingSession?.currentItem)
-    val nowPlayingStripTitle = nowPlayingPresentation.title.ifBlank { "No active playback" }
-    val nowPlayingStripDomain = nowPlayingPresentation.sourceLabel
-    val nowPlayingStripSourceUrl = nowPlayingPresentation.sourceUrl
-    val canExpandNowPlayingTitle = nowPlayingSession?.currentItem != null
+    val shellBottomClearance = 12.dp
     val baseUrlHint = vm.baseUrlHintForDevice(isLikelyPhysicalDevice())
     val baseAddress = settings.baseUrl.trim().removePrefix("http://").removePrefix("https://")
     val statusLooksError = statusMessage?.let { message ->
@@ -969,20 +950,6 @@ private fun MimeoApp(vm: AppViewModel) {
                         detail = bannerDetail,
                         onRetry = { vm.loadQueue() },
                         onDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
-                    )
-                }
-                if (!requiresSignIn) {
-                    PersistentNowPlayingStrip(
-                        title = nowPlayingStripTitle,
-                        domain = nowPlayingStripDomain,
-                        sourceUrl = nowPlayingStripSourceUrl,
-                        continuous = settings.continuousNowPlayingMarquee,
-                        expanded = isNowPlayingStripExpanded,
-                        onTap = {
-                            if (canExpandNowPlayingTitle) {
-                                isNowPlayingStripExpanded = !isNowPlayingStripExpanded
-                            }
-                        },
                     )
                 }
                 if (libraryShellVisible) {
@@ -1309,6 +1276,11 @@ private fun MimeoApp(vm: AppViewModel) {
                                     }
                                 }
                             },
+                            onOpenLocusForItem = { itemId ->
+                                nav.navigate("$ROUTE_LOCUS/$itemId") {
+                                    launchSingleTop = true
+                                }
+                            },
                             onRequestBack = {
                                 // Pop back to wherever the user came from (playlist detail,
                                 // Up Next, Inbox, etc.) rather than always jumping to Up Next.
@@ -1372,93 +1344,6 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
-}
-
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun PersistentNowPlayingStrip(
-    title: String,
-    domain: String?,
-    sourceUrl: String?,
-    continuous: Boolean,
-    expanded: Boolean,
-    onTap: () -> Unit,
-) {
-    val uriHandler = LocalUriHandler.current
-    val displayTitle = title.ifBlank { "No active playback" }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 2.dp, vertical = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onTap),
-        ) {
-            Text(
-                text = "❯ ",
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-            )
-            AnimatedContent(
-                targetState = expanded,
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(150)) togetherWith
-                        fadeOut(animationSpec = tween(120))
-                },
-                label = "nowPlayingStripExpand",
-            ) { isExpanded ->
-                Text(
-                    text = displayTitle,
-                    modifier = Modifier
-                        .weight(1f)
-                        .let { base ->
-                            if (!isExpanded) {
-                                base.basicMarquee(iterations = if (continuous) Int.MAX_VALUE else 1)
-                            } else {
-                                base
-                            }
-                        },
-                    maxLines = if (isExpanded) 5 else 1,
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                )
-            }
-        }
-        if (!domain.isNullOrBlank()) {
-            val domainBaseModifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp)
-            val domainModifier = if (sourceUrl != null) {
-                domainBaseModifier
-                    .clickable { uriHandler.openUri(sourceUrl) }
-            } else {
-                domainBaseModifier
-            }
-            Text(
-                text = domain,
-                modifier = domainModifier,
-                maxLines = 1,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontStyle = FontStyle.Italic,
-                    color = MaterialTheme.colorScheme.primary,
-                ),
-            )
-        }
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Spacer(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp)
-                    .height(1.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
-            )
-        }
-    }
 }
 
 @Composable
