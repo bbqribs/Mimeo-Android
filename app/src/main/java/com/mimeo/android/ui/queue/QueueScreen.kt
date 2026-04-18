@@ -468,6 +468,17 @@ fun QueueScreen(
     val selectedPlaylistName = settings.selectedPlaylistId?.let { id ->
         playlists.firstOrNull { it.id == id }?.name
     } ?: "Smart queue"
+    val queueFeedLabel = buildString {
+        append("Queue feed")
+        append(" · source: ")
+        append(selectedPlaylistName)
+        append(" · sort: ")
+        append(selectedSort.label)
+        if (selectedFilter != QueueFilterChip.ALL) {
+            append(" · filter: ")
+            append(selectedFilter.label)
+        }
+    }
     val canReseedFromCurrentSource = !loading
     val sessionSeedPresentation = nowPlayingSession?.let { session ->
         resolveSessionSeedSourcePresentation(
@@ -852,7 +863,7 @@ fun QueueScreen(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = "Queue: $selectedPlaylistName",
+                    text = "Source: $selectedPlaylistName",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
@@ -1301,7 +1312,7 @@ fun QueueScreen(
             )
         }
         Text(
-            text = "Queue feed (created order)",
+            text = queueFeedLabel,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 4.dp),
