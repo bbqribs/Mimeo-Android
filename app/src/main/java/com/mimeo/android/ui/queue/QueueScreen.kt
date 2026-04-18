@@ -1173,6 +1173,18 @@ fun QueueScreen(
                 session = session,
                 playlists = playlists,
                 onOpenItem = { itemId -> onOpenPlayer(itemId) },
+                onMoveItemUp = { index ->
+                    vm.reorderNowPlayingSessionItem(
+                        fromIndex = index,
+                        toIndex = index - 1,
+                    )
+                },
+                onMoveItemDown = { index ->
+                    vm.reorderNowPlayingSessionItem(
+                        fromIndex = index,
+                        toIndex = index + 1,
+                    )
+                },
                 onRemoveItem = { itemId -> vm.removeItemFromSession(itemId) },
                 onClearSession = { vm.clearNowPlayingSession() },
             )
@@ -2793,6 +2805,8 @@ private fun NowPlayingSessionPanel(
     session: NowPlayingSession,
     playlists: List<PlaylistSummary>,
     onOpenItem: (Int) -> Unit,
+    onMoveItemUp: (Int) -> Unit,
+    onMoveItemDown: (Int) -> Unit,
     onRemoveItem: (Int) -> Unit,
     onClearSession: () -> Unit,
 ) {
@@ -2881,6 +2895,30 @@ private fun NowPlayingSessionPanel(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
                         )
+                        IconButton(
+                            onClick = { onMoveItemUp(index) },
+                            enabled = index > 0,
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowUp,
+                                contentDescription = "Move up in session",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                        IconButton(
+                            onClick = { onMoveItemDown(index) },
+                            enabled = index < session.items.lastIndex,
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Move down in session",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
                         if (!isCurrent) {
                             IconButton(
                                 onClick = { onRemoveItem(item.itemId) },

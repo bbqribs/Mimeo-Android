@@ -4034,6 +4034,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun reorderNowPlayingSessionItem(fromIndex: Int, toIndex: Int) {
+        viewModelScope.launch {
+            val session = repository.reorderSessionItem(fromIndex = fromIndex, toIndex = toIndex) ?: return@launch
+            applySessionSnapshot(session)
+        }
+    }
+
     fun restartNowPlayingSession() {
         viewModelScope.launch {
             val restarted = repository.restartSession()
