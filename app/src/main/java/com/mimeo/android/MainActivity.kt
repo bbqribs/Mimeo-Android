@@ -610,10 +610,7 @@ private fun MimeoApp(vm: AppViewModel) {
         currentRoute.startsWith(ROUTE_SETTINGS_DIAGNOSTICS) -> ROUTE_SETTINGS
         currentRoute.startsWith(ROUTE_SETTINGS) -> ROUTE_SETTINGS
         currentRoute.startsWith("playlist/") -> currentRoute
-        currentRoute.startsWith(ROUTE_UP_NEXT) -> {
-            val pid = settings.selectedPlaylistId
-            if (pid != null) "playlist/$pid" else ROUTE_UP_NEXT
-        }
+        currentRoute.startsWith(ROUTE_UP_NEXT) -> ROUTE_UP_NEXT
         currentRoute.startsWith(ROUTE_ARCHIVE) -> ROUTE_ARCHIVE
         currentRoute.startsWith(ROUTE_BIN) -> ROUTE_BIN
         currentRoute.startsWith(ROUTE_FAVORITES) -> ROUTE_FAVORITES
