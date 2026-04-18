@@ -118,7 +118,7 @@
    - Current backend limitation until contract lands: v1 persisted/exported report shape remains the authoritative operator record.
 2. [ ] Cross-repo source metadata unification: align backend + extension/web on the same provenance/origin contract and rendering precedence shipped on Android (no body-link source inference).
 3. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.
-4. [ ] Offline action queueing follow-up: expand deferred-sync coverage beyond favourite/archive to remaining item lifecycle actions where local-first behavior is valuable.
+4. [x] Offline action queueing follow-up shipped: deferred-sync coverage now extends beyond favourite/archive to bin lifecycle actions (move to bin, restore, purge) with local-first optimistic state and bounded reconnect flush behavior.
 5. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
 6. [x] Keep-screen-on/session UX follow-up: shipped — screen stays on during active playback or manual reader mode sessions (PR #167).
 

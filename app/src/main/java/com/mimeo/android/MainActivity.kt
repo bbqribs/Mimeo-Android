@@ -349,6 +349,7 @@ internal data class PendingItemActionFlushEntry(
 internal enum class PendingItemActionFamily {
     FAVORITE,
     ARCHIVE,
+    BIN,
 }
 
 internal fun pendingItemActionFamily(actionType: PendingItemActionType): PendingItemActionFamily {
@@ -357,6 +358,10 @@ internal fun pendingItemActionFamily(actionType: PendingItemActionType): Pending
         PendingItemActionType.ARCHIVE,
         PendingItemActionType.UNARCHIVE,
         -> PendingItemActionFamily.ARCHIVE
+        PendingItemActionType.MOVE_TO_BIN,
+        PendingItemActionType.RESTORE_FROM_BIN,
+        PendingItemActionType.PURGE_FROM_BIN,
+        -> PendingItemActionFamily.BIN
     }
 }
 

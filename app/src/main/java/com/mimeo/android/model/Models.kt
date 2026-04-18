@@ -352,6 +352,9 @@ enum class PendingItemActionType {
     SET_FAVORITE,
     ARCHIVE,
     UNARCHIVE,
+    MOVE_TO_BIN,
+    RESTORE_FROM_BIN,
+    PURGE_FROM_BIN,
 }
 
 @Serializable
