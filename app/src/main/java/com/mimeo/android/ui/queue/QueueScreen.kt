@@ -1489,7 +1489,12 @@ fun QueueScreen(
                                         )
                                             .onSuccess {
                                                 collapsingArchivedItemIds = collapsingArchivedItemIds - item.itemId
-                                                onShowSnackbar("Moved to Bin (14 days)", "Undo", ACTION_KEY_UNDO_ARCHIVE)
+                                                val offlineDeferred = vm.queueOffline.value
+                                                if (offlineDeferred) {
+                                                    onShowSnackbar("Moved to Bin offline; will sync", null, null)
+                                                } else {
+                                                    onShowSnackbar("Moved to Bin (14 days)", "Undo", ACTION_KEY_UNDO_ARCHIVE)
+                                                }
                                             }
                                             .onFailure {
                                                 collapsingArchivedItemIds = collapsingArchivedItemIds - item.itemId
@@ -1514,7 +1519,12 @@ fun QueueScreen(
                                     actionScope.launch {
                                         vm.restoreItemFromBin(item.itemId)
                                             .onSuccess {
-                                                onShowSnackbar("Restored from Bin", null, null)
+                                                val offlineDeferred = vm.queueOffline.value
+                                                onShowSnackbar(
+                                                    if (offlineDeferred) "Restored from Bin offline; will sync" else "Restored from Bin",
+                                                    null,
+                                                    null,
+                                                )
                                             }
                                             .onFailure {
                                                 onShowSnackbar("Couldn't restore from Bin", "Diagnostics", "open_diagnostics")
@@ -1536,7 +1546,12 @@ fun QueueScreen(
                                     actionScope.launch {
                                         vm.purgeItemFromBin(item.itemId)
                                             .onSuccess {
-                                                onShowSnackbar("Permanently deleted", null, null)
+                                                val offlineDeferred = vm.queueOffline.value
+                                                onShowSnackbar(
+                                                    if (offlineDeferred) "Deleted from Bin offline; will sync" else "Permanently deleted",
+                                                    null,
+                                                    null,
+                                                )
                                             }
                                             .onFailure {
                                                 onShowSnackbar("Couldn't purge item", "Diagnostics", "open_diagnostics")

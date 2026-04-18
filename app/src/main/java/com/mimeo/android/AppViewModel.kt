@@ -3362,6 +3362,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val sort = _binSort.value
         val query = _binSearchQuery.value
         return try {
+            val flushedPendingActions = flushPendingItemActions()
             val trashed = repository.listItemsByView(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
@@ -3372,6 +3373,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
             _binItems.value = trashed.map { it.toPlaybackQueueItem() }
             _queueOffline.value = false
+            if (flushedPendingActions > 0) {
+                _statusMessage.value = "Synced offline actions"
+            }
             updateSyncBadgeState()
             Result.success(Unit)
         } catch (error: CancellationException) {
@@ -3415,6 +3419,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val sort = _archiveSort.value
         val query = _archiveSearchQuery.value
         return try {
+            val flushedPendingActions = flushPendingItemActions()
             val archived = repository.listItemsByView(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
@@ -3433,6 +3438,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
             reconcileCachedItemVisibility()
             _queueOffline.value = false
+            if (flushedPendingActions > 0) {
+                _statusMessage.value = "Synced offline actions"
+            }
             updateSyncBadgeState()
             Result.success(Unit)
         } catch (error: CancellationException) {
@@ -3458,6 +3466,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     ): Result<Unit> {
         val current = settings.value
         return try {
+            val flushedPendingActions = flushPendingItemActions()
             val items = repository.listItemsByView(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
@@ -3468,6 +3477,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ).map { it.toPlaybackQueueItem() }
             onLoaded(items)
             _queueOffline.value = false
+            if (flushedPendingActions > 0) {
+                _statusMessage.value = "Synced offline actions"
+            }
             updateSyncBadgeState()
             Result.success(Unit)
         } catch (error: CancellationException) {
@@ -4577,7 +4589,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun isNetworkError(error: Throwable): Boolean = error is IOException
+    private fun isNetworkError(error: Throwable): Boolean {
+        var cursor: Throwable? = error
+        while (cursor != null) {
+            if (cursor is IOException) return true
+            cursor = cursor.cause
+        }
+        return false
+    }
 
     private fun userFacingRequestErrorMessage(error: Throwable, fallback: String): String {
         if (error is ApiException) {

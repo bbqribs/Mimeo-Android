@@ -2135,7 +2135,12 @@ fun PlayerScreen(
                                                         source = ArchiveActionSource.LOCUS,
                                                     )
                                                         .onSuccess {
-                                                            onShowSnackbar("Moved to Bin (14 days)", "Undo", ACTION_KEY_UNDO_ARCHIVE)
+                                                            val offlineDeferred = vm.queueOffline.value
+                                                            if (offlineDeferred) {
+                                                                onShowSnackbar("Moved to Bin offline; will sync", null, null)
+                                                            } else {
+                                                                onShowSnackbar("Moved to Bin (14 days)", "Undo", ACTION_KEY_UNDO_ARCHIVE)
+                                                            }
                                                             if (locusActionItemId != currentItemId && currentItemId > 0) {
                                                                 onOpenItem(currentItemId)
                                                             } else if (nextItemId != null) {
