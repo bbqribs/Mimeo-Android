@@ -1983,8 +1983,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun flushPendingItemActions(): Int {
-        if (!pendingItemActionFlushMutex.tryLock()) return 0
-        try {
+        return pendingItemActionFlushMutex.withLock {
             val current = settings.value
             if (current.apiToken.isBlank()) return 0
             val pending = _pendingItemActions.value
@@ -2075,8 +2074,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             return successCount
-        } finally {
-            pendingItemActionFlushMutex.unlock()
         }
     }
 
