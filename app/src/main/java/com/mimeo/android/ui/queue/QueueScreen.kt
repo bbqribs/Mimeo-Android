@@ -468,6 +468,17 @@ fun QueueScreen(
     val selectedPlaylistName = settings.selectedPlaylistId?.let { id ->
         playlists.firstOrNull { it.id == id }?.name
     } ?: "Smart queue"
+    val queueFeedLabel = buildString {
+        append("Queue feed")
+        append(" · source: ")
+        append(selectedPlaylistName)
+        append(" · sort: ")
+        append(selectedSort.label)
+        if (selectedFilter != QueueFilterChip.ALL) {
+            append(" · filter: ")
+            append(selectedFilter.label)
+        }
+    }
     val canReseedFromCurrentSource = !loading
     val sessionSeedPresentation = nowPlayingSession?.let { session ->
         resolveSessionSeedSourcePresentation(
@@ -852,7 +863,7 @@ fun QueueScreen(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = "Queue: $selectedPlaylistName",
+                    text = "Source: $selectedPlaylistName",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
@@ -1271,6 +1282,18 @@ fun QueueScreen(
                 seededFromLabel = sessionSeedPresentation?.seededFromLabel ?: "Unknown source",
                 currentSourceLabel = sessionSeedPresentation?.currentSourceLabel ?: selectedPlaylistName,
                 onOpenItem = { itemId -> onOpenPlayer(itemId) },
+                onMoveItemUp = { index ->
+                    vm.reorderNowPlayingSessionItem(
+                        fromIndex = index,
+                        toIndex = index - 1,
+                    )
+                },
+                onMoveItemDown = { index ->
+                    vm.reorderNowPlayingSessionItem(
+                        fromIndex = index,
+                        toIndex = index + 1,
+                    )
+                },
                 onRemoveItem = { itemId -> vm.removeItemFromSession(itemId) },
                 onClearSession = { vm.clearNowPlayingSession() },
                 reseedEnabled = canReseedFromCurrentSource,
@@ -1288,6 +1311,12 @@ fun QueueScreen(
                 },
             )
         }
+        Text(
+            text = queueFeedLabel,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 4.dp),
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -2932,6 +2961,8 @@ private fun NowPlayingSessionPanel(
     seededFromLabel: String,
     currentSourceLabel: String,
     onOpenItem: (Int) -> Unit,
+    onMoveItemUp: (Int) -> Unit,
+    onMoveItemDown: (Int) -> Unit,
     onRemoveItem: (Int) -> Unit,
     onClearSession: () -> Unit,
     reseedEnabled: Boolean,
@@ -3035,6 +3066,30 @@ private fun NowPlayingSessionPanel(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
                         )
+                        IconButton(
+                            onClick = { onMoveItemUp(index) },
+                            enabled = index > 0,
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowUp,
+                                contentDescription = "Move up in session",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                        IconButton(
+                            onClick = { onMoveItemDown(index) },
+                            enabled = index < session.items.lastIndex,
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Move down in session",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
                         if (!isCurrent) {
                             IconButton(
                                 onClick = { onRemoveItem(item.itemId) },

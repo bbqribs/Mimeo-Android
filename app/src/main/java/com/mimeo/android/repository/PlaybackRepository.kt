@@ -84,6 +84,37 @@ data class PlaylistMembershipToggleResult(
     val added: Boolean,
 )
 
+internal data class SessionReorderPlan(
+    val fromIndex: Int,
+    val toIndex: Int,
+    val currentIndex: Int,
+)
+
+internal fun computeSessionReorderPlan(
+    itemCount: Int,
+    currentIndex: Int,
+    fromIndex: Int,
+    toIndex: Int,
+): SessionReorderPlan? {
+    if (itemCount <= 1) return null
+    val maxIndex = itemCount - 1
+    val normalizedFrom = fromIndex.coerceIn(0, maxIndex)
+    val normalizedTo = toIndex.coerceIn(0, maxIndex)
+    if (normalizedFrom == normalizedTo) return null
+    val safeCurrent = currentIndex.coerceIn(0, maxIndex)
+    val normalizedCurrent = when {
+        safeCurrent == normalizedFrom -> normalizedTo
+        normalizedFrom < safeCurrent && normalizedTo >= safeCurrent -> safeCurrent - 1
+        normalizedFrom > safeCurrent && normalizedTo <= safeCurrent -> safeCurrent + 1
+        else -> safeCurrent
+    }
+    return SessionReorderPlan(
+        fromIndex = normalizedFrom,
+        toIndex = normalizedTo,
+        currentIndex = normalizedCurrent,
+    )
+}
+
 @Serializable
 private data class StoredNowPlayingItem(
     val itemId: Int,
@@ -832,6 +863,32 @@ class PlaybackRepository(
         val updatedRow = row.copy(
             queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
             currentIndex = newCurrentIndex,
+            updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(stored)
+    }
+
+    suspend fun reorderSessionItem(fromIndex: Int, toIndex: Int): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson).toMutableList()
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        val reorder = computeSessionReorderPlan(
+            itemCount = stored.size,
+            currentIndex = row.currentIndex,
+            fromIndex = fromIndex,
+            toIndex = toIndex,
+        ) ?: return row.toSession(stored)
+        val moved = stored.removeAt(reorder.fromIndex)
+        stored.add(reorder.toIndex, moved)
+        val updatedAt = System.currentTimeMillis()
+        val updatedRow = row.copy(
+            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            currentIndex = reorder.currentIndex,
             updatedAt = updatedAt,
         )
         dao.upsert(updatedRow)
