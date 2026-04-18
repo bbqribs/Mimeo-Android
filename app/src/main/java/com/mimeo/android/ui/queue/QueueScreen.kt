@@ -1300,6 +1300,12 @@ fun QueueScreen(
                 },
             )
         }
+        Text(
+            text = "Queue feed (created order)",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 4.dp),
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
