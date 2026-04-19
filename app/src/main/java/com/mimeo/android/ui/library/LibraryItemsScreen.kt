@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.filled.PlaylistAdd
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaylistSummary
+import com.mimeo.android.ui.common.queueCapturePresentation
 import com.mimeo.android.ui.playlists.BatchPlaylistPickerDialog
 
 data class LibraryBatchAction(
@@ -386,8 +387,9 @@ private fun LibraryItemRow(
     onToggleSelect: () -> Unit,
     onEnterSelection: () -> Unit,
 ) {
-    val title = item.title?.takeIf { it.isNotBlank() } ?: item.url
-    val source = item.host?.takeIf { it.isNotBlank() } ?: item.url
+    val presentation = remember(item) { queueCapturePresentation(item) }
+    val title = presentation.title
+    val source = presentation.sourceLabel ?: item.url
     val progress = item.progressPercent.coerceIn(0, 100)
     val progressLabel = if (progress > 0) " · $progress%" else ""
 
