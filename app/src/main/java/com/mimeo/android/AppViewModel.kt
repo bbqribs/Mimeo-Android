@@ -1625,7 +1625,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 prefetchCount = 0,
             )
             val queue = queueResult.payload
-            val queueItems = applyFavoriteOverrides(queue.items)
+            val queueItems = applyPendingBinProjectionToNonBinItems(
+                applyFavoriteOverrides(queue.items),
+            )
             var offlineReadyIds = resolveOfflineReadyIds(queueItems)
             offlineReadyIds = runInitialPostSignInHydrationIfNeeded(
                 current = current,
@@ -1719,7 +1721,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     prefetchCount = 0,
                 )
                 val refreshedQueue = refreshedQueueResult.payload
-                val refreshedQueueItems = applyFavoriteOverrides(refreshedQueue.items)
+                val refreshedQueueItems = applyPendingBinProjectionToNonBinItems(
+                    applyFavoriteOverrides(refreshedQueue.items),
+                )
                 var refreshedOfflineReadyIds = resolveOfflineReadyIds(refreshedQueueItems)
                 refreshedOfflineReadyIds = ensurePendingItemsOfflineReady(
                     queueItems = refreshedQueueItems,
@@ -1983,8 +1987,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun flushPendingItemActions(): Int {
-        if (!pendingItemActionFlushMutex.tryLock()) return 0
-        try {
+        return pendingItemActionFlushMutex.withLock {
             val current = settings.value
             if (current.apiToken.isBlank()) return 0
             val pending = _pendingItemActions.value
@@ -2023,6 +2026,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                                 markDone = false,
                             )
                         }
+                        PendingItemActionType.MOVE_TO_BIN -> {
+                            repository.moveItemToBin(
+                                baseUrl = current.baseUrl,
+                                token = current.apiToken,
+                                itemId = action.itemId,
+                            )
+                        }
+                        PendingItemActionType.RESTORE_FROM_BIN -> {
+                            repository.restoreItemFromBin(
+                                baseUrl = current.baseUrl,
+                                token = current.apiToken,
+                                itemId = action.itemId,
+                            )
+                            if (action.favorited == true) {
+                                repository.setFavoriteState(
+                                    baseUrl = current.baseUrl,
+                                    token = current.apiToken,
+                                    itemId = action.itemId,
+                                    favorited = true,
+                                )
+                            }
+                        }
+                        PendingItemActionType.PURGE_FROM_BIN -> {
+                            repository.purgeItemFromBin(
+                                baseUrl = current.baseUrl,
+                                token = current.apiToken,
+                                itemId = action.itemId,
+                            )
+                        }
                     }
                 }
                 if (result.isSuccess) {
@@ -2046,8 +2078,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             return successCount
-        } finally {
-            pendingItemActionFlushMutex.unlock()
         }
     }
 
@@ -3212,7 +3242,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val wasNoActiveContent = _noActiveContentItemIds.value.contains(itemId)
         val favoritedSnapshot = queueItemSnapshot?.isFavorited ?: archivedItemSnapshot?.isFavorited
         return try {
-            repository.moveItemToBin(current.baseUrl, current.apiToken, itemId)
             if (favoritedSnapshot != null) {
                 binnedFavoriteStateByItemId[itemId] = favoritedSnapshot
             }
@@ -3233,22 +3262,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 playbackPause(forceSync = true)
                 clearNowPlayingSessionNow()
             }
+            removeArchivedItemLocally(itemId, preserveFavoriteState = true)
+            val binSeed = queueItemSnapshot ?: archivedItemSnapshot
+            if (binSeed != null) {
+                _binItems.update { existing ->
+                    mergeItemIntoList(existing, binSeed, addToFront = true)
+                }
+            }
+            repository.moveItemToBin(current.baseUrl, current.apiToken, itemId)
             if (refreshQueue) {
                 val refreshResult = loadQueueOnce(autoRetryPendingSaves = false)
                 if (refreshResult.isFailure) {
-                    removeArchivedItemLocally(itemId, preserveFavoriteState = true)
                     _statusMessage.value = "Moved to Bin (14 days); queue refresh failed"
                 } else {
                     _statusMessage.value = "Moved to Bin (14 days)"
                 }
             } else {
-                removeArchivedItemLocally(itemId, preserveFavoriteState = true)
-                val binSeed = queueItemSnapshot ?: archivedItemSnapshot
-                if (binSeed != null) {
-                    _binItems.update { existing ->
-                        mergeItemIntoList(existing, binSeed, addToFront = true)
-                    }
-                }
                 _statusMessage.value = "Moved to Bin (14 days)"
             }
             _queueOffline.value = false
@@ -3261,9 +3290,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return Result.failure(error)
             }
             if (isNetworkError(error)) {
+                enqueuePendingItemAction(
+                    itemId = itemId,
+                    actionType = PendingItemActionType.MOVE_TO_BIN,
+                )
                 _queueOffline.value = true
                 _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+                _statusMessage.value = "Moved to Bin offline; will sync"
+                return Result.success(Unit)
             }
+            runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
+            runCatching { loadArchivedItems() }
+            runCatching { loadBinItems() }
             Result.failure(error)
         }
     }
@@ -3325,6 +3363,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val sort = _binSort.value
         val query = _binSearchQuery.value
         return try {
+            val flushedPendingActions = flushPendingItemActions()
             val trashed = repository.listItemsByView(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
@@ -3333,8 +3372,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 dir = sort.sortDir,
                 q = query.takeIf { it.isNotBlank() },
             )
-            _binItems.value = trashed.map { it.toPlaybackQueueItem() }
+            _binItems.value = applyPendingBinProjectionToBinItems(
+                trashed.map { it.toPlaybackQueueItem() },
+            )
             _queueOffline.value = false
+            if (flushedPendingActions > 0) {
+                _statusMessage.value = "Synced offline actions"
+            }
             updateSyncBadgeState()
             Result.success(Unit)
         } catch (error: CancellationException) {
@@ -3378,6 +3422,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val sort = _archiveSort.value
         val query = _archiveSearchQuery.value
         return try {
+            val flushedPendingActions = flushPendingItemActions()
             val archived = repository.listItemsByView(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
@@ -3386,7 +3431,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 dir = sort.sortDir,
                 q = query.takeIf { it.isNotBlank() },
             )
-            _archivedItems.value = archived.map { it.toPlaybackQueueItem() }
+            _archivedItems.value = applyPendingBinProjectionToNonBinItems(
+                archived.map { it.toPlaybackQueueItem() },
+            )
             val combined = (_queueItems.value + _archivedItems.value).distinctBy { item -> item.itemId }
             val offlineReadyIds = resolveOfflineReadyIds(combined)
             _cachedItemIds.update { previous -> previous + offlineReadyIds }
@@ -3396,6 +3443,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
             reconcileCachedItemVisibility()
             _queueOffline.value = false
+            if (flushedPendingActions > 0) {
+                _statusMessage.value = "Synced offline actions"
+            }
             updateSyncBadgeState()
             Result.success(Unit)
         } catch (error: CancellationException) {
@@ -3421,6 +3471,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     ): Result<Unit> {
         val current = settings.value
         return try {
+            val flushedPendingActions = flushPendingItemActions()
             val items = repository.listItemsByView(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
@@ -3429,8 +3480,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 dir = dir,
                 q = q,
             ).map { it.toPlaybackQueueItem() }
-            onLoaded(items)
+            val projected = if (view == ApiClient.ItemsView.TRASH) {
+                applyPendingBinProjectionToBinItems(items)
+            } else {
+                applyPendingBinProjectionToNonBinItems(items)
+            }
+            onLoaded(projected)
             _queueOffline.value = false
+            if (flushedPendingActions > 0) {
+                _statusMessage.value = "Synced offline actions"
+            }
             updateSyncBadgeState()
             Result.success(Unit)
         } catch (error: CancellationException) {
@@ -3511,11 +3570,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun restoreItemFromBin(itemId: Int): Result<Unit> {
         val current = settings.value
+        val binSnapshot = _binItems.value.firstOrNull { it.itemId == itemId }
+        val shouldRestoreFavorite = binnedFavoriteStateByItemId[itemId] == true
         return try {
-            repository.restoreItemFromBin(current.baseUrl, current.apiToken, itemId)
             _binItems.update { existing -> existing.filterNot { it.itemId == itemId } }
+            if (binSnapshot != null && _queueItems.value.none { it.itemId == itemId }) {
+                _queueItems.update { existing ->
+                    mergeItemIntoList(existing, binSnapshot, addToFront = true)
+                }
+            }
+            updateAutoDownloadQueueSnapshotDiagnostics(
+                current = settings.value,
+                queueItems = _queueItems.value,
+                offlineReadyIds = _cachedItemIds.value,
+                knownNoActiveIds = _noActiveContentItemIds.value,
+            )
+            repository.restoreItemFromBin(current.baseUrl, current.apiToken, itemId)
             loadQueueOnce(autoRetryPendingSaves = false)
-            val shouldRestoreFavorite = binnedFavoriteStateByItemId[itemId] == true
             if (shouldRestoreFavorite) {
                 runCatching {
                     repository.setFavoriteState(
@@ -3540,9 +3611,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return Result.failure(error)
             }
             if (isNetworkError(error)) {
+                enqueuePendingItemAction(
+                    itemId = itemId,
+                    actionType = PendingItemActionType.RESTORE_FROM_BIN,
+                    favorited = shouldRestoreFavorite,
+                )
+                binnedFavoriteStateByItemId.remove(itemId)
                 _queueOffline.value = true
                 _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+                _statusMessage.value = "Restored from Bin offline; will sync"
+                return Result.success(Unit)
             }
+            runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
+            runCatching { loadBinItems() }
             Result.failure(error)
         }
     }
@@ -3550,10 +3631,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun purgeItemFromBin(itemId: Int): Result<Unit> {
         val current = settings.value
         return try {
-            repository.purgeItemFromBin(current.baseUrl, current.apiToken, itemId)
             _binItems.update { existing -> existing.filterNot { it.itemId == itemId } }
             binnedFavoriteStateByItemId.remove(itemId)
             favoriteOverridesByItemId.remove(itemId)
+            repository.purgeItemFromBin(current.baseUrl, current.apiToken, itemId)
             _statusMessage.value = "Permanently deleted from Bin"
             _queueOffline.value = false
             updateSyncBadgeState()
@@ -3565,9 +3646,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return Result.failure(error)
             }
             if (isNetworkError(error)) {
+                enqueuePendingItemAction(
+                    itemId = itemId,
+                    actionType = PendingItemActionType.PURGE_FROM_BIN,
+                )
                 _queueOffline.value = true
                 _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+                _statusMessage.value = "Deleted from Bin offline; will sync"
+                return Result.success(Unit)
             }
+            runCatching { loadBinItems() }
             Result.failure(error)
         }
     }
@@ -3949,6 +4037,68 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val override = favoriteOverridesByItemId[item.itemId] ?: return@map item
             if (item.isFavorited == override) item else item.copy(isFavorited = override)
         }
+    }
+
+    private fun latestPendingBinActionByItemId(): Map<Int, PendingItemActionType> {
+        val coalesced = coalescePendingItemActions(_pendingItemActions.value)
+        return coalesced
+            .asSequence()
+            .map { it.action }
+            .filter { action ->
+                when (action.actionType) {
+                    PendingItemActionType.MOVE_TO_BIN,
+                    PendingItemActionType.RESTORE_FROM_BIN,
+                    PendingItemActionType.PURGE_FROM_BIN,
+                    -> true
+                    else -> false
+                }
+            }
+            .associate { it.itemId to it.actionType }
+    }
+
+    private fun applyPendingBinProjectionToNonBinItems(
+        fetched: List<PlaybackQueueItem>,
+    ): List<PlaybackQueueItem> {
+        if (fetched.isEmpty()) return fetched
+        val pendingByItemId = latestPendingBinActionByItemId()
+        if (pendingByItemId.isEmpty()) return fetched
+        val pendingMoveIds = pendingByItemId
+            .filterValues { it == PendingItemActionType.MOVE_TO_BIN }
+            .keys
+        val pendingRestoreIds = pendingByItemId
+            .filterValues { it == PendingItemActionType.RESTORE_FROM_BIN }
+            .keys
+        val filtered = fetched.filterNot { item -> pendingMoveIds.contains(item.itemId) }
+        if (pendingRestoreIds.isEmpty()) return filtered
+        val existingIds = filtered.mapTo(hashSetOf()) { it.itemId }
+        val localSeeds = _queueItems.value
+            .asSequence()
+            .filter { item -> pendingRestoreIds.contains(item.itemId) && !existingIds.contains(item.itemId) }
+            .toList()
+        return if (localSeeds.isEmpty()) filtered else localSeeds + filtered
+    }
+
+    private fun applyPendingBinProjectionToBinItems(
+        fetched: List<PlaybackQueueItem>,
+    ): List<PlaybackQueueItem> {
+        val pendingByItemId = latestPendingBinActionByItemId()
+        if (pendingByItemId.isEmpty()) return fetched
+        val pendingMoveIds = pendingByItemId
+            .filterValues { it == PendingItemActionType.MOVE_TO_BIN }
+            .keys
+        val pendingRestoreOrPurgeIds = pendingByItemId
+            .filterValues {
+                it == PendingItemActionType.RESTORE_FROM_BIN || it == PendingItemActionType.PURGE_FROM_BIN
+            }
+            .keys
+        val filtered = fetched.filterNot { item -> pendingRestoreOrPurgeIds.contains(item.itemId) }
+        if (pendingMoveIds.isEmpty()) return filtered
+        val existingIds = filtered.mapTo(hashSetOf()) { it.itemId }
+        val localSeeds = _binItems.value
+            .asSequence()
+            .filter { item -> pendingMoveIds.contains(item.itemId) && !existingIds.contains(item.itemId) }
+            .toList()
+        return if (localSeeds.isEmpty()) filtered else localSeeds + filtered
     }
 
     private fun currentPlaybackOwnerItemId(): Int? {
@@ -4511,7 +4661,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun isNetworkError(error: Throwable): Boolean = error is IOException
+    private fun isNetworkError(error: Throwable): Boolean {
+        var cursor: Throwable? = error
+        while (cursor != null) {
+            if (cursor is IOException) return true
+            cursor = cursor.cause
+        }
+        return false
+    }
 
     private fun userFacingRequestErrorMessage(error: Throwable, fallback: String): String {
         if (error is ApiException) {

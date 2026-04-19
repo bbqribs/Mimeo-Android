@@ -832,6 +832,10 @@ class SettingsStore(private val context: Context) {
             PendingItemActionType.ARCHIVE,
             PendingItemActionType.UNARCHIVE,
             -> "archive"
+            PendingItemActionType.MOVE_TO_BIN,
+            PendingItemActionType.RESTORE_FROM_BIN,
+            PendingItemActionType.PURGE_FROM_BIN,
+            -> "bin"
         }
     }
 
