@@ -1625,7 +1625,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 prefetchCount = 0,
             )
             val queue = queueResult.payload
-            val queueItems = applyFavoriteOverrides(queue.items)
+            val queueItems = applyPendingBinProjectionToNonBinItems(
+                applyFavoriteOverrides(queue.items),
+            )
             var offlineReadyIds = resolveOfflineReadyIds(queueItems)
             offlineReadyIds = runInitialPostSignInHydrationIfNeeded(
                 current = current,
@@ -1719,7 +1721,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     prefetchCount = 0,
                 )
                 val refreshedQueue = refreshedQueueResult.payload
-                val refreshedQueueItems = applyFavoriteOverrides(refreshedQueue.items)
+                val refreshedQueueItems = applyPendingBinProjectionToNonBinItems(
+                    applyFavoriteOverrides(refreshedQueue.items),
+                )
                 var refreshedOfflineReadyIds = resolveOfflineReadyIds(refreshedQueueItems)
                 refreshedOfflineReadyIds = ensurePendingItemsOfflineReady(
                     queueItems = refreshedQueueItems,
@@ -3368,7 +3372,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 dir = sort.sortDir,
                 q = query.takeIf { it.isNotBlank() },
             )
-            _binItems.value = trashed.map { it.toPlaybackQueueItem() }
+            _binItems.value = applyPendingBinProjectionToBinItems(
+                trashed.map { it.toPlaybackQueueItem() },
+            )
             _queueOffline.value = false
             if (flushedPendingActions > 0) {
                 _statusMessage.value = "Synced offline actions"
@@ -3425,7 +3431,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 dir = sort.sortDir,
                 q = query.takeIf { it.isNotBlank() },
             )
-            _archivedItems.value = archived.map { it.toPlaybackQueueItem() }
+            _archivedItems.value = applyPendingBinProjectionToNonBinItems(
+                archived.map { it.toPlaybackQueueItem() },
+            )
             val combined = (_queueItems.value + _archivedItems.value).distinctBy { item -> item.itemId }
             val offlineReadyIds = resolveOfflineReadyIds(combined)
             _cachedItemIds.update { previous -> previous + offlineReadyIds }
@@ -3472,7 +3480,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 dir = dir,
                 q = q,
             ).map { it.toPlaybackQueueItem() }
-            onLoaded(items)
+            val projected = if (view == ApiClient.ItemsView.TRASH) {
+                applyPendingBinProjectionToBinItems(items)
+            } else {
+                applyPendingBinProjectionToNonBinItems(items)
+            }
+            onLoaded(projected)
             _queueOffline.value = false
             if (flushedPendingActions > 0) {
                 _statusMessage.value = "Synced offline actions"
@@ -4024,6 +4037,68 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val override = favoriteOverridesByItemId[item.itemId] ?: return@map item
             if (item.isFavorited == override) item else item.copy(isFavorited = override)
         }
+    }
+
+    private fun latestPendingBinActionByItemId(): Map<Int, PendingItemActionType> {
+        val coalesced = coalescePendingItemActions(_pendingItemActions.value)
+        return coalesced
+            .asSequence()
+            .map { it.action }
+            .filter { action ->
+                when (action.actionType) {
+                    PendingItemActionType.MOVE_TO_BIN,
+                    PendingItemActionType.RESTORE_FROM_BIN,
+                    PendingItemActionType.PURGE_FROM_BIN,
+                    -> true
+                    else -> false
+                }
+            }
+            .associate { it.itemId to it.actionType }
+    }
+
+    private fun applyPendingBinProjectionToNonBinItems(
+        fetched: List<PlaybackQueueItem>,
+    ): List<PlaybackQueueItem> {
+        if (fetched.isEmpty()) return fetched
+        val pendingByItemId = latestPendingBinActionByItemId()
+        if (pendingByItemId.isEmpty()) return fetched
+        val pendingMoveIds = pendingByItemId
+            .filterValues { it == PendingItemActionType.MOVE_TO_BIN }
+            .keys
+        val pendingRestoreIds = pendingByItemId
+            .filterValues { it == PendingItemActionType.RESTORE_FROM_BIN }
+            .keys
+        val filtered = fetched.filterNot { item -> pendingMoveIds.contains(item.itemId) }
+        if (pendingRestoreIds.isEmpty()) return filtered
+        val existingIds = filtered.mapTo(hashSetOf()) { it.itemId }
+        val localSeeds = _queueItems.value
+            .asSequence()
+            .filter { item -> pendingRestoreIds.contains(item.itemId) && !existingIds.contains(item.itemId) }
+            .toList()
+        return if (localSeeds.isEmpty()) filtered else localSeeds + filtered
+    }
+
+    private fun applyPendingBinProjectionToBinItems(
+        fetched: List<PlaybackQueueItem>,
+    ): List<PlaybackQueueItem> {
+        val pendingByItemId = latestPendingBinActionByItemId()
+        if (pendingByItemId.isEmpty()) return fetched
+        val pendingMoveIds = pendingByItemId
+            .filterValues { it == PendingItemActionType.MOVE_TO_BIN }
+            .keys
+        val pendingRestoreOrPurgeIds = pendingByItemId
+            .filterValues {
+                it == PendingItemActionType.RESTORE_FROM_BIN || it == PendingItemActionType.PURGE_FROM_BIN
+            }
+            .keys
+        val filtered = fetched.filterNot { item -> pendingRestoreOrPurgeIds.contains(item.itemId) }
+        if (pendingMoveIds.isEmpty()) return filtered
+        val existingIds = filtered.mapTo(hashSetOf()) { it.itemId }
+        val localSeeds = _binItems.value
+            .asSequence()
+            .filter { item -> pendingMoveIds.contains(item.itemId) && !existingIds.contains(item.itemId) }
+            .toList()
+        return if (localSeeds.isEmpty()) filtered else localSeeds + filtered
     }
 
     private fun currentPlaybackOwnerItemId(): Int? {
