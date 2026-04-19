@@ -116,7 +116,7 @@
 ### Next tickets
 1. [~] Problem reports v2 attachment contract (CONTRACT CHANGE): Android opt-in UI/payload path is now implemented (default-OFF in-dialog attachment checkboxes for title/text + compact privacy hint + bounded attachment payload fields); backend persistence/export contract work remains pending per `docs/PROBLEM_REPORT_ATTACHMENT_V2_CONTRACT_SPEC.md`.
    - Current backend limitation until contract lands: v1 persisted/exported report shape remains the authoritative operator record.
-2. [ ] Cross-repo source metadata unification: align backend + extension/web on the same provenance/origin contract and rendering precedence shipped on Android (no body-link source inference).
+2. [x] Cross-repo source metadata unification: Android client contract locked in `docs/ANDROID_SOURCE_METADATA_UNIFICATION_SPEC.md`; backend/web/extension alignment is a follow-on coordination ticket (requires CONTRACT CHANGE for `ArticleSummary` endpoint).
 3. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.
 4. [x] Offline action queueing follow-up shipped: deferred-sync coverage now extends beyond favourite/archive to bin lifecycle actions (move to bin, restore, purge) with local-first optimistic state and bounded reconnect flush behavior.
 5. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
