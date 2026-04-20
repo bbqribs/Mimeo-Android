@@ -3511,7 +3511,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             itemId = id,
             title = title,
             url = url,
-            host = siteName,
+            host = siteName ?: runCatching { java.net.URI(url).host }.getOrNull(),
             sourceType = sourceType,
             sourceLabel = sourceLabel,
             sourceUrl = sourceUrl,

@@ -187,6 +187,30 @@ class LibraryViewCapturePresentationTest {
         assertEquals("legacy.example.com", p.sourceLabel)
     }
 
+    @Test
+    fun `legacy item with null host and all null source metadata yields null sourceLabel (url shown in row)`() {
+        // Simulates what toPlaybackQueueItem() would produce if siteName=null and URL host extraction
+        // was not applied — sourceLabel is null so LibraryItemRow falls back to item.url.
+        // This test documents the gap closed by the URL-host-extraction fallback in the conversion.
+        val item = PlaybackQueueItem(
+            itemId = 11,
+            title = "Old article",
+            url = "https://legacy.example.com/old",
+            host = null,
+            sourceType = null,
+            sourceLabel = null,
+            sourceUrl = null,
+            captureKind = null,
+            sourceAppPackage = null,
+        )
+
+        val p = queueCapturePresentation(item)
+
+        assertEquals("Old article", p.title)
+        assertNull(p.sourceLabel)
+        assertEquals("https://legacy.example.com/old", p.sourceUrl)
+    }
+
     // --- Excerpt title formatting (§4.2) ---
 
     @Test
