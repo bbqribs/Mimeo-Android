@@ -169,7 +169,7 @@
 ## Later
 - [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.
 - [ ] Persist last segment index per item in DataStore for cross-process resume.
-- [ ] Add queue filters/sorting controls from playback API query params.
+- [x] Add queue filters/sorting controls from playback API query params.
 - [ ] Audio focus/media session polish.
 - [ ] Better conflict handling for stale cached versions during long offline sessions.
 - [ ] Replace dev cleartext dependence with HTTPS-friendly transport story for hosted/mobile use.

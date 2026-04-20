@@ -275,6 +275,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _queueHasMorePages = MutableStateFlow(false)
     val queueHasMorePages: StateFlow<Boolean> = _queueHasMorePages.asStateFlow()
     private var queueServerFetchedCount = 0
+    private var queueServerSortField: String = "created"
+    private var queueServerSortDir: String = "desc"
     private var lastQueueLoadCompletedAtMs: Long = 0L
     private val _queueReloadGeneration = MutableStateFlow(0)
     val queueReloadGeneration: StateFlow<Int> = _queueReloadGeneration.asStateFlow()
@@ -1610,6 +1612,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 current.apiToken,
                 playlistId = current.selectedPlaylistId,
                 prefetchCount = 0,
+                sortField = queueServerSortField,
+                sortDir = queueServerSortDir,
             )
             val queue = queueResult.payload
             val queueItems = applyPendingBinProjectionToNonBinItems(
@@ -1706,6 +1710,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     current.apiToken,
                     playlistId = current.selectedPlaylistId,
                     prefetchCount = 0,
+                    sortField = queueServerSortField,
+                    sortDir = queueServerSortDir,
                 )
                 val refreshedQueue = refreshedQueueResult.payload
                 val refreshedQueueItems = applyPendingBinProjectionToNonBinItems(
@@ -1834,6 +1840,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         loadQueue()
     }
 
+    fun updateQueueServerSort(sortField: String, sortDir: String) {
+        if (queueServerSortField == sortField && queueServerSortDir == sortDir) return
+        queueServerSortField = sortField
+        queueServerSortDir = sortDir
+        loadQueue()
+    }
+
     fun loadMoreQueueItems() {
         if (!_queueHasMorePages.value || _queueLoadingMore.value) {
             if (BuildConfig.DEBUG) Log.d(QUEUE_DEBUG_TAG, "loadMore: skipped hasMore=${_queueHasMorePages.value} loadingMore=${_queueLoadingMore.value}")
@@ -1857,6 +1870,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     playlistId = current.selectedPlaylistId,
                     offset = offset,
                     limit = ApiClient.QUEUE_LOAD_MORE_LIMIT,
+                    sortField = queueServerSortField,
+                    sortDir = queueServerSortDir,
                 )
                 val fetchedCount = result.payload.items.size
                 val newItems = applyFavoriteOverrides(result.payload.items)
@@ -2942,6 +2957,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 current.apiToken,
                 playlistId = current.selectedPlaylistId,
                 prefetchCount = 0,
+                sortField = queueServerSortField,
+                sortDir = queueServerSortDir,
             )
             val queue = queueResult.payload
             val queueItems = applyFavoriteOverrides(queue.items)
