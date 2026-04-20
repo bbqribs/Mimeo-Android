@@ -54,6 +54,7 @@ import androidx.compose.ui.zIndex
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.ui.collections.FolderPickerDialog
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -78,6 +79,8 @@ fun PlaylistDetailScreen(
     onNavigateBack: () -> Unit = {},
 ) {
     val playlists by vm.playlists.collectAsState()
+    val folders by vm.folders.collectAsState()
+    val playlistFolderAssignments by vm.playlistFolderAssignments.collectAsState()
     val queueItems by vm.queueItems.collectAsState()
     val inboxItems by vm.inboxItems.collectAsState()
     val archivedItems by vm.archivedItems.collectAsState()
@@ -90,6 +93,7 @@ fun PlaylistDetailScreen(
 
     LaunchedEffect(playlistId) {
         vm.refreshPlaylists()
+        vm.refreshFolders()
         vm.loadArchivedItems()
         vm.loadBinItems()
     }
@@ -128,11 +132,12 @@ fun PlaylistDetailScreen(
     var currentTargetIndex by remember { mutableIntStateOf(-1) }
     var isSaving by remember { mutableStateOf(false) }
 
-    // Rename/delete dialog state
+    // Rename/delete/folder dialog state
     var showOverflowMenu by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameText by remember { mutableStateOf("") }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showFolderPicker by remember { mutableStateOf(false) }
 
     /** Average measured item height; falls back to a reasonable default. */
     fun avgItemHeight(): Float =
@@ -245,6 +250,13 @@ fun PlaylistDetailScreen(
                                     showOverflowMenu = false
                                     renameText = playlist.name
                                     showRenameDialog = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Folder\u2026") },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    showFolderPicker = true
                                 },
                             )
                             DropdownMenuItem(
@@ -415,6 +427,19 @@ fun PlaylistDetailScreen(
                 TextButton(onClick = { showDeleteDialog = false }) {
                     Text("Cancel")
                 }
+            },
+        )
+    }
+
+    if (showFolderPicker && playlist != null) {
+        FolderPickerDialog(
+            playlist = playlist,
+            folders = folders,
+            assignedFolderId = playlistFolderAssignments[playlist.id],
+            onDismiss = { showFolderPicker = false },
+            onSelectFolder = { folderId ->
+                vm.assignPlaylistToFolder(playlist.id, folderId)
+                showFolderPicker = false
             },
         )
     }

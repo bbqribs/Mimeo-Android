@@ -378,7 +378,7 @@ fun CollectionsScreen(
 }
 
 @Composable
-private fun FolderPickerDialog(
+internal fun FolderPickerDialog(
     playlist: PlaylistSummary,
     folders: List<FolderSummary>,
     assignedFolderId: Int?,
