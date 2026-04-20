@@ -117,6 +117,44 @@ class PlaybackServiceObservabilityTest {
     }
 
     @Test
+    fun `drift clues include playing without anchor when playing with focus but anchor is stopped`() {
+        val clues = detectPlaybackDriftClues(
+            PlaybackAuditState(
+                itemId = 42,
+                isPlaying = true,
+                hasAudioFocus = true,
+                mediaSessionActive = true,
+                isForeground = true,
+                anchorPlaying = false,
+                isDeviceInteractive = false,
+                isDeviceLocked = true,
+                appInBackground = true,
+            ),
+        )
+
+        assertTrue(clues.contains("playing-without-anchor"))
+    }
+
+    @Test
+    fun `drift clues do not include playing without anchor when anchor is running`() {
+        val clues = detectPlaybackDriftClues(
+            PlaybackAuditState(
+                itemId = 42,
+                isPlaying = true,
+                hasAudioFocus = true,
+                mediaSessionActive = true,
+                isForeground = true,
+                anchorPlaying = true,
+                isDeviceInteractive = false,
+                isDeviceLocked = true,
+                appInBackground = true,
+            ),
+        )
+
+        assertFalse(clues.contains("playing-without-anchor"))
+    }
+
+    @Test
     fun `capture emits transition when device state changes`() {
         val trail = PlaybackServiceAuditTrail(heartbeatIntervalMs = 60_000)
         val start = PlaybackAuditState(

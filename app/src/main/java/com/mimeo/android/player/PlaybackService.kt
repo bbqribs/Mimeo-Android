@@ -142,7 +142,11 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK,
             -> {
-                hasAudioFocus = false
+                // Both paths use PauseKeepFocus: we pause TTS but keep the OS focus
+                // registration so AUDIOFOCUS_GAIN is delivered when the interruption ends
+                // and auto-resume fires. hasAudioFocus remains true — a user-triggered
+                // resume before GAIN re-anchors via requestAudioFocus() without creating
+                // a second registered request.
                 stopMediaButtonAnchor()
             }
         }
@@ -292,7 +296,12 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     }
 
     private fun requestAudioFocus() {
-        if (hasAudioFocus) return
+        if (hasAudioFocus) {
+            // Already hold OS focus (e.g. user-resumed during a transient interruption
+            // before AUDIOFOCUS_GAIN arrived). Re-anchor so media buttons stay routed here.
+            startMediaButtonAnchor()
+            return
+        }
         val manager = audioManager ?: return
         hasAudioFocus = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
