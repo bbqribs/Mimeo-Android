@@ -139,19 +139,14 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                     startMediaButtonAnchor()
                 }
             }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                // Keep focus registration alive (PauseKeepFocus policy); only stop
-                // the anchor while paused. hasAudioFocus remains true so that a
-                // user-triggered resume before GAIN does not re-request focus and
-                // orphan the existing AudioFocusRequest in the OS.
-                stopMediaButtonAnchor()
-            }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                // We intend to abandon focus for this path (PauseReleaseFocus policy).
-                // Do NOT set hasAudioFocus = false here: abandonAudioFocusNow() checks
-                // that flag as a guard, so setting it early would cause the guard to
-                // fire and the OS abandon call would never happen. Let the method manage
-                // the flag after the actual AudioManager call.
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK,
+            -> {
+                // Both paths use PauseKeepFocus: we pause TTS but keep the OS focus
+                // registration so AUDIOFOCUS_GAIN is delivered when the interruption ends
+                // and auto-resume fires. hasAudioFocus remains true — a user-triggered
+                // resume before GAIN re-anchors via requestAudioFocus() without creating
+                // a second registered request.
                 stopMediaButtonAnchor()
             }
         }
