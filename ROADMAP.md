@@ -118,7 +118,7 @@
    - Current backend limitation until contract lands: v1 persisted/exported report shape remains the authoritative operator record.
 2. [x] Cross-repo source metadata unification: Android client contract locked in `docs/ANDROID_SOURCE_METADATA_UNIFICATION_SPEC.md`; backend/web/extension alignment is a follow-on coordination ticket (requires CONTRACT CHANGE for `ArticleSummary` endpoint).
 2a. [x] Android source metadata unification v2: `ArticleSummary` model extended with source metadata fields (null-defaulted, backward-compatible); `toPlaybackQueueItem()` forwards fields; `LibraryItemRow` now uses `capturePresentation()` for correct excerpt/article/legacy rendering in library views. No backend change required — fields resolve to null until backend CONTRACT CHANGE lands.
-3. [ ] Source metadata backfill/legacy normalization: define how older items without metadata should render and whether any safe migration/backfill is warranted.
+3. [x] Source metadata backfill/legacy normalization: legacy case categories, safe fallback rules, and backfill trigger criteria defined in `docs/ANDROID_LEGACY_SOURCE_METADATA_SPEC.md`. No Android code changes.
 4. [x] Offline action queueing follow-up shipped: deferred-sync coverage now extends beyond favourite/archive to bin lifecycle actions (move to bin, restore, purge) with local-first optimistic state and bounded reconnect flush behavior.
 5. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
 6. [x] Keep-screen-on/session UX follow-up: shipped — screen stays on during active playback or manual reader mode sessions (PR #167).
