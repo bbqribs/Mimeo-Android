@@ -120,7 +120,7 @@
 2a. [x] Android source metadata unification v2: `ArticleSummary` model extended with source metadata fields (null-defaulted, backward-compatible); `toPlaybackQueueItem()` forwards fields; `LibraryItemRow` now uses `capturePresentation()` for correct excerpt/article/legacy rendering in library views. No backend change required — fields resolve to null until backend CONTRACT CHANGE lands.
 3. [x] Source metadata backfill/legacy normalization: legacy case categories, safe fallback rules, and backfill trigger criteria defined in `docs/ANDROID_LEGACY_SOURCE_METADATA_SPEC.md`. No Android code changes.
 4. [x] Offline action queueing follow-up shipped: deferred-sync coverage now extends beyond favourite/archive to bin lifecycle actions (move to bin, restore, purge) with local-first optimistic state and bounded reconnect flush behavior.
-5. [ ] Audio-focus/ownership long-session watch: continue targeted stabilization for rare media-button ownership drift in very long sessions, using existing observability hooks.
+5. [x] Audio-focus/ownership long-session watch: three bounded drift fixes shipped — stacked transient/duck interruption resume preservation, AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK abandon-focus guard bypass, and anchor restart on user-resume-before-GAIN; new `playing-without-anchor` drift clue and 4 new policy tests.
 6. [x] Keep-screen-on/session UX follow-up: shipped — screen stays on during active playback or manual reader mode sessions (PR #167).
 
 ## Reader/Player UX fidelity + state persistence backlog

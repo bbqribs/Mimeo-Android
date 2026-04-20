@@ -139,10 +139,19 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                     startMediaButtonAnchor()
                 }
             }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK,
-            -> {
-                hasAudioFocus = false
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                // Keep focus registration alive (PauseKeepFocus policy); only stop
+                // the anchor while paused. hasAudioFocus remains true so that a
+                // user-triggered resume before GAIN does not re-request focus and
+                // orphan the existing AudioFocusRequest in the OS.
+                stopMediaButtonAnchor()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                // We intend to abandon focus for this path (PauseReleaseFocus policy).
+                // Do NOT set hasAudioFocus = false here: abandonAudioFocusNow() checks
+                // that flag as a guard, so setting it early would cause the guard to
+                // fire and the OS abandon call would never happen. Let the method manage
+                // the flag after the actual AudioManager call.
                 stopMediaButtonAnchor()
             }
         }
@@ -292,7 +301,12 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     }
 
     private fun requestAudioFocus() {
-        if (hasAudioFocus) return
+        if (hasAudioFocus) {
+            // Already hold OS focus (e.g. user-resumed during a transient interruption
+            // before AUDIOFOCUS_GAIN arrived). Re-anchor so media buttons stay routed here.
+            startMediaButtonAnchor()
+            return
+        }
         val manager = audioManager ?: return
         hasAudioFocus = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)

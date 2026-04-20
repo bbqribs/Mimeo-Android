@@ -106,4 +106,77 @@ class AudioInterruptionPolicyTest {
 
         assertEquals(AudioInterruptionAction.ResumePlayback, action)
     }
+
+    @Test
+    fun `stacked transient loss while already paused preserves resume expectation`() {
+        val policy = AudioInterruptionPolicy()
+        // First interrupt while playing: sets resumeAfterTransientGain = true
+        policy.onAudioFocusChange(
+            focusChange = AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            isCurrentlyPlaying = true,
+            hasLoadedItem = true,
+        )
+        // Second interrupt arrives while paused: must not clear the expectation
+        policy.onAudioFocusChange(
+            focusChange = AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            isCurrentlyPlaying = false,
+            hasLoadedItem = true,
+        )
+
+        val action = policy.onAudioFocusChange(
+            focusChange = AudioManager.AUDIOFOCUS_GAIN,
+            isCurrentlyPlaying = false,
+            hasLoadedItem = true,
+        )
+
+        assertEquals(AudioInterruptionAction.ResumePlayback, action)
+    }
+
+    @Test
+    fun `stacked duck loss while already paused preserves resume expectation`() {
+        val policy = AudioInterruptionPolicy()
+        policy.onAudioFocusChange(
+            focusChange = AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK,
+            isCurrentlyPlaying = true,
+            hasLoadedItem = true,
+        )
+        policy.onAudioFocusChange(
+            focusChange = AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK,
+            isCurrentlyPlaying = false,
+            hasLoadedItem = true,
+        )
+
+        val action = policy.onAudioFocusChange(
+            focusChange = AudioManager.AUDIOFOCUS_GAIN,
+            isCurrentlyPlaying = false,
+            hasLoadedItem = true,
+        )
+
+        assertEquals(AudioInterruptionAction.ResumePlayback, action)
+    }
+
+    @Test
+    fun `explicit clear between stacked interruptions suppresses auto resume`() {
+        val policy = AudioInterruptionPolicy()
+        policy.onAudioFocusChange(
+            focusChange = AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            isCurrentlyPlaying = true,
+            hasLoadedItem = true,
+        )
+        // User explicitly paused (e.g. tapped Pause button in Mimeo UI)
+        policy.clearResumeExpectation()
+        policy.onAudioFocusChange(
+            focusChange = AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            isCurrentlyPlaying = false,
+            hasLoadedItem = true,
+        )
+
+        val action = policy.onAudioFocusChange(
+            focusChange = AudioManager.AUDIOFOCUS_GAIN,
+            isCurrentlyPlaying = false,
+            hasLoadedItem = true,
+        )
+
+        assertEquals(AudioInterruptionAction.None, action)
+    }
 }

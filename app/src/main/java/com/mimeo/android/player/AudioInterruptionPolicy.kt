@@ -25,14 +25,21 @@ internal class AudioInterruptionPolicy {
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                 // For TTS we do not duck; we pause and only auto-resume if interruption
                 // is transient and we were actively playing.
-                resumeAfterTransientGain = isCurrentlyPlaying
+                // Preserve an existing resume expectation across stacked interruptions:
+                // a second interrupt while already paused (isCurrentlyPlaying=false) must
+                // not clear a resume expectation set by the first interrupt.
+                if (!resumeAfterTransientGain) {
+                    resumeAfterTransientGain = isCurrentlyPlaying
+                }
                 AudioInterruptionAction.PauseKeepFocus
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                 // Navigation prompts commonly come through this path. For TTS we pause
                 // and release focus so the other speaker path can run immediately.
-                // Auto-resume on gain only if we were actively playing at interruption.
-                resumeAfterTransientGain = isCurrentlyPlaying
+                // Same stacking rule: preserve an existing resume expectation.
+                if (!resumeAfterTransientGain) {
+                    resumeAfterTransientGain = isCurrentlyPlaying
+                }
                 AudioInterruptionAction.PauseReleaseFocus
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
