@@ -12,9 +12,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -45,8 +43,6 @@ data class PlaylistPickerChoice(
 @Composable
 fun PlaylistsScreen(vm: AppViewModel) {
     val playlists by vm.playlists.collectAsState()
-    val folders by vm.folders.collectAsState()
-    val playlistFolderAssignments by vm.playlistFolderAssignments.collectAsState()
     val settings by vm.settings.collectAsState()
     val offline by vm.queueOffline.collectAsState()
     var newName by remember { mutableStateOf("") }
@@ -60,7 +56,6 @@ fun PlaylistsScreen(vm: AppViewModel) {
 
     LaunchedEffect(Unit) {
         vm.refreshPlaylists()
-        vm.refreshFolders()
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -123,70 +118,50 @@ fun PlaylistsScreen(vm: AppViewModel) {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 items(playlists, key = { it.id }) { playlist ->
                     val isSelected = settings.selectedPlaylistId == playlist.id
-                    val assignedFolderName = playlistFolderAssignments[playlist.id]
-                        ?.let { fid -> folders.firstOrNull { it.id == fid }?.name }
                     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 8.dp),
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 6.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                Text(
-                                    modifier = Modifier.weight(1f),
-                                    text = if (isSelected) "${playlist.name} (selected)" else playlist.name,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Box {
-                                    TextButton(onClick = { menuForPlaylistId = playlist.id }) {
-                                        Text("Menu")
-                                    }
-                                    DropdownMenu(
-                                        expanded = menuForPlaylistId == playlist.id,
-                                        onDismissRequest = { menuForPlaylistId = -1 },
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = { Text("Use") },
-                                            onClick = {
-                                                menuForPlaylistId = -1
-                                                vm.selectPlaylist(playlist.id)
-                                            },
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("Rename") },
-                                            onClick = {
-                                                menuForPlaylistId = -1
-                                                renameTarget = playlist
-                                                renameText = playlist.name
-                                            },
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("Delete") },
-                                            onClick = {
-                                                menuForPlaylistId = -1
-                                                deleteTarget = playlist
-                                            },
-                                        )
-                                    }
+                            Text(
+                                modifier = Modifier.weight(1f),
+                                text = if (isSelected) "${playlist.name} (selected)" else playlist.name,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Box {
+                                TextButton(onClick = { menuForPlaylistId = playlist.id }) {
+                                    Text("Menu")
                                 }
-                            }
-                            if (!assignedFolderName.isNullOrBlank()) {
-                                SuggestionChip(
-                                    modifier = Modifier.padding(bottom = 4.dp),
-                                    onClick = {},
-                                    label = {
-                                        Text(
-                                            text = assignedFolderName,
-                                            style = MaterialTheme.typography.labelSmall,
-                                        )
-                                    },
-                                )
+                                DropdownMenu(
+                                    expanded = menuForPlaylistId == playlist.id,
+                                    onDismissRequest = { menuForPlaylistId = -1 },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Use") },
+                                        onClick = {
+                                            menuForPlaylistId = -1
+                                            vm.selectPlaylist(playlist.id)
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Rename") },
+                                        onClick = {
+                                            menuForPlaylistId = -1
+                                            renameTarget = playlist
+                                            renameText = playlist.name
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Delete") },
+                                        onClick = {
+                                            menuForPlaylistId = -1
+                                            deleteTarget = playlist
+                                        },
+                                    )
+                                }
                             }
                         }
                     }

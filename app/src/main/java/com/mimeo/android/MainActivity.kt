@@ -48,6 +48,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
@@ -534,6 +535,8 @@ private fun MimeoApp(vm: AppViewModel) {
     )
     val settings by vm.settings.collectAsState()
     val playlists by vm.playlists.collectAsState()
+    val folders by vm.folders.collectAsState()
+    val playlistFolderAssignments by vm.playlistFolderAssignments.collectAsState()
     var showNewPlaylistDialog by remember { mutableStateOf(false) }
     var newPlaylistDialogName by remember { mutableStateOf("") }
     val signInState by vm.signInState.collectAsState()
@@ -835,24 +838,39 @@ private fun MimeoApp(vm: AppViewModel) {
                         )
                         playlists.forEach { playlist ->
                             val count = playlist.entries.size
+                            val assignedFolderName = playlistFolderAssignments[playlist.id]
+                                ?.let { fid -> folders.firstOrNull { it.id == fid }?.name }
                             NavigationDrawerItem(
                                 label = {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                    ) {
-                                        Text(
-                                            text = playlist.name,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                        if (count > 0) {
+                                    Column {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                        ) {
                                             Text(
-                                                text = "($count)",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.padding(start = 4.dp),
+                                                text = playlist.name,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                            if (count > 0) {
+                                                Text(
+                                                    text = "($count)",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.padding(start = 4.dp),
+                                                )
+                                            }
+                                        }
+                                        if (!assignedFolderName.isNullOrBlank()) {
+                                            SuggestionChip(
+                                                onClick = {},
+                                                label = {
+                                                    Text(
+                                                        text = assignedFolderName,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                    )
+                                                },
                                             )
                                         }
                                     }
