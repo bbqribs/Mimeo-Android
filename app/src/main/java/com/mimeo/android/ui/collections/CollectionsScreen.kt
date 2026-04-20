@@ -14,6 +14,7 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
@@ -115,8 +116,9 @@ fun CollectionsScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         playlists.forEach { playlist ->
                             val selected = settings.selectedPlaylistId == playlist.id
-                            val assignedFolderName = playlistFolderAssignments[playlist.id]
-                                ?.let { folderId -> folders.firstOrNull { it.id == folderId }?.name }
+                            val assignedFolderId = playlistFolderAssignments[playlist.id]
+                            val assignedFolderName = assignedFolderId
+                                ?.let { fid -> folders.firstOrNull { it.id == fid }?.name }
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -136,16 +138,21 @@ fun CollectionsScreen(
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                     Text(
-                                        text = buildString {
-                                            append("${playlist.entries.size} items")
-                                            if (!assignedFolderName.isNullOrBlank()) {
-                                                append(" • ")
-                                                append(assignedFolderName)
-                                            }
-                                        },
+                                        text = "${playlist.entries.size} items",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
+                                    if (assignedFolderId != null && !assignedFolderName.isNullOrBlank()) {
+                                        SuggestionChip(
+                                            onClick = { onOpenFolder(assignedFolderId) },
+                                            label = {
+                                                Text(
+                                                    text = assignedFolderName,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                )
+                                            },
+                                        )
+                                    }
                                 }
                                 Row(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
