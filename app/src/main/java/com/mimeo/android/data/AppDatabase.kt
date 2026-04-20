@@ -7,12 +7,9 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.mimeo.android.data.dao.CachedItemDao
-import com.mimeo.android.data.dao.FolderDao
 import com.mimeo.android.data.dao.NowPlayingDao
 import com.mimeo.android.data.dao.PendingProgressDao
 import com.mimeo.android.data.entities.CachedItemEntity
-import com.mimeo.android.data.entities.FolderEntity
-import com.mimeo.android.data.entities.FolderPlaylistEntity
 import com.mimeo.android.data.entities.NowPlayingEntity
 import com.mimeo.android.data.entities.PendingProgressEntity
 
@@ -21,17 +18,14 @@ import com.mimeo.android.data.entities.PendingProgressEntity
         CachedItemEntity::class,
         PendingProgressEntity::class,
         NowPlayingEntity::class,
-        FolderEntity::class,
-        FolderPlaylistEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun cachedItemDao(): CachedItemDao
     abstract fun pendingProgressDao(): PendingProgressDao
     abstract fun nowPlayingDao(): NowPlayingDao
-    abstract fun folderDao(): FolderDao
 
     companion object {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -101,6 +95,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS folder_playlists")
+                db.execSQL("DROP TABLE IF EXISTS folders")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -110,7 +111,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "mimeo_android.db",
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build().also { INSTANCE = it }
             }
         }
     }

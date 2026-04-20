@@ -104,7 +104,6 @@ import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
-import com.mimeo.android.model.FolderSummary
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.ParagraphSpacingOption
@@ -129,7 +128,6 @@ import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.repository.ItemTextResult
 import com.mimeo.android.repository.ItemTextPrefetchAttempt
-import com.mimeo.android.repository.FoldersRepository
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.NowPlayingSessionItem
 import com.mimeo.android.repository.OfflineReadyCandidate
@@ -145,8 +143,6 @@ import com.mimeo.android.share.ShareSaveRefreshBus
 import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.isAutoRetryEligiblePendingSaveResult
 import com.mimeo.android.share.isRetryablePendingSaveResult
-import com.mimeo.android.ui.collections.CollectionsScreen
-import com.mimeo.android.ui.collections.FolderDetailScreen
 import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
@@ -165,7 +161,6 @@ import com.mimeo.android.ui.player.PlaybackEngineState
 import com.mimeo.android.ui.player.PlaybackOpenIntent
 import com.mimeo.android.ui.player.buildPlaybackChunks
 import com.mimeo.android.ui.common.nowPlayingCapturePresentation
-import com.mimeo.android.ui.playlists.PlaylistsScreen
 import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.ui.signin.SignInScreen
 import com.mimeo.android.ui.signin.SignInState
@@ -226,7 +221,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         settingsStore = settingsStore,
         playbackRepository = repository,
     )
-    private val foldersRepository = FoldersRepository(database)
     private val noActiveContentStore = NoActiveContentStore(application.applicationContext)
     private val autoDownloadStatusStore = AutoDownloadStatusStore(application.applicationContext)
 
@@ -271,10 +265,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val pendingManualRetryInProgress: StateFlow<Boolean> = _pendingManualRetryInProgress.asStateFlow()
     private val _playlists = MutableStateFlow<List<PlaylistSummary>>(emptyList())
     val playlists: StateFlow<List<PlaylistSummary>> = _playlists.asStateFlow()
-    private val _folders = MutableStateFlow<List<FolderSummary>>(emptyList())
-    val folders: StateFlow<List<FolderSummary>> = _folders.asStateFlow()
-    private val _playlistFolderAssignments = MutableStateFlow<Map<Int, Int>>(emptyMap())
-    val playlistFolderAssignments: StateFlow<Map<Int, Int>> = _playlistFolderAssignments.asStateFlow()
 
     private val _queueLoading = MutableStateFlow(false)
     val queueLoading: StateFlow<Boolean> = _queueLoading.asStateFlow()
@@ -637,9 +627,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 _cachedItemIds.value = resolveOfflineReadyIdsForSession(session.items)
             }
-        }
-        viewModelScope.launch {
-            refreshFolders()
         }
         startConnectivityMonitoring()
     }
@@ -2501,13 +2488,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun refreshFolders() {
-        viewModelScope.launch {
-            _folders.value = foldersRepository.listFolders()
-            _playlistFolderAssignments.value = foldersRepository.listPlaylistAssignments()
-        }
-    }
-
     fun selectPlaylist(playlistId: Int?) {
         viewModelScope.launch {
             _settings.update { current -> current.copy(selectedPlaylistId = playlistId) }
@@ -2635,7 +2615,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 repository.deletePlaylist(current.baseUrl, current.apiToken, playlistId)
-                foldersRepository.assignPlaylistToFolder(playlistId, null)
                 _playlists.update { rows -> rows.filterNot { it.id == playlistId } }
                 if (settings.value.selectedPlaylistId == playlistId) {
                     _settings.update { it.copy(selectedPlaylistId = null) }
@@ -2645,54 +2624,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     _settings.update { it.copy(defaultSavePlaylistId = null) }
                     settingsStore.saveDefaultSavePlaylistId(null)
                 }
-                refreshFolders()
                 _statusMessage.value = "Playlist deleted"
                 loadQueue()
             } catch (e: Exception) {
                 _statusMessage.value = e.message ?: "Delete playlist failed"
             }
-        }
-    }
-
-    fun createFolder(name: String) {
-        val trimmed = name.trim()
-        if (trimmed.isEmpty()) return
-        viewModelScope.launch {
-            foldersRepository.createFolder(trimmed)
-            refreshFolders()
-            showSnackbar("Folder created")
-        }
-    }
-
-    fun renameFolder(folderId: Int, name: String) {
-        val trimmed = name.trim()
-        if (trimmed.isEmpty()) return
-        viewModelScope.launch {
-            foldersRepository.renameFolder(folderId, trimmed)
-            refreshFolders()
-            showSnackbar("Folder renamed")
-        }
-    }
-
-    fun deleteFolder(folderId: Int) {
-        viewModelScope.launch {
-            foldersRepository.deleteFolder(folderId)
-            refreshFolders()
-            showSnackbar("Folder deleted")
-        }
-    }
-
-    fun assignPlaylistToFolder(playlistId: Int, folderId: Int?) {
-        viewModelScope.launch {
-            foldersRepository.assignPlaylistToFolder(playlistId, folderId)
-            refreshFolders()
-            val message = if (folderId == null) {
-                "Removed from folder"
-            } else {
-                val folderName = _folders.value.firstOrNull { it.id == folderId }?.name ?: "folder"
-                "Assigned to $folderName"
-            }
-            showSnackbar(message)
         }
     }
 
