@@ -107,7 +107,6 @@ import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
-import com.mimeo.android.model.FolderSummary
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.ParagraphSpacingOption
@@ -132,7 +131,6 @@ import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.repository.ItemTextResult
 import com.mimeo.android.repository.ItemTextPrefetchAttempt
-import com.mimeo.android.repository.FoldersRepository
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.NowPlayingSessionItem
 import com.mimeo.android.repository.OfflineReadyCandidate
@@ -148,8 +146,6 @@ import com.mimeo.android.share.ShareSaveRefreshBus
 import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.isAutoRetryEligiblePendingSaveResult
 import com.mimeo.android.share.isRetryablePendingSaveResult
-import com.mimeo.android.ui.collections.CollectionsScreen
-import com.mimeo.android.ui.collections.FolderDetailScreen
 import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.library.LibraryBatchAction
@@ -177,7 +173,6 @@ import com.mimeo.android.ui.player.PlaybackEngineState
 import com.mimeo.android.ui.player.PlaybackOpenIntent
 import com.mimeo.android.ui.player.buildPlaybackChunks
 import com.mimeo.android.ui.playlists.PlaylistDetailScreen
-import com.mimeo.android.ui.playlists.PlaylistsScreen
 import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.ui.signin.SignInScreen
 import com.mimeo.android.ui.signin.SignInState
@@ -226,10 +221,7 @@ internal const val ROUTE_UP_NEXT = "upNext"
 internal const val ROUTE_SIGN_IN = "signIn"
 internal const val ROUTE_LOCUS = "locus"
 internal const val ROUTE_LOCUS_ITEM = "locus/{itemId}"
-internal const val ROUTE_COLLECTIONS = "collections"
-internal const val ROUTE_COLLECTIONS_PLAYLISTS = "collections/playlists"
 internal const val ROUTE_PLAYLIST_DETAIL = "playlist/{playlistId}"
-internal const val ROUTE_COLLECTIONS_FOLDER = "collections/folder/{folderId}"
 internal const val ROUTE_SETTINGS = "settings"
 internal const val ROUTE_SETTINGS_DIAGNOSTICS = "settings/diagnostics"
 internal const val ACTION_KEY_OPEN_DIAGNOSTICS = "open_diagnostics"
@@ -1176,33 +1168,6 @@ private fun MimeoApp(vm: AppViewModel) {
                                     }
                                 },
                             )
-                        }
-                        composable(ROUTE_COLLECTIONS) {
-                            CollectionsScreen(
-                                vm = vm,
-                                onOpenPlaylistsManager = { nav.navigate(ROUTE_COLLECTIONS_PLAYLISTS) },
-                                onOpenFolder = { folderId -> nav.navigate("collections/folder/$folderId") },
-                            )
-                        }
-                        composable(
-                            ROUTE_COLLECTIONS_FOLDER,
-                            arguments = listOf(navArgument("folderId") { type = NavType.IntType }),
-                        ) { backStack ->
-                            val folderId = backStack.arguments?.getInt("folderId") ?: return@composable
-                            FolderDetailScreen(
-                                vm = vm,
-                                folderId = folderId,
-                                onBack = { nav.popBackStack() },
-                                onOpenPlaylist = {
-                                    nav.navigate(ROUTE_UP_NEXT) {
-                                        popUpTo(ROUTE_COLLECTIONS)
-                                        launchSingleTop = true
-                                    }
-                                },
-                            )
-                        }
-                        composable(ROUTE_COLLECTIONS_PLAYLISTS) {
-                            PlaylistsScreen(vm = vm)
                         }
                         composable(
                             ROUTE_PLAYLIST_DETAIL,

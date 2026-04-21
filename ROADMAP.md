@@ -154,7 +154,7 @@
 8. [x] Collections baseline: special collections + named playlist browser under the redesign shell.
 9. [x] Phase 6.2: local playlist folders (create/rename/delete + assign playlists within Collections).
 10. [x] Phase 6.3: folder detail view with playlist counts and remove-from-folder shipped.
-11. [ ] Next: folder badges in playlist list and optional nested folders.
+11. [removed] Playlist folders cut: folder entities, DAO, repository, CollectionsScreen, FolderDetailScreen, and all ViewModel folder methods removed. Decision: cut per REDESIGN_V2_PLAN.md §4 decision #10 ("Not in v1, not in v2 plan"). DB bumped to v6 with MIGRATION_5_6 dropping the orphaned tables.
 12. [x] Locus expand/collapse on `main`: explicit buttons only, collapsed tab entry, expanded resume/direct entry, title ellipsis fix, and TESTING.md invariants checklist.
 13. [x] Player completion icon follow-up: completion iconography shipped (PR #58).
 14. [ ] Shared pinned PlayerBar on `main` remains a separate architecture ticket, not part of playback-speed follow-up.
@@ -169,7 +169,7 @@
 ## Later
 - [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.
 - [ ] Persist last segment index per item in DataStore for cross-process resume.
-- [ ] Add queue filters/sorting controls from playback API query params.
+- [x] Add queue filters/sorting controls from playback API query params.
 - [ ] Audio focus/media session polish.
 - [ ] Better conflict handling for stale cached versions during long offline sessions.
 - [ ] Replace dev cleartext dependence with HTTPS-friendly transport story for hosted/mobile use.

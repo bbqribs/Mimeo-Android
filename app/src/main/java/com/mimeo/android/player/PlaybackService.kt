@@ -113,9 +113,16 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                     MediaButtonReceiver.handleIntent(mediaSession, intent)
                 }
             }
-            ACTION_PLAY -> dispatchPlay()
-            ACTION_PAUSE -> dispatchPause()
-            ACTION_TOGGLE_PLAY_PAUSE -> dispatchToggle()
+            ACTION_PLAY, ACTION_PAUSE, ACTION_TOGGLE_PLAY_PAUSE -> {
+                // Refresh snapshot before dispatching so we act on current playback state,
+                // not the last-pushed snapshot (which may be stale for between-chunk gaps).
+                PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
+                when (intent.action) {
+                    ACTION_PLAY -> dispatchPlay()
+                    ACTION_PAUSE -> dispatchPause()
+                    ACTION_TOGGLE_PLAY_PAUSE -> dispatchToggle()
+                }
+            }
             ACTION_SYNC_FROM_BRIDGE -> {
                 PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
             }
@@ -196,24 +203,25 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
 
     private fun dispatchToggle() {
         Log.d(mediaButtonLogTag, "dispatchToggle isPlaying=${snapshot.isPlaying}")
-        val toggled = PlaybackServiceBridge.onTogglePlayPause
-        if (toggled != null) {
-            toggled.invoke()
-            PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
-        } else {
-            if (snapshot.isPlaying) dispatchPause() else dispatchPlay()
-        }
+        // Use the snapshot state (refreshed immediately before dispatch) rather than re-reading
+        // engine state via onTogglePlayPause. Engine state can briefly read isSpeaking=false
+        // between TTS chunks while the user still considers playback active, causing play to
+        // fire instead of pause on a single earphone press.
+        if (snapshot.isPlaying) dispatchPause() else dispatchPlay()
         emitAudit("dispatchToggle")
     }
 
     private fun updateSnapshot(next: PlaybackServiceSnapshot) {
         snapshot = next
         mediaSession.isActive = next.itemId != null
-        // Keep media-button ownership stable for the currently loaded item.
-        // Relying on per-utterance speaking state causes focus/register churn and
-        // allows other media apps to reclaim headset button handling mid-playback.
         if (next.itemId != null && next.isPlaying) {
             requestAudioFocus()
+        } else if (next.itemId != null && hasAudioFocus) {
+            // Paused but still holding audio focus: keep anchor running so the OS continues
+            // routing media button events (earphone controls) to this session. The anchor is
+            // a no-op if already playing; explicit restart here guards against anchor stopping
+            // due to an exception while paused (which would otherwise go undetected until play).
+            startMediaButtonAnchor()
         } else if (next.itemId == null) {
             interruptionPolicy.clearResumeExpectation()
             abandonAudioFocusNow()

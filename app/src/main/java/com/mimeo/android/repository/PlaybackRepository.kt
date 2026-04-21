@@ -155,8 +155,10 @@ class PlaybackRepository(
         token: String,
         playlistId: Int? = null,
         prefetchCount: Int = PREFETCH_DEFAULT,
+        sortField: String = "created",
+        sortDir: String = "desc",
     ): QueueFetchResult {
-        val queueResult = apiClient.getQueue(baseUrl, token, playlistId = playlistId)
+        val queueResult = apiClient.getQueue(baseUrl, token, playlistId = playlistId, sortField = sortField, sortDir = sortDir)
         val queue = queueResult.payload
         val targets = if (prefetchCount <= 0) {
             emptyList()

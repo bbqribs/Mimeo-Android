@@ -76,12 +76,6 @@ data class PlaylistSummary(
     val entries: List<PlaylistEntrySummary> = emptyList(),
 )
 
-data class FolderSummary(
-    val id: Int,
-    val name: String,
-    val createdAt: Long,
-)
-
 @Serializable
 data class PlaylistEntrySummary(
     val id: Int,

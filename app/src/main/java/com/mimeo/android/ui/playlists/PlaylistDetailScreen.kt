@@ -418,6 +418,7 @@ fun PlaylistDetailScreen(
             },
         )
     }
+
 }
 
 @Composable

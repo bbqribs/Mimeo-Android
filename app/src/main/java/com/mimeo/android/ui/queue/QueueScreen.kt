@@ -294,6 +294,16 @@ private enum class QueueSortOption(val label: String) {
     TITLE_AZ("Title A-Z"),
 }
 
+// Maps each sort option to the (sortField, sortDir) pair sent to the server.
+// TITLE_AZ has no server-side equivalent; server fetches newest-first and client sorts by title.
+private fun QueueSortOption.serverSortParams(): Pair<String, String> = when (this) {
+    QueueSortOption.NEWEST -> "created" to "desc"
+    QueueSortOption.OLDEST -> "created" to "asc"
+    QueueSortOption.PROGRESS_HIGH -> "progress" to "desc"
+    QueueSortOption.PROGRESS_LOW -> "progress" to "asc"
+    QueueSortOption.TITLE_AZ -> "created" to "desc"
+}
+
 internal fun shouldStartNewSessionOnQueueOpen(
     tappedItemId: Int,
     sessionCurrentItemId: Int,
@@ -519,6 +529,10 @@ fun QueueScreen(
             QueueFilterChip.BIN -> vm.loadBinItems()
             else -> Unit
         }
+    }
+    LaunchedEffect(selectedSort) {
+        val (sortField, sortDir) = selectedSort.serverSortParams()
+        vm.updateQueueServerSort(sortField, sortDir)
     }
 
     val searchNeedle = remember(searchQuery) { searchQuery.trim().lowercase() }
