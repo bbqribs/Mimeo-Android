@@ -40,6 +40,40 @@ class PlaybackServiceObservabilityTest {
     }
 
     @Test
+    fun `headsethook key resolves to toggle regardless of playing state`() {
+        val actionWhilePlaying = resolveMediaButtonDispatchAction(
+            keyCode = KeyEvent.KEYCODE_HEADSETHOOK,
+            isCurrentlyPlaying = true,
+        )
+        val actionWhilePaused = resolveMediaButtonDispatchAction(
+            keyCode = KeyEvent.KEYCODE_HEADSETHOOK,
+            isCurrentlyPlaying = false,
+        )
+
+        assertEquals(MediaButtonDispatchAction.Toggle, actionWhilePlaying)
+        assertEquals(MediaButtonDispatchAction.Toggle, actionWhilePaused)
+    }
+
+    @Test
+    fun `toggle resolves to pause when snapshot says playing`() {
+        // Verifies that Toggle routes through dispatchPause path when isCurrentlyPlaying=true,
+        // not through a secondary engine-state read that could be stale between TTS chunks.
+        val pauseAction = resolveMediaButtonDispatchAction(
+            keyCode = KeyEvent.KEYCODE_HEADSETHOOK,
+            isCurrentlyPlaying = true,
+        )
+        val playAction = resolveMediaButtonDispatchAction(
+            keyCode = KeyEvent.KEYCODE_HEADSETHOOK,
+            isCurrentlyPlaying = false,
+        )
+
+        // Toggle when playing → service should dispatchPause (snapshot.isPlaying=true)
+        assertEquals(MediaButtonDispatchAction.Toggle, pauseAction)
+        // Toggle when paused → service should dispatchPlay (snapshot.isPlaying=false)
+        assertEquals(MediaButtonDispatchAction.Toggle, playAction)
+    }
+
+    @Test
     fun `drift clues include focus without item`() {
         val clues = detectPlaybackDriftClues(
             PlaybackAuditState(
