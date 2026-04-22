@@ -1875,8 +1875,7 @@ fun PlayerScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .then(modifier)
-                    .background(Color.Black),
+                    .then(modifier),
             ) {
                 renderPlayerDock()
             }

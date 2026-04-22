@@ -76,6 +76,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -1156,49 +1157,58 @@ private fun MimeoApp(vm: AppViewModel) {
                     }
 
                     if (showMiniPlayer) {
-                        MiniPlayer(
-                            vm = vm,
-                            onShowSnackbar = { message, actionLabel, actionKey ->
-                                vm.showSnackbar(message, actionLabel, actionKey)
-                            },
-                            initialItemId = requestedPlayerItemId,
-                            requestedItemId = requestedPlayerItemId,
-                            locusTapSignal = locusTabTapSignal,
-                            openRequestSignal = playerOpenRequestSignal,
-                            onOpenItem = { nextId ->
-                                if (currentRoute.startsWith(ROUTE_LOCUS)) {
-                                    nav.navigate("$ROUTE_LOCUS/$nextId") {
-                                        launchSingleTop = true
-                                    }
-                                }
-                            },
-                            onOpenLocusForItem = { _ ->
-                                nav.navigate(ROUTE_LOCUS) {
-                                    launchSingleTop = true
-                                }
-                            },
-                            onRequestBack = {
-                                if (!nav.popBackStack()) {
-                                    nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
-                                }
-                            },
-                            onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
-                            showCompactControls = showCompactControls,
-                            controlsMode = settings.playerControlsMode,
-                            lastNonNubMode = settings.playerLastNonNubMode,
-                            chevronSnapEdge = settings.playerChevronSnapEdge,
-                            onControlsModeChange = shellState.onControlsModeChange,
-                            onPlaybackActiveChange = shellState.onPlaybackActiveChange,
-                            onManualReadingActiveChange = shellState.onManualReadingActiveChange,
-                            onReaderChromeVisibilityChange = shellState.onReaderChromeVisibilityChange,
-                            onChevronSnapChange = { edge ->
-                                vm.savePlayerChevronSnap(edge, 0.5f)
-                            },
+                        Column(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .padding(bottom = shellBottomClearance)
                                 .fillMaxWidth(),
-                        )
+                        ) {
+                            MiniPlayer(
+                                vm = vm,
+                                onShowSnackbar = { message, actionLabel, actionKey ->
+                                    vm.showSnackbar(message, actionLabel, actionKey)
+                                },
+                                initialItemId = requestedPlayerItemId,
+                                requestedItemId = requestedPlayerItemId,
+                                locusTapSignal = locusTabTapSignal,
+                                openRequestSignal = playerOpenRequestSignal,
+                                onOpenItem = { nextId ->
+                                    if (currentRoute.startsWith(ROUTE_LOCUS)) {
+                                        nav.navigate("$ROUTE_LOCUS/$nextId") {
+                                            launchSingleTop = true
+                                        }
+                                    }
+                                },
+                                onOpenLocusForItem = { _ ->
+                                    nav.navigate(ROUTE_LOCUS) {
+                                        launchSingleTop = true
+                                    }
+                                },
+                                onRequestBack = {
+                                    if (!nav.popBackStack()) {
+                                        nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
+                                    }
+                                },
+                                onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
+                                showCompactControls = showCompactControls,
+                                controlsMode = settings.playerControlsMode,
+                                lastNonNubMode = settings.playerLastNonNubMode,
+                                chevronSnapEdge = settings.playerChevronSnapEdge,
+                                onControlsModeChange = shellState.onControlsModeChange,
+                                onPlaybackActiveChange = shellState.onPlaybackActiveChange,
+                                onManualReadingActiveChange = shellState.onManualReadingActiveChange,
+                                onReaderChromeVisibilityChange = shellState.onReaderChromeVisibilityChange,
+                                onChevronSnapChange = { edge ->
+                                    vm.savePlayerChevronSnap(edge, 0.5f)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(shellBottomClearance)
+                                    .background(Color.Black),
+                            )
+                        }
                     }
                 }
             }
