@@ -600,16 +600,20 @@ internal fun shouldSkipInitialReopen(
     isSpeaking: Boolean,
     isAutoPlaying: Boolean,
 ): Boolean {
+    if (resolvedItemId <= 0 || currentItemId <= 0) return false
     if (resolvedItemId != currentItemId) return false
-    return autoPlayAfterLoad || isSpeaking || isAutoPlaying
+    // Mini-player <-> Locus route swaps should attach to the existing playback owner,
+    // even when playback is currently paused.
+    return true
 }
 
 internal fun shouldPreserveActivePlaybackDuringLoad(
+    sameItemSurfaceAttach: Boolean,
     autoPlayAfterLoad: Boolean,
     isSpeaking: Boolean,
     isAutoPlaying: Boolean,
 ): Boolean {
-    return autoPlayAfterLoad || isSpeaking || isAutoPlaying
+    return sameItemSurfaceAttach || autoPlayAfterLoad || isSpeaking || isAutoPlaying
 }
 
 internal fun shouldUseTitleIntroOnPlaybackStart(
@@ -1238,10 +1242,14 @@ fun PlayerScreen(
         continuationLog(
             "loadItem start currentItemId=$currentItemId reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
         )
+        val sameItemSurfaceAttach =
+            currentItemId > 0 &&
+                (requestedItemId == null || requestedItemId == currentItemId)
         // During auto-continue handoff we keep the existing reader/control surface visible
         // until the next item's payload is ready, avoiding a transient blank+spinner flash.
         val preservingVisibleContent = preserveVisibleContentOnReload || autoPlayAfterLoad
         val preserveActivePlayback = shouldPreserveActivePlaybackDuringLoad(
+            sameItemSurfaceAttach = sameItemSurfaceAttach,
             autoPlayAfterLoad = autoPlayAfterLoad,
             isSpeaking = isSpeaking,
             isAutoPlaying = isAutoPlaying,

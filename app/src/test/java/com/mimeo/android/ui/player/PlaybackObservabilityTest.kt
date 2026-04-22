@@ -115,10 +115,36 @@ class PlaybackObservabilityTest {
     }
 
     @Test
+    fun skipInitialReopenWhenSameItemPausedDuringSurfaceSwap() {
+        val shouldSkip = shouldSkipInitialReopen(
+            resolvedItemId = 42,
+            currentItemId = 42,
+            autoPlayAfterLoad = false,
+            isSpeaking = false,
+            isAutoPlaying = false,
+        )
+
+        assertTrue(shouldSkip)
+    }
+
+    @Test
     fun preserveActivePlaybackDuringLoadWhenAlreadySpeaking() {
         val preserve = shouldPreserveActivePlaybackDuringLoad(
+            sameItemSurfaceAttach = false,
             autoPlayAfterLoad = false,
             isSpeaking = true,
+            isAutoPlaying = false,
+        )
+
+        assertTrue(preserve)
+    }
+
+    @Test
+    fun preserveActivePlaybackDuringLoadWhenSameItemSurfaceAttaches() {
+        val preserve = shouldPreserveActivePlaybackDuringLoad(
+            sameItemSurfaceAttach = true,
+            autoPlayAfterLoad = false,
+            isSpeaking = false,
             isAutoPlaying = false,
         )
 
