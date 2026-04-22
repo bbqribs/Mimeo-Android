@@ -147,7 +147,6 @@ class PlaybackObservabilityTest {
     @Test
     fun preserveActivePlaybackDuringLoadWhenAlreadySpeaking() {
         val preserve = shouldPreserveActivePlaybackDuringLoad(
-            sameItemSurfaceAttach = false,
             autoPlayAfterLoad = false,
             isSpeaking = true,
             isAutoPlaying = false,
@@ -157,15 +156,14 @@ class PlaybackObservabilityTest {
     }
 
     @Test
-    fun preserveActivePlaybackDuringLoadWhenSameItemSurfaceAttaches() {
+    fun doNotPreserveActivePlaybackDuringLoadWhenPausedWithoutAutoplay() {
         val preserve = shouldPreserveActivePlaybackDuringLoad(
-            sameItemSurfaceAttach = true,
             autoPlayAfterLoad = false,
             isSpeaking = false,
             isAutoPlaying = false,
         )
 
-        assertTrue(preserve)
+        assertFalse(preserve)
     }
 
     @Test

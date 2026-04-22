@@ -611,12 +611,11 @@ internal fun shouldSkipInitialReopen(
 }
 
 internal fun shouldPreserveActivePlaybackDuringLoad(
-    sameItemSurfaceAttach: Boolean,
     autoPlayAfterLoad: Boolean,
     isSpeaking: Boolean,
     isAutoPlaying: Boolean,
 ): Boolean {
-    return sameItemSurfaceAttach || autoPlayAfterLoad || isSpeaking || isAutoPlaying
+    return autoPlayAfterLoad || isSpeaking || isAutoPlaying
 }
 
 internal fun shouldUseTitleIntroOnPlaybackStart(
@@ -1246,14 +1245,10 @@ fun PlayerScreen(
         continuationLog(
             "loadItem start currentItemId=$currentItemId reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
         )
-        val sameItemSurfaceAttach =
-            engineState.currentItemId > 0 &&
-                (requestedItemId == null || requestedItemId == engineState.currentItemId)
         // During auto-continue handoff we keep the existing reader/control surface visible
         // until the next item's payload is ready, avoiding a transient blank+spinner flash.
         val preservingVisibleContent = preserveVisibleContentOnReload || autoPlayAfterLoad
         val preserveActivePlayback = shouldPreserveActivePlaybackDuringLoad(
-            sameItemSurfaceAttach = sameItemSurfaceAttach,
             autoPlayAfterLoad = autoPlayAfterLoad,
             isSpeaking = isSpeaking,
             isAutoPlaying = isAutoPlaying,
