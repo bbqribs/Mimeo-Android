@@ -383,6 +383,9 @@ class PlaybackEngine(
         settings: PlaybackEngineSettings,
     ) {
         if (chunks.isEmpty()) return
+        // Ensure every playback start/restart uses the persisted speed, even if
+        // no settings-change event has fired in this composition lifecycle.
+        ttsController.setSpeechRate(settings.playbackSpeed)
         val current = _state.value
         val safe = normalizedPosition(position)
         val shouldSpeakTitleFirst = shouldUseTitleIntroOnPlaybackStart(
