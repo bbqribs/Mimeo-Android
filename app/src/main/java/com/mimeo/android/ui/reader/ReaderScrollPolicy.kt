@@ -48,11 +48,11 @@ internal fun shouldAutoReattachAfterManualScroll(
     anchorFullyVisible: Boolean,
     triggerKind: ReaderScrollTriggerKind,
 ): Boolean {
-    // Preserve manual detachment until an explicit reattach trigger is sent.
-    // Releasing a drag should not implicitly opt back into follow mode.
     if (!manualScrollDetached) return false
     if (!anchorFullyVisible) return false
-    return triggerKind == ReaderScrollTriggerKind.FORCE_REATTACH
+    // Keep FF/RW center-if-offscreen semantics independent from manual-scroll follow logic.
+    if (triggerKind == ReaderScrollTriggerKind.CENTER_IF_OFFSCREEN) return false
+    return true
 }
 
 internal fun shouldAutoScrollForStandardPlayback(

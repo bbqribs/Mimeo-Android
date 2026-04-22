@@ -119,6 +119,7 @@ fun ReaderBody(
     var isProgrammaticScroll by remember { mutableStateOf(false) }
     var suppressTransitionUntilMs by remember { mutableStateOf(0L) }
     var manualScrollDetached by remember { mutableStateOf(false) }
+    var followSuppressedByManualScroll by remember { mutableStateOf(false) }
     val highlightedSentenceRange = remember(chunks, sentenceRangesByChunk, safeChunkIndex, currentChunkOffsetInChars, activeRangeInChunk) {
         chunks.getOrNull(safeChunkIndex)?.let { chunk ->
             val offsetForSentence = activeRangeInChunk?.first ?: currentChunkOffsetInChars
@@ -590,6 +591,7 @@ fun ReaderBody(
                 ) {
                     suppressTransitionUntilMs = SystemClock.elapsedRealtime() + MANUAL_SCROLL_SUPPRESS_MS
                     manualScrollDetached = true
+                    followSuppressedByManualScroll = true
                 }
                 lastAnchorWasFullyVisible = fullyVisible
             }
@@ -671,14 +673,20 @@ fun ReaderBody(
         val triggerKind = classifyReaderScrollTrigger(scrollTriggerSignal, lastHandledScrollTrigger)
         val externalTrigger = triggerKind != ReaderScrollTriggerKind.NONE
         val forceReattach = triggerKind == ReaderScrollTriggerKind.FORCE_REATTACH
-        if (
-            shouldAutoReattachAfterManualScroll(
-                manualScrollDetached = manualScrollDetached,
-                anchorFullyVisible = fullyVisibleNow,
-                triggerKind = triggerKind,
-            )
-        ) {
-            manualScrollDetached = false
+        if (forceReattach) {
+            followSuppressedByManualScroll = false
+        }
+        val canAutoReattachNow = forceReattach || nowMs >= suppressTransitionUntilMs
+        if (canAutoReattachNow) {
+            if (
+                shouldAutoReattachAfterManualScroll(
+                    manualScrollDetached = manualScrollDetached,
+                    anchorFullyVisible = fullyVisibleNow,
+                    triggerKind = triggerKind,
+                )
+            ) {
+                manualScrollDetached = false
+            }
         }
         val anchorChanged = lastAnchorRange != anchor
         if (
@@ -711,16 +719,17 @@ fun ReaderBody(
             return@LaunchedEffect
         }
         val hiddenByBottom = endBottomInRoot > desiredBottomInRoot
+        val followEnabled = autoScrollWhileListening && !followSuppressedByManualScroll
         val standardFollowTrigger = shouldAutoScrollForStandardPlayback(
             triggerKind = triggerKind,
-            autoScrollWhileListening = autoScrollWhileListening,
+            autoScrollWhileListening = followEnabled,
             manualScrollDetached = manualScrollDetached,
             hiddenByBottom = hiddenByBottom,
             nowMs = nowMs,
             suppressUntilMs = suppressTransitionUntilMs,
         )
         val boundaryFollowTrigger = shouldAutoScrollForPlaybackBoundary(
-            autoScrollWhileListening = autoScrollWhileListening,
+            autoScrollWhileListening = followEnabled,
             manualScrollDetached = manualScrollDetached,
             anchorChanged = anchorChanged,
             hiddenByBottom = hiddenByBottom,

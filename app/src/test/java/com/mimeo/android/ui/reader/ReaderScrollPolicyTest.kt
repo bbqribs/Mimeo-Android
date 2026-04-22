@@ -77,22 +77,11 @@ class ReaderScrollPolicyTest {
 
     @Test
     fun manualScrollDetached_autoReattachesWhenAnchorVisibleAgain() {
-        assertFalse(
-            shouldAutoReattachAfterManualScroll(
-                manualScrollDetached = true,
-                anchorFullyVisible = true,
-                triggerKind = ReaderScrollTriggerKind.NONE,
-            ),
-        )
-    }
-
-    @Test
-    fun manualScrollDetached_autoReattachesOnlyForForceReattachTrigger() {
         assertTrue(
             shouldAutoReattachAfterManualScroll(
                 manualScrollDetached = true,
                 anchorFullyVisible = true,
-                triggerKind = ReaderScrollTriggerKind.FORCE_REATTACH,
+                triggerKind = ReaderScrollTriggerKind.NONE,
             ),
         )
     }
