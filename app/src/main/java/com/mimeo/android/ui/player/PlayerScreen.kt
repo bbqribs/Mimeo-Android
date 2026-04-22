@@ -93,6 +93,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.TextToolbarStatus
@@ -864,6 +865,7 @@ fun PlayerScreen(
     val readerScrollState = rememberSaveable(readerScrollItemId, readerViewportSessionNonce, saver = ScrollState.Saver) {
         ScrollState(readerInitialOffset)
     }
+    val density = LocalDensity.current
     val waitingForRequestedItem =
         requestedItemId != null &&
             requestedItemId != currentItemId &&
@@ -1916,6 +1918,7 @@ fun PlayerScreen(
                                     }
                                 }
                         ) {
+                            val readerTopInsetDp = with(density) { locusTopOverlayHeightPx.toDp() }
                             CompositionLocalProvider(LocalTextToolbar provides textToolbar) {
                                 ReaderBody(
                                     fullText = displayPayload?.text,
@@ -1940,7 +1943,7 @@ fun PlayerScreen(
                                     selectionResetSignal = readerSelectionResetSignal,
                                     scrollState = readerScrollState,
                                     showEmptyPlaceholder = transitionSettled && !isLoading,
-                                    topOverlayOcclusionPx = locusTopOverlayHeightPx,
+                                    topOverlayOcclusionPx = 0,
                                     bottomOverlayOcclusionPx = locusBottomOverlayHeightPx,
                                     onNonLinkTap = {
                                         if (textToolbar.status == TextToolbarStatus.Shown || selectionClearArmed) {
@@ -1951,6 +1954,7 @@ fun PlayerScreen(
                                     },
                                     modifier = Modifier
                                         .fillMaxSize()
+                                        .padding(top = readerTopInsetDp)
                                         .graphicsLayer { alpha = bodyContentAlpha },
                                 )
                             }
