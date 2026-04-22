@@ -32,6 +32,9 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
@@ -124,6 +127,29 @@ fun ReaderBody(
     var suppressTransitionUntilMs by remember { mutableStateOf(0L) }
     var manualScrollDetached by remember { mutableStateOf(false) }
     var followSuppressedByManualScroll by remember { mutableStateOf(false) }
+    fun armManualScrollSuppression(reason: String) {
+        if (!autoScrollWhileListening) return
+        suppressTransitionUntilMs = SystemClock.elapsedRealtime() + MANUAL_SCROLL_SUPPRESS_MS
+        manualScrollDetached = true
+        followSuppressedByManualScroll = true
+        onManualScrollGesture?.invoke()
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                READER_SCROLL_DEBUG_TAG,
+                "manual_detach reason=$reason scroll=${scrollState.value} suppressUntil=$suppressTransitionUntilMs",
+            )
+        }
+    }
+    val manualScrollNestedConnection = remember(autoScrollWhileListening) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.Drag && abs(available.y) > 0.5f) {
+                    armManualScrollSuppression("nested_drag")
+                }
+                return Offset.Zero
+            }
+        }
+    }
     val highlightedSentenceRange = remember(chunks, sentenceRangesByChunk, safeChunkIndex, currentChunkOffsetInChars, activeRangeInChunk) {
         chunks.getOrNull(safeChunkIndex)?.let { chunk ->
             val offsetForSentence = activeRangeInChunk?.first ?: currentChunkOffsetInChars
@@ -351,6 +377,7 @@ fun ReaderBody(
             .onGloballyPositioned { coordinates ->
                 viewportTopInRootPx = coordinates.positionInRoot().y
             }
+            .nestedScroll(manualScrollNestedConnection)
             .verticalScroll(scrollState),
         contentAlignment = Alignment.TopCenter,
     ) {
@@ -593,16 +620,7 @@ fun ReaderBody(
                     manualScrollChange &&
                     autoScrollWhileListening
                 ) {
-                    suppressTransitionUntilMs = SystemClock.elapsedRealtime() + MANUAL_SCROLL_SUPPRESS_MS
-                    manualScrollDetached = true
-                    followSuppressedByManualScroll = true
-                    onManualScrollGesture?.invoke()
-                    if (BuildConfig.DEBUG) {
-                        Log.d(
-                            READER_SCROLL_DEBUG_TAG,
-                            "manual_detach scroll=${scrollState.value} suppressUntil=$suppressTransitionUntilMs",
-                        )
-                    }
+                    armManualScrollSuppression("scroll_delta")
                 }
                 lastAnchorWasFullyVisible = fullyVisible
             }
