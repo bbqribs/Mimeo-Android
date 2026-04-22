@@ -89,6 +89,7 @@ fun ReaderBody(
     bottomOverlayOcclusionPx: Int = 0,
     showEmptyPlaceholder: Boolean = true,
     onNonLinkTap: (() -> Unit)? = null,
+    onManualScrollGesture: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -592,6 +593,7 @@ fun ReaderBody(
                     suppressTransitionUntilMs = SystemClock.elapsedRealtime() + MANUAL_SCROLL_SUPPRESS_MS
                     manualScrollDetached = true
                     followSuppressedByManualScroll = true
+                    onManualScrollGesture?.invoke()
                 }
                 lastAnchorWasFullyVisible = fullyVisible
             }

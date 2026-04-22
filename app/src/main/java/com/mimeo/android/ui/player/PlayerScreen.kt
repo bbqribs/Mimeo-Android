@@ -1,6 +1,7 @@
 package com.mimeo.android.ui.player
 
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -171,6 +172,7 @@ private val PLAYBACK_SPEED_PILLS = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
 private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 private const val MANUAL_OPEN_DEBUG_TAG = "MimeoManualOpen"
 private const val ACTION_KEY_UNDO_ARCHIVE = "undo_archive"
+private const val MANUAL_SCROLL_TAP_REATTACH_BLOCK_MS = 450L
 
 private fun nextStandardScrollTriggerSignal(current: Int): Int {
     val base = kotlin.math.abs(current) + 1
@@ -803,6 +805,7 @@ fun PlayerScreen(
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     val activeChunkRange = engineState.activeChunkRange
     var readerScrollTriggerSignal by rememberSaveable { mutableIntStateOf(0) }
+    var lastReaderManualScrollAtMs by remember { mutableLongStateOf(0L) }
     var readerSelectionResetSignal by rememberSaveable { mutableIntStateOf(0) }
     var selectionClearArmed by rememberSaveable { mutableStateOf(false) }
     var lastHandledLocusTapSignal by rememberSaveable { mutableIntStateOf(locusTapSignal) }
@@ -1706,6 +1709,10 @@ fun PlayerScreen(
             nowPlayingTitle = nowPlayingTitle,
             continuousMarquee = settings.continuousNowPlayingMarquee,
             onOpenLocusForItem = {
+                val nowMs = SystemClock.elapsedRealtime()
+                if (nowMs - lastReaderManualScrollAtMs < MANUAL_SCROLL_TAP_REATTACH_BLOCK_MS) {
+                    return@PlayerControlBar
+                }
                 readerScrollTriggerSignal = nextForceReattachScrollTriggerSignal(readerScrollTriggerSignal)
                 val locusTargetId = resolveLocusOpenTargetId()
                 if (locusTargetId > 0) onOpenLocusForItem(locusTargetId)
@@ -1952,6 +1959,9 @@ fun PlayerScreen(
                                         } else {
                                             toggleReaderMode()
                                         }
+                                    },
+                                    onManualScrollGesture = {
+                                        lastReaderManualScrollAtMs = SystemClock.elapsedRealtime()
                                     },
                                     modifier = Modifier
                                         .fillMaxSize()
