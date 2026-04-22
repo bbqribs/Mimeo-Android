@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
+import android.util.Log
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -50,6 +51,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.ReaderFontOption
@@ -63,6 +65,7 @@ private val READER_SEARCH_FOCUS_EXTRA_TOP_PADDING = 120.dp
 private const val MANUAL_SCROLL_SUPPRESS_MS = 1200L
 private const val URL_ANNOTATION_TAG = "reader-url"
 private val READER_LINK_BLUE = Color(0xFF64B5F6)
+private const val READER_SCROLL_DEBUG_TAG = "MimeoReaderScroll"
 
 @Composable
 fun ReaderBody(
@@ -594,6 +597,12 @@ fun ReaderBody(
                     manualScrollDetached = true
                     followSuppressedByManualScroll = true
                     onManualScrollGesture?.invoke()
+                    if (BuildConfig.DEBUG) {
+                        Log.d(
+                            READER_SCROLL_DEBUG_TAG,
+                            "manual_detach scroll=${scrollState.value} suppressUntil=$suppressTransitionUntilMs",
+                        )
+                    }
                 }
                 lastAnchorWasFullyVisible = fullyVisible
             }
@@ -677,6 +686,12 @@ fun ReaderBody(
         val forceReattach = triggerKind == ReaderScrollTriggerKind.FORCE_REATTACH
         val anchorChanged = lastAnchorRange != anchor
         if (followSuppressedByManualScroll && !forceReattach) {
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    READER_SCROLL_DEBUG_TAG,
+                    "skip_follow suppressed=true trigger=$triggerKind anchorChanged=$anchorChanged",
+                )
+            }
             if (externalTrigger) {
                 lastHandledScrollTrigger = scrollTriggerSignal
             }
@@ -688,6 +703,9 @@ fun ReaderBody(
         }
         if (forceReattach) {
             followSuppressedByManualScroll = false
+            if (BuildConfig.DEBUG) {
+                Log.d(READER_SCROLL_DEBUG_TAG, "force_reattach trigger=$triggerKind")
+            }
         }
         val canAutoReattachNow = forceReattach || nowMs >= suppressTransitionUntilMs
         if (canAutoReattachNow) {
@@ -768,6 +786,12 @@ fun ReaderBody(
             }
             lastAnchorRange = anchor
             return@LaunchedEffect
+        }
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                READER_SCROLL_DEBUG_TAG,
+                "jump trigger=$triggerKind standard=$standardFollowTrigger boundary=$boundaryFollowTrigger center=$centerIfOffscreenTrigger force=$forceReattach detached=$manualScrollDetached suppressed=$followSuppressedByManualScroll",
+            )
         }
 
         suspend fun jumpAnchorToTop() {
