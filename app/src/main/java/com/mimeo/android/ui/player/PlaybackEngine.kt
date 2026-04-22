@@ -407,17 +407,25 @@ class PlaybackEngine(
             } else {
                 0
             }
-            pendingBodyStartAfterTitleIntro = applyTitlePrefixSkipToStartPosition(
+            val pendingStart = applyTitlePrefixSkipToStartPosition(
                 start = safe,
                 chunks = chunks,
                 skipCharsFromOpening = prefixSkipChars,
             )
+            pendingBodyStartAfterTitleIntro = pendingStart
             pendingSourceCueAfterTitleIntro = sourceCue
-            _state.value = _state.value.copy(
-                isAutoPlaying = true,
-                isSpeaking = true,
-            )
-            ttsController.speakTitleIntro(current.currentItemId, title)
+            val titleStarted = ttsController.speakTitleIntro(current.currentItemId, title)
+            if (titleStarted) {
+                _state.value = _state.value.copy(
+                    isAutoPlaying = true,
+                    isSpeaking = true,
+                )
+            } else {
+                pendingBodyStartAfterTitleIntro = null
+                pendingSourceCueAfterTitleIntro = null
+                _state.value = _state.value.copy(isAutoPlaying = true)
+                playChunk(pendingStart.chunkIndex, pendingStart.offsetInChunkChars)
+            }
         } else {
             pendingBodyStartAfterTitleIntro = null
             pendingSourceCueAfterTitleIntro = null
@@ -443,11 +451,20 @@ class PlaybackEngine(
             chunkIndex = safeIndex,
             text = speakText,
             baseOffset = safeOffset,
-        )
-        _state.value = _state.value.copy(
-            isSpeaking = true,
-            hasStartedPlaybackForCurrentItem = true,
-        )
+        ).also { started ->
+            if (started) {
+                _state.value = _state.value.copy(
+                    isSpeaking = true,
+                    hasStartedPlaybackForCurrentItem = true,
+                )
+            } else {
+                _state.value = _state.value.copy(
+                    isSpeaking = false,
+                    isAutoPlaying = false,
+                )
+                _events.tryEmit(PlaybackEngineEvent.UiMessage("Speech engine unavailable. Try Play again."))
+            }
+        }
     }
 
     private fun setPlaybackPosition(chunkIndex: Int, offsetInChunkChars: Int) {

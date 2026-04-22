@@ -168,8 +168,8 @@ class TtsController(
         })
     }
 
-    fun speakChunk(itemId: Int, chunkIndex: Int, text: String, baseOffset: Int) {
-        if (!initialized || text.isBlank()) return
+    fun speakChunk(itemId: Int, chunkIndex: Int, text: String, baseOffset: Int): Boolean {
+        if (!initialized || text.isBlank()) return false
         applyPreferredOrDefaultVoice()
         tts.setSpeechRate(speechRate)
         val generation = generationCounter.incrementAndGet()
@@ -188,12 +188,13 @@ class TtsController(
         if (DEBUG_PLAYBACK) {
             println("[Mimeo][tts] speak utteranceId=$utteranceId item=$itemId chunk=$chunkIndex base=$baseOffset")
         }
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+        val result = tts.speak(text, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+        return result == TextToSpeech.SUCCESS
     }
 
-    fun speakTitleIntro(itemId: Int, titleText: String) {
+    fun speakTitleIntro(itemId: Int, titleText: String): Boolean {
         val clean = titleText.trim()
-        if (!initialized || clean.isBlank()) return
+        if (!initialized || clean.isBlank()) return false
         applyPreferredOrDefaultVoice()
         tts.setSpeechRate(speechRate)
         val generation = generationCounter.incrementAndGet()
@@ -209,7 +210,8 @@ class TtsController(
         val params = Bundle().apply {
             putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
         }
-        tts.speak(clean, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+        val result = tts.speak(clean, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+        return result == TextToSpeech.SUCCESS
     }
 
     fun speakSourceCue(itemId: Int, sourceCueText: String): Boolean {
@@ -230,8 +232,8 @@ class TtsController(
         val params = Bundle().apply {
             putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
         }
-        tts.speak(clean, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
-        return true
+        val result = tts.speak(clean, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+        return result == TextToSpeech.SUCCESS
     }
 
     fun setSpeechRate(rate: Float) {
