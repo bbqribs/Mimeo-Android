@@ -167,6 +167,34 @@ class PlaybackObservabilityTest {
     }
 
     @Test
+    fun skipSurfaceHandoffReloadWhenPlaybackActiveAndSharedContentMatchesItem() {
+        val skip = shouldSkipSurfaceHandoffReload(
+            currentItemId = 42,
+            payloadItemId = 42,
+            chunkCount = 5,
+            autoPlayAfterLoad = false,
+            isSpeaking = true,
+            isAutoPlaying = true,
+        )
+
+        assertTrue(skip)
+    }
+
+    @Test
+    fun doNotSkipSurfaceHandoffReloadWhenSharedContentMissing() {
+        val skip = shouldSkipSurfaceHandoffReload(
+            currentItemId = 42,
+            payloadItemId = null,
+            chunkCount = 0,
+            autoPlayAfterLoad = false,
+            isSpeaking = true,
+            isAutoPlaying = true,
+        )
+
+        assertFalse(skip)
+    }
+
+    @Test
     fun updateReaderScrollOffsetsAddsAndUpdatesPerItemOffset() {
         val initial = mapOf(100 to 24)
         val updated = updateReaderScrollOffsets(

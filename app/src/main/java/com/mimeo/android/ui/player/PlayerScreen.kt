@@ -618,6 +618,20 @@ internal fun shouldPreserveActivePlaybackDuringLoad(
     return autoPlayAfterLoad || isSpeaking || isAutoPlaying
 }
 
+internal fun shouldSkipSurfaceHandoffReload(
+    currentItemId: Int,
+    payloadItemId: Int?,
+    chunkCount: Int,
+    autoPlayAfterLoad: Boolean,
+    isSpeaking: Boolean,
+    isAutoPlaying: Boolean,
+): Boolean {
+    if (currentItemId <= 0) return false
+    if (payloadItemId != currentItemId) return false
+    if (chunkCount <= 0) return false
+    return autoPlayAfterLoad || isSpeaking || isAutoPlaying
+}
+
 internal fun shouldUseTitleIntroOnPlaybackStart(
     allowTitleIntro: Boolean,
     hasStartedPlaybackForItem: Boolean,
@@ -1215,6 +1229,24 @@ fun PlayerScreen(
 
     LaunchedEffect(currentItemId, resolvedInitial, reloadNonce, waitingForRequestedItem, previewModeActive) {
         if (!resolvedInitial) return@LaunchedEffect
+        val skipSurfaceHandoffReload = shouldSkipSurfaceHandoffReload(
+            currentItemId = currentItemId,
+            payloadItemId = textPayload?.itemId,
+            chunkCount = chunks.size,
+            autoPlayAfterLoad = autoPlayAfterLoad,
+            isSpeaking = isSpeaking,
+            isAutoPlaying = isAutoPlaying,
+        )
+        if (skipSurfaceHandoffReload) {
+            continuationLog(
+                "loadItem skip surfaceHandoff currentItemId=$currentItemId reloadNonce=$reloadNonce " +
+                    "speaking=$isSpeaking auto=$isAutoPlaying autoPlayAfterLoad=$autoPlayAfterLoad",
+            )
+            isLoading = false
+            bodyRevealReady = true
+            preserveVisibleContentOnReload = false
+            return@LaunchedEffect
+        }
         val previewOnlyHandoffActive =
             hasLockedPlaybackOwner &&
                 requestedItemId != null &&
