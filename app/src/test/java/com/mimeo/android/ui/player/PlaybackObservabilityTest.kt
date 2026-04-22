@@ -93,6 +93,7 @@ class PlaybackObservabilityTest {
         val shouldSkip = shouldSkipInitialReopen(
             resolvedItemId = 42,
             currentItemId = 42,
+            engineCurrentItemId = 42,
             autoPlayAfterLoad = false,
             isSpeaking = true,
             isAutoPlaying = false,
@@ -106,6 +107,7 @@ class PlaybackObservabilityTest {
         val shouldSkip = shouldSkipInitialReopen(
             resolvedItemId = 42,
             currentItemId = 41,
+            engineCurrentItemId = 41,
             autoPlayAfterLoad = true,
             isSpeaking = true,
             isAutoPlaying = true,
@@ -119,12 +121,27 @@ class PlaybackObservabilityTest {
         val shouldSkip = shouldSkipInitialReopen(
             resolvedItemId = 42,
             currentItemId = 42,
+            engineCurrentItemId = 42,
             autoPlayAfterLoad = false,
             isSpeaking = false,
             isAutoPlaying = false,
         )
 
         assertTrue(shouldSkip)
+    }
+
+    @Test
+    fun doNotSkipInitialReopenWhenEngineNotAttachedYet() {
+        val shouldSkip = shouldSkipInitialReopen(
+            resolvedItemId = 42,
+            currentItemId = 42,
+            engineCurrentItemId = -1,
+            autoPlayAfterLoad = false,
+            isSpeaking = false,
+            isAutoPlaying = false,
+        )
+
+        assertEquals(false, shouldSkip)
     }
 
     @Test

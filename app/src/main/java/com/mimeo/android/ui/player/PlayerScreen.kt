@@ -596,14 +596,16 @@ internal fun resolveParagraphJumpPosition(
 internal fun shouldSkipInitialReopen(
     resolvedItemId: Int,
     currentItemId: Int,
+    engineCurrentItemId: Int,
     autoPlayAfterLoad: Boolean,
     isSpeaking: Boolean,
     isAutoPlaying: Boolean,
 ): Boolean {
+    if (engineCurrentItemId <= 0) return false
     if (resolvedItemId <= 0 || currentItemId <= 0) return false
     if (resolvedItemId != currentItemId) return false
-    // Mini-player <-> Locus route swaps should attach to the existing playback owner,
-    // even when playback is currently paused.
+    if (engineCurrentItemId != resolvedItemId) return false
+    // Mini-player <-> Locus route swaps should attach to the existing playback owner.
     return true
 }
 
@@ -1021,6 +1023,7 @@ fun PlayerScreen(
         val attachToActiveSession = shouldSkipInitialReopen(
             resolvedItemId = resolvedId,
             currentItemId = currentItemId,
+            engineCurrentItemId = engineState.currentItemId,
             autoPlayAfterLoad = autoPlayAfterLoad,
             isSpeaking = isSpeaking,
             isAutoPlaying = isAutoPlaying,
@@ -1243,8 +1246,8 @@ fun PlayerScreen(
             "loadItem start currentItemId=$currentItemId reloadNonce=$reloadNonce autoPlayAfterLoad=$autoPlayAfterLoad",
         )
         val sameItemSurfaceAttach =
-            currentItemId > 0 &&
-                (requestedItemId == null || requestedItemId == currentItemId)
+            engineState.currentItemId > 0 &&
+                (requestedItemId == null || requestedItemId == engineState.currentItemId)
         // During auto-continue handoff we keep the existing reader/control surface visible
         // until the next item's payload is ready, avoiding a transient blank+spinner flash.
         val preservingVisibleContent = preserveVisibleContentOnReload || autoPlayAfterLoad
