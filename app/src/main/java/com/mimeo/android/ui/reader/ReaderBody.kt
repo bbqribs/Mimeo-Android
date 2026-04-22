@@ -586,8 +586,7 @@ fun ReaderBody(
                     endBottomInRoot <= (visibleBottomInRoot - bottomComfortPx)
                 if (
                     manualScrollChange &&
-                    autoScrollWhileListening &&
-                    !manualScrollDetached
+                    autoScrollWhileListening
                 ) {
                     suppressTransitionUntilMs = SystemClock.elapsedRealtime() + MANUAL_SCROLL_SUPPRESS_MS
                     manualScrollDetached = true

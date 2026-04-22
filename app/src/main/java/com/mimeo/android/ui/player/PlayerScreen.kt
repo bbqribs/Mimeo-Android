@@ -1706,6 +1706,7 @@ fun PlayerScreen(
             nowPlayingTitle = nowPlayingTitle,
             continuousMarquee = settings.continuousNowPlayingMarquee,
             onOpenLocusForItem = {
+                readerScrollTriggerSignal = nextForceReattachScrollTriggerSignal(readerScrollTriggerSignal)
                 val locusTargetId = resolveLocusOpenTargetId()
                 if (locusTargetId > 0) onOpenLocusForItem(locusTargetId)
             },
