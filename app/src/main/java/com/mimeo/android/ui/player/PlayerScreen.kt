@@ -605,8 +605,9 @@ internal fun shouldSkipInitialReopen(
     if (resolvedItemId <= 0 || currentItemId <= 0) return false
     if (resolvedItemId != currentItemId) return false
     if (engineCurrentItemId != resolvedItemId) return false
-    // Mini-player <-> Locus route swaps should attach to the existing playback owner.
-    return true
+    // Only skip reopen when playback is already active/continuing.
+    // If paused, we still need a reopen to prime the engine so Play works.
+    return autoPlayAfterLoad || isSpeaking || isAutoPlaying
 }
 
 internal fun shouldPreserveActivePlaybackDuringLoad(

@@ -127,7 +127,7 @@ class PlaybackObservabilityTest {
             isAutoPlaying = false,
         )
 
-        assertTrue(shouldSkip)
+        assertEquals(false, shouldSkip)
     }
 
     @Test
