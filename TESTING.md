@@ -51,6 +51,15 @@ Copy this checklist into any PR that changes `ReaderBody`, highlight selection, 
 - Explicit trigger consumption is deferred until scroll bounds are ready.
 - Auto-scroll transition trigger fires only when highlight crosses out at the bottom edge.
 - Manual-scroll suppression is time-bounded (about 1.2 seconds).
+- Manual drag suppression must arm from drag source detection in both directions (drag up and drag down).
+
+### Playback Scroll Guard Suite
+
+Run this suite for any PR touching reader auto-scroll, manual detach/suppression, or reattach triggers:
+
+```bash
+.\gradlew.bat testDebugUnitTest --no-daemon --tests "com.mimeo.android.ui.reader.PlaybackScrollContractGuardTest" --tests "com.mimeo.android.ui.reader.ReaderScrollPolicyTest" --tests "com.mimeo.android.ui.reader.ReaderScrollCooldownPolicyTest" --tests "com.mimeo.android.ui.reader.ReaderVisibleBoundsTest"
+```
 
 ## Share-sheet manual sanity
 

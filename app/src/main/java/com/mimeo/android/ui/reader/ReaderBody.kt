@@ -143,7 +143,13 @@ fun ReaderBody(
     val manualScrollNestedConnection = remember(autoScrollWhileListening) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (source == NestedScrollSource.Drag && abs(available.y) > 0.5f) {
+                if (
+                    shouldArmManualSuppressionFromDrag(
+                        autoScrollWhileListening = autoScrollWhileListening,
+                        source = source,
+                        availableY = available.y,
+                    )
+                ) {
                     armManualScrollSuppression("nested_drag")
                 }
                 return Offset.Zero
@@ -1001,6 +1007,16 @@ private fun normalizeInclusiveRange(range: IntRange?, textLength: Int): IntRange
     val start = range.first.coerceIn(0, textLength)
     val endExclusive = (range.last + 1).coerceIn(start, textLength)
     return if (start < endExclusive) start until endExclusive else null
+}
+
+internal fun shouldArmManualSuppressionFromDrag(
+    autoScrollWhileListening: Boolean,
+    source: NestedScrollSource,
+    availableY: Float,
+): Boolean {
+    if (!autoScrollWhileListening) return false
+    if (source != NestedScrollSource.Drag) return false
+    return abs(availableY) > 0.5f
 }
 
 internal fun shouldSuppressStandardTriggerDuringCooldown(

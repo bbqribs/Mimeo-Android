@@ -1,5 +1,6 @@
 package com.mimeo.android.ui.reader
 
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -156,6 +157,38 @@ class PlaybackScrollContractGuardTest {
                 manualScrollDetached = true,
                 anchorFullyVisible = true,
                 triggerKind = ReaderScrollTriggerKind.NONE,
+            ),
+        )
+    }
+
+    @Test
+    fun nestedDrag_armsManualSuppressionInBothDirections() {
+        assertTrue(
+            shouldArmManualSuppressionFromDrag(
+                autoScrollWhileListening = true,
+                source = NestedScrollSource.Drag,
+                availableY = 12f,
+            ),
+        )
+        assertTrue(
+            shouldArmManualSuppressionFromDrag(
+                autoScrollWhileListening = true,
+                source = NestedScrollSource.Drag,
+                availableY = -12f,
+            ),
+        )
+        assertFalse(
+            shouldArmManualSuppressionFromDrag(
+                autoScrollWhileListening = true,
+                source = NestedScrollSource.Fling,
+                availableY = 12f,
+            ),
+        )
+        assertFalse(
+            shouldArmManualSuppressionFromDrag(
+                autoScrollWhileListening = false,
+                source = NestedScrollSource.Drag,
+                availableY = 12f,
             ),
         )
     }
