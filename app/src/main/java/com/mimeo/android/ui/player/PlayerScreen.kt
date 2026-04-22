@@ -1778,6 +1778,13 @@ fun PlayerScreen(
                     )
                     readerScrollTriggerSignal = nextStandardScrollTriggerSignal(readerScrollTriggerSignal)
                     vm.playbackPlay()
+                } else if (currentItemId > 0) {
+                    vm.playbackOpenItem(
+                        itemId = currentItemId,
+                        intent = PlaybackOpenIntent.ManualOpen,
+                        autoPlayAfterLoad = true,
+                    )
+                    uiMessage = "Loading audio..."
                 }
             },
             onPlayButtonLongPress = { playLocusItem() },
