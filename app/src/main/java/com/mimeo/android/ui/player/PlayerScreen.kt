@@ -632,6 +632,13 @@ internal fun shouldSkipSurfaceHandoffReload(
     return autoPlayAfterLoad || isSpeaking || isAutoPlaying
 }
 
+internal fun shouldApplyVoiceSettings(
+    lastAppliedVoiceName: String,
+    requestedVoiceName: String,
+): Boolean {
+    return lastAppliedVoiceName != requestedVoiceName
+}
+
 internal fun shouldUseTitleIntroOnPlaybackStart(
     allowTitleIntro: Boolean,
     hasStartedPlaybackForItem: Boolean,
@@ -1593,7 +1600,7 @@ fun PlayerScreen(
     }
 
     LaunchedEffect(settings.ttsVoiceName) {
-        if (lastAppliedVoiceName == settings.ttsVoiceName) return@LaunchedEffect
+        if (!shouldApplyVoiceSettings(lastAppliedVoiceName, settings.ttsVoiceName)) return@LaunchedEffect
         lastAppliedVoiceName = settings.ttsVoiceName
         vm.playbackApplyCurrentSettings()
     }

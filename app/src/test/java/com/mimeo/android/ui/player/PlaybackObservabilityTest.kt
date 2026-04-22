@@ -195,6 +195,26 @@ class PlaybackObservabilityTest {
     }
 
     @Test
+    fun applyVoiceSettingsWhenRequestedVoiceChanges() {
+        val apply = shouldApplyVoiceSettings(
+            lastAppliedVoiceName = "en-us-x-sfg#male_1-local",
+            requestedVoiceName = "en-us-x-sfg#female_1-local",
+        )
+
+        assertTrue(apply)
+    }
+
+    @Test
+    fun doNotApplyVoiceSettingsWhenRequestedVoiceUnchanged() {
+        val apply = shouldApplyVoiceSettings(
+            lastAppliedVoiceName = "en-us-x-sfg#female_1-local",
+            requestedVoiceName = "en-us-x-sfg#female_1-local",
+        )
+
+        assertFalse(apply)
+    }
+
+    @Test
     fun updateReaderScrollOffsetsAddsAndUpdatesPerItemOffset() {
         val initial = mapOf(100 to 24)
         val updated = updateReaderScrollOffsets(
