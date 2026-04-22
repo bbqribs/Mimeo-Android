@@ -159,6 +159,7 @@ import com.mimeo.android.ui.player.PlaybackEngineHost
 import com.mimeo.android.ui.player.PlaybackEngineSettings
 import com.mimeo.android.ui.player.PlaybackEngineState
 import com.mimeo.android.ui.player.PlaybackOpenIntent
+import com.mimeo.android.ui.player.PlayerSurfaceContentState
 import com.mimeo.android.ui.player.buildPlaybackChunks
 import com.mimeo.android.ui.common.nowPlayingCapturePresentation
 import com.mimeo.android.ui.queue.QueueScreen
@@ -329,6 +330,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _playbackPositionByItem = MutableStateFlow<Map<Int, PlaybackPosition>>(emptyMap())
     val playbackPositionByItem: StateFlow<Map<Int, PlaybackPosition>> = _playbackPositionByItem.asStateFlow()
+    val playerSurfaceContentState = PlayerSurfaceContentState()
     private val playbackEngine = PlaybackEngine(
         context = application.applicationContext,
         scope = viewModelScope,
@@ -1187,6 +1189,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun signOut() {
         viewModelScope.launch {
             authFailureHandledThisSession = false
+            playerSurfaceContentState.reset()
             settingsStore.saveTokenOnly("")
             requestNavigation(ROUTE_SIGN_IN)
         }

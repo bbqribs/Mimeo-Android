@@ -93,6 +93,7 @@ class PlaybackObservabilityTest {
         val shouldSkip = shouldSkipInitialReopen(
             resolvedItemId = 42,
             currentItemId = 42,
+            engineCurrentItemId = 42,
             autoPlayAfterLoad = false,
             isSpeaking = true,
             isAutoPlaying = false,
@@ -106,9 +107,38 @@ class PlaybackObservabilityTest {
         val shouldSkip = shouldSkipInitialReopen(
             resolvedItemId = 42,
             currentItemId = 41,
+            engineCurrentItemId = 41,
             autoPlayAfterLoad = true,
             isSpeaking = true,
             isAutoPlaying = true,
+        )
+
+        assertEquals(false, shouldSkip)
+    }
+
+    @Test
+    fun skipInitialReopenWhenSameItemPausedDuringSurfaceSwap() {
+        val shouldSkip = shouldSkipInitialReopen(
+            resolvedItemId = 42,
+            currentItemId = 42,
+            engineCurrentItemId = 42,
+            autoPlayAfterLoad = false,
+            isSpeaking = false,
+            isAutoPlaying = false,
+        )
+
+        assertEquals(false, shouldSkip)
+    }
+
+    @Test
+    fun doNotSkipInitialReopenWhenEngineNotAttachedYet() {
+        val shouldSkip = shouldSkipInitialReopen(
+            resolvedItemId = 42,
+            currentItemId = 42,
+            engineCurrentItemId = -1,
+            autoPlayAfterLoad = false,
+            isSpeaking = false,
+            isAutoPlaying = false,
         )
 
         assertEquals(false, shouldSkip)
@@ -123,6 +153,65 @@ class PlaybackObservabilityTest {
         )
 
         assertTrue(preserve)
+    }
+
+    @Test
+    fun doNotPreserveActivePlaybackDuringLoadWhenPausedWithoutAutoplay() {
+        val preserve = shouldPreserveActivePlaybackDuringLoad(
+            autoPlayAfterLoad = false,
+            isSpeaking = false,
+            isAutoPlaying = false,
+        )
+
+        assertFalse(preserve)
+    }
+
+    @Test
+    fun skipSurfaceHandoffReloadWhenPlaybackActiveAndSharedContentMatchesItem() {
+        val skip = shouldSkipSurfaceHandoffReload(
+            currentItemId = 42,
+            payloadItemId = 42,
+            chunkCount = 5,
+            autoPlayAfterLoad = false,
+            isSpeaking = true,
+            isAutoPlaying = true,
+        )
+
+        assertTrue(skip)
+    }
+
+    @Test
+    fun doNotSkipSurfaceHandoffReloadWhenSharedContentMissing() {
+        val skip = shouldSkipSurfaceHandoffReload(
+            currentItemId = 42,
+            payloadItemId = null,
+            chunkCount = 0,
+            autoPlayAfterLoad = false,
+            isSpeaking = true,
+            isAutoPlaying = true,
+        )
+
+        assertFalse(skip)
+    }
+
+    @Test
+    fun applyVoiceSettingsWhenRequestedVoiceChanges() {
+        val apply = shouldApplyVoiceSettings(
+            lastAppliedVoiceName = "en-us-x-sfg#male_1-local",
+            requestedVoiceName = "en-us-x-sfg#female_1-local",
+        )
+
+        assertTrue(apply)
+    }
+
+    @Test
+    fun doNotApplyVoiceSettingsWhenRequestedVoiceUnchanged() {
+        val apply = shouldApplyVoiceSettings(
+            lastAppliedVoiceName = "en-us-x-sfg#female_1-local",
+            requestedVoiceName = "en-us-x-sfg#female_1-local",
+        )
+
+        assertFalse(apply)
     }
 
     @Test

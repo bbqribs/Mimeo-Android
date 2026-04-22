@@ -76,6 +76,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -156,6 +157,7 @@ import com.mimeo.android.ui.settings.SettingsScreen
 import com.mimeo.android.ui.settings.passwordChangeSuccessMessage
 import com.mimeo.android.ui.settings.resolvePasswordChangeError
 import com.mimeo.android.ui.settings.validatePasswordChangeInput
+import com.mimeo.android.ui.player.MiniPlayer
 import com.mimeo.android.ui.player.PlayerScreen
 import com.mimeo.android.ui.player.PlaybackEngine
 import com.mimeo.android.ui.player.PlaybackEngineEvent
@@ -585,9 +587,9 @@ private fun MimeoApp(vm: AppViewModel) {
     var playerOpenRequestSignal by rememberSaveable { mutableIntStateOf(0) }
     var offlineBannerVisible by rememberSaveable { mutableStateOf(false) }
     val presentingLocus = isOnLocusRoute
-    val compactControlsOnly = !isOnLocusRoute
     val libraryShellVisible = !requiresSignIn && !presentingLocus
     val playerControlsVisible = !requiresSignIn && requestedPlayerItemId != null && !(presentingLocus && readerChromeHidden)
+    val showMiniPlayer = !requiresSignIn && !isOnLocusRoute && requestedPlayerItemId != null
     val snackbarBottomPadding = when {
         playerControlsVisible -> 108.dp
         presentingLocus && readerChromeHidden -> 12.dp
@@ -1034,7 +1036,49 @@ private fun MimeoApp(vm: AppViewModel) {
                             if (requestedPlayerItemId == null) {
                                 NoNowPlayingScreen(onGoQueue = { nav.navigate(ROUTE_UP_NEXT) })
                             } else {
-                                Box(modifier = Modifier.fillMaxSize())
+                                PlayerScreen(
+                                    vm = vm,
+                                    onShowSnackbar = { message, actionLabel, actionKey ->
+                                        vm.showSnackbar(message, actionLabel, actionKey)
+                                    },
+                                    initialItemId = requestedPlayerItemId,
+                                    requestedItemId = requestedPlayerItemId,
+                                    locusTapSignal = locusTabTapSignal,
+                                    openRequestSignal = playerOpenRequestSignal,
+                                    onOpenItem = { nextId ->
+                                        if (currentRoute.startsWith(ROUTE_LOCUS)) {
+                                            nav.navigate("$ROUTE_LOCUS/$nextId") {
+                                                launchSingleTop = true
+                                            }
+                                        }
+                                    },
+                                    onOpenLocusForItem = { itemId ->
+                                        nav.navigate("$ROUTE_LOCUS/$itemId") {
+                                            launchSingleTop = true
+                                        }
+                                    },
+                                    onRequestBack = {
+                                        if (!nav.popBackStack()) {
+                                            nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
+                                        }
+                                    },
+                                    onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
+                                    compactControlsOnly = false,
+                                    showCompactControls = showCompactControls,
+                                    controlsMode = settings.playerControlsMode,
+                                    lastNonNubMode = settings.playerLastNonNubMode,
+                                    chevronSnapEdge = settings.playerChevronSnapEdge,
+                                    onControlsModeChange = shellState.onControlsModeChange,
+                                    onPlaybackActiveChange = shellState.onPlaybackActiveChange,
+                                    onManualReadingActiveChange = shellState.onManualReadingActiveChange,
+                                    onReaderChromeVisibilityChange = shellState.onReaderChromeVisibilityChange,
+                                    onChevronSnapChange = { edge ->
+                                        vm.savePlayerChevronSnap(edge, 0.5f)
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(bottom = shellBottomClearance),
+                                )
                             }
                         }
                         composable(
@@ -1062,64 +1106,109 @@ private fun MimeoApp(vm: AppViewModel) {
                             ROUTE_LOCUS_ITEM,
                             arguments = listOf(navArgument("itemId") { type = NavType.IntType }),
                         ) {
-                            Box(modifier = Modifier.fillMaxSize())
+                            if (requestedPlayerItemId == null) {
+                                NoNowPlayingScreen(onGoQueue = { nav.navigate(ROUTE_UP_NEXT) })
+                            } else {
+                                PlayerScreen(
+                                    vm = vm,
+                                    onShowSnackbar = { message, actionLabel, actionKey ->
+                                        vm.showSnackbar(message, actionLabel, actionKey)
+                                    },
+                                    initialItemId = requestedPlayerItemId,
+                                    requestedItemId = requestedPlayerItemId,
+                                    locusTapSignal = locusTabTapSignal,
+                                    openRequestSignal = playerOpenRequestSignal,
+                                    onOpenItem = { nextId ->
+                                        if (currentRoute.startsWith(ROUTE_LOCUS)) {
+                                            nav.navigate("$ROUTE_LOCUS/$nextId") {
+                                                launchSingleTop = true
+                                            }
+                                        }
+                                    },
+                                    onOpenLocusForItem = { itemId ->
+                                        nav.navigate("$ROUTE_LOCUS/$itemId") {
+                                            launchSingleTop = true
+                                        }
+                                    },
+                                    onRequestBack = {
+                                        if (!nav.popBackStack()) {
+                                            nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
+                                        }
+                                    },
+                                    onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
+                                    compactControlsOnly = false,
+                                    showCompactControls = showCompactControls,
+                                    controlsMode = settings.playerControlsMode,
+                                    lastNonNubMode = settings.playerLastNonNubMode,
+                                    chevronSnapEdge = settings.playerChevronSnapEdge,
+                                    onControlsModeChange = shellState.onControlsModeChange,
+                                    onPlaybackActiveChange = shellState.onPlaybackActiveChange,
+                                    onManualReadingActiveChange = shellState.onManualReadingActiveChange,
+                                    onReaderChromeVisibilityChange = shellState.onReaderChromeVisibilityChange,
+                                    onChevronSnapChange = { edge ->
+                                        vm.savePlayerChevronSnap(edge, 0.5f)
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(bottom = shellBottomClearance),
+                                )
+                            }
                         }
                     }
 
-                    if (!requiresSignIn && requestedPlayerItemId != null) {
-                        PlayerScreen(
-                            vm = vm,
-                            onShowSnackbar = { message, actionLabel, actionKey ->
-                                vm.showSnackbar(message, actionLabel, actionKey)
-                            },
-                            initialItemId = requestedPlayerItemId,
-                            requestedItemId = requestedPlayerItemId,
-                            locusTapSignal = locusTabTapSignal,
-                            openRequestSignal = playerOpenRequestSignal,
-                            onOpenItem = { nextId ->
-                                if (currentRoute.startsWith(ROUTE_LOCUS)) {
-                                    nav.navigate("$ROUTE_LOCUS/$nextId") {
+                    if (showMiniPlayer) {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth(),
+                        ) {
+                            MiniPlayer(
+                                vm = vm,
+                                onShowSnackbar = { message, actionLabel, actionKey ->
+                                    vm.showSnackbar(message, actionLabel, actionKey)
+                                },
+                                initialItemId = requestedPlayerItemId,
+                                requestedItemId = requestedPlayerItemId,
+                                locusTapSignal = locusTabTapSignal,
+                                openRequestSignal = playerOpenRequestSignal,
+                                onOpenItem = { nextId ->
+                                    if (currentRoute.startsWith(ROUTE_LOCUS)) {
+                                        nav.navigate("$ROUTE_LOCUS/$nextId") {
+                                            launchSingleTop = true
+                                        }
+                                    }
+                                },
+                                onOpenLocusForItem = { itemId ->
+                                    nav.navigate("$ROUTE_LOCUS/$itemId") {
                                         launchSingleTop = true
                                     }
-                                }
-                            },
-                            onOpenLocusForItem = { itemId ->
-                                nav.navigate("$ROUTE_LOCUS/$itemId") {
-                                    launchSingleTop = true
-                                }
-                            },
-                            onRequestBack = {
-                                // Pop back to wherever the user came from (playlist detail,
-                                // Up Next, Inbox, etc.) rather than always jumping to Up Next.
-                                if (!nav.popBackStack()) {
-                                    nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
-                                }
-                            },
-                            onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
-                            stopPlaybackOnDispose = true,
-                            compactControlsOnly = compactControlsOnly,
-                            showCompactControls = showCompactControls,
-                            controlsMode = settings.playerControlsMode,
-                            lastNonNubMode = settings.playerLastNonNubMode,
-                            chevronSnapEdge = settings.playerChevronSnapEdge,
-                            onControlsModeChange = shellState.onControlsModeChange,
-                            onPlaybackActiveChange = shellState.onPlaybackActiveChange,
-                            onManualReadingActiveChange = shellState.onManualReadingActiveChange,
-                            onReaderChromeVisibilityChange = shellState.onReaderChromeVisibilityChange,
-                            onChevronSnapChange = { edge ->
-                                vm.savePlayerChevronSnap(edge, 0.5f)
-                            },
-                            modifier = if (compactControlsOnly) {
-                                Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(bottom = shellBottomClearance)
+                                },
+                                onRequestBack = {
+                                    if (!nav.popBackStack()) {
+                                        nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
+                                    }
+                                },
+                                onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
+                                showCompactControls = showCompactControls,
+                                controlsMode = settings.playerControlsMode,
+                                lastNonNubMode = settings.playerLastNonNubMode,
+                                chevronSnapEdge = settings.playerChevronSnapEdge,
+                                onControlsModeChange = shellState.onControlsModeChange,
+                                onPlaybackActiveChange = shellState.onPlaybackActiveChange,
+                                onManualReadingActiveChange = shellState.onManualReadingActiveChange,
+                                onReaderChromeVisibilityChange = shellState.onReaderChromeVisibilityChange,
+                                onChevronSnapChange = { edge ->
+                                    vm.savePlayerChevronSnap(edge, 0.5f)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Box(
+                                modifier = Modifier
                                     .fillMaxWidth()
-                            } else {
-                                Modifier
-                                    .fillMaxSize()
-                                    .padding(bottom = shellBottomClearance)
-                            },
-                        )
+                                    .height(shellBottomClearance)
+                                    .background(Color.Black),
+                            )
+                        }
                     }
                 }
             }
