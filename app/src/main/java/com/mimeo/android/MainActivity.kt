@@ -1178,8 +1178,8 @@ private fun MimeoApp(vm: AppViewModel) {
                                         }
                                     }
                                 },
-                                onOpenLocusForItem = { _ ->
-                                    nav.navigate(ROUTE_LOCUS) {
+                                onOpenLocusForItem = { itemId ->
+                                    nav.navigate("$ROUTE_LOCUS/$itemId") {
                                         launchSingleTop = true
                                     }
                                 },
