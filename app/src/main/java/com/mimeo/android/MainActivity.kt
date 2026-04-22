@@ -50,10 +50,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.NavigationDrawerItem
-import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -76,13 +73,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -121,7 +114,6 @@ import com.mimeo.android.model.PendingItemAction
 import com.mimeo.android.model.PendingItemActionType
 import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.model.PlayerChevronSnapEdge
-import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.ProblemReportCategory
 import com.mimeo.android.model.ProblemReportRequest
 import com.mimeo.android.model.toProblemReportAttachmentText
@@ -272,7 +264,7 @@ internal fun shouldSkipShareRefreshBurst(
     return (nowMs - lastExecutedAtMs) < dedupeWindowMs
 }
 
-private data class DrawerDestination(
+internal data class DrawerDestination(
     val route: String,
     val label: String,
 )
@@ -523,7 +515,6 @@ private fun MimeoApp(vm: AppViewModel) {
     var showNewPlaylistDialog by remember { mutableStateOf(false) }
     var newPlaylistDialogName by remember { mutableStateOf("") }
     val signInState by vm.signInState.collectAsState()
-    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val inboxItems by vm.inboxItems.collectAsState()
     val favoriteItems by vm.favoriteItems.collectAsState()
     val archivedItems by vm.archivedItems.collectAsState()
@@ -540,35 +531,21 @@ private fun MimeoApp(vm: AppViewModel) {
     val statusMessage by vm.statusMessage.collectAsState()
     val pendingNavigationRoute by vm.pendingNavigationRoute.collectAsState()
     val requiresSignIn = settings.apiToken.isBlank()
-    var pendingLocusOpen by rememberSaveable { mutableStateOf(false) }
-    var pendingLocusItemId by rememberSaveable { mutableIntStateOf(-1) }
-    val sessionNowPlayingItemId = vm.currentNowPlayingItemId()
-    val openItemInLocus: (Int) -> Unit = { itemId ->
-        val activeNowPlayingItemId = sessionNowPlayingItemId?.takeIf { it > 0 }
-        val playbackInProgress = vm.hasPlaybackInProgressForSessionItem(activeNowPlayingItemId)
-        if (playbackInProgress && activeNowPlayingItemId != null && activeNowPlayingItemId != itemId) {
-            pendingLocusOpen = true
-            pendingLocusItemId = itemId
-            nav.navigate("$ROUTE_LOCUS/$itemId") {
-                launchSingleTop = true
-            }
-        } else {
-            pendingLocusOpen = true
-            pendingLocusItemId = itemId
-            nav.navigate("$ROUTE_LOCUS/$itemId") {
-                launchSingleTop = true
-            }
-        }
-    }
     val routeItemId = navBackStack?.arguments?.let { args ->
         if (args.containsKey("itemId")) args.getInt("itemId").takeIf { it > 0 } else null
     }
-    val requestedPlayerItemId =
-        routeItemId
-            ?: pendingLocusItemId.takeIf { pendingLocusOpen && it > 0 }
-            ?: sessionNowPlayingItemId
-    var playbackActive by rememberSaveable { mutableStateOf(false) }
-    var manualReadingActive by rememberSaveable { mutableStateOf(false) }
+    val shellState = rememberPlayerShellState(
+        vm = vm,
+        nav = nav,
+        settings = settings,
+        currentRoute = currentRoute,
+        routeItemId = routeItemId,
+    )
+    val requestedPlayerItemId = shellState.requestedPlayerItemId
+    val playbackActive = shellState.playbackActive
+    val manualReadingActive = shellState.manualReadingActive
+    val readerChromeHidden = shellState.readerChromeHidden
+    val openItemInLocus = shellState.openItemInLocus
     val keepScreenOnForSession = shouldKeepScreenOnForSession(
         keepScreenOnEnabled = settings.keepScreenOnDuringSession,
         requiresSignIn = requiresSignIn,
@@ -590,13 +567,6 @@ private fun MimeoApp(vm: AppViewModel) {
             hostActivity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
-    LaunchedEffect(sessionNowPlayingItemId, routeItemId, requestedPlayerItemId, currentRoute, pendingLocusOpen, pendingLocusItemId) {
-        Log.d(
-            LOCUS_CONTINUATION_DEBUG_TAG,
-            "mimeoApp route=$currentRoute routeItemId=$routeItemId sessionItemId=$sessionNowPlayingItemId requestedItemId=$requestedPlayerItemId " +
-                "handoffPending=$pendingLocusOpen handoffTarget=$pendingLocusItemId",
-        )
-    }
     val selectedDrawerRoute = when {
         currentRoute.startsWith(ROUTE_SETTINGS_DIAGNOSTICS) -> ROUTE_SETTINGS
         currentRoute.startsWith(ROUTE_SETTINGS) -> ROUTE_SETTINGS
@@ -609,21 +579,6 @@ private fun MimeoApp(vm: AppViewModel) {
         else -> ROUTE_UP_NEXT
     }
     val isOnLocusRoute = currentRoute.startsWith(ROUTE_LOCUS)
-    var readerChromeHidden by rememberSaveable { mutableStateOf(false) }
-    val controlsMode = settings.playerControlsMode
-    val storedLastNonNubMode = settings.playerLastNonNubMode
-        .takeIf { it != PlayerControlsMode.NUB }
-        ?: PlayerControlsMode.FULL
-    var previousRoute by rememberSaveable { mutableStateOf(currentRoute) }
-    var lastLocusMode by rememberSaveable {
-        mutableStateOf(
-            if (settings.playerControlsMode == PlayerControlsMode.NUB) {
-                storedLastNonNubMode
-            } else {
-                settings.playerControlsMode
-            },
-        )
-    }
     val showCompactControls = settings.persistentPlayerEnabled
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var upNextTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
@@ -737,152 +692,37 @@ private fun MimeoApp(vm: AppViewModel) {
         }
     }
 
-    LaunchedEffect(currentRoute) {
-        if (currentRoute.startsWith(ROUTE_LOCUS)) {
-            pendingLocusOpen = false
-            pendingLocusItemId = -1
-        }
-        if (currentRoute == previousRoute) return@LaunchedEffect
-        val wasOnLocus = previousRoute.startsWith(ROUTE_LOCUS)
-        val nowOnLocus = currentRoute.startsWith(ROUTE_LOCUS)
-        val currentMode = settings.playerControlsMode
-
-        if (wasOnLocus && !nowOnLocus) {
-            lastLocusMode = currentMode
-            if (!playbackActive && currentMode != PlayerControlsMode.NUB) {
-                val nextLastNonNub = currentMode.takeIf { it != PlayerControlsMode.NUB } ?: storedLastNonNubMode
-                vm.savePlayerControlsState(PlayerControlsMode.NUB, nextLastNonNub)
-            }
-        } else if (!wasOnLocus && nowOnLocus) {
-            val restoreMode = lastLocusMode
-            val restoreLastNonNub = restoreMode.takeIf { it != PlayerControlsMode.NUB } ?: storedLastNonNubMode
-            if (currentMode != restoreMode || settings.playerLastNonNubMode != restoreLastNonNub) {
-                vm.savePlayerControlsState(restoreMode, restoreLastNonNub)
-            }
-        } else if (!wasOnLocus && !nowOnLocus) {
-            if (!playbackActive && currentMode != PlayerControlsMode.NUB) {
-                val nextLastNonNub = lastLocusMode.takeIf { it != PlayerControlsMode.NUB } ?: storedLastNonNubMode
-                vm.savePlayerControlsState(PlayerControlsMode.NUB, nextLastNonNub)
-            }
-        }
-        previousRoute = currentRoute
-    }
-
-    LaunchedEffect(pendingLocusOpen, currentRoute) {
-        if (!pendingLocusOpen || currentRoute.startsWith(ROUTE_LOCUS)) return@LaunchedEffect
-        delay(750)
-        if (pendingLocusOpen && !currentRoute.startsWith(ROUTE_LOCUS)) {
-            pendingLocusOpen = false
-            pendingLocusItemId = -1
-        }
-    }
-
     ModalNavigationDrawer(
         drawerState = drawerState,
         gesturesEnabled = libraryShellVisible,
         drawerContent = {
             if (libraryShellVisible) {
-                ModalDrawerSheet {
-                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                        Text(
-                            text = "Mimeo",
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        drawerItems.forEach { destination ->
-                            NavigationDrawerItem(
-                                label = { Text(destination.label) },
-                                selected = selectedDrawerRoute == destination.route,
-                                onClick = {
-                                    if (destination.route == ROUTE_UP_NEXT && selectedDrawerRoute == ROUTE_UP_NEXT) {
-                                        upNextTabTapSignal += 1
-                                    }
-                                    if (destination.route == ROUTE_UP_NEXT) {
-                                        vm.selectPlaylist(null)
-                                    }
-                                    nav.navigate(destination.route) { launchSingleTop = true }
-                                    coroutineScope.launch { drawerState.close() }
-                                },
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                                colors = NavigationDrawerItemDefaults.colors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-                                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                                ),
-                            )
+                MimeoDrawerContent(
+                    drawerItems = drawerItems,
+                    playlists = playlists,
+                    selectedDrawerRoute = selectedDrawerRoute,
+                    onNavItemClick = { route ->
+                        if (route == ROUTE_UP_NEXT && selectedDrawerRoute == ROUTE_UP_NEXT) {
+                            upNextTabTapSignal += 1
                         }
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        )
-                        Text(
-                            text = "Playlists",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp),
-                        )
-                        playlists.forEach { playlist ->
-                            val count = playlist.entries.size
-                            NavigationDrawerItem(
-                                label = {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                    ) {
-                                        Text(
-                                            text = playlist.name,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                        if (count > 0) {
-                                            Text(
-                                                text = "($count)",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.padding(start = 4.dp),
-                                            )
-                                        }
-                                    }
-                                },
-                                selected = selectedDrawerRoute == "playlist/${playlist.id}",
-                                onClick = {
-                                    vm.selectPlaylist(playlist.id)
-                                    nav.navigate("playlist/${playlist.id}") { launchSingleTop = true }
-                                    coroutineScope.launch { drawerState.close() }
-                                },
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                                colors = NavigationDrawerItemDefaults.colors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-                                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                                ),
-                            )
-                        }
-                        NavigationDrawerItem(
-                            label = { Text("+ New Playlist") },
-                            selected = false,
-                            onClick = {
-                                coroutineScope.launch { drawerState.close() }
-                                showNewPlaylistDialog = true
-                            },
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        )
-                        NavigationDrawerItem(
-                            label = { Text("Settings") },
-                            selected = selectedDrawerRoute == ROUTE_SETTINGS,
-                            onClick = {
-                                nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true }
-                                coroutineScope.launch { drawerState.close() }
-                            },
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                            colors = NavigationDrawerItemDefaults.colors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                            ),
-                        )
-                    }
-                }
+                        if (route == ROUTE_UP_NEXT) vm.selectPlaylist(null)
+                        nav.navigate(route) { launchSingleTop = true }
+                        coroutineScope.launch { drawerState.close() }
+                    },
+                    onPlaylistClick = { playlistId ->
+                        vm.selectPlaylist(playlistId)
+                        nav.navigate("playlist/$playlistId") { launchSingleTop = true }
+                        coroutineScope.launch { drawerState.close() }
+                    },
+                    onNewPlaylistClick = {
+                        coroutineScope.launch { drawerState.close() }
+                        showNewPlaylistDialog = true
+                    },
+                    onSettingsClick = {
+                        nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true }
+                        coroutineScope.launch { drawerState.close() }
+                    },
+                )
             }
         },
     ) {
@@ -1259,24 +1099,13 @@ private fun MimeoApp(vm: AppViewModel) {
                             stopPlaybackOnDispose = true,
                             compactControlsOnly = compactControlsOnly,
                             showCompactControls = showCompactControls,
-                            controlsMode = controlsMode,
+                            controlsMode = settings.playerControlsMode,
                             lastNonNubMode = settings.playerLastNonNubMode,
                             chevronSnapEdge = settings.playerChevronSnapEdge,
-                            onControlsModeChange = { mode, lastNonNubMode ->
-                                vm.savePlayerControlsState(mode, lastNonNubMode)
-                                if (isOnLocusRoute) {
-                                    lastLocusMode = mode
-                                }
-                            },
-                            onPlaybackActiveChange = { active ->
-                                playbackActive = active
-                            },
-                            onManualReadingActiveChange = { active ->
-                                manualReadingActive = active
-                            },
-                            onReaderChromeVisibilityChange = { hidden ->
-                                readerChromeHidden = hidden
-                            },
+                            onControlsModeChange = shellState.onControlsModeChange,
+                            onPlaybackActiveChange = shellState.onPlaybackActiveChange,
+                            onManualReadingActiveChange = shellState.onManualReadingActiveChange,
+                            onReaderChromeVisibilityChange = shellState.onReaderChromeVisibilityChange,
                             onChevronSnapChange = { edge ->
                                 vm.savePlayerChevronSnap(edge, 0.5f)
                             },
