@@ -1565,6 +1565,7 @@ fun PlayerScreen(
     val showCompleted = effectivePercent >= DONE_PERCENT_THRESHOLD || nearEndForcedForItemId == currentItemId
     val undoDonePercent = effectivePercent.coerceIn(0, DONE_PERCENT_THRESHOLD - 1)
     var lastAppliedSpeed by remember { mutableStateOf(settings.playbackSpeed) }
+    var lastAppliedVoiceName by remember { mutableStateOf(settings.ttsVoiceName) }
 
     LaunchedEffect(isSpeaking, isAutoPlaying) {
         onPlaybackActiveChange(isSpeaking || isAutoPlaying)
@@ -1592,6 +1593,8 @@ fun PlayerScreen(
     }
 
     LaunchedEffect(settings.ttsVoiceName) {
+        if (lastAppliedVoiceName == settings.ttsVoiceName) return@LaunchedEffect
+        lastAppliedVoiceName = settings.ttsVoiceName
         vm.playbackApplyCurrentSettings()
     }
 
