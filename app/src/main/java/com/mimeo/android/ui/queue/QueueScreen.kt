@@ -30,8 +30,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DragHandle
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -76,7 +74,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -86,7 +83,6 @@ import androidx.compose.ui.zIndex
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
-import com.mimeo.android.isPendingProcessingFailureMessage
 import com.mimeo.android.isTerminalPendingProcessingStatus
 import com.mimeo.android.resolveSessionSourcePlaylistId
 import com.mimeo.android.model.AutoDownloadDiagnostics
@@ -108,7 +104,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.net.URI
 import java.util.UUID
 import kotlin.math.abs
 
@@ -672,31 +667,7 @@ fun QueueScreen(
             }
         }
 
-        // 4. Pending manual saves section (max 240.dp, scrollable)
-        if (pendingManualSaves.isNotEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 240.dp)
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                pendingManualSaves.forEach { item ->
-                    PendingProjectedQueueItemCard(
-                        item = item,
-                        retryInProgress = pendingManualRetryInProgress,
-                        onRetry = { retryPendingItem(item) },
-                        onDismiss = { vm.removePendingManualSave(item.id) },
-                        onTap = {
-                            if (isPendingFailureState(item.lastFailureMessage)) {
-                                onShowSnackbar(item.lastFailureMessage, null, null)
-                            }
-                        },
-                    )
-                }
-            }
-        }
-
-        // 5. NowPlayingSessionPanel with weight(1f), or empty-state card
+        // 4. NowPlayingSessionPanel with weight(1f), or empty-state card
         val session = nowPlayingSession
         if (session != null) {
             NowPlayingSessionPanel(
@@ -1206,6 +1177,10 @@ private fun normalizePendingComparisonUrl(raw: String?): String? {
     return extracted.removeSuffix("/")
 }
 
+private fun hasFailedPendingProjectionStatus(queueItem: PlaybackQueueItem): Boolean {
+    return isTerminalPendingProcessingStatus(queueItem.status)
+}
+
 internal fun resolveManualSaveUrl(input: String): String? {
     return extractFirstHttpUrl(input.trim())
 }
@@ -1485,151 +1460,6 @@ private fun PendingManualRetryCard(
 }
 
 @Composable
-private fun PendingProjectedQueueItemCard(
-    item: PendingManualSaveItem,
-    retryInProgress: Boolean,
-    onRetry: () -> Unit,
-    onDismiss: () -> Unit,
-    onTap: () -> Unit,
-) {
-    var actionsMenuExpanded by remember { mutableStateOf(false) }
-    val hostLabel = resolvePendingHost(item.urlInput)
-    val subLabel = hostLabel
-    val primaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f)
-    val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
-    val failedProcessing = isPendingFailureState(item.lastFailureMessage)
-    val resolvedAwaitingCache = item.resolvedItemId != null && !failedProcessing
-    val statusText = when {
-        failedProcessing -> "Processing failed"
-        resolvedAwaitingCache -> "Caching offline..."
-        else -> "Pending save..."
-    }
-    val statusTint = if (failedProcessing) {
-        MaterialTheme.colorScheme.error
-    } else {
-        secondaryTextColor
-    }
-    val titleLine = when {
-        !item.titleInput.isNullOrBlank() -> item.titleInput
-        item.urlInput.isNotBlank() -> item.urlInput
-        item.type == PendingManualSaveType.TEXT -> "Pasted text"
-        else -> "(pending save)"
-    }
-    ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = failedProcessing, onClick = onTap),
-        colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 5.dp),
-            verticalArrangement = Arrangement.spacedBy(1.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = titleLine,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = primaryTextColor,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Box {
-                    IconButton(
-                        modifier = Modifier.size(40.dp),
-                        enabled = !retryInProgress,
-                        onClick = { actionsMenuExpanded = true },
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.msr_more_vert_24),
-                            contentDescription = "Pending item actions",
-                            tint = secondaryTextColor,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = actionsMenuExpanded,
-                        onDismissRequest = { actionsMenuExpanded = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Retry") },
-                            onClick = {
-                                onRetry()
-                                actionsMenuExpanded = false
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Dismiss") },
-                            onClick = {
-                                onDismiss()
-                                actionsMenuExpanded = false
-                            },
-                        )
-                    }
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = subLabel,
-                    style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
-                    color = secondaryTextColor,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = statusText,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = statusTint,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Box(modifier = Modifier.size(6.dp))
-                Icon(
-                    painter = painterResource(
-                        id = if (failedProcessing) R.drawable.msr_error_circle_24 else R.drawable.msr_sync_problem_24,
-                    ),
-                    contentDescription = if (failedProcessing) {
-                        "Pending save failed"
-                    } else {
-                        "Saved and waiting for offline cache"
-                    },
-                    tint = statusTint,
-                    modifier = Modifier
-                        .size(16.dp),
-                )
-            }
-        }
-    }
-}
-
-private fun resolvePendingHost(urlInput: String): String {
-    val extracted = extractFirstHttpUrl(urlInput)?.trim().orEmpty()
-    if (extracted.isEmpty()) return "Pending"
-    return runCatching {
-        URI(extracted).host?.removePrefix("www.")?.takeIf { it.isNotBlank() }
-    }.getOrNull() ?: "Pending"
-}
-
-private fun hasFailedPendingProjectionStatus(queueItem: PlaybackQueueItem): Boolean {
-    return isTerminalPendingProcessingStatus(queueItem.status)
-}
-
-private fun isPendingFailureState(message: String): Boolean {
-    return isPendingProcessingFailureMessage(message)
-}
-
-@Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun ActionHintTooltip(
     label: String,
@@ -1862,30 +1692,6 @@ private fun NowPlayingSessionPanel(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
                         )
-                        IconButton(
-                            onClick = { onReorderItem(index, index - 1) },
-                            enabled = index > 0,
-                            modifier = Modifier.size(28.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowUp,
-                                contentDescription = "Move up in session",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                modifier = Modifier.size(14.dp),
-                            )
-                        }
-                        IconButton(
-                            onClick = { onReorderItem(index, index + 1) },
-                            enabled = index < localItems.lastIndex,
-                            modifier = Modifier.size(28.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowDown,
-                                contentDescription = "Move down in session",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                modifier = Modifier.size(14.dp),
-                            )
-                        }
                         if (!isCurrent) {
                             IconButton(
                                 onClick = { onRemoveItem(item.itemId) },
