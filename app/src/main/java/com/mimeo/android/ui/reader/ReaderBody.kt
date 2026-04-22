@@ -673,6 +673,17 @@ fun ReaderBody(
         val triggerKind = classifyReaderScrollTrigger(scrollTriggerSignal, lastHandledScrollTrigger)
         val externalTrigger = triggerKind != ReaderScrollTriggerKind.NONE
         val forceReattach = triggerKind == ReaderScrollTriggerKind.FORCE_REATTACH
+        val anchorChanged = lastAnchorRange != anchor
+        if (followSuppressedByManualScroll && !forceReattach) {
+            if (externalTrigger) {
+                lastHandledScrollTrigger = scrollTriggerSignal
+            }
+            if (anchorChanged) {
+                lastAnchorWasFullyVisible = fullyVisibleNow
+            }
+            lastAnchorRange = anchor
+            return@LaunchedEffect
+        }
         if (forceReattach) {
             followSuppressedByManualScroll = false
         }
@@ -688,7 +699,6 @@ fun ReaderBody(
                 manualScrollDetached = false
             }
         }
-        val anchorChanged = lastAnchorRange != anchor
         if (
             shouldSuppressStandardTriggerDuringCooldown(
                 triggerKind = triggerKind,
