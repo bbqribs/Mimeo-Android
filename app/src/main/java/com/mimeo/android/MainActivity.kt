@@ -1089,14 +1089,11 @@ private fun MimeoApp(vm: AppViewModel) {
                                 }
                             },
                             onRequestBack = {
-                                // Pop back to wherever the user came from (playlist detail,
-                                // Up Next, Inbox, etc.) rather than always jumping to Up Next.
                                 if (!nav.popBackStack()) {
                                     nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
                                 }
                             },
                             onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
-                            stopPlaybackOnDispose = true,
                             compactControlsOnly = compactControlsOnly,
                             showCompactControls = showCompactControls,
                             controlsMode = settings.playerControlsMode,
