@@ -399,8 +399,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val pendingNavigationRoute: StateFlow<String?> = _pendingNavigationRoute.asStateFlow()
     private val _settingsScrollOffset = MutableStateFlow(0)
     val settingsScrollOffset: StateFlow<Int> = _settingsScrollOffset.asStateFlow()
-    private val _queueScrollState = MutableStateFlow(QueueScrollState())
-    val queueScrollState: StateFlow<QueueScrollState> = _queueScrollState.asStateFlow()
     private val authFailureMutex = Mutex()
     private var authFailureHandledThisSession = false
     private var lastArchiveUndoSnapshot: ArchiveUndoSnapshot? = null
@@ -2573,18 +2571,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setSettingsScrollOffset(offset: Int) {
         _settingsScrollOffset.value = offset.coerceAtLeast(0)
-    }
-
-    fun setQueueScrollState(index: Int, offset: Int, anchorItemId: Int?) {
-        _queueScrollState.value = QueueScrollState(
-            index = index.coerceAtLeast(0),
-            offset = offset.coerceAtLeast(0),
-            anchorItemId = anchorItemId,
-        )
-    }
-
-    fun clearQueueScrollState() {
-        _queueScrollState.value = QueueScrollState()
     }
 
     fun createPlaylist(name: String) {

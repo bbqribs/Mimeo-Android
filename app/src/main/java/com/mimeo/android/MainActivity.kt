@@ -327,12 +327,6 @@ data class PendingRetryBatchResult(
     val firstFailureResult: ShareSaveResult? = null,
 )
 
-data class QueueScrollState(
-    val index: Int = 0,
-    val offset: Int = 0,
-    val anchorItemId: Int? = null,
-)
-
 internal data class PendingItemActionFlushEntry(
     val action: PendingItemAction,
     val sourceIds: List<Long>,
