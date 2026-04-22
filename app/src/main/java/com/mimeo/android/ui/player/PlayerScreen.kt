@@ -778,26 +778,27 @@ fun PlayerScreen(
     val context = LocalContext.current
     val engineState by vm.playbackEngineState.collectAsState()
     val currentItemId = if (engineState.currentItemId > 0) engineState.currentItemId else initialItemId
+    val sharedContentState = vm.playerSurfaceContentState
     var resolvedInitial by rememberSaveable(initialItemId) { mutableStateOf(false) }
     val reloadNonce = engineState.reloadNonce
-    var textPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
+    var textPayload by sharedContentState.textPayload
     var viewerOverrideItemId by rememberSaveable { mutableIntStateOf(-1) }
     var viewerOverrideTitle by rememberSaveable { mutableStateOf("") }
     var viewerPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
     var viewerPayloadItemId by rememberSaveable { mutableIntStateOf(-1) }
     var viewerChunks by remember { mutableStateOf<List<PlaybackChunk>>(emptyList()) }
-    var usingCachedText by remember { mutableStateOf(false) }
-    var chunks by remember { mutableStateOf<List<PlaybackChunk>>(emptyList()) }
+    var usingCachedText by sharedContentState.usingCachedText
+    var chunks by sharedContentState.chunks
     var uiMessage by remember { mutableStateOf<String?>(null) }
-    var isLoading by remember { mutableStateOf(false) }
+    var isLoading by sharedContentState.isLoading
     val isSpeaking = engineState.isSpeaking
     val isAutoPlaying = engineState.isAutoPlaying
     val autoPlayAfterLoad = engineState.autoPlayAfterLoad
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
     var hasRefreshProblem by rememberSaveable { mutableStateOf(false) }
-    var preserveVisibleContentOnReload by remember { mutableStateOf(false) }
-    var bodyRevealReady by remember { mutableStateOf(false) }
+    var preserveVisibleContentOnReload by sharedContentState.preserveVisibleContentOnReload
+    var bodyRevealReady by sharedContentState.bodyRevealReady
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     val activeChunkRange = engineState.activeChunkRange
     var readerScrollTriggerSignal by rememberSaveable { mutableIntStateOf(0) }
