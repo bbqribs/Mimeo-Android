@@ -1,6 +1,7 @@
 package com.mimeo.android.ui.player
 
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -93,6 +94,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.TextToolbarStatus
@@ -170,6 +172,7 @@ private val PLAYBACK_SPEED_PILLS = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
 private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 private const val MANUAL_OPEN_DEBUG_TAG = "MimeoManualOpen"
 private const val ACTION_KEY_UNDO_ARCHIVE = "undo_archive"
+private const val MANUAL_SCROLL_TAP_REATTACH_BLOCK_MS = 450L
 
 private fun nextStandardScrollTriggerSignal(current: Int): Int {
     val base = kotlin.math.abs(current) + 1
@@ -778,29 +781,31 @@ fun PlayerScreen(
     val context = LocalContext.current
     val engineState by vm.playbackEngineState.collectAsState()
     val currentItemId = if (engineState.currentItemId > 0) engineState.currentItemId else initialItemId
+    val sharedContentState = vm.playerSurfaceContentState
     var resolvedInitial by rememberSaveable(initialItemId) { mutableStateOf(false) }
     val reloadNonce = engineState.reloadNonce
-    var textPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
+    var textPayload by sharedContentState.textPayload
     var viewerOverrideItemId by rememberSaveable { mutableIntStateOf(-1) }
     var viewerOverrideTitle by rememberSaveable { mutableStateOf("") }
     var viewerPayload by remember { mutableStateOf<ItemTextResponse?>(null) }
     var viewerPayloadItemId by rememberSaveable { mutableIntStateOf(-1) }
     var viewerChunks by remember { mutableStateOf<List<PlaybackChunk>>(emptyList()) }
-    var usingCachedText by remember { mutableStateOf(false) }
-    var chunks by remember { mutableStateOf<List<PlaybackChunk>>(emptyList()) }
+    var usingCachedText by sharedContentState.usingCachedText
+    var chunks by sharedContentState.chunks
     var uiMessage by remember { mutableStateOf<String?>(null) }
-    var isLoading by remember { mutableStateOf(false) }
+    var isLoading by sharedContentState.isLoading
     val isSpeaking = engineState.isSpeaking
     val isAutoPlaying = engineState.isAutoPlaying
     val autoPlayAfterLoad = engineState.autoPlayAfterLoad
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
     var hasRefreshProblem by rememberSaveable { mutableStateOf(false) }
-    var preserveVisibleContentOnReload by remember { mutableStateOf(false) }
-    var bodyRevealReady by remember { mutableStateOf(false) }
+    var preserveVisibleContentOnReload by sharedContentState.preserveVisibleContentOnReload
+    var bodyRevealReady by sharedContentState.bodyRevealReady
     var localDonePercentOverride by rememberSaveable(initialItemId) { mutableIntStateOf(-1) }
     val activeChunkRange = engineState.activeChunkRange
     var readerScrollTriggerSignal by rememberSaveable { mutableIntStateOf(0) }
+    var lastReaderManualScrollAtMs by remember { mutableLongStateOf(0L) }
     var readerSelectionResetSignal by rememberSaveable { mutableIntStateOf(0) }
     var selectionClearArmed by rememberSaveable { mutableStateOf(false) }
     var lastHandledLocusTapSignal by rememberSaveable { mutableIntStateOf(locusTapSignal) }
@@ -863,6 +868,7 @@ fun PlayerScreen(
     val readerScrollState = rememberSaveable(readerScrollItemId, readerViewportSessionNonce, saver = ScrollState.Saver) {
         ScrollState(readerInitialOffset)
     }
+    val density = LocalDensity.current
     val waitingForRequestedItem =
         requestedItemId != null &&
             requestedItemId != currentItemId &&
@@ -1703,6 +1709,11 @@ fun PlayerScreen(
             nowPlayingTitle = nowPlayingTitle,
             continuousMarquee = settings.continuousNowPlayingMarquee,
             onOpenLocusForItem = {
+                val nowMs = SystemClock.elapsedRealtime()
+                if (nowMs - lastReaderManualScrollAtMs < MANUAL_SCROLL_TAP_REATTACH_BLOCK_MS) {
+                    return@PlayerControlBar
+                }
+                readerScrollTriggerSignal = nextForceReattachScrollTriggerSignal(readerScrollTriggerSignal)
                 val locusTargetId = resolveLocusOpenTargetId()
                 if (locusTargetId > 0) onOpenLocusForItem(locusTargetId)
             },
@@ -1915,6 +1926,7 @@ fun PlayerScreen(
                                     }
                                 }
                         ) {
+                            val readerTopInsetDp = with(density) { locusTopOverlayHeightPx.toDp() }
                             CompositionLocalProvider(LocalTextToolbar provides textToolbar) {
                                 ReaderBody(
                                     fullText = displayPayload?.text,
@@ -1939,7 +1951,7 @@ fun PlayerScreen(
                                     selectionResetSignal = readerSelectionResetSignal,
                                     scrollState = readerScrollState,
                                     showEmptyPlaceholder = transitionSettled && !isLoading,
-                                    topOverlayOcclusionPx = locusTopOverlayHeightPx,
+                                    topOverlayOcclusionPx = 0,
                                     bottomOverlayOcclusionPx = locusBottomOverlayHeightPx,
                                     onNonLinkTap = {
                                         if (textToolbar.status == TextToolbarStatus.Shown || selectionClearArmed) {
@@ -1948,8 +1960,12 @@ fun PlayerScreen(
                                             toggleReaderMode()
                                         }
                                     },
+                                    onManualScrollGesture = {
+                                        lastReaderManualScrollAtMs = SystemClock.elapsedRealtime()
+                                    },
                                     modifier = Modifier
                                         .fillMaxSize()
+                                        .padding(top = readerTopInsetDp)
                                         .graphicsLayer { alpha = bodyContentAlpha },
                                 )
                             }

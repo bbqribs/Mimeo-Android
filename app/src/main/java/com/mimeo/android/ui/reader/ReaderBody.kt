@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
+import android.util.Log
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -31,6 +32,9 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
@@ -50,6 +54,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.ReaderFontOption
@@ -63,6 +68,7 @@ private val READER_SEARCH_FOCUS_EXTRA_TOP_PADDING = 120.dp
 private const val MANUAL_SCROLL_SUPPRESS_MS = 1200L
 private const val URL_ANNOTATION_TAG = "reader-url"
 private val READER_LINK_BLUE = Color(0xFF64B5F6)
+private const val READER_SCROLL_DEBUG_TAG = "MimeoReaderScroll"
 
 @Composable
 fun ReaderBody(
@@ -89,6 +95,7 @@ fun ReaderBody(
     bottomOverlayOcclusionPx: Int = 0,
     showEmptyPlaceholder: Boolean = true,
     onNonLinkTap: (() -> Unit)? = null,
+    onManualScrollGesture: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -119,6 +126,36 @@ fun ReaderBody(
     var isProgrammaticScroll by remember { mutableStateOf(false) }
     var suppressTransitionUntilMs by remember { mutableStateOf(0L) }
     var manualScrollDetached by remember { mutableStateOf(false) }
+    var followSuppressedByManualScroll by remember { mutableStateOf(false) }
+    fun armManualScrollSuppression(reason: String) {
+        if (!autoScrollWhileListening) return
+        suppressTransitionUntilMs = SystemClock.elapsedRealtime() + MANUAL_SCROLL_SUPPRESS_MS
+        manualScrollDetached = true
+        followSuppressedByManualScroll = true
+        onManualScrollGesture?.invoke()
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                READER_SCROLL_DEBUG_TAG,
+                "manual_detach reason=$reason scroll=${scrollState.value} suppressUntil=$suppressTransitionUntilMs",
+            )
+        }
+    }
+    val manualScrollNestedConnection = remember(autoScrollWhileListening) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (
+                    shouldArmManualSuppressionFromDrag(
+                        autoScrollWhileListening = autoScrollWhileListening,
+                        source = source,
+                        availableY = available.y,
+                    )
+                ) {
+                    armManualScrollSuppression("nested_drag")
+                }
+                return Offset.Zero
+            }
+        }
+    }
     val highlightedSentenceRange = remember(chunks, sentenceRangesByChunk, safeChunkIndex, currentChunkOffsetInChars, activeRangeInChunk) {
         chunks.getOrNull(safeChunkIndex)?.let { chunk ->
             val offsetForSentence = activeRangeInChunk?.first ?: currentChunkOffsetInChars
@@ -346,6 +383,7 @@ fun ReaderBody(
             .onGloballyPositioned { coordinates ->
                 viewportTopInRootPx = coordinates.positionInRoot().y
             }
+            .nestedScroll(manualScrollNestedConnection)
             .verticalScroll(scrollState),
         contentAlignment = Alignment.TopCenter,
     ) {
@@ -586,11 +624,9 @@ fun ReaderBody(
                     endBottomInRoot <= (visibleBottomInRoot - bottomComfortPx)
                 if (
                     manualScrollChange &&
-                    autoScrollWhileListening &&
-                    !manualScrollDetached
+                    autoScrollWhileListening
                 ) {
-                    suppressTransitionUntilMs = SystemClock.elapsedRealtime() + MANUAL_SCROLL_SUPPRESS_MS
-                    manualScrollDetached = true
+                    armManualScrollSuppression("scroll_delta")
                 }
                 lastAnchorWasFullyVisible = fullyVisible
             }
@@ -672,16 +708,41 @@ fun ReaderBody(
         val triggerKind = classifyReaderScrollTrigger(scrollTriggerSignal, lastHandledScrollTrigger)
         val externalTrigger = triggerKind != ReaderScrollTriggerKind.NONE
         val forceReattach = triggerKind == ReaderScrollTriggerKind.FORCE_REATTACH
-        if (
-            shouldAutoReattachAfterManualScroll(
-                manualScrollDetached = manualScrollDetached,
-                anchorFullyVisible = fullyVisibleNow,
-                triggerKind = triggerKind,
-            )
-        ) {
-            manualScrollDetached = false
-        }
         val anchorChanged = lastAnchorRange != anchor
+        if (followSuppressedByManualScroll && !forceReattach) {
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    READER_SCROLL_DEBUG_TAG,
+                    "skip_follow suppressed=true trigger=$triggerKind anchorChanged=$anchorChanged",
+                )
+            }
+            if (externalTrigger) {
+                lastHandledScrollTrigger = scrollTriggerSignal
+            }
+            if (anchorChanged) {
+                lastAnchorWasFullyVisible = fullyVisibleNow
+            }
+            lastAnchorRange = anchor
+            return@LaunchedEffect
+        }
+        if (forceReattach) {
+            followSuppressedByManualScroll = false
+            if (BuildConfig.DEBUG) {
+                Log.d(READER_SCROLL_DEBUG_TAG, "force_reattach trigger=$triggerKind")
+            }
+        }
+        val canAutoReattachNow = forceReattach || nowMs >= suppressTransitionUntilMs
+        if (canAutoReattachNow) {
+            if (
+                shouldAutoReattachAfterManualScroll(
+                    manualScrollDetached = manualScrollDetached,
+                    anchorFullyVisible = fullyVisibleNow,
+                    triggerKind = triggerKind,
+                )
+            ) {
+                manualScrollDetached = false
+            }
+        }
         if (
             shouldSuppressStandardTriggerDuringCooldown(
                 triggerKind = triggerKind,
@@ -712,16 +773,17 @@ fun ReaderBody(
             return@LaunchedEffect
         }
         val hiddenByBottom = endBottomInRoot > desiredBottomInRoot
+        val followEnabled = autoScrollWhileListening && !followSuppressedByManualScroll
         val standardFollowTrigger = shouldAutoScrollForStandardPlayback(
             triggerKind = triggerKind,
-            autoScrollWhileListening = autoScrollWhileListening,
+            autoScrollWhileListening = followEnabled,
             manualScrollDetached = manualScrollDetached,
             hiddenByBottom = hiddenByBottom,
             nowMs = nowMs,
             suppressUntilMs = suppressTransitionUntilMs,
         )
         val boundaryFollowTrigger = shouldAutoScrollForPlaybackBoundary(
-            autoScrollWhileListening = autoScrollWhileListening,
+            autoScrollWhileListening = followEnabled,
             manualScrollDetached = manualScrollDetached,
             anchorChanged = anchorChanged,
             hiddenByBottom = hiddenByBottom,
@@ -748,6 +810,12 @@ fun ReaderBody(
             }
             lastAnchorRange = anchor
             return@LaunchedEffect
+        }
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                READER_SCROLL_DEBUG_TAG,
+                "jump trigger=$triggerKind standard=$standardFollowTrigger boundary=$boundaryFollowTrigger center=$centerIfOffscreenTrigger force=$forceReattach detached=$manualScrollDetached suppressed=$followSuppressedByManualScroll",
+            )
         }
 
         suspend fun jumpAnchorToTop() {
@@ -939,6 +1007,16 @@ private fun normalizeInclusiveRange(range: IntRange?, textLength: Int): IntRange
     val start = range.first.coerceIn(0, textLength)
     val endExclusive = (range.last + 1).coerceIn(start, textLength)
     return if (start < endExclusive) start until endExclusive else null
+}
+
+internal fun shouldArmManualSuppressionFromDrag(
+    autoScrollWhileListening: Boolean,
+    source: NestedScrollSource,
+    availableY: Float,
+): Boolean {
+    if (!autoScrollWhileListening) return false
+    if (source != NestedScrollSource.Drag) return false
+    return abs(availableY) > 0.5f
 }
 
 internal fun shouldSuppressStandardTriggerDuringCooldown(
