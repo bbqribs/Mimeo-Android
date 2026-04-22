@@ -2,46 +2,42 @@ package com.mimeo.android.ui.queue
 
 import android.content.ClipboardManager
 import android.content.Context
-import android.os.Build
-import android.util.Log
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.core.tween
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -56,49 +52,31 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import com.mimeo.android.repository.NowPlayingSession
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.foundation.shape.RoundedCornerShape
 import com.mimeo.android.AppViewModel
-import com.mimeo.android.ArchiveActionSource
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
 import com.mimeo.android.isPendingProcessingFailureMessage
 import com.mimeo.android.isTerminalPendingProcessingStatus
-import com.mimeo.android.isNoActiveContentError
 import com.mimeo.android.resolveSessionSourcePlaylistId
-import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.AutoDownloadDiagnostics
 import com.mimeo.android.model.AutoDownloadWorkerState
 import com.mimeo.android.model.PendingManualSaveItem
@@ -106,32 +84,21 @@ import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaylistSummary
+import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.extractFirstHttpUrl
 import com.mimeo.android.share.isRetryablePendingSaveResult
-import com.mimeo.android.ui.common.openItemInBrowser
-import com.mimeo.android.ui.common.queueCapturePresentation
-import com.mimeo.android.ui.common.shareItemUrl
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
-import com.mimeo.android.ui.playlists.PlaylistPickerChoice
-import com.mimeo.android.ui.playlists.PlaylistPickerDialog
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.ExperimentalMaterial3Api
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.net.URI
 import java.util.UUID
 
-private const val DONE_PERCENT_THRESHOLD = 98
 private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
-private const val ACTION_KEY_UNDO_ARCHIVE = "undo_archive"
-private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 
 internal fun autoDownloadWorkerStateLabel(state: AutoDownloadWorkerState): String {
     return when (state) {
@@ -163,58 +130,10 @@ internal fun autoDownloadStatusLines(status: AutoDownloadDiagnostics): List<Stri
     )
 }
 
-internal fun shouldAutoScrollToTopForNewItems(
-    previousDisplayedItemIds: List<Int>,
-    currentDisplayedItemIds: List<Int>,
-    pendingFocusId: Int,
-    hasSearchQuery: Boolean,
-    isDefaultFilterAndSort: Boolean,
-): Boolean {
-    if (pendingFocusId > 0) return false
-    if (hasSearchQuery) return false
-    if (!isDefaultFilterAndSort) return false
-    if (previousDisplayedItemIds.isEmpty()) return false
-    if (currentDisplayedItemIds.isEmpty()) return false
-    val previousSet = previousDisplayedItemIds.toHashSet()
-    // Only scroll to top if the FIRST item in the sorted list is genuinely new
-    // (a new save appeared at the head). Appended pages from pagination add items
-    // at the tail and must not trigger a bounce to top.
-    return currentDisplayedItemIds.first() !in previousSet
-}
-
-internal data class UpNextRestorePosition(
-    val index: Int,
-    val offset: Int,
-)
-
 internal data class SessionSeedSourcePresentation(
     val seededFromLabel: String,
     val currentSourceLabel: String,
 )
-
-internal fun resolveUpNextRestorePosition(
-    currentDisplayedItemIds: List<Int>,
-    savedIndex: Int,
-    savedOffset: Int,
-    savedAnchorItemId: Int?,
-): UpNextRestorePosition? {
-    if (currentDisplayedItemIds.isEmpty()) return null
-    val resolvedIndex = when {
-        savedAnchorItemId != null -> {
-            val anchorIndex = currentDisplayedItemIds.indexOf(savedAnchorItemId)
-            if (anchorIndex < 0) return null
-            anchorIndex
-        }
-        savedIndex <= 0 -> 0
-        else -> savedIndex.coerceAtMost(currentDisplayedItemIds.lastIndex)
-    }
-    val resolvedOffset = if (resolvedIndex == savedIndex) {
-        savedOffset.coerceAtLeast(0)
-    } else {
-        0
-    }
-    return UpNextRestorePosition(index = resolvedIndex, offset = resolvedOffset)
-}
 
 internal fun resolveSessionSeedSourcePresentation(
     sessionSourcePlaylistId: Int?,
@@ -275,75 +194,6 @@ private data class ManualSavePayload(
     val destinationPlaylistId: Int?,
 )
 
-private enum class QueueFilterChip(val label: String, val enabled: Boolean = true) {
-    ALL("All"),
-    FAVORITES("Favourites"),
-    ARCHIVE("Archive"),
-    BIN("Bin"),
-    UNREAD("Unread"),
-    IN_PROGRESS("In progress"),
-    DONE("Done"),
-    PENDING("Pending"),
-}
-
-private enum class QueueSortOption(val label: String) {
-    NEWEST("Newest"),
-    OLDEST("Oldest"),
-    PROGRESS_HIGH("Progress"),
-    PROGRESS_LOW("Least progress"),
-    TITLE_AZ("Title A-Z"),
-}
-
-// Maps each sort option to the (sortField, sortDir) pair sent to the server.
-// TITLE_AZ has no server-side equivalent; server fetches newest-first and client sorts by title.
-private fun QueueSortOption.serverSortParams(): Pair<String, String> = when (this) {
-    QueueSortOption.NEWEST -> "created" to "desc"
-    QueueSortOption.OLDEST -> "created" to "asc"
-    QueueSortOption.PROGRESS_HIGH -> "progress" to "desc"
-    QueueSortOption.PROGRESS_LOW -> "progress" to "asc"
-    QueueSortOption.TITLE_AZ -> "created" to "desc"
-}
-
-internal fun shouldStartNewSessionOnQueueOpen(
-    tappedItemId: Int,
-    sessionCurrentItemId: Int,
-    playbackActive: Boolean,
-): Boolean {
-    if (tappedItemId <= 0) return false
-    if (sessionCurrentItemId <= 0) return true
-    if (tappedItemId == sessionCurrentItemId) return true
-    val preserveExistingOwner = playbackActive
-    // Preserve playback owner only while playback is actively running. If playback is
-    // paused/inactive, tapping a row should retarget ownership to that opened item.
-    return !preserveExistingOwner
-}
-
-internal data class QueueRowStateMarkers(
-    val playingItemId: Int?,
-    val readyResumeItemId: Int?,
-)
-
-internal fun resolveQueueRowStateMarkers(
-    engineCurrentItemId: Int,
-    sessionCurrentItemId: Int?,
-    isSpeaking: Boolean,
-    isAutoPlaying: Boolean,
-    autoPlayAfterLoad: Boolean,
-): QueueRowStateMarkers {
-    val ownerItemId = when {
-        engineCurrentItemId > 0 -> engineCurrentItemId
-        (sessionCurrentItemId ?: -1) > 0 -> sessionCurrentItemId
-        else -> null
-    }
-    val playbackActive = isSpeaking || isAutoPlaying || autoPlayAfterLoad
-    val playingItemId = if (playbackActive) ownerItemId else null
-    val readyResumeItemId = if (!playbackActive) ownerItemId else null
-    return QueueRowStateMarkers(
-        playingItemId = playingItemId,
-        readyResumeItemId = readyResumeItemId,
-    )
-}
-
 internal enum class PendingOutcomeSimulation {
     CACHED,
     NO_ACTIVE_CONTENT,
@@ -400,56 +250,22 @@ fun QueueScreen(
 ) {
     val context = LocalContext.current
     val items by vm.queueItems.collectAsState()
-    val archivedItems by vm.archivedItems.collectAsState()
-    val binItems by vm.binItems.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val settings by vm.settings.collectAsState()
     val loading by vm.queueLoading.collectAsState()
-    val loadingMore by vm.queueLoadingMore.collectAsState()
-    val queueHasMorePages by vm.queueHasMorePages.collectAsState()
-    val queueReloadGeneration by vm.queueReloadGeneration.collectAsState()
     val offline by vm.queueOffline.collectAsState()
-    val cachedItemIds by vm.cachedItemIds.collectAsState()
-    val noActiveContentItemIds by vm.noActiveContentItemIds.collectAsState()
     val autoDownloadDiagnostics by vm.autoDownloadDiagnostics.collectAsState()
     val pendingManualSaves by vm.pendingManualSaves.collectAsState()
     val pendingManualRetryInProgress by vm.pendingManualRetryInProgress.collectAsState()
-    val pendingShareFocusItemId by vm.pendingQueueFocusItemId.collectAsState()
-    val lastQueueFetchDebug by vm.lastQueueFetchDebug.collectAsState()
-    val queueScrollState by vm.queueScrollState.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
-    val playbackState by vm.playbackEngineState.collectAsState()
     val actionScope = rememberCoroutineScope()
-    val density = LocalDensity.current
 
-    val listState = rememberLazyListState()
-    val pullRefreshMaxPx = with(density) { 96.dp.toPx() }
-    val pullRefreshThresholdPx = pullRefreshMaxPx
-    var pullRefreshDistancePx by remember { mutableFloatStateOf(0f) }
-    var pendingFocusId by remember { mutableIntStateOf(-1) }
-    var previousProjectedPendingIds by remember { mutableStateOf<List<Long>>(emptyList()) }
-    var previousDisplayedItemIds by remember { mutableStateOf<List<Int>>(emptyList()) }
-    var suppressAutoScrollToTopOnce by remember { mutableStateOf(false) }
-    var initialUpNextRestoreHandled by remember { mutableStateOf(false) }
-    var collapsingArchivedItemIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
-    var playlistMenuExpanded by remember { mutableStateOf(false) }
-    var rowMenuItemId by remember { mutableIntStateOf(-1) }
-    var playlistPickerItem by remember { mutableStateOf<PlaybackQueueItem?>(null) }
     var topActionsMenuExpanded by remember { mutableStateOf(false) }
     var showReseedConfirmation by remember { mutableStateOf(false) }
     var showPendingSavesHub by remember { mutableStateOf(false) }
     var pendingHubStatusMessage by remember { mutableStateOf<String?>(null) }
-    var sortMenuExpanded by remember { mutableStateOf(false) }
-    var searchExpanded by rememberSaveable { mutableStateOf(false) }
-    var searchQuery by rememberSaveable { mutableStateOf("") }
-    var selectedFilter by rememberSaveable { mutableStateOf(QueueFilterChip.ALL) }
-    var selectedSort by rememberSaveable { mutableStateOf(QueueSortOption.NEWEST) }
-    var showQueueFetchDebug by rememberSaveable { mutableStateOf(false) }
-    var hasRefreshProblem by rememberSaveable { mutableStateOf(false) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
     var simulatedPendingOutcome by remember { mutableStateOf<PendingOutcomeSimulation?>(null) }
-    var lastHandledUpNextTapSignal by rememberSaveable { mutableIntStateOf(upNextTabTapSignal) }
-    var nextUpNextTapScrollTargetTop by rememberSaveable { mutableStateOf(false) }
     var showSaveEntryDialog by remember { mutableStateOf(false) }
     var manualSaveMode by rememberSaveable { mutableStateOf(ManualSaveMode.URL) }
     var manualUrlInput by rememberSaveable { mutableStateOf("") }
@@ -471,24 +287,9 @@ fun QueueScreen(
         vm.flushPendingProgress()
     }
 
-    LaunchedEffect(focusItemId, pendingShareFocusItemId) {
-        pendingFocusId = pendingShareFocusItemId ?: (focusItemId ?: -1)
-    }
-
     val selectedPlaylistName = settings.selectedPlaylistId?.let { id ->
         playlists.firstOrNull { it.id == id }?.name
     } ?: "Smart queue"
-    val queueFeedLabel = buildString {
-        append("Queue feed")
-        append(" · source: ")
-        append(selectedPlaylistName)
-        append(" · sort: ")
-        append(selectedSort.label)
-        if (selectedFilter != QueueFilterChip.ALL) {
-            append(" · filter: ")
-            append(selectedFilter.label)
-        }
-    }
     val canReseedFromCurrentSource = !loading
     val sessionSeedPresentation = nowPlayingSession?.let { session ->
         resolveSessionSeedSourcePresentation(
@@ -497,6 +298,7 @@ fun QueueScreen(
             playlists = playlists,
         )
     }
+
     suspend fun executeReseedFromCurrentSource() {
         if (!canReseedFromCurrentSource) {
             onShowSnackbar("Queue is still loading. Wait, then re-seed.", null, null)
@@ -514,135 +316,11 @@ fun QueueScreen(
                 onShowSnackbar("Couldn't re-seed Up Next from current source.", "Diagnostics", "open_diagnostics")
             }
     }
-    val playlistChoices = playlistPickerItem?.let { target ->
-        playlists.map { playlist ->
-            PlaylistPickerChoice(
-                playlistId = playlist.id,
-                playlistName = playlist.name,
-                isMember = vm.isItemInPlaylist(target.itemId, playlist.id),
-            )
-        }
-    }.orEmpty()
-    LaunchedEffect(selectedFilter) {
-        when (selectedFilter) {
-            QueueFilterChip.ARCHIVE -> vm.loadArchivedItems()
-            QueueFilterChip.BIN -> vm.loadBinItems()
-            else -> Unit
-        }
-    }
-    LaunchedEffect(selectedSort) {
-        val (sortField, sortDir) = selectedSort.serverSortParams()
-        vm.updateQueueServerSort(sortField, sortDir)
-    }
 
-    val searchNeedle = remember(searchQuery) { searchQuery.trim().lowercase() }
-    val normalizedSearchNeedle = remember(searchNeedle) { normalizeSearchText(searchNeedle) }
-    val favoritesSourceItems = remember(items, archivedItems) {
-        (items + archivedItems).distinctBy { it.itemId }
-    }
-    val activeItems = remember(selectedFilter, items, favoritesSourceItems, archivedItems, binItems) {
-        when (selectedFilter) {
-            QueueFilterChip.PENDING -> emptyList()
-            QueueFilterChip.FAVORITES -> favoritesSourceItems
-            QueueFilterChip.ARCHIVE -> archivedItems
-            QueueFilterChip.BIN -> binItems
-            else -> items
-        }
-    }
-    val archivedItemIds = remember(archivedItems) { archivedItems.mapTo(hashSetOf()) { it.itemId } }
-    val filteredItems = remember(activeItems, selectedFilter, searchNeedle, normalizedSearchNeedle) {
-        activeItems.filter { item ->
-            val matchesSearch = if (searchNeedle.isBlank()) {
-                true
-            } else {
-                listOf(
-                    item.title.orEmpty(),
-                    item.host.orEmpty(),
-                    item.url,
-                ).any { candidate ->
-                    val lowered = candidate.lowercase()
-                    lowered.contains(searchNeedle) || normalizeSearchText(lowered).contains(normalizedSearchNeedle)
-                }
-            }
-            val matchesFilter = when (selectedFilter) {
-                QueueFilterChip.ALL -> true
-                QueueFilterChip.PENDING -> false
-                QueueFilterChip.FAVORITES -> item.isFavorited
-                QueueFilterChip.UNREAD -> item.furthestPercent <= 0
-                QueueFilterChip.IN_PROGRESS -> item.furthestPercent in 1 until DONE_PERCENT_THRESHOLD
-                QueueFilterChip.DONE -> item.furthestPercent >= DONE_PERCENT_THRESHOLD
-                QueueFilterChip.ARCHIVE -> true
-                QueueFilterChip.BIN -> true
-            }
-            matchesSearch && matchesFilter
-        }
-    }
-    val displayedItems = remember(filteredItems, selectedSort) {
-        when (selectedSort) {
-            QueueSortOption.NEWEST -> filteredItems.sortedByDescending { it.createdAt ?: "" }
-            QueueSortOption.OLDEST -> filteredItems.sortedBy { it.createdAt ?: "" }
-            QueueSortOption.PROGRESS_HIGH -> filteredItems.sortedByDescending { it.furthestPercent }
-            QueueSortOption.PROGRESS_LOW -> filteredItems.sortedBy { it.furthestPercent }
-            QueueSortOption.TITLE_AZ -> filteredItems.sortedBy { (it.title ?: it.url).lowercase() }
-        }
-    }
-    val rowStateMarkers = remember(
-        playbackState.currentItemId,
-        nowPlayingSession?.currentItem?.itemId,
-        playbackState.isSpeaking,
-        playbackState.isAutoPlaying,
-        playbackState.autoPlayAfterLoad,
-    ) {
-        resolveQueueRowStateMarkers(
-            engineCurrentItemId = playbackState.currentItemId,
-            sessionCurrentItemId = nowPlayingSession?.currentItem?.itemId,
-            isSpeaking = playbackState.isSpeaking,
-            isAutoPlaying = playbackState.isAutoPlaying,
-            autoPlayAfterLoad = playbackState.autoPlayAfterLoad,
-        )
-    }
-    val activePlayingItemId = rowStateMarkers.playingItemId
-    val readyResumeItemId = rowStateMarkers.readyResumeItemId
-    val visibleProjectedPendingItems = remember(selectedFilter, pendingManualSaves, searchQuery) {
-        when (selectedFilter) {
-            QueueFilterChip.PENDING -> pendingManualSaves.filter { pending ->
-                pendingMatchesSearch(pending, searchQuery)
-            }
-            else -> emptyList()
-        }
-    }
-    val hasVisibleQueueContent = displayedItems.isNotEmpty() || visibleProjectedPendingItems.isNotEmpty()
-    val pullRefreshProgress = (pullRefreshDistancePx / pullRefreshThresholdPx).coerceIn(0f, 1f)
-    val emptyStateMessage = when {
-        selectedFilter == QueueFilterChip.PENDING -> null
-        loading -> null
-        !hasVisibleQueueContent && offline && settings.selectedPlaylistId != null ->
-            "Offline. Can't refresh \"$selectedPlaylistName\" right now."
-        !hasVisibleQueueContent && offline ->
-            "Offline. Can't refresh Smart Queue right now."
-        !hasVisibleQueueContent && settings.selectedPlaylistId != null -> "No items yet in \"$selectedPlaylistName\"."
-        !hasVisibleQueueContent -> "No items in Smart queue yet. Share a link to add one."
-        displayedItems.isEmpty() && searchQuery.isNotBlank() ->
-            "No results for \"$searchQuery\" in $selectedPlaylistName."
-        displayedItems.isEmpty() && selectedFilter == QueueFilterChip.ARCHIVE ->
-            "Archive is empty."
-        displayedItems.isEmpty() && selectedFilter == QueueFilterChip.BIN ->
-            "Bin is empty. Items stay in Bin for 14 days unless purged earlier."
-        displayedItems.isEmpty() && selectedFilter != QueueFilterChip.ALL && selectedFilter != QueueFilterChip.PENDING ->
-            "No items match the ${selectedFilter.label.lowercase()} filter."
-        displayedItems.isEmpty() -> "No items match the current search/filter."
-        else -> null
-    }
     suspend fun refreshQueueContent() {
         if (refreshActionState == RefreshActionVisualState.Refreshing) return
         refreshActionState = RefreshActionVisualState.Refreshing
-        val result = when (selectedFilter) {
-            QueueFilterChip.ARCHIVE -> vm.loadArchivedItems()
-            QueueFilterChip.BIN -> vm.loadBinItems()
-            QueueFilterChip.PENDING -> vm.loadQueueOnce(forceAutoDownloadAllVisibleUncached = true)
-            else -> vm.loadQueueOnce(forceAutoDownloadAllVisibleUncached = true)
-        }
-        hasRefreshProblem = result.isFailure
+        val result = vm.loadQueueOnce(forceAutoDownloadAllVisibleUncached = true)
         refreshActionState = if (result.isSuccess) {
             RefreshActionVisualState.Success
         } else {
@@ -654,38 +332,6 @@ fun QueueScreen(
             refreshActionState == RefreshActionVisualState.Failure
         ) {
             refreshActionState = RefreshActionVisualState.Idle
-        }
-    }
-    val pullToRefreshConnection = remember(
-        listState,
-        refreshActionState,
-        pullRefreshMaxPx,
-        pullRefreshThresholdPx,
-    ) {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (source != NestedScrollSource.Drag) return Offset.Zero
-                if (refreshActionState == RefreshActionVisualState.Refreshing) return Offset.Zero
-                val isAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-                if (!isAtTop) return Offset.Zero
-
-                val nextDistance = (pullRefreshDistancePx + available.y).coerceIn(0f, pullRefreshMaxPx)
-                val consumedY = nextDistance - pullRefreshDistancePx
-                if (consumedY == 0f) return Offset.Zero
-                pullRefreshDistancePx = nextDistance
-                return Offset(0f, consumedY)
-            }
-
-            override suspend fun onPreFling(available: Velocity): Velocity {
-                if (
-                    refreshActionState != RefreshActionVisualState.Refreshing &&
-                    pullRefreshDistancePx >= pullRefreshThresholdPx
-                ) {
-                    actionScope.launch { refreshQueueContent() }
-                }
-                pullRefreshDistancePx = 0f
-                return Velocity.Zero
-            }
         }
     }
 
@@ -734,137 +380,11 @@ fun QueueScreen(
         }
     }
 
-    LaunchedEffect(displayedItems, pendingFocusId) {
-        if (pendingFocusId <= 0) return@LaunchedEffect
-        val index = displayedItems.indexOfFirst { it.itemId == pendingFocusId }
-        if (index >= 0) {
-            val focusedItemId = pendingFocusId
-            listState.animateScrollToItem(index)
-            vm.consumePendingQueueFocusItemId(focusedItemId)
-            pendingFocusId = -1
-        }
-    }
-
-    LaunchedEffect(
-        displayedItems,
-        visibleProjectedPendingItems,
-        pendingFocusId,
-        selectedFilter,
-        selectedSort,
-        searchQuery,
-        queueScrollState,
-    ) {
-        if (initialUpNextRestoreHandled) return@LaunchedEffect
-        val currentIds = displayedItems.map { it.itemId }
-        if (currentIds.isEmpty()) return@LaunchedEffect
-        if (pendingFocusId > 0) return@LaunchedEffect
-        val isNormalUpNextView = selectedFilter == QueueFilterChip.ALL &&
-            selectedSort == QueueSortOption.NEWEST &&
-            searchQuery.isBlank()
-        if (!isNormalUpNextView) {
-            previousDisplayedItemIds = currentIds
-            previousProjectedPendingIds = visibleProjectedPendingItems.map { it.id }
-            initialUpNextRestoreHandled = true
-            return@LaunchedEffect
-        }
-        val restore = resolveUpNextRestorePosition(
-            currentDisplayedItemIds = currentIds,
-            savedIndex = queueScrollState.index,
-            savedOffset = queueScrollState.offset,
-            savedAnchorItemId = queueScrollState.anchorItemId,
-        )
-        previousDisplayedItemIds = currentIds
-        previousProjectedPendingIds = visibleProjectedPendingItems.map { it.id }
-        initialUpNextRestoreHandled = true
-        if (restore == null) {
-            vm.clearQueueScrollState()
-            return@LaunchedEffect
-        }
-        if (restore.index == 0 && restore.offset == 0) return@LaunchedEffect
-        suppressAutoScrollToTopOnce = true
-        listState.scrollToItem(restore.index, restore.offset)
-    }
-
-    LaunchedEffect(listState, displayedItems, selectedFilter, selectedSort, searchQuery) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .distinctUntilChanged()
-            .collect { (index, offset) ->
-                val isNormalUpNextView = selectedFilter == QueueFilterChip.ALL &&
-                    selectedSort == QueueSortOption.NEWEST &&
-                    searchQuery.isBlank()
-                if (!isNormalUpNextView || displayedItems.isEmpty()) return@collect
-                val safeIndex = index.coerceIn(0, displayedItems.lastIndex)
-                vm.setQueueScrollState(
-                    index = safeIndex,
-                    offset = offset,
-                    anchorItemId = displayedItems.getOrNull(safeIndex)?.itemId,
-                )
-            }
-    }
-
-    LaunchedEffect(visibleProjectedPendingItems) {
-        val currentIds = visibleProjectedPendingItems.map { it.id }
-        if (!initialUpNextRestoreHandled) {
-            previousProjectedPendingIds = currentIds
-            return@LaunchedEffect
-        }
-        val previousIds = previousProjectedPendingIds.toHashSet()
-        val hasNewProjectedPending = currentIds.any { it !in previousIds }
-        if (hasNewProjectedPending && currentIds.isNotEmpty()) {
-            listState.animateScrollToItem(0)
-        }
-        previousProjectedPendingIds = currentIds
-    }
-
-    LaunchedEffect(displayedItems, pendingFocusId, searchQuery, selectedFilter, selectedSort) {
-        val currentIds = displayedItems.map { it.itemId }
-        if (!initialUpNextRestoreHandled) {
-            previousDisplayedItemIds = currentIds
-            return@LaunchedEffect
-        }
-        if (suppressAutoScrollToTopOnce) {
-            suppressAutoScrollToTopOnce = false
-            previousDisplayedItemIds = currentIds
-            return@LaunchedEffect
-        }
-        val shouldScroll = shouldAutoScrollToTopForNewItems(
-            previousDisplayedItemIds = previousDisplayedItemIds,
-            currentDisplayedItemIds = currentIds,
-            pendingFocusId = pendingFocusId,
-            hasSearchQuery = searchQuery.isNotBlank(),
-            isDefaultFilterAndSort = selectedFilter == QueueFilterChip.ALL && selectedSort == QueueSortOption.NEWEST,
-        )
-        if (shouldScroll) {
-            listState.animateScrollToItem(0)
-        }
-        previousDisplayedItemIds = currentIds
-    }
-
-    LaunchedEffect(upNextTabTapSignal, displayedItems, activePlayingItemId) {
-        if (upNextTabTapSignal == lastHandledUpNextTapSignal) return@LaunchedEffect
-        lastHandledUpNextTapSignal = upNextTabTapSignal
-        if (displayedItems.isEmpty()) return@LaunchedEffect
-        if (nextUpNextTapScrollTargetTop) {
-            listState.animateScrollToItem(0)
-            nextUpNextTapScrollTargetTop = false
-            return@LaunchedEffect
-        }
-        val activeIndex = activePlayingItemId?.let { id ->
-            displayedItems.indexOfFirst { item -> item.itemId == id }.takeIf { it >= 0 }
-        }
-        if (activeIndex != null) {
-            listState.animateScrollToItem(activeIndex)
-            nextUpNextTapScrollTargetTop = true
-        } else {
-            listState.animateScrollToItem(0)
-            nextUpNextTapScrollTargetTop = false
-        }
-    }
-
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        // 1. Header card: seed-source labels + Refresh + Save + overflow
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
@@ -876,48 +396,44 @@ fun QueueScreen(
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                Text(
-                    text = "Source: $selectedPlaylistName",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                if (sessionSeedPresentation != null) {
+                    Text(
+                        text = "Seeded from: ${sessionSeedPresentation.seededFromLabel}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (sessionSeedPresentation.seededFromLabel != sessionSeedPresentation.currentSourceLabel) {
+                        Text(
+                            text = "Current source: ${sessionSeedPresentation.currentSourceLabel}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "Source: $selectedPlaylistName",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.CenterEnd,
                 ) {
-                    Row(
-                        modifier = Modifier.horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        ActionHintTooltip(label = "Archive") {
-                            IconButton(onClick = { selectedFilter = QueueFilterChip.ARCHIVE }) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_archive_box_24),
-                                    contentDescription = "Show Archive",
-                                    modifier = Modifier.size(24.dp),
-                                )
-                            }
-                        }
-                        ActionHintTooltip(label = if (searchExpanded) "Close search" else "Search") {
-                            IconButton(onClick = { searchExpanded = !searchExpanded }) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.msr_search_24),
-                                    contentDescription = if (searchExpanded) "Close search" else "Search queue",
-                                    modifier = Modifier.size(24.dp),
-                                )
-                            }
-                        }
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                         ActionHintTooltip(label = "Refresh") {
                             RefreshActionButton(
                                 state = refreshActionState,
-                                showConnectivityIssue = offline || hasRefreshProblem,
-                                onClick = {
-                                    actionScope.launch { refreshQueueContent() }
-                                },
+                                showConnectivityIssue = offline,
+                                onClick = { actionScope.launch { refreshQueueContent() } },
                                 contentDescription = "Refresh queue and sync progress",
-                                pullProgress = pullRefreshProgress,
+                                pullProgress = 0f,
                             )
                         }
                         ActionHintTooltip(label = "Save") {
@@ -940,63 +456,6 @@ fun QueueScreen(
                                     contentDescription = "Save URL",
                                     modifier = Modifier.size(24.dp),
                                 )
-                            }
-                        }
-                        ActionHintTooltip(label = "Switch queue") {
-                            Box {
-                                IconButton(onClick = { playlistMenuExpanded = true }) {
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.msr_list_layers_24),
-                                        contentDescription = "Switch queue",
-                                        modifier = Modifier.size(24.dp),
-                                    )
-                                }
-                                DropdownMenu(
-                                    expanded = playlistMenuExpanded,
-                                    onDismissRequest = { playlistMenuExpanded = false },
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Smart queue") },
-                                        onClick = {
-                                            playlistMenuExpanded = false
-                                            vm.selectPlaylist(null)
-                                        },
-                                    )
-                                    playlists.forEach { playlist ->
-                                        DropdownMenuItem(
-                                            text = { Text(playlist.name) },
-                                            onClick = {
-                                                playlistMenuExpanded = false
-                                                vm.selectPlaylist(playlist.id)
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        ActionHintTooltip(label = "Sort") {
-                            Box {
-                                IconButton(onClick = { sortMenuExpanded = true }) {
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.msr_sort_layers_24),
-                                        contentDescription = "Sort queue: ${selectedSort.label}",
-                                        modifier = Modifier.size(24.dp),
-                                    )
-                                }
-                                DropdownMenu(
-                                    expanded = sortMenuExpanded,
-                                    onDismissRequest = { sortMenuExpanded = false },
-                                ) {
-                                    QueueSortOption.entries.forEach { option ->
-                                        DropdownMenuItem(
-                                            text = { Text(option.label) },
-                                            onClick = {
-                                                selectedSort = option
-                                                sortMenuExpanded = false
-                                            },
-                                        )
-                                    }
-                                }
                             }
                         }
                         ActionHintTooltip(label = "Queue actions") {
@@ -1051,23 +510,6 @@ fun QueueScreen(
                                             }
                                         },
                                     )
-                                    if (BuildConfig.DEBUG) {
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                if (showQueueFetchDebug) {
-                                                    "Hide debug fetch"
-                                                } else {
-                                                    "Show debug fetch"
-                                                },
-                                            )
-                                        },
-                                        onClick = {
-                                            showQueueFetchDebug = !showQueueFetchDebug
-                                            topActionsMenuExpanded = false
-                                        },
-                                    )
-                                }
                                 }
                             }
                         }
@@ -1075,6 +517,8 @@ fun QueueScreen(
                 }
             }
         }
+
+        // 2. Auto-download diagnostics card (optional)
         if (settings.showAutoDownloadDiagnostics) {
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
@@ -1100,6 +544,8 @@ fun QueueScreen(
                 }
             }
         }
+
+        // 3. Pending outcome simulator (debug only)
         if (BuildConfig.DEBUG && settings.showPendingOutcomeSimulator) {
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
@@ -1211,87 +657,36 @@ fun QueueScreen(
                 }
             }
         }
-        if (BuildConfig.DEBUG && showQueueFetchDebug && lastQueueFetchDebug.statusCode != null) {
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
-                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+
+        // 4. Pending manual saves section (max 240.dp, scrollable)
+        if (pendingManualSaves.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 240.dp)
+                    .verticalScroll(rememberScrollState()),
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text("Debug queue fetch")
-                    Text(
-                        text = "playlistId=${lastQueueFetchDebug.selectedPlaylistId ?: "smart"} status=${lastQueueFetchDebug.statusCode} responseCount=${lastQueueFetchDebug.responseItemCount} responseContains409=${lastQueueFetchDebug.responseContains409}",
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+                pendingManualSaves.forEach { item ->
+                    PendingProjectedQueueItemCard(
+                        item = item,
+                        retryInProgress = pendingManualRetryInProgress,
+                        onRetry = { retryPendingItem(item) },
+                        onDismiss = { vm.removePendingManualSave(item.id) },
+                        onTap = {
+                            if (isPendingFailureState(item.lastFailureMessage)) {
+                                onShowSnackbar(item.lastFailureMessage, null, null)
+                            }
+                        },
                     )
-                    Text(
-                        text = "appliedCount=${lastQueueFetchDebug.appliedItemCount} appliedContains409=${lastQueueFetchDebug.appliedContains409} bytes=${lastQueueFetchDebug.responseBytes} hash=${lastQueueFetchDebug.responseHash}",
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "at=${lastQueueFetchDebug.lastFetchAt}",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = lastQueueFetchDebug.requestUrl,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "renderedIds=${displayedItems.take(3).joinToString { it.itemId.toString() }}${if (displayedItems.size > 6) " … " else ""}${displayedItems.takeLast(3).joinToString { it.itemId.toString() }}",
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-        }
-        if (searchExpanded) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedTextField(
-                    modifier = Modifier.weight(1f),
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    singleLine = true,
-                    label = { Text("Search Up Next") },
-                )
-                TextButton(
-                    onClick = {
-                        searchQuery = ""
-                        searchExpanded = false
-                    },
-                ) {
-                    Text("Close")
                 }
             }
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            QueueFilterChip.entries.forEach { chip ->
-                FilterChip(
-                    selected = selectedFilter == chip,
-                    onClick = { selectedFilter = chip },
-                    enabled = chip.enabled,
-                    label = { Text(chip.label) },
-                )
-            }
-        }
-        nowPlayingSession?.let { session ->
+        // 5. NowPlayingSessionPanel with weight(1f), or empty-state card
+        val session = nowPlayingSession
+        if (session != null) {
             NowPlayingSessionPanel(
+                modifier = Modifier.weight(1f),
                 session = session,
                 seededFromLabel = sessionSeedPresentation?.seededFromLabel ?: "Unknown source",
                 currentSourceLabel = sessionSeedPresentation?.currentSourceLabel ?: selectedPlaylistName,
@@ -1324,292 +719,31 @@ fun QueueScreen(
                     }
                 },
             )
-        }
-        Text(
-            text = queueFeedLabel,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 4.dp),
-        )
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .weight(1f, fill = true)
-                .nestedScroll(pullToRefreshConnection),
-            verticalArrangement = Arrangement.spacedBy(0.dp),
-        ) {
-            if (pullRefreshDistancePx > 0f) {
-                Spacer(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(with(density) { pullRefreshDistancePx.toDp() }),
-                )
-            }
-            emptyStateMessage?.let { message ->
-                ElevatedCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
-                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
-                ) {
-                    Text(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                        text = message,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            }
-            LaunchedEffect(listState, queueHasMorePages, queueReloadGeneration) {
-                if (BuildConfig.DEBUG) Log.d("MimeoQueueFetch", "scroll-trigger LaunchedEffect started hasMore=$queueHasMorePages")
-                snapshotFlow {
-                    val layoutInfo = listState.layoutInfo
-                    val totalItems = layoutInfo.totalItemsCount
-                    val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                    lastVisibleIndex to totalItems
-                }
-                    .distinctUntilChanged()
-                    .collect { (lastVisible, total) ->
-                        if (BuildConfig.DEBUG) Log.d("MimeoQueueFetch", "scroll pos: last=$lastVisible total=$total hasMore=$queueHasMorePages threshold=${total - 5}")
-                        if (queueHasMorePages && total > 0 && lastVisible >= total - 5) {
-                            vm.loadMoreQueueItems()
-                        }
-                    }
-            }
-
-            LazyColumn(
+        } else {
+            ElevatedCard(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f, fill = true),
-                state = listState,
-                verticalArrangement = Arrangement.spacedBy(0.dp),
+                    .weight(1f),
+                colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
             ) {
-                itemsIndexed(
-                    items = visibleProjectedPendingItems,
-                    key = { _, item -> "pending-${item.id}" },
-                ) { index, item ->
-                    Column(modifier = Modifier) {
-                        PendingProjectedQueueItemCard(
-                            item = item,
-                            retryInProgress = pendingManualRetryInProgress,
-                            onRetry = { retryPendingItem(item) },
-                            onDismiss = { vm.removePendingManualSave(item.id) },
-                            onTap = {
-                                if (isPendingFailureState(item.lastFailureMessage)) {
-                                    onShowSnackbar(item.lastFailureMessage, null, null)
-                                }
-                            },
-                        )
-                        if (index < visibleProjectedPendingItems.lastIndex || displayedItems.isNotEmpty()) {
-                            ThinQueueDivider()
-                        }
-                    }
-                }
-                itemsIndexed(
-                    items = displayedItems,
-                    key = { _, item -> item.itemId },
-                ) { index, item ->
-                    Column(modifier = Modifier) {
-                        AnimatedVisibility(
-                            visible = item.itemId !in collapsingArchivedItemIds,
-                            exit = shrinkVertically(animationSpec = tween(durationMillis = 220)) +
-                                fadeOut(animationSpec = tween(durationMillis = 180)),
-                        ) {
-                            QueueItemCard(
-                                item = item,
-                                isBinView = selectedFilter == QueueFilterChip.BIN,
-                                isArchiveView = selectedFilter == QueueFilterChip.ARCHIVE,
-                                isArchivedItem = archivedItemIds.contains(item.itemId),
-                                cached = cachedItemIds.contains(item.itemId),
-                                noActiveContent = noActiveContentItemIds.contains(item.itemId),
-                                failedProcessing = hasFailedPendingProjectionStatus(item),
-                                isActivePlayingItem = item.itemId == activePlayingItemId,
-                                isReadyResumeItem = item.itemId == readyResumeItemId,
-                                showQueueCaptureMetadata = settings.showQueueCaptureMetadata,
-                                onOpenPlayer = {
-                                    Log.d(
-                                        LOCUS_CONTINUATION_DEBUG_TAG,
-                                        "queue.openPlayer tapped=${item.itemId} sort=${selectedSort.name} " +
-                                            "playlist=${settings.selectedPlaylistId ?: "smart"} " +
-                                            "displayedHead=${displayedItems.take(8).joinToString { it.itemId.toString() }} " +
-                                            "sessionBefore=${vm.currentNowPlayingItemId()}",
-                                    )
-                                    vm.warmItemTextForPlayer(item.itemId)
-                                    val itemAlreadyInSession = nowPlayingSession?.items?.any { it.itemId == item.itemId } == true
-                                    if (!itemAlreadyInSession &&
-                                        shouldStartNewSessionOnQueueOpen(
-                                            tappedItemId = item.itemId,
-                                            sessionCurrentItemId = nowPlayingSession?.currentItem?.itemId ?: -1,
-                                            playbackActive = playbackState.isSpeaking || playbackState.isAutoPlaying,
-                                        )
-                                    ) {
-                                        vm.startNowPlayingSession(
-                                            startItemId = item.itemId,
-                                            orderedQueueItems = displayedItems,
-                                        )
-                                    }
-                                    onOpenPlayer(item.itemId)
-                                },
-                                onDownload = {
-                                    actionScope.launch {
-                                        if (cachedItemIds.contains(item.itemId)) {
-                                            onShowSnackbar("Already available offline", null, null)
-                                            return@launch
-                                        }
-                                        val result = vm.downloadItemForOffline(item.itemId)
-                                        if (result.isSuccess) {
-                                            onShowSnackbar("Offline cache ready", null, null)
-                                        } else if (result.exceptionOrNull()?.let(::isNoActiveContentError) == true) {
-                                            onShowSnackbar("Unavailable offline for this item", null, null)
-                                        } else {
-                                            onShowSnackbar("Couldn't cache offline right now", null, null)
-                                        }
-                                    }
-                                },
-                                onOpenPlaylistPicker = {
-                                    vm.refreshPlaylists()
-                                    playlistPickerItem = item
-                                },
-                                onArchive = {
-                                    actionScope.launch {
-                                        if (item.itemId in collapsingArchivedItemIds) return@launch
-                                        collapsingArchivedItemIds = collapsingArchivedItemIds + item.itemId
-                                        delay(220)
-                                        suppressAutoScrollToTopOnce = true
-                                        vm.archiveItem(
-                                            item.itemId,
-                                            refreshQueue = false,
-                                            source = ArchiveActionSource.UP_NEXT,
-                                        )
-                                            .onSuccess {
-                                                collapsingArchivedItemIds = collapsingArchivedItemIds - item.itemId
-                                                onShowSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
-                                            }
-                                            .onFailure {
-                                                collapsingArchivedItemIds = collapsingArchivedItemIds - item.itemId
-                                                suppressAutoScrollToTopOnce = false
-                                                onShowSnackbar("Couldn't archive item", "Diagnostics", "open_diagnostics")
-                                            }
-                                        }
-                                },
-                                onMoveToBin = {
-                                    actionScope.launch {
-                                        if (item.itemId in collapsingArchivedItemIds) return@launch
-                                        collapsingArchivedItemIds = collapsingArchivedItemIds + item.itemId
-                                        delay(220)
-                                        suppressAutoScrollToTopOnce = true
-                                        vm.moveItemToBin(
-                                            item.itemId,
-                                            refreshQueue = false,
-                                            source = ArchiveActionSource.UP_NEXT,
-                                        )
-                                            .onSuccess {
-                                                collapsingArchivedItemIds = collapsingArchivedItemIds - item.itemId
-                                                val offlineDeferred = vm.queueOffline.value
-                                                if (offlineDeferred) {
-                                                    onShowSnackbar("Moved to Bin offline; will sync", null, null)
-                                                } else {
-                                                    onShowSnackbar("Moved to Bin (14 days)", "Undo", ACTION_KEY_UNDO_ARCHIVE)
-                                                }
-                                            }
-                                            .onFailure {
-                                                collapsingArchivedItemIds = collapsingArchivedItemIds - item.itemId
-                                                suppressAutoScrollToTopOnce = false
-                                                onShowSnackbar("Couldn't move item to Bin", "Diagnostics", "open_diagnostics")
-                                            }
-                                    }
-                                },
-                                onToggleFavorite = {
-                                    actionScope.launch {
-                                        vm.setItemFavorited(item.itemId, favorited = !item.isFavorited)
-                                            .onSuccess {
-                                                val message = if (item.isFavorited) "Removed from favourites" else "Added to favourites"
-                                                onShowSnackbar(message, null, null)
-                                            }
-                                            .onFailure {
-                                                onShowSnackbar("Couldn't update favourite", "Diagnostics", "open_diagnostics")
-                                            }
-                                    }
-                                },
-                                onRestoreFromBin = {
-                                    actionScope.launch {
-                                        vm.restoreItemFromBin(item.itemId)
-                                            .onSuccess {
-                                                val offlineDeferred = vm.queueOffline.value
-                                                onShowSnackbar(
-                                                    if (offlineDeferred) "Restored from Bin offline; will sync" else "Restored from Bin",
-                                                    null,
-                                                    null,
-                                                )
-                                            }
-                                            .onFailure {
-                                                onShowSnackbar("Couldn't restore from Bin", "Diagnostics", "open_diagnostics")
-                                            }
-                                    }
-                                },
-                                onUnarchive = {
-                                    actionScope.launch {
-                                        vm.unarchiveItem(item.itemId)
-                                            .onSuccess {
-                                                onShowSnackbar("Unarchived", null, null)
-                                            }
-                                            .onFailure {
-                                                onShowSnackbar("Couldn't unarchive item", "Diagnostics", "open_diagnostics")
-                                            }
-                                    }
-                                },
-                                onPurgeFromBin = {
-                                    actionScope.launch {
-                                        vm.purgeItemFromBin(item.itemId)
-                                            .onSuccess {
-                                                val offlineDeferred = vm.queueOffline.value
-                                                onShowSnackbar(
-                                                    if (offlineDeferred) "Deleted from Bin offline; will sync" else "Permanently deleted",
-                                                    null,
-                                                    null,
-                                                )
-                                            }
-                                            .onFailure {
-                                                onShowSnackbar("Couldn't purge item", "Diagnostics", "open_diagnostics")
-                                            }
-                                    }
-                                },
-                                onPlayNext = {
-                                    vm.playNext(item.itemId)
-                                },
-                                onPlayLast = {
-                                    vm.playLast(item.itemId)
-                                },
-                                onShareUrl = {
-                                    shareItemUrl(context, item.url, item.title)
-                                },
-                                onOpenInBrowser = {
-                                    openItemInBrowser(context, item.url)
-                                },
-                                isMenuExpanded = rowMenuItemId == item.itemId,
-                                onDismissMenu = { rowMenuItemId = -1 },
-                                onExpandMenu = { rowMenuItemId = item.itemId },
-                            )
-                        }
-                        if (index < displayedItems.lastIndex) {
-                            ThinQueueDivider()
-                        }
-                    }
-                }
-                if (loadingMore) {
-                    item(key = "queue-load-more-footer") {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 16.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        }
-                    }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "No active session. Open an item to start one.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
     }
 
+    // Re-seed confirmation dialog
     if (showReseedConfirmation) {
         AlertDialog(
             onDismissRequest = { showReseedConfirmation = false },
@@ -1637,33 +771,7 @@ fun QueueScreen(
         )
     }
 
-    playlistPickerItem?.let { target ->
-        PlaylistPickerDialog(
-            itemTitle = target.title?.ifBlank { null } ?: target.url,
-            playlistChoices = playlistChoices,
-            isLoading = false,
-            onDismiss = { playlistPickerItem = null },
-            onTogglePlaylist = { choice ->
-                actionScope.launch {
-                    vm.togglePlaylistMembership(target.itemId, choice.playlistId)
-                        .onSuccess { result ->
-                            val verb = if (result.added) "Added to" else "Removed from"
-                            playlistPickerItem = null
-                            onShowSnackbar("$verb ${choice.playlistName}", null, null)
-                        }
-                        .onFailure { error ->
-                            playlistPickerItem = null
-                            onShowSnackbar(
-                                friendlyPlaylistError(error),
-                                "Diagnostics",
-                                "open_diagnostics",
-                            )
-                        }
-                }
-            },
-        )
-    }
-
+    // Manual save dialog
     if (showSaveEntryDialog) {
         val canSubmit = canSubmitManualSave(
             mode = manualSaveMode,
@@ -2020,6 +1128,7 @@ fun QueueScreen(
         )
     }
 
+    // Pending saves hub dialog
     if (showPendingSavesHub) {
         AlertDialog(
             onDismissRequest = {
@@ -2061,7 +1170,6 @@ fun QueueScreen(
             },
         )
     }
-
 }
 
 internal fun projectPendingItemsForDestination(
@@ -2091,34 +1199,6 @@ internal fun projectPendingItemsForDestination(
 private fun normalizePendingComparisonUrl(raw: String?): String? {
     val extracted = extractFirstHttpUrl(raw)?.trim()?.lowercase() ?: return null
     return extracted.removeSuffix("/")
-}
-
-@Composable
-private fun ThinQueueDivider() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 10.dp)
-            .height(1.dp)
-            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
-    )
-}
-
-private fun normalizeSearchText(value: String): String {
-    return value.filter { it.isLetterOrDigit() }
-}
-
-private fun pendingMatchesSearch(item: PendingManualSaveItem, query: String): Boolean {
-    if (query.isBlank()) return true
-    val needle = query.trim().lowercase()
-    val normalizedNeedle = normalizeSearchText(needle)
-    val title = item.titleInput.orEmpty()
-    val body = item.bodyInput.orEmpty()
-    val url = item.urlInput
-    return listOf(title, body, url).any { candidate ->
-        val lowered = candidate.lowercase()
-        lowered.contains(needle) || normalizeSearchText(lowered).contains(normalizedNeedle)
-    }
 }
 
 internal fun resolveManualSaveUrl(input: String): String? {
@@ -2389,7 +1469,7 @@ private fun PendingManualRetryCard(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(1.dp)
+                                .heightIn(min = 1.dp, max = 1.dp)
                                 .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f)),
                         )
                     }
@@ -2544,431 +1624,6 @@ private fun isPendingFailureState(message: String): Boolean {
     return isPendingProcessingFailureMessage(message)
 }
 
-internal fun queueCaptureStrategyLabel(strategyUsed: String?): String? {
-    val normalized = strategyUsed
-        ?.trim()
-        ?.lowercase()
-        ?.replace('_', ' ')
-        ?.takeIf { it.isNotBlank() }
-        ?: return null
-    val humanized = normalized.split(' ')
-        .filter { it.isNotBlank() }
-        .joinToString(" ") { token -> token.replaceFirstChar { it.uppercase() } }
-    return "Capture: $humanized"
-}
-
-internal fun queueSourceMetadataLine(
-    source: String,
-    captureStrategyLabel: String?,
-    showQueueCaptureMetadata: Boolean,
-): String {
-    return if (showQueueCaptureMetadata && !captureStrategyLabel.isNullOrBlank()) {
-        "$source  •  $captureStrategyLabel"
-    } else {
-        source
-    }
-}
-
-internal fun queueProgressIconRes(
-    progress: Int,
-    isDone: Boolean,
-    noActiveContent: Boolean,
-    failedProcessing: Boolean,
-): Int {
-    return when {
-        noActiveContent || failedProcessing -> R.drawable.msr_error_circle_24
-        isDone -> R.drawable.ic_book_closed_24
-        progress <= 0 -> R.drawable.ic_book_closed_plain_24
-        else -> R.drawable.ic_book_open_24
-    }
-}
-
-internal fun queueProgressIconDescription(
-    progress: Int,
-    isDone: Boolean,
-    noActiveContent: Boolean,
-    failedProcessing: Boolean,
-): String {
-    return when {
-        noActiveContent -> "Not available offline"
-        failedProcessing -> "Processing failed"
-        isDone -> "Done"
-        progress <= 0 -> "Unread"
-        else -> "In progress"
-    }
-}
-
-internal fun queueOfflineStateLabel(
-    progress: Int,
-    cached: Boolean,
-    noActiveContent: Boolean,
-    failedProcessing: Boolean,
-): String {
-    return when {
-        failedProcessing -> "Processing failed"
-        noActiveContent -> "Unavailable offline"
-        else -> "$progress%"
-    }
-}
-
-internal fun queueDownloadMenuLabel(
-    noActiveContent: Boolean,
-    failedProcessing: Boolean,
-): String {
-    return when {
-        noActiveContent || failedProcessing -> "Retry offline cache"
-        else -> "Download for offline"
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun QueueItemCard(
-    item: PlaybackQueueItem,
-    isBinView: Boolean,
-    isArchiveView: Boolean,
-    isArchivedItem: Boolean,
-    cached: Boolean,
-    noActiveContent: Boolean,
-    failedProcessing: Boolean,
-    isActivePlayingItem: Boolean,
-    isReadyResumeItem: Boolean,
-    showQueueCaptureMetadata: Boolean,
-    onOpenPlayer: () -> Unit,
-    onDownload: () -> Unit,
-    onOpenPlaylistPicker: () -> Unit,
-    onArchive: () -> Unit,
-    onMoveToBin: () -> Unit,
-    onRestoreFromBin: () -> Unit,
-    onUnarchive: () -> Unit,
-    onPurgeFromBin: () -> Unit,
-    onToggleFavorite: () -> Unit,
-    onPlayNext: () -> Unit,
-    onPlayLast: () -> Unit,
-    onShareUrl: () -> Unit,
-    onOpenInBrowser: () -> Unit,
-    isMenuExpanded: Boolean,
-    onDismissMenu: () -> Unit,
-    onExpandMenu: () -> Unit,
-) {
-    val capturePresentation = queueCapturePresentation(item)
-    val title = capturePresentation.title
-    val source = capturePresentation.sourceLabel ?: "Unknown source"
-    val hasUrl = item.url.isNotBlank()
-    val progress = item.progressPercent
-    val isDone = item.furthestPercent >= DONE_PERCENT_THRESHOLD
-    val captureStrategyLabel = queueCaptureStrategyLabel(item.strategyUsed)
-    val sourceLine = queueSourceMetadataLine(
-        source = source,
-        captureStrategyLabel = captureStrategyLabel,
-        showQueueCaptureMetadata = showQueueCaptureMetadata,
-    )
-    val progressIconRes = queueProgressIconRes(
-        progress = progress,
-        isDone = isDone,
-        noActiveContent = noActiveContent && !cached,
-        failedProcessing = failedProcessing,
-    )
-    val progressIconDescription = queueProgressIconDescription(
-        progress = progress,
-        isDone = isDone,
-        noActiveContent = noActiveContent && !cached,
-        failedProcessing = failedProcessing,
-    )
-    val primaryTextColor = if (cached) {
-        MaterialTheme.colorScheme.onSurface
-    } else if (noActiveContent || failedProcessing) {
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f)
-    }
-    val secondaryTextColor = if (cached) {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    } else if (noActiveContent || failedProcessing) {
-        MaterialTheme.colorScheme.error.copy(alpha = 0.9f)
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
-    }
-    val activeIndicatorColor = MaterialTheme.colorScheme.primary
-
-    ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(
-                if (isActivePlayingItem) {
-                    Modifier.border(
-                        width = 1.dp,
-                        color = activeIndicatorColor.copy(alpha = 0.82f),
-                        shape = RoundedCornerShape(10.dp),
-                    )
-                } else {
-                    Modifier
-                },
-            )
-            .combinedClickable(
-                enabled = !isBinView,
-                onClick = onOpenPlayer,
-                onLongClick = onExpandMenu,
-            ),
-        colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 5.dp),
-            verticalArrangement = Arrangement.spacedBy(1.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    modifier = Modifier.weight(1f),
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = primaryTextColor,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Box {
-                    IconButton(
-                        modifier = Modifier.size(40.dp),
-                        onClick = onExpandMenu,
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.msr_more_vert_24),
-                            contentDescription = "Item actions",
-                            tint = secondaryTextColor,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = isMenuExpanded,
-                        onDismissRequest = onDismissMenu,
-                    ) {
-                        if (isBinView) {
-                            DropdownMenuItem(
-                                text = { Text("Restore") },
-                                onClick = {
-                                    onDismissMenu()
-                                    onRestoreFromBin()
-                                },
-                            )
-                            if (hasUrl) {
-                                DropdownMenuItem(
-                                    text = { Text("Open in browser") },
-                                    onClick = {
-                                        onDismissMenu()
-                                        onOpenInBrowser()
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Share URL") },
-                                    onClick = {
-                                        onDismissMenu()
-                                        onShareUrl()
-                                    },
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text("Purge permanently") },
-                                onClick = {
-                                    onDismissMenu()
-                                    onPurgeFromBin()
-                                },
-                            )
-                        } else if (isArchiveView) {
-                            DropdownMenuItem(
-                                text = { Text(if (item.isFavorited) "Unfavourite" else "Favourite") },
-                                onClick = {
-                                    onDismissMenu()
-                                    onToggleFavorite()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Unarchive") },
-                                onClick = {
-                                    onDismissMenu()
-                                    onUnarchive()
-                                },
-                            )
-                            if (hasUrl) {
-                                DropdownMenuItem(
-                                    text = { Text("Open in browser") },
-                                    onClick = {
-                                        onDismissMenu()
-                                        onOpenInBrowser()
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Share URL") },
-                                    onClick = {
-                                        onDismissMenu()
-                                        onShareUrl()
-                                    },
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text("Move to Bin (14 days)") },
-                                onClick = {
-                                    onDismissMenu()
-                                    onMoveToBin()
-                                },
-                            )
-                        } else {
-                            DropdownMenuItem(
-                                text = { Text("Play Next") },
-                                onClick = {
-                                    onDismissMenu()
-                                    onPlayNext()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Play Last") },
-                                onClick = {
-                                    onDismissMenu()
-                                    onPlayLast()
-                                },
-                            )
-                            if (!cached) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(queueDownloadMenuLabel(noActiveContent, failedProcessing))
-                                    },
-                                    onClick = {
-                                        onDismissMenu()
-                                        onDownload()
-                                    },
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text("Playlists...") },
-                                onClick = {
-                                    onDismissMenu()
-                                    onOpenPlaylistPicker()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(if (item.isFavorited) "Unfavourite" else "Favourite") },
-                                onClick = {
-                                    onDismissMenu()
-                                    onToggleFavorite()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Archive") },
-                                onClick = {
-                                    onDismissMenu()
-                                    onArchive()
-                                },
-                            )
-                            if (hasUrl) {
-                                DropdownMenuItem(
-                                    text = { Text("Open in browser") },
-                                    onClick = {
-                                        onDismissMenu()
-                                        onOpenInBrowser()
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Share URL") },
-                                    onClick = {
-                                        onDismissMenu()
-                                        onShareUrl()
-                                    },
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text("Move to Bin (14 days)") },
-                                onClick = {
-                                    onDismissMenu()
-                                    onMoveToBin()
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    modifier = Modifier.weight(1f),
-                    text = sourceLine,
-                    style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
-                    color = if ((noActiveContent || failedProcessing) && !cached) {
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.46f)
-                    } else {
-                        secondaryTextColor
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Row(
-                    modifier = Modifier.padding(start = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    if (isActivePlayingItem) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.msr_play_arrow_24),
-                            contentDescription = "Currently playing",
-                            tint = activeIndicatorColor,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    } else if (isReadyResumeItem) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.msr_play_arrow_24),
-                            contentDescription = "Ready to resume",
-                            tint = activeIndicatorColor.copy(alpha = 0.66f),
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
-                    Text(
-                        text = queueOfflineStateLabel(progress, cached, noActiveContent, failedProcessing),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = secondaryTextColor,
-                    )
-                    if (isArchivedItem) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_archive_box_24),
-                            contentDescription = "Archived",
-                            tint = secondaryTextColor,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
-                    Icon(
-                        painter = painterResource(id = progressIconRes),
-                        contentDescription = progressIconDescription,
-                        tint = secondaryTextColor,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    if (item.isFavorited) {
-                        Text(
-                            text = "\u2665",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun friendlyPlaylistError(error: Throwable): String {
-    return when (error) {
-        is ApiException -> {
-            when (error.statusCode) {
-                401, 403 -> "Unauthorized. Check token, then open Diagnostics."
-                else -> "Could not update playlist. Open Diagnostics and retry."
-            }
-        }
-        else -> "Couldn't update playlist. Check connection, then open Diagnostics."
-    }
-}
-
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun ActionHintTooltip(
@@ -2996,15 +1651,14 @@ private fun NowPlayingSessionPanel(
     onClearSession: () -> Unit,
     reseedEnabled: Boolean,
     onReseed: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    var expanded by rememberSaveable { mutableStateOf(true) }
     val showCurrentSource = seededFromLabel != currentSourceLabel
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { expanded = !expanded }
                 .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -3052,108 +1706,89 @@ private fun NowPlayingSessionPanel(
                     modifier = Modifier.size(16.dp),
                 )
             }
-            Icon(
-                imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                contentDescription = if (expanded) "Collapse session queue" else "Expand session queue",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp).padding(end = 4.dp),
-            )
         }
-        if (expanded) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 192.dp)
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                session.items.forEachIndexed { index, item ->
-                    val isCurrent = index == session.currentIndex
-                    Row(
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            session.items.forEachIndexed { index, item ->
+                val isCurrent = index == session.currentIndex
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenItem(item.itemId) }
+                        .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onOpenItem(item.itemId) }
-                            .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            .size(6.dp)
+                            .background(
+                                if (isCurrent) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.outlineVariant,
+                                RoundedCornerShape(50),
+                            ),
+                    )
+                    Text(
+                        text = item.title?.ifBlank { null } ?: item.host ?: item.url,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (isCurrent) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(
+                        onClick = { onMoveItemUp(index) },
+                        enabled = index > 0,
+                        modifier = Modifier.size(28.dp),
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .background(
-                                    if (isCurrent) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.outlineVariant,
-                                    RoundedCornerShape(50),
-                                ),
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowUp,
+                            contentDescription = "Move up in session",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(14.dp),
                         )
-                        Text(
-                            text = item.title?.ifBlank { null } ?: item.host ?: item.url,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isCurrent) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
+                    }
+                    IconButton(
+                        onClick = { onMoveItemDown(index) },
+                        enabled = index < session.items.lastIndex,
+                        modifier = Modifier.size(28.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Move down in session",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(14.dp),
                         )
+                    }
+                    if (!isCurrent) {
                         IconButton(
-                            onClick = { onMoveItemUp(index) },
-                            enabled = index > 0,
+                            onClick = { onRemoveItem(item.itemId) },
                             modifier = Modifier.size(28.dp),
                         ) {
                             Icon(
-                                imageVector = Icons.Default.KeyboardArrowUp,
-                                contentDescription = "Move up in session",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Remove from session",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                 modifier = Modifier.size(14.dp),
                             )
                         }
-                        IconButton(
-                            onClick = { onMoveItemDown(index) },
-                            enabled = index < session.items.lastIndex,
-                            modifier = Modifier.size(28.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowDown,
-                                contentDescription = "Move down in session",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                modifier = Modifier.size(14.dp),
-                            )
-                        }
-                        if (!isCurrent) {
-                            IconButton(
-                                onClick = { onRemoveItem(item.itemId) },
-                                modifier = Modifier.size(28.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Remove from session",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(14.dp),
-                                )
-                            }
-                        }
                     }
-                    if (index < session.items.lastIndex) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                        )
-                    }
+                }
+                if (index < session.items.lastIndex) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                    )
                 }
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
     }
-}
-
-private fun isLikelyPhysicalDevice(): Boolean {
-    val fingerprint = Build.FINGERPRINT.lowercase()
-    val model = Build.MODEL.lowercase()
-    val brand = Build.BRAND.lowercase()
-    return !(fingerprint.contains("generic") ||
-        fingerprint.contains("emulator") ||
-        model.contains("sdk") ||
-        model.contains("emulator") ||
-        brand.startsWith("generic"))
 }

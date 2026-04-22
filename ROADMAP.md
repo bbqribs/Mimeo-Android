@@ -1,179 +1,223 @@
 # Roadmap (Android)
 
-## Done
-- [x] MVP v0 app scaffold with Compose + DataStore + OkHttp.
-- [x] Settings screen with base URL/token and `/debug/version` test.
-- [x] Queue screen using `/playback/queue`.
-- [x] Player screen using `/items/{id}/text` with TTS play/pause/next.
-- [x] Progress sync via `/items/{id}/progress` (periodic while speaking + done=100).
-- [x] Segment-based playback using `paragraphs[]` (with text fallback), prev/next segment controls, and segment-index progress sync.
-- [x] Offline caching + retry queue: cached text/paragraphs (Room), offline player fallback, queued progress sync with retry.
-- [x] WorkManager auto-flush for queued progress when network returns (no manual sync required).
-- [x] v0.3 now-playing session snapshot: persisted queue order + current index, queue resume action, and next/prev item navigation tied to session state.
-- [x] In-app connectivity diagnostics screen: `/health`, `/debug/version`, `/debug/python` checks with device-aware hints and timestamps.
-- [x] Progress model v1: canonical chunk/char-offset percent wiring, monotonic server updates, and near-end auto-done alignment.
-- [x] Android MVP playback end-to-end polish: Now Playing status header, offline/cache badges, retry+diagnostics recovery actions, and configurable completion auto-advance.
-- [x] Text segmentation/chunking improvements: backend now emits more natural paragraph/sentence chunk boundaries with deterministic sizing, and Android percent math remains monotonic across varied chunk lengths.
-- [x] Start listening here + highlight + optional auto-scroll: player `View text` supports long-press start-from-chunk, current chunk highlighting, and auto-scroll toggle with temporary manual-scroll suppression.
-- [x] Now Playing/session UX refinements + playlists entry point stub: queue session banner with resume/restart/clear controls, player session header/back-to-queue action, and a top-level playlists placeholder screen.
-- [x] Named playlists v1 integration: playlist CRUD + selection UI, Smart queue fallback, and playlist-scoped queue loading.
-- [x] Playlist item membership UX: Queue row/player overflow now expose `Add to playlist…` with per-playlist add/remove toggles.
-- [x] UI compression pass: compact nav, dense queue/player/playlists/settings layouts, and collapsible status banner for offline/LAN issues.
-- [x] UX follow-ups: root snackbar visibility, stable player status/banner placement, and denser player control bar without reducing tap targets.
-- [x] Player chrome reliability follow-up: non-Locus player controls render as a bottom overlay without tab hit-test conflicts; settings toggles persist correctly; playback remains alive across tab switches even when persistent controls are hidden.
-- [x] Up Next controls cleanup: single Refresh action remains and covers queue reload plus queued-progress sync path; standalone Sync button removed.
-- [x] Reader chrome/fullscreen interaction pass: tapping reader text toggles chrome visibility with directional slide transitions while preserving visible text position.
-- [x] Player controls minimization (D-lite): Full/Minimal/Nub modes with persisted mode+side, stable chevron placement, and mode-specific progress lanes (full slider, minimal thin top line, nub thin line at nav boundary).
-- [x] Refresh affordance polish: unified Material refresh action states (idle/spin/success/failure + sync-problem warning) across Queue, Playlists, and Locus with reduced error clutter.
-- [x] Locus speed control polish: compact icon-led trigger + preset capsules + custom slider + stepper row, with tuned icon/typography sizing and consistent narrow-screen layout.
-- [x] Shared chrome polish: persistent title strip typography/link behavior finalized (bold title + italic tappable domain), compact top action bar density, and centered title-strip divider treatment for clearer separation.
-- [x] Auth/session clarity in Settings: explicit signed-in/session-source messaging, sign-out consequences, and stale-auth guidance copy.
-- [x] Phase 3 auth flow complete: sign-in startup gate, username/password sign-in, stale-token recovery, and explicit sign-out path.
-- [x] Token storage hardening: auth token moved off plain settings storage to secure-at-rest path with migration and fallback handling.
-- [x] Endpoint/scheme guardrails: mode-aware URL validation (Local/LAN/Remote), blocking invalid base URLs and warning on common mismatches while keeping HTTP-over-Tailscale supported.
-- [x] TTS voice selection + preview: user-selectable on-device voice/accent with preview phrase and engine-default fallback handling.
-- [x] Title-before-body playback option: optional title intro before article text, duplicate-opening suppression, and autoplay sequencing support.
-- [x] End-of-article completion cue: optional audible completion signal that does not alter queue/progress semantics.
-- [x] Queue metadata/affordance polish: clearer row state indicators and developer-gated capture metadata visibility.
-- [x] Playback/open observability + developer toggle: diagnostic state surface for manual-open/autoplay handoff and start-position decisions.
-- [x] Player/reader handoff polish: reduced stale-content flashes and smoother queue-tap -> Locus transition.
-- [x] Autodownload consistency + durability: newly surfaced item targeting, explicit-refresh re-attempt behavior, workerization with backoff, and diagnostics surface.
-- [x] Up Next transition clarity follow-up: explicit failed-processing/no-active-content row states and clearer pending -> saved -> cached visibility after retry/autodownload.
-- [x] Mimeo Control Phase 2 Slice 1: app-scoped `PlaybackEngine` extraction shipped; live playback ownership (TTS lifecycle, chunk callbacks, continuation decisions, progress sync triggers) no longer depends on `PlayerScreen` lifecycle.
-- [x] Mimeo Control Phase 3 Slice 1 shipped: foreground playback service + media session + media notification foundation, including headset/media-button stabilization follow-up.
-- [x] Mimeo Control Phase 3 Slice 2 shipped: bounded audio-focus/interruption policy pass (pause on interruption, no ducking, transient-gain auto-resume where safe) plus headset disconnect pause alignment.
-- [x] Continuous play reliability fix shipped: service-owned continuation now remains reliable across screen-off, lock, and background scenarios.
-- [x] Background playback observability shipped: continuation/focus/media-button audit logs for screen-off/lock/background troubleshooting.
-- [x] Pending outcome simulator (dev-only) shipped: reproducible cached / unavailable-offline / processing-failed outcomes for UI verification.
-- [x] Pending/offline outcome polish shipped: clearer non-cached failure presentation, reduced stale-row confusion, and tighter pending/offline state copy.
-- [x] Offline/no-active-content copy + behavior cleanup shipped: unavailable-offline/no-active-content messaging and row-state behavior tightened for daily use.
-- [x] Plain-text share behavior shipped: dedicated text-share save path, mixed text+URL handling, and original-source footer flow.
-- [x] Structured source metadata emission shipped for Android capture flows (`source_type`, `source_label`, `source_url`, `capture_kind`, optional `source_app_package`) with backward-compatible behavior when server ignores fields.
-- [x] Provenance/origin/content separation shipped for Android share handling: content links are preserved as content, provenance is inferred only for trusted browser-marked selection patterns, and URL-only vs excerpt capture routing is deterministic.
-- [x] Source/title rendering shipped in Up Next + Locus + now-playing strip using metadata-first precedence (`provenance -> origin -> Android selection`) with excerpt title normalization.
-- [x] Up Next orientation pass shipped: active-item indicator for current/resumable session item, normal-flow list-position restore, stale-position guardrails, and Up Next tab tap cycle (active item <-> top).
-- [x] Locus next-article handoff polish shipped: auto-continue now prefers cached/local content for faster continuation and offline/unreachable fallback without waiting on network-first timeouts.
-- [x] Offline action queueing (slice 1) shipped for favourite/archive flows on Locus and list surfaces: local optimistic apply while offline with bounded deferred sync on reconnect (favorite/unfavorite + archive/unarchive).
-- [x] PR #170 shipped: offline queued favourite/archive sync, Locus action-target correctness while previewing, playback-owner notification title correctness, and saved-item extraction reconciliation hardening.
-- [x] Locus full-text/default-open behavior shipped per `docs/ANDROID_LOCUS_FULLTEXT_DEFAULT_OPEN_SPEC.md`: default manual-open uses Full-text, explicit mode choice is remembered, autoplay preserves mode, and preview-vs-playing ownership rules remain intact.
-- [x] Locus source/publication cue shipped: when title-intro is active and a meaningful source label is available, TTS now speaks a brief “From {source}.” cue between title and body; skipped for missing/unhelpful provenance and unchanged for resume/replay rules.
-- [x] Archive-while-playing continuity shipped: archiving the currently playing item now marks it archived immediately for UI/list state while preserving active playback; cleanup/removal from playback context is deferred to natural playback/session boundaries.
-- [x] Locus FF/RW text navigation shipped: tap rewind/forward now moves by sentence; long-press rewind/forward moves by paragraph, with predictable edge behavior.
-- [x] Playback scroll lock-in (spec+tests) shipped: explicit trigger policy extraction, focused unit coverage for detach/reattach/recenter invariants, and bounded instrumentation smoke scaffold + contract doc.
-- [x] Android performance quick-wins shipped (bounded): share/save refresh coalescing to reduce duplicate queue churn, memoized QueueScreen list transforms, PlayerScreen keyed queue/archive lookups, and debug-only queue-hash gating so release paths avoid unnecessary hash work.
-- [x] Share-save refresh burst dedupe follow-up shipped (bounded): keyed coalescing layered on top of debounce to collapse same-item refresh bursts, plus debug-only refresh counters (source/seen/skipped/executed) for validation without release-path impact.
-- [x] Reader rendering performance follow-up shipped (bounded): ReaderBody now caches base annotated full-text/link/search markup by stable keys and applies playback/focus highlight overlays on top, reducing repeated long-article annotated-string rebuild work while preserving current behavior.
-- [x] Cached-item invalidation narrowing shipped (bounded): replaced full cached-id table emission observer with scoped latest-write + count-change reconciliation so cache writes update only impacted visible items while still handling delete/eviction shrink paths safely.
-- [x] App-shell recomposition pressure follow-up shipped (bounded): removed root collection of high-churn playback engine state in `MimeoApp`, shifted playback-in-progress checks to local usage points, and preserved existing navigation/playback behavior without broad state architecture refactors.
-- [x] Playback-owner state correctness pass shipped: Locus title ownership now follows true playback owner (engine/session) with bounded preview override rules, and Up Next row markers now distinguish actively playing vs ready-to-resume owner states.
-- [x] In-article link preservation (Android v2 slice) shipped: reader/Locus now render preserved HTTP/HTTPS in-article links as clickable spans using backend `content_blocks.links` metadata with safe fallback behavior when metadata is absent/invalid, and taps open externally via Android `Intent.ACTION_VIEW`.
-- [x] Up Next infinite scroll shipped: `/playback/queue` offset pagination with scroll-trigger appending, pull-to-refresh reset, and stable scroll position across Locus navigation.
-- [x] Settings collapsible row descriptions shipped: toggle help text is collapsible with inline info icon, Material icons for copy/share/use actions, and connection test results persist in panel with share/copy affordances.
-- [x] Connection defaults v1 stage 2 shipped: Local/LAN/Remote mode defaults and guidance updated.
-- [x] Item actions v1 shipped: Share URL + Open in browser in Up Next and Locus overflows; long-press on Up Next rows opens bottom-sheet action menu; canonical overflow order per `docs/ANDROID_ITEM_ACTIONS_SPEC.md`.
-- [x] Reader text actions shipped: custom floating selection toolbar (Copy + Share selected text); Copy article text + Share article text in Locus overflow with conditional citation block (title/source/URL); `buildArticleShareText` unit tests.
-- [x] Reader scrollbar shipped: non-draggable visual scroll indicator on reader right edge via `drawWithContent`; thumb height and position track scroll fraction.
-- [x] Reader selection edge-scroll shipped: after releasing a selection handle near top/bottom edge (screen-fraction threshold), reader auto-scrolls ~870 px over 1 s; driven by `edgeScrollSpeed` polled at ~60 fps in PlayerScreen.
-- [x] Redesign v2 Phase 2B shipped (bounded data wiring): Inbox/Favorites/Archive/Bin drawer routes now load real library data from `GET /items?view=inbox|favorites|archived|trash` with shared route list rendering, while preserving Up Next/Locus/playback semantics.
-- [x] Phase 5C shipped: Play Next / Play Last from QueueScreen item overflow, PlaylistDetailScreen per-row overflow (new), and Locus player overflow; basic collapsible session-queue panel in QueueScreen shows current session order with current-item indicator. Cross-device sync deferred to Phase 6.
-- [x] Phase 6A shipped: Up Next local session queue finalization substrate — remove-from-session per row, clear-session button, duplicate-move semantics for Play Next/Play Last (existing item moved rather than duplicated), seed-source "From: [playlist]" label in session panel, snackbar feedback for queue mutations, and session-preserve guard when tapping a queue row that is already in the active session.
+Source of truth for redesign scope: `docs/REDESIGN_V2_PLAN.md`.
+Drift guard: `docs/REDESIGN_V2_DECISION_SNAPSHOT.md`.
+Most recent audit: `docs/REDESIGN_V2_AUDIT_2026-04-21.md`.
 
-## Redesign v2 execution track
-- Source of truth: `docs/REDESIGN_V2_PLAN.md` (product + architecture plan). Drift guard: `docs/REDESIGN_V2_DECISION_SNAPSHOT.md`.
-- Guardrail: playback semantics must not change during Phase 0 and Phase 2 unless an explicit ticket says so.
-- Phase 0: `MainActivity` and root state extraction into dedicated ViewModel/navigation-state units (no user-visible behavior change).
-- Phase 2 substrate: drawer shell, library routes (`Inbox/Favorites/Archive/Bin`), Up Next drawer destination, and playlist visibility path (playlist list + existing detail route).
-- Phase 3: persistent mini-player plus Locus restructure (Locus no longer a drawer destination; expansion from mini-player and item entry points).
-- Phase 4: multi-select and batch actions across list surfaces, including partial-failure and narrow undo behavior.
-- Phase 5: playlist management and reorder (rename/delete/reorder, Play Next/Play Last insertion, and related offline sync for reorder actions).
-- Phase 6: Up Next session queue panel + management (collapsible session-order view in QueueScreen, reorder/remove within session, eventual cross-device sync via backend API — see Phase 6 notes below).
-- Non-goals for this track: no playlist folders, no auto re-seed on pull-to-refresh.
-- Phase 6 sync note: the shipped Up Next implementation is device-local (Room). Cross-device sync is the planned long-term direction: when playback continues on a second device, Up Next should resume in the same order. This requires a dedicated backend API contract for session queue persistence and is a CONTRACT CHANGE that must be coordinated with the Mimeo backend repo before any Android sync work begins.
-- [x] Deferred UI ticket shipped: persistent top now-playing title bar removed; player controls now carry a compact scrolling (marquee) title showing currently-playing content; article-level title shown in the reader overlay top bar for the item open in reader view.
+## Open — priority order
 
-## Priority 0
-- [x] Android share-sheet saving before redesign: `ACTION_SEND` URL capture via invisible share receiver, `POST /items` with idempotency key, default-save playlist routing, Collections discovery guidance, and share-result notifications without foregrounding the app.
+### P0 — redesign closeout
 
-### Share-sheet saving (P0)
-- [x] Share target implemented via `ACTION_SEND` and `ShareReceiverActivity`.
-- [x] System notifications for success/error with Settings action for token issues.
-- [x] Optional persistent notification mode in Settings; default behavior auto-dismisses after about 4 seconds.
-- [x] Default save playlist routing.
-- [x] Collections discovery link and instructions dialog.
-- [x] Queue verification controls restored (search + filters).
-- [x] Queue search robustness fix (raw substring + normalized fallback).
-- [x] Queue debug instrumentation is hidden behind an explicit overflow toggle (debug builds).
-- [x] Share-save can auto-download newly saved items for offline readiness via Settings toggle.
-- [x] Active Up Next context refresh now carries focus metadata so newly shared items can appear immediately in the current playlist view.
-- [x] Share-save success-message semantics: destination-aware `Saved to Smart Queue ✅` / `Saved to <Playlist> ✅` without duplicate-specific success wording.
-- [x] Up Next top action bar supports manual URL save entry via lightweight `+` dialog, routed through existing save semantics.
-- [x] Up Next `+` flow now supports manual text submission v1 (`Save URL` / `Paste Text`) via existing `/items/manual-text` backend path.
-- [x] Share-sheet plain-text capture shipped: plain text is saved as readable content, URL-only shares remain URL capture, and mixed text+link shares use text capture behavior.
+1. [ ] **Up Next screen rearchitecture.** Remove the legacy library-filter
+   chips (`All / Favorites / Archive / Bin / Unread / In progress / Done`)
+   from `QueueScreen`. Those views now live in the drawer and duplicating
+   them on Up Next exercises the plan's Risk 2 (Inbox and Up Next
+   confusingly similar). Retain: manual-save `+` entry, seed-source header
+   with re-seed + confirmation, per-row overflow (Play Next / Play Last /
+   remove), session pointer semantics. Decide pending-projection placement
+   (on-Up-Next pending section vs Inbox pending) as part of this ticket.
+2. [ ] **Persistent mini-player + real Locus route (Phase 3 structural).**
+   Add a `MiniPlayer` composable pinned at the bottom of the library shell
+   (title + progress + play/pause + queue icon). Tap expands to Locus. Make
+   `ROUTE_LOCUS` render the real player instead of an empty placeholder
+   `Box`. Replace the current "compose `PlayerScreen` above `NavHost`
+   whenever `requestedPlayerItemId != null`" overlay hack. Internal playback
+   behavior must be preserved byte-for-byte (per plan Risk 3).
+3. [ ] **Up Next drag-to-reorder + TalkBack move-up/move-down + delete
+   orphaned `PlaylistsScreen.kt`.** Closes the Phase 6 reorder UX gap.
+   Handles per plan §8 (grip icon, always-visible in ordered lists) with
+   accessible non-drag alternatives per §14. Delete unused
+   `ui/playlists/PlaylistsScreen.kt` (no route references it).
 
-### User sign-in (Phase 3)
-- [x] Username/password sign-in flow — shipped per `docs/ANDROID_AUTH_PHASE3_SPEC.md` slice plan (gate, recovery, sign-out, settings coexistence).
+### P1 — small follow-ups implied by the plan / shipped state
 
-### Next tickets
-1. [~] Problem reports v2 attachment contract (CONTRACT CHANGE): Android opt-in UI/payload path is now implemented (default-OFF in-dialog attachment checkboxes for title/text + compact privacy hint + bounded attachment payload fields); backend persistence/export contract work remains pending per `docs/PROBLEM_REPORT_ATTACHMENT_V2_CONTRACT_SPEC.md`.
-   - Current backend limitation until contract lands: v1 persisted/exported report shape remains the authoritative operator record.
-2. [x] Cross-repo source metadata unification: Android client contract locked in `docs/ANDROID_SOURCE_METADATA_UNIFICATION_SPEC.md`; backend/web/extension alignment is a follow-on coordination ticket (requires CONTRACT CHANGE for `ArticleSummary` endpoint).
-2a. [x] Android source metadata unification v2: `ArticleSummary` model extended with source metadata fields (null-defaulted, backward-compatible); `toPlaybackQueueItem()` forwards fields; `LibraryItemRow` now uses `capturePresentation()` for correct excerpt/article/legacy rendering in library views. No backend change required — fields resolve to null until backend CONTRACT CHANGE lands.
-3. [x] Source metadata backfill/legacy normalization: legacy case categories, safe fallback rules, and backfill trigger criteria defined in `docs/ANDROID_LEGACY_SOURCE_METADATA_SPEC.md`. No Android code changes.
-4. [x] Offline action queueing follow-up shipped: deferred-sync coverage now extends beyond favourite/archive to bin lifecycle actions (move to bin, restore, purge) with local-first optimistic state and bounded reconnect flush behavior.
-5. [x] Audio-focus/ownership long-session watch: three bounded drift fixes shipped — stacked transient/duck interruption resume preservation, AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK abandon-focus guard bypass, and anchor restart on user-resume-before-GAIN; new `playing-without-anchor` drift clue and 4 new policy tests.
-6. [x] Keep-screen-on/session UX follow-up: shipped — screen stays on during active playback or manual reader mode sessions (PR #167).
+4. [ ] **Phase 0 follow-on decomposition of `MainActivity.kt`.** The shell
+   has grown back to ~1300 lines since Phase 0 nominally landed. Extract
+   drawer content, navigation wiring, and the player-overlay controller
+   into dedicated composables/state holders. Pure refactor; zero behavior
+   change. Sequence before or alongside ticket 2.
+5. [ ] **Problem reports v2 attachment contract (CONTRACT CHANGE, backend).**
+   Android opt-in UI/payload path is implemented (default-OFF attachment
+   checkboxes + privacy hint + bounded payload). Remaining work is backend
+   persistence/export per `docs/PROBLEM_REPORT_ATTACHMENT_V2_CONTRACT_SPEC.md`.
+   Tracked in the Mimeo (backend) repo; this line is a pointer only.
 
-## Reader/Player UX fidelity + state persistence backlog
+### P2 — exploratory / deferred
 
-### Near-term implementation candidates (ranked)
-1. [x] Search within Locus: in-article text search with next/previous result navigation, visible match count, and preservation of active playback highlight behavior (PR #162).
-2. [x] Scroll-level persistence across tabs (Locus rules): per-item reader scroll offsets now persist/restore; Locus-tab return from preview now reattaches to now-playing item using a Settings toggle for either last reader position (default) or live playback pointer.
-3. [x] Reader/Locus paragraph formatting fidelity: paragraph spacing and clickable links shipped.
-4. [x] Reader/Locus clickable links: render links as tappable in-body spans with safe external-open behavior, while preserving current selection and playback UX.
-5. [x] Locus bottom-gap transition issue: Scaffold content insets removed to eliminate bottom vacated gap.
-6. [x] Progress/player scroll jerk during drag: player slider drag stabilized against live progress updates to prevent jump/jitter in reader scroll position.
-7. [x] Collapsible pending-item section in Up Next: pending saves moved to a dedicated filter chip (rather than a collapsible section), achieving the same queue-noise reduction goal.
+6. [ ] **Time-based FF/RW follow-up (optional).** Evaluate whether a
+   separate time-skip control model is still useful now that sentence /
+   paragraph FF/RW is shipped.
+7. [ ] **Hosting story v2 UX.** HTTPS-first guidance, per-device token
+   setup polish, safer LAN-mode flow.
+8. [ ] **Persist last segment index per item in DataStore** for
+   cross-process resume.
+9. [ ] **Audio focus / media session polish** beyond the bounded drift
+   fixes already shipped.
+10. [ ] **Conflict handling for stale cached versions** during long
+    offline sessions.
+11. [ ] **Cleartext → HTTPS-friendly transport** for hosted/mobile use.
+12. [ ] **Scrollbars** for Up Next (draggable, long-queue ergonomics) and
+    Settings (non-draggable `drawWithContent` indicator).
+13. [ ] **Compose BOM migration to 1.10.x.** Bump from `2024.06.00`, fix
+    any Material3/API deprecations. Standalone session. Unblocks
+    `onSelectAllRequested` in the reader selection toolbar.
 
-### Spec/design-first items (clarify behavior before coding)
-1. [x] Auto-archive toggle at end of article: shipped — configurable toggle archives item on playback completion (PR #164).
-2. [x] Undo last article archive/delete: shipped — undo snackbar for last archive/bin action with backend unarchive call (PR #165).
-3. [x] Start-in-full-screen / Locus collapse removal shipped: `isExpanded` mechanism and "Collapse player" overflow option removed entirely; `LocusPeekCard` and dead `startExpanded` parameter deleted. Locus is always expanded. See `docs/ANDROID_LOCUS_START_FULLSCREEN_SPEC.md`.
-4. [x] Full-text/default-open behavior spec finalized: see `docs/ANDROID_LOCUS_FULLTEXT_DEFAULT_OPEN_SPEC.md` (decision-only; implementation remains a follow-up ticket).
+### Testing debt
 
-### Later / exploratory
-1. [ ] Time-based FF/RW follow-up (optional): evaluate whether a separate time-skip control model is still useful now that text-native sentence/paragraph FF/RW is shipped.
+- [ ] `NoActiveContentStore` Worker→ViewModel integration test: verify IDs
+  written by the worker during a download run are read back and merged
+  into the ViewModel's `noActiveContentItemIds` on the next queue load.
+  Needs ViewModel testing infrastructure (e.g. `TestCoroutineDispatcher`
+  + fake repo) not yet established.
 
-## Android Redesign v1.1
-1. [~] Foundation: 4-tab nav shell (Up Next / Locus / Collections / Settings) plus black/purple theme foundations.
-2. [x] Mini control panel (collapsed Locus peek) for active playback/session continuity. [Later removed: collapsed peek and `isExpanded` mechanism eliminated — Locus is always expanded.]
-3. [x] Up Next skeleton: playlist dropdown, search affordance, filter chips, and grouped queue sections.
-4. [x] Typography preferences pass: reading fonts, line height, and display density controls.
-5. [x] Playback speed control in Locus with persisted preference.
-6. [x] Playback speed location decision: keep speed in expanded Locus header, not the pinned PlayerBar.
-7. [cancelled] Move playback speed into pinned PlayerBar. Superseded by docs/decision-playback-speed-location.md; keep speed local to the expanded Locus header and avoid expanding shared PlayerBar scope.
-8. [x] Collections baseline: special collections + named playlist browser under the redesign shell.
-9. [x] Phase 6.2: local playlist folders (create/rename/delete + assign playlists within Collections).
-10. [x] Phase 6.3: folder detail view with playlist counts and remove-from-folder shipped.
-11. [removed] Playlist folders cut: folder entities, DAO, repository, CollectionsScreen, FolderDetailScreen, and all ViewModel folder methods removed. Decision: cut per REDESIGN_V2_PLAN.md §4 decision #10 ("Not in v1, not in v2 plan"). DB bumped to v6 with MIGRATION_5_6 dropping the orphaned tables.
-12. [x] Locus expand/collapse on `main`: explicit buttons only, collapsed tab entry, expanded resume/direct entry, title ellipsis fix, and TESTING.md invariants checklist.
-13. [x] Player completion icon follow-up: completion iconography shipped (PR #58).
-14. [ ] Shared pinned PlayerBar on `main` remains a separate architecture ticket, not part of playback-speed follow-up.
-15. [x] Player screen banding foundation: TopAppBar + reader body + pinned controls above bottom nav shipped (PR #56).
-16. [x] Reader highlight progression: sentence-level highlighting with range-level (TTS `onRangeStart`) support and sentence fallback.
-17. [x] Player chrome compression slice: persistent title strip + 3-state controls with chevron mode transitions and persisted settings.
-18. [x] Header action polish: refresh visual states unified and speed control updated to compact panel styling with preserved speed semantics.
+## Redesign v2 execution track (reference)
 
-## Testing debt
-- [ ] NoActiveContentStore Worker→ViewModel integration test: verify that IDs written by the worker during a download run are correctly read back and merged into the ViewModel's `noActiveContentItemIds` on the next queue load. Needs ViewModel testing infrastructure (e.g. `TestCoroutineDispatcher` + fake repository) not yet established in this project.
+Settled rules and phase map live in `docs/REDESIGN_V2_PLAN.md`. Quick
+pointers:
 
-## Later
-- [ ] Hosting story v2 UX: HTTPS-first guidance, per-device token setup polish, safer LAN-mode flow.
-- [ ] Persist last segment index per item in DataStore for cross-process resume.
-- [x] Add queue filters/sorting controls from playback API query params.
-- [ ] Audio focus/media session polish.
-- [ ] Better conflict handling for stale cached versions during long offline sessions.
-- [ ] Replace dev cleartext dependence with HTTPS-friendly transport story for hosted/mobile use.
-- [ ] Scrollbars for Up Next and Settings: non-draggable `drawWithContent` indicator for Settings; draggable scrollbar for Up Next LazyColumn (touch overlay maps drag Y → `lazyListState.scrollToItem`; useful for long queues).
-- [ ] Compose BOM migration to 1.10.x: bump `compose-bom` from `2024.06.00`, fix any Material3/API deprecations; no architectural changes expected; do as a standalone session. (Also unblocks `onSelectAllRequested` in reader selection toolbar.)
+- **Phase 0**: `MainActivity` / root state extraction. Nominally landed;
+  ticket 4 above is the follow-on.
+- **Phase 1 (backend contracts)**: shipped (library `view=` query, batch
+  endpoints).
+- **Phase 2 (drawer + library views + playlist visibility)**: shipped.
+- **Phase 3 (mini-player + Locus restructure)**: open; ticket 2 above.
+- **Phase 4 (multi-select + batch actions)**: shipped.
+- **Phase 5 (playlist management + reorder)**: shipped.
+- **Phase 6 (Up Next finalization)**: substrate shipped (6A). Remaining
+  reorder / a11y work is ticket 3 above. Cross-device sync deferred to
+  v2+ (requires backend CONTRACT CHANGE).
 
+Non-goals still in force:
+- No playlist folders (cut in v0.2 of the plan).
+- No auto re-seed on pull-to-refresh (plan §3.2, Risk 10).
+- No cross-device Up Next sync in v1 (snapshot rule 14).
 
+---
+
+## Shipped log
+
+History of shipped work, kept for reference. Newest at the top of each
+block. Not a forward-looking list.
+
+### Redesign v2 + recent polish (2026 Q1 – Q2)
+
+- Phase 6A: device-local session queue substrate — remove-from-session
+  per row, clear-session button, duplicate-move semantics for Play
+  Next / Play Last, `From: [playlist]` seed-source label, snackbar
+  feedback, session-preserve guard, session persists across navigation
+  / restart / library-view browsing.
+- Phase 5C: Play Next / Play Last from `QueueScreen` overflow,
+  `PlaylistDetailScreen` per-row overflow, Locus player overflow;
+  collapsible session-queue panel in `QueueScreen` with current-item
+  indicator.
+- Phase 4: multi-select and batch actions across list surfaces with
+  partial-failure and narrow undo.
+- Phase 2B: Inbox / Favorites / Archive / Bin drawer routes load real
+  library data from `GET /items?view=...` with shared list rendering.
+- Deferred player-chrome ticket: persistent top now-playing title bar
+  removed; compact scrolling (marquee) title on player controls;
+  article-level title in reader overlay top bar.
+- Locus: full-text default-open behavior
+  (`docs/ANDROID_LOCUS_FULLTEXT_DEFAULT_OPEN_SPEC.md`), source /
+  publication TTS cue, archive-while-playing continuity, FF/RW
+  sentence / paragraph text navigation.
+- Playback scroll lock-in (spec + tests), app-shell recomposition
+  reductions, cached-item invalidation narrowing, share-save refresh
+  coalescing, reader rendering memoization.
+- Playback-owner state correctness pass (Locus title ownership,
+  Up Next row markers).
+- In-article link preservation (Android v2 slice) — render
+  `content_blocks.links` as tappable spans with safe fallback.
+- Up Next infinite scroll via `/playback/queue` offset pagination with
+  scroll-trigger appending, pull-to-refresh reset, stable scroll
+  position across Locus navigation.
+- Settings collapsible row descriptions; Connection defaults v1 stage
+  2 (Local / LAN / Remote mode defaults).
+- Item actions v1 (`docs/ANDROID_ITEM_ACTIONS_SPEC.md`): Share URL +
+  Open in browser in Up Next and Locus overflows; long-press bottom
+  sheet; canonical overflow order.
+- Reader text actions: custom floating selection toolbar, Copy /
+  Share article text in Locus overflow with citation block;
+  `buildArticleShareText` unit tests.
+- Reader scrollbar (non-draggable `drawWithContent`).
+- Reader selection edge-scroll after releasing a handle near screen
+  edges.
+- Search within Locus, per-item reader scroll offsets + Locus-tab
+  return preference, paragraph formatting fidelity, clickable
+  in-body links, Scaffold bottom-gap fix, player slider drag
+  stabilized, pending-items filter chip (in place of the previously
+  proposed collapsible section).
+- Auto-archive at article end (PR #164), undo last archive / bin
+  (PR #165), start-in-full-screen / Locus collapse removal
+  (`docs/ANDROID_LOCUS_START_FULLSCREEN_SPEC.md`).
+
+### Pre-redesign playback / share-sheet / auth / offline work
+
+- Share-sheet saving (P0): `ACTION_SEND` URL capture via
+  `ShareReceiverActivity`, `POST /items` with idempotency key,
+  default-save playlist routing, Collections discovery guidance,
+  success/error notifications, persistent-notification toggle,
+  share-save auto-download, destination-aware success messages,
+  manual URL / paste-text `+` dialog, plain-text capture.
+- Auth Phase 3: sign-in startup gate, username/password flow,
+  stale-token recovery, explicit sign-out, token storage hardening
+  (secure-at-rest with migration), endpoint/scheme guardrails.
+- TTS voice selection + preview, title-before-body option,
+  end-of-article completion cue, queue metadata polish, observability
+  + developer toggles, player/reader handoff polish, autodownload
+  consistency + durability, Up Next transition clarity follow-up.
+- Mimeo Control Phase 2 Slice 1 (`PlaybackEngine` extraction),
+  Phase 3 Slice 1 (foreground service + media session + notification),
+  Phase 3 Slice 2 (audio-focus / interruption policy). Continuous
+  play reliability fix + background playback observability.
+- Pending outcome simulator (dev-only), offline / no-active-content
+  copy + behavior cleanup, plain-text share behavior.
+- Structured source metadata emission, provenance / origin / content
+  separation, source/title rendering, Up Next orientation pass
+  (active-item indicator, scroll restore, stale guardrails, tab-tap
+  cycle), Locus next-article handoff, offline action queueing
+  (favourite / archive / bin lifecycle), cross-repo source metadata
+  unification (`docs/ANDROID_SOURCE_METADATA_UNIFICATION_SPEC.md`),
+  legacy source metadata normalization
+  (`docs/ANDROID_LEGACY_SOURCE_METADATA_SPEC.md`),
+  audio-focus/ownership long-session watch fixes, keep-screen-on
+  during playback / manual reader (PR #167).
+- Reader / player fidelity: sentence-level highlight with range
+  support, player chrome compression (Full / Minimal / Nub), header
+  action polish, shared chrome polish, auth/session clarity, Locus
+  speed control polish, refresh affordance polish, reader
+  chrome/fullscreen interaction, Up Next controls cleanup (single
+  Refresh action), player chrome reliability follow-up, UX
+  compression pass and follow-ups.
+
+### v1.1 → redesign bridge (historical)
+
+- 4-tab nav shell + black/purple theme foundations.
+- Mini control panel (collapsed Locus peek) — later removed; Locus
+  is always expanded.
+- Up Next skeleton (playlist dropdown, search, filter chips, grouped
+  sections). The filter chips from this skeleton are what ticket 1
+  now removes.
+- Typography preferences, playback speed in Locus (decision:
+  `docs/decision-playback-speed-location.md`). Superseded ticket to
+  move speed into the pinned `PlayerBar` was cancelled.
+- Collections baseline + playlist browser — later superseded by the
+  drawer playlists section.
+- Playlist folders (Phase 6.2 / 6.3) — shipped then **cut** in
+  Redesign v2 (`REDESIGN_V2_PLAN.md` §4 decision #10). Entities,
+  DAO, repository, Collections/FolderDetail screens, and folder
+  ViewModel methods removed. DB bumped to v6 with `MIGRATION_5_6`
+  dropping orphaned tables.
+- Locus expand/collapse explicit buttons + TESTING.md invariants,
+  player completion iconography (PR #58), player screen banding
+  foundation (PR #56).
+
+### MVP → v0.3 (historical)
+
+- App scaffold (Compose + DataStore + OkHttp), Settings screen,
+  queue / player / progress sync, segment-based playback, offline
+  caching + retry queue, WorkManager auto-flush, now-playing session
+  snapshot (v0.3), in-app connectivity diagnostics, progress model
+  v1, MVP playback end-to-end polish, chunking improvements,
+  start-listening-here + highlight + auto-scroll, Now Playing UX
+  refinements, named playlists v1, playlist item membership UX.
