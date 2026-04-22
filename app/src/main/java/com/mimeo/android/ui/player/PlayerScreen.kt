@@ -762,7 +762,6 @@ fun PlayerScreen(
     onOpenLocusForItem: (Int) -> Unit,
     onRequestBack: () -> Unit = {},
     onOpenDiagnostics: () -> Unit,
-    stopPlaybackOnDispose: Boolean = false,
     compactControlsOnly: Boolean = false,
     showCompactControls: Boolean = true,
     controlsMode: PlayerControlsMode = PlayerControlsMode.FULL,
