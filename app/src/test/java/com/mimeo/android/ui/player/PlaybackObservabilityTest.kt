@@ -1,5 +1,6 @@
 package com.mimeo.android.ui.player
 
+import com.mimeo.android.model.PlaybackPosition
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -27,6 +28,30 @@ class PlaybackObservabilityTest {
         )
 
         assertEquals("autocontinue:start_of_item", source)
+    }
+
+    @Test
+    fun replayStartSourceUsesSavedPointerWhenBelowDoneThreshold() {
+        val source = resolveOpenStartSource(
+            openIntent = PlaybackOpenIntent.Replay,
+            knownProgress = 40,
+            hasChunks = true,
+            savedPlaybackPosition = PlaybackPosition(chunkIndex = 3, offsetInChunkChars = 19),
+        )
+
+        assertEquals("replay:playback_pointer", source)
+    }
+
+    @Test
+    fun replayStartSourceUsesBeginningWhenDoneThresholdReached() {
+        val source = resolveOpenStartSource(
+            openIntent = PlaybackOpenIntent.Replay,
+            knownProgress = 100,
+            hasChunks = true,
+            savedPlaybackPosition = PlaybackPosition(chunkIndex = 3, offsetInChunkChars = 19),
+        )
+
+        assertEquals("replay:start_of_item", source)
     }
 
     @Test

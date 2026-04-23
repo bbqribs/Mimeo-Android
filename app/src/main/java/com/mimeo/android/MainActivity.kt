@@ -513,7 +513,6 @@ private fun MimeoApp(vm: AppViewModel) {
     val shellState = rememberPlayerShellState(
         vm = vm,
         nav = nav,
-        settings = settings,
         currentRoute = currentRoute,
         routeItemId = routeItemId,
     )
