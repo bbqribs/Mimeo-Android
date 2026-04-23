@@ -1222,6 +1222,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun signOut() {
         viewModelScope.launch {
             authFailureHandledThisSession = false
+            _signInState.value = SignInState.Idle
             playerSurfaceContentState.reset()
             settingsStore.saveTokenOnly("")
             requestNavigation(ROUTE_SIGN_IN)

@@ -202,6 +202,12 @@ internal fun MainActivityShell(
         DrawerPanelSide.LEFT -> LayoutDirection.Ltr
     }
 
+    LaunchedEffect(drawerAvailable) {
+        if (!drawerAvailable && drawerState.isOpen) {
+            drawerState.close()
+        }
+    }
+
     androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides drawerLayoutDirection) {
         BackHandler(enabled = drawerState.isOpen) {
             coroutineScope.launch { drawerState.close() }
