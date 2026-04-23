@@ -563,6 +563,8 @@ internal fun MainActivityShell(
                                     shellBottomClearance = shellBottomClearance,
                                     onGoQueue = { nav.navigate(ROUTE_UP_NEXT) },
                                     onChevronTap = playerHandlers.onChevronTap,
+                                    drawerIsOpen = drawerState.isOpen,
+                                    onCloseDrawer = { coroutineScope.launch { drawerState.close() } },
                                 )
                             }
                             composable(
@@ -600,6 +602,8 @@ internal fun MainActivityShell(
                                     shellBottomClearance = shellBottomClearance,
                                     onGoQueue = { nav.navigate(ROUTE_UP_NEXT) },
                                     onChevronTap = playerHandlers.onChevronTap,
+                                    drawerIsOpen = drawerState.isOpen,
+                                    onCloseDrawer = { coroutineScope.launch { drawerState.close() } },
                                 )
                             }
                         }
@@ -670,6 +674,8 @@ private fun LocusPlayerRoute(
     shellBottomClearance: Dp,
     onGoQueue: () -> Unit,
     onChevronTap: () -> Unit,
+    drawerIsOpen: Boolean,
+    onCloseDrawer: () -> Unit,
 ) {
     if (requestedPlayerItemId == null) {
         NoNowPlayingScreen(onGoQueue = onGoQueue)
@@ -687,6 +693,8 @@ private fun LocusPlayerRoute(
         onRequestBack = playerHandlers.onRequestBack,
         onOpenDiagnostics = playerHandlers.onOpenDiagnostics,
         onChevronTap = onChevronTap,
+        drawerIsOpen = drawerIsOpen,
+        onCloseDrawer = onCloseDrawer,
         compactControlsOnly = false,
         showCompactControls = showCompactControls,
         controlsMode = settings.playerControlsMode,

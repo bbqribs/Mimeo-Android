@@ -15,9 +15,11 @@ import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.width
 import com.mimeo.android.model.PlaylistSummary
 
 @Composable
@@ -32,7 +34,10 @@ internal fun MimeoDrawerContent(
     onNewPlaylistClick: () -> Unit,
     onSettingsClick: () -> Unit,
 ) {
-    ModalDrawerSheet {
+    val drawerWidth = LocalConfiguration.current.screenWidthDp.dp * (2f / 3f)
+    ModalDrawerSheet(
+        modifier = Modifier.width(drawerWidth),
+    ) {
         Column(modifier = Modifier.fillMaxHeight()) {
             Column(
                 modifier = Modifier
