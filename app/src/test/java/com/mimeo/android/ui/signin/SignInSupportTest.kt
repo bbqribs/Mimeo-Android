@@ -26,19 +26,19 @@ class SignInSupportTest {
             resolveSignInErrorMessage(ApiException(429, """HTTP 429: {"detail":"Too many login attempts. Please wait 5 minutes before trying again."}""")),
         )
         assertEquals(
-            "Could not reach server. Check the URL and your network connection.",
+            "Could not reach server. Check URL scheme (http/https), certificate trust, and network.",
             resolveSignInErrorMessage(IOException("timeout")),
         )
     }
 
     @Test
-    fun `defaults blank and local sign in url to remote http preset`() {
+    fun `defaults blank and local sign in url to remote https preset`() {
         assertEquals(
-            "http://100.84.13.10:8000",
+            "https://100.84.13.10:8000",
             defaultSignInServerUrl(""),
         )
         assertEquals(
-            "http://100.84.13.10:8000",
+            "https://100.84.13.10:8000",
             defaultSignInServerUrl("http://10.0.2.2:8000"),
         )
     }
@@ -56,6 +56,18 @@ class SignInSupportTest {
         assertEquals(
             "http://example.com:8000",
             buildPresetServerUrl(SignInServerPreset.MANUAL, SignInUrlScheme.HTTP, "example.com:8000"),
+        )
+    }
+
+    @Test
+    fun `maps cleartext and tls sign in failures to scheme guidance`() {
+        assertEquals(
+            "Probable URL scheme/security mismatch. Remote/hosted sign-in is HTTPS-first; Local/LAN may use HTTP.",
+            resolveSignInErrorMessage(IOException("CLEARTEXT communication to host not permitted by network security policy")),
+        )
+        assertEquals(
+            "Probable URL scheme/security mismatch. Remote/hosted sign-in is HTTPS-first; Local/LAN may use HTTP.",
+            resolveSignInErrorMessage(IOException("SSLHandshakeException: handshake failed")),
         )
     }
 

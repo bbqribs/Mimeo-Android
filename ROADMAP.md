@@ -52,7 +52,7 @@ Most recent audit: `docs/REDESIGN_V2_AUDIT_2026-04-21.md`.
    fixes already shipped.
 10. [x] **Conflict handling for stale cached versions** during long
     offline sessions.
-11. [ ] **Cleartext → HTTPS-friendly transport** for hosted/mobile use.
+11. [x] **Cleartext → HTTPS-friendly transport** for hosted/mobile use.
 12. [ ] **Scrollbars** for Up Next (draggable, long-queue ergonomics) and
     Settings (non-draggable `drawWithContent` indicator).
 13. [ ] **Compose BOM migration to 1.10.x.** Bump from `2024.06.00`, fix

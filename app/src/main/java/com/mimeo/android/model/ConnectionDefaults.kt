@@ -9,7 +9,7 @@ internal const val DEFAULT_REMOTE_HOST = "100.84.13.10:8000"
 
 internal const val DEFAULT_LOCAL_BASE_URL = "http://$DEFAULT_LOCAL_HOST"
 internal const val DEFAULT_LAN_BASE_URL = "http://$DEFAULT_LAN_HOST"
-internal const val DEFAULT_REMOTE_BASE_URL = "http://$DEFAULT_REMOTE_HOST"
+internal const val DEFAULT_REMOTE_BASE_URL = "https://$DEFAULT_REMOTE_HOST"
 
 internal fun inferConnectionModeForHost(baseUrl: String): ConnectionMode {
     val host = parseConnectionHost(baseUrl)
