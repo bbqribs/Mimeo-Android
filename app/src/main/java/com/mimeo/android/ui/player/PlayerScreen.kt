@@ -289,7 +289,13 @@ internal fun resolveOpenStartSource(
 ): String {
     return when (openIntent) {
         PlaybackOpenIntent.AutoContinue -> "autocontinue:start_of_item"
-        PlaybackOpenIntent.Replay -> "replay:start_of_item"
+        PlaybackOpenIntent.Replay -> {
+            if (hasChunks && knownProgress < DONE_PERCENT_THRESHOLD && hasSavedPlaybackPointer(savedPlaybackPosition)) {
+                "replay:playback_pointer"
+            } else {
+                "replay:start_of_item"
+            }
+        }
         PlaybackOpenIntent.ManualOpen -> {
             if (hasChunks && hasSavedPlaybackPointer(savedPlaybackPosition)) {
                 "manual:playback_pointer"
@@ -341,8 +347,14 @@ internal fun resolveSeededPlaybackPosition(
         offsetInChunkChars = savedPlaybackPosition.offsetInChunkChars.coerceAtLeast(0),
     )
     return when (openIntent) {
-        PlaybackOpenIntent.AutoContinue,
-        PlaybackOpenIntent.Replay -> PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
+        PlaybackOpenIntent.AutoContinue -> PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
+        PlaybackOpenIntent.Replay -> {
+            if (hasChunks && knownProgress < DONE_PERCENT_THRESHOLD && hasSavedPlaybackPointer(normalizedSaved)) {
+                normalizedSaved
+            } else {
+                PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
+            }
+        }
         PlaybackOpenIntent.ManualOpen -> {
             if (hasChunks && hasSavedPlaybackPointer(normalizedSaved)) {
                 normalizedSaved

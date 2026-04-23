@@ -78,6 +78,19 @@ class PlaybackOpenIntentTest {
     }
 
     @Test
+    fun replayUsesSavedPlaybackPointerWhenProgressIsNotAtEnd() {
+        val seeded = resolveSeededPlaybackPosition(
+            knownProgress = 29,
+            hasChunks = true,
+            openIntent = PlaybackOpenIntent.Replay,
+            savedPlaybackPosition = PlaybackPosition(chunkIndex = 3, offsetInChunkChars = 25),
+            positionForPercent = { PlaybackPosition(chunkIndex = 1, offsetInChunkChars = 10) },
+        )
+
+        assertEquals(PlaybackPosition(chunkIndex = 3, offsetInChunkChars = 25), seeded)
+    }
+
+    @Test
     fun manualOpenPrefersSavedPlaybackPointerOverQueuePercent() {
         val seeded = resolveSeededPlaybackPosition(
             knownProgress = 25,
