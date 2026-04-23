@@ -42,6 +42,7 @@ internal fun validateConnectionEndpoint(
     val isLanIp = isLanIpv4(lowerHost)
     val isLikelyTailnetIp = isTailnetIpv4(lowerHost)
     val isLikelyTailnetHost = lowerHost.endsWith(".ts.net")
+    val isPublicOrCustomHost = !isLoopback && !isEmulatorHost && !isLanIp && !isLikelyTailnetIp && !isLikelyTailnetHost
 
     when (mode) {
         ConnectionMode.LOCAL -> {
@@ -62,8 +63,14 @@ internal fun validateConnectionEndpoint(
             if (isLikelyTailnetIp || isLikelyTailnetHost) {
                 warnings += "This host looks like a Remote/Tailscale target. Use Remote mode unless phone + laptop are on the same LAN."
             }
+            if (isPublicOrCustomHost) {
+                warnings += "This host does not look like a private LAN address. If this is hosted/off-LAN, use Remote mode."
+            }
             if (!isLanIp) {
                 warnings += "LAN mode is intended for same-network server addresses."
+            }
+            if (scheme == "http") {
+                warnings += "LAN HTTP is fine on a trusted home/work network. Prefer HTTPS when your LAN endpoint supports TLS."
             }
         }
 
@@ -76,8 +83,12 @@ internal fun validateConnectionEndpoint(
             if (isLanIp) {
                 warnings += "Remote mode is using a LAN IP. If phone and server are on same network, use LAN mode."
             }
-            if (scheme == "http" && !isLikelyTailnetIp && !isLikelyTailnetHost && !isLanIp) {
-                warnings += "HTTP remote URLs are supported over trusted VPN/Tailscale. Use HTTPS for internet-exposed hosts."
+            if (scheme == "http") {
+                warnings += if (isLikelyTailnetIp || isLikelyTailnetHost) {
+                    "HTTP over Tailscale/VPN can work, but HTTPS is preferred when available."
+                } else {
+                    "Remote setup should be HTTPS-first. Use HTTP only for trusted encrypted tunnels."
+                }
             }
         }
     }

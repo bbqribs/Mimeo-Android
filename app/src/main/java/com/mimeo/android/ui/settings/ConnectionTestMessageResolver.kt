@@ -5,7 +5,19 @@ import java.net.URI
 import java.util.Locale
 
 internal object ConnectionTestMessageResolver {
-    fun tokenRequired(): String = "Token required"
+    fun tokenRequired(
+        mode: ConnectionMode,
+        baseUrl: String,
+    ): String {
+        return when (mode) {
+            ConnectionMode.REMOTE ->
+                "Device token required. Sign in to create one for this device, or paste a valid token for ${tokenTargetHint(mode, baseUrl)}."
+            ConnectionMode.LAN ->
+                "Device token required. Sign in first, or paste a valid token for ${tokenTargetHint(mode, baseUrl)}."
+            ConnectionMode.LOCAL ->
+                "Device token required. Sign in first, or paste a valid token for this local/dev server."
+        }
+    }
 
     fun connected(
         mode: ConnectionMode,
@@ -59,9 +71,9 @@ internal object ConnectionTestMessageResolver {
 
     private fun authFailureMessage(mode: ConnectionMode): String {
         return if (mode == ConnectionMode.REMOTE) {
-            "Token rejected. It may be expired or invalid. Create a new device token and update Settings."
+            "Token rejected. It may be expired or from a different server target. Create a new device token and update Settings."
         } else {
-            "Token rejected. Check API token."
+            "Token rejected. Check this device token matches the selected server."
         }
     }
 
@@ -73,7 +85,7 @@ internal object ConnectionTestMessageResolver {
         val lower = message.orEmpty().lowercase(Locale.US)
         return when {
             lower.contains("cleartxt") || lower.contains("cleartext") ->
-                "Wrong URL scheme. Use http/https that matches server setup."
+                "Wrong URL scheme. Local/LAN may use HTTP; Remote should be HTTPS-first unless tunneled."
             lower.contains("ssl") || lower.contains("certificate") || lower.contains("handshake") ->
                 "TLS/HTTPS failed. Verify remote certificate or URL scheme."
             lower.contains("unable to resolve host") || lower.contains("no address associated") ->
@@ -117,7 +129,7 @@ internal object ConnectionTestMessageResolver {
         return when {
             lower.contains("cleartxt") || lower.contains("cleartext") ||
                 lower.contains("ssl") || lower.contains("certificate") || lower.contains("handshake") ->
-                "Probable scheme mismatch (http/https). Verify URL scheme and certificate setup."
+                "Probable scheme mismatch (http/https). Remote is HTTPS-first; verify URL scheme and certificate setup."
             lower.contains("unauthorized") || lower.contains("forbidden") ->
                 authFailureMessage(mode)
             lower.contains("unable to resolve host") || lower.contains("no address associated") -> {
@@ -166,9 +178,18 @@ internal object ConnectionTestMessageResolver {
                 if (isLanHost) {
                     "Remote mode usually needs Tailscale/VPN URL, not LAN IP."
                 } else {
-                    "Check Tailscale/VPN is connected on phone and server."
+                    "Check Tailscale/VPN is connected on phone and server, or use HTTPS for hosted endpoints."
                 }
             }
+        }
+    }
+
+    private fun tokenTargetHint(mode: ConnectionMode, baseUrl: String): String {
+        val host = parseHost(baseUrl).ifBlank { "this server" }
+        return when (mode) {
+            ConnectionMode.LOCAL -> "this local/dev server"
+            ConnectionMode.LAN -> "LAN host $host"
+            ConnectionMode.REMOTE -> "remote host $host"
         }
     }
 

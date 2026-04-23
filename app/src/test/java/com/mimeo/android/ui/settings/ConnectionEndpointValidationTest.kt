@@ -62,14 +62,14 @@ class ConnectionEndpointValidationTest {
     fun `remote http warns for non-tailnet non-lan hosts`() {
         val publicHttp = validateConnectionEndpoint(ConnectionMode.REMOTE, "http://example.com:8000")
         assertNull(publicHttp.blockingError)
-        assertTrue(publicHttp.warnings.any { it.contains("Use HTTPS", ignoreCase = true) })
+        assertTrue(publicHttp.warnings.any { it.contains("HTTPS", ignoreCase = true) })
     }
 
     @Test
-    fun `remote tailnet http remains allowed without https warning`() {
+    fun `remote tailnet http remains allowed with preference warning`() {
         val tailnet = validateConnectionEndpoint(ConnectionMode.REMOTE, "http://100.93.62.125:8000")
         assertNull(tailnet.blockingError)
-        assertTrue(tailnet.warnings.none { it.contains("Use HTTPS", ignoreCase = true) })
+        assertTrue(tailnet.warnings.any { it.contains("HTTPS", ignoreCase = true) })
     }
 
     @Test
@@ -80,5 +80,21 @@ class ConnectionEndpointValidationTest {
         assertTrue(
             validation.warnings.any { it.contains("Remote/Tailscale target", ignoreCase = true) },
         )
+    }
+
+    @Test
+    fun `lan mode warns when host does not look private or remote-tunnel`() {
+        val validation = validateConnectionEndpoint(ConnectionMode.LAN, "http://example.com:8000")
+
+        assertNull(validation.blockingError)
+        assertTrue(validation.warnings.any { it.contains("does not look like a private LAN address", ignoreCase = true) })
+    }
+
+    @Test
+    fun `lan mode http guidance recommends https when available`() {
+        val validation = validateConnectionEndpoint(ConnectionMode.LAN, "http://192.168.1.20:8000")
+
+        assertNull(validation.blockingError)
+        assertTrue(validation.warnings.any { it.contains("Prefer HTTPS", ignoreCase = true) })
     }
 }
