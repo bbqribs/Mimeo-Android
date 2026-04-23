@@ -2513,7 +2513,7 @@ private fun ExpandedPlayerTopBar(
                             it.basicMarquee(
                                 iterations = if (continuousMarquee) Int.MAX_VALUE else 1,
                                 initialDelayMillis = 3_000,
-                                delayMillis = 5_000,
+                                repeatDelayMillis = 5_000,
                             )
                         } else {
                             it
@@ -3639,7 +3639,7 @@ private fun PlayerControlBar(
                         .basicMarquee(
                             iterations = if (continuousMarquee) Int.MAX_VALUE else 1,
                             initialDelayMillis = 3_000,
-                            delayMillis = 5_000,
+                            repeatDelayMillis = 5_000,
                         ),
                     maxLines = 1,
                     style = MaterialTheme.typography.labelMedium.copy(
