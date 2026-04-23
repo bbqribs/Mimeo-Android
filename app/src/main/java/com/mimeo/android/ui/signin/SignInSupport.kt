@@ -41,7 +41,7 @@ internal fun inferConnectionModeForBaseUrl(baseUrl: String): ConnectionMode {
 
 internal fun resolveSignInErrorMessage(error: Throwable): String {
     if (looksLikeSchemeOrTlsMismatch(error)) {
-        return "Probable URL scheme/security mismatch. Remote/hosted sign-in is HTTPS-first; Local/LAN may use HTTP."
+        return "Probable URL scheme/security mismatch. Remote/hosted is HTTPS-first; for Tailscale IP without endpoint TLS use HTTP, or use HTTPS with a .ts.net/hosted URL."
     }
     return when (error) {
         is ApiException -> {
@@ -73,7 +73,11 @@ internal fun buildAuthDeviceName(manufacturer: String, model: String): String {
 internal fun defaultSignInServerUrl(initialServerUrl: String): String {
     val trimmed = initialServerUrl.trim()
     return if (trimmed.isBlank() || trimmed == DEFAULT_LOCAL_SIGN_IN_URL) {
-        buildPresetServerUrl(SignInServerPreset.REMOTE, SignInUrlScheme.HTTPS, manualUrl = "")
+        buildPresetServerUrl(
+            SignInServerPreset.REMOTE,
+            if (isCarrierGradeNatHost(DEFAULT_REMOTE_SIGN_IN_HOST.substringBefore(':'))) SignInUrlScheme.HTTP else SignInUrlScheme.HTTPS,
+            manualUrl = "",
+        )
     } else {
         trimmed
     }
@@ -148,4 +152,12 @@ private fun looksLikeSchemeOrTlsMismatch(error: Throwable): Boolean {
         fullMessage.contains("ssl") ||
         fullMessage.contains("tls") ||
         fullMessage.contains("handshake")
+}
+
+private fun isCarrierGradeNatHost(host: String): Boolean {
+    if (!host.startsWith("100.")) return false
+    val octets = host.split('.')
+    if (octets.size != 4) return false
+    val secondOctet = octets.getOrNull(1)?.toIntOrNull() ?: return false
+    return secondOctet in 64..127
 }

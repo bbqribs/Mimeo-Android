@@ -32,13 +32,13 @@ class SignInSupportTest {
     }
 
     @Test
-    fun `defaults blank and local sign in url to remote https preset`() {
+    fun `defaults blank and local sign in url to remote preset for configured host type`() {
         assertEquals(
-            "https://100.84.13.10:8000",
+            "http://100.84.13.10:8000",
             defaultSignInServerUrl(""),
         )
         assertEquals(
-            "https://100.84.13.10:8000",
+            "http://100.84.13.10:8000",
             defaultSignInServerUrl("http://10.0.2.2:8000"),
         )
     }
@@ -62,11 +62,11 @@ class SignInSupportTest {
     @Test
     fun `maps cleartext and tls sign in failures to scheme guidance`() {
         assertEquals(
-            "Probable URL scheme/security mismatch. Remote/hosted sign-in is HTTPS-first; Local/LAN may use HTTP.",
+            "Probable URL scheme/security mismatch. Remote/hosted is HTTPS-first; for Tailscale IP without endpoint TLS use HTTP, or use HTTPS with a .ts.net/hosted URL.",
             resolveSignInErrorMessage(IOException("CLEARTEXT communication to host not permitted by network security policy")),
         )
         assertEquals(
-            "Probable URL scheme/security mismatch. Remote/hosted sign-in is HTTPS-first; Local/LAN may use HTTP.",
+            "Probable URL scheme/security mismatch. Remote/hosted is HTTPS-first; for Tailscale IP without endpoint TLS use HTTP, or use HTTPS with a .ts.net/hosted URL.",
             resolveSignInErrorMessage(IOException("SSLHandshakeException: handshake failed")),
         )
     }
