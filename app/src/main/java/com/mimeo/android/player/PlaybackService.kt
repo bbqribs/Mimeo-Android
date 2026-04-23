@@ -179,7 +179,10 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     private fun dispatchPlay() {
         Log.d(mediaButtonLogTag, "dispatchPlay")
         interruptionPolicy.clearResumeExpectation()
-        requestAudioFocus()
+        if (!requestAudioFocus()) {
+            emitAudit("dispatchPlay:focusDenied")
+            return
+        }
         PlaybackServiceBridge.onPlay?.invoke()
         PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
         emitAudit("dispatchPlay")
@@ -303,14 +306,14 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             .build()
     }
 
-    private fun requestAudioFocus() {
+    private fun requestAudioFocus(): Boolean {
         if (hasAudioFocus) {
             // Already hold OS focus (e.g. user-resumed during a transient interruption
             // before AUDIOFOCUS_GAIN arrived). Re-anchor so media buttons stay routed here.
             startMediaButtonAnchor()
-            return
+            return true
         }
-        val manager = audioManager ?: return
+        val manager = audioManager ?: return false
         hasAudioFocus = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
                 .setOnAudioFocusChangeListener(this)
@@ -334,6 +337,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         if (hasAudioFocus) {
             startMediaButtonAnchor()
         }
+        return hasAudioFocus
     }
 
     private fun abandonAudioFocusNow() {

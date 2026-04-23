@@ -23,6 +23,7 @@ internal fun detectPlaybackDriftClues(state: PlaybackAuditState): List<String> {
     if (state.itemId == null && state.mediaSessionActive) clues += "session-active-without-item"
     if (state.itemId == null && state.hasAudioFocus) clues += "focus-without-item"
     if (state.itemId == null && state.isForeground) clues += "foreground-without-item"
+    if (state.itemId != null && state.isPlaying && !state.hasAudioFocus) clues += "playing-without-focus"
     if (state.itemId != null && state.isPlaying && !state.mediaSessionActive) clues += "playing-with-inactive-session"
     if (state.itemId != null && state.isPlaying && !state.isForeground) clues += "playing-without-foreground-service"
     if (state.anchorPlaying && !state.hasAudioFocus) clues += "anchor-playing-without-focus"
@@ -118,10 +119,10 @@ internal fun resolveMediaButtonDispatchAction(
 ): MediaButtonDispatchAction {
     return when (keyCode) {
         android.view.KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-            if (isCurrentlyPlaying) MediaButtonDispatchAction.Pause else MediaButtonDispatchAction.Play
+            MediaButtonDispatchAction.Pause
         }
         android.view.KeyEvent.KEYCODE_MEDIA_PLAY -> {
-            if (isCurrentlyPlaying) MediaButtonDispatchAction.Pause else MediaButtonDispatchAction.Play
+            MediaButtonDispatchAction.Play
         }
         android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
         android.view.KeyEvent.KEYCODE_HEADSETHOOK,
