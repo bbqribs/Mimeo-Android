@@ -858,6 +858,7 @@ fun PlayerScreen(
     val queueOffline by vm.queueOffline.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val settings by vm.settings.collectAsState()
+    val playbackResumeStateReady by vm.playbackResumeStateReady.collectAsState()
     val locusContentMode = settings.locusContentMode
     val readerModeEnabled = locusContentMode != LocusContentMode.PLAYBACK_FOCUSED
     val immersiveReaderMode = locusContentMode == LocusContentMode.FULL_TEXT
@@ -1044,7 +1045,8 @@ fun PlayerScreen(
         vm.playbackPause(forceSync = forceSync)
     }
 
-    LaunchedEffect(initialItemId, requestedItemId) {
+    LaunchedEffect(initialItemId, requestedItemId, playbackResumeStateReady) {
+        if (!playbackResumeStateReady) return@LaunchedEffect
         if (resolvedInitial) return@LaunchedEffect
         val resolvedId = requestedItemId ?: vm.resolveInitialPlayerItemId(initialItemId)
         if (hasLockedPlaybackOwner && resolvedId != currentItemId) {
