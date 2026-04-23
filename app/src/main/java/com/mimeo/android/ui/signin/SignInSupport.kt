@@ -4,6 +4,7 @@ import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.DEFAULT_LAN_HOST
 import com.mimeo.android.model.DEFAULT_LOCAL_BASE_URL
+import com.mimeo.android.model.DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL
 import com.mimeo.android.model.DEFAULT_REMOTE_HOST
 import com.mimeo.android.model.inferConnectionModeForHost
 import java.io.IOException
@@ -41,7 +42,7 @@ internal fun inferConnectionModeForBaseUrl(baseUrl: String): ConnectionMode {
 
 internal fun resolveSignInErrorMessage(error: Throwable): String {
     if (looksLikeSchemeOrTlsMismatch(error)) {
-        return "Probable URL scheme/security mismatch. Remote/hosted is HTTPS-first; for Tailscale IP without endpoint TLS use HTTP, or use HTTPS with a .ts.net/hosted URL."
+        return "Probable URL scheme/security mismatch. Remote is HTTPS-first with .ts.net; fallback HTTP is $DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL when endpoint TLS is disabled."
     }
     return when (error) {
         is ApiException -> {
@@ -75,7 +76,7 @@ internal fun defaultSignInServerUrl(initialServerUrl: String): String {
     return if (trimmed.isBlank() || trimmed == DEFAULT_LOCAL_SIGN_IN_URL) {
         buildPresetServerUrl(
             SignInServerPreset.REMOTE,
-            if (isCarrierGradeNatHost(DEFAULT_REMOTE_SIGN_IN_HOST.substringBefore(':'))) SignInUrlScheme.HTTP else SignInUrlScheme.HTTPS,
+            SignInUrlScheme.HTTPS,
             manualUrl = "",
         )
     } else {
@@ -154,10 +155,3 @@ private fun looksLikeSchemeOrTlsMismatch(error: Throwable): Boolean {
         fullMessage.contains("handshake")
 }
 
-private fun isCarrierGradeNatHost(host: String): Boolean {
-    if (!host.startsWith("100.")) return false
-    val octets = host.split('.')
-    if (octets.size != 4) return false
-    val secondOctet = octets.getOrNull(1)?.toIntOrNull() ?: return false
-    return secondOctet in 64..127
-}

@@ -64,6 +64,8 @@ import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
+import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
+import com.mimeo.android.model.DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL
 import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.ParagraphSpacingOption
@@ -1122,7 +1124,7 @@ fun SettingsScreen(
                         },
                     ) { Text(if (ttsPreviewing) "Playing..." else "Preview") }
                 }
-                Text("Defaults: Local=http://10.0.2.2:8000, LAN=http://192.168.68.124:8000, Remote=http://100.84.13.10:8000 (use HTTPS with .ts.net/hosted URL when configured)")
+                Text("Defaults: Local=http://10.0.2.2:8000, LAN=http://192.168.68.124:8000, Remote=$DEFAULT_REMOTE_BASE_URL (fallback HTTP: $DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL)")
             }
         }
         SettingsSectionSeparator()
@@ -1600,7 +1602,7 @@ private fun ConnectionMode.displayName(): String = when (this) {
 private fun ConnectionMode.description(): String = when (this) {
     ConnectionMode.LOCAL -> "Local emulator/dev mode (10.0.2.2 or localhost loopback)."
     ConnectionMode.LAN -> "Same-network mode (phone + laptop on the same LAN/Wi-Fi)."
-    ConnectionMode.REMOTE -> "Off-LAN mode (Tailscale/VPN or hosted endpoint). Prefer HTTPS."
+    ConnectionMode.REMOTE -> "Off-LAN mode (Tailscale/VPN or hosted endpoint). Canonical HTTPS: $DEFAULT_REMOTE_BASE_URL."
 }
 
 internal fun connectionModeBaseUrlGuidance(mode: ConnectionMode): String = when (mode) {
@@ -1609,7 +1611,7 @@ internal fun connectionModeBaseUrlGuidance(mode: ConnectionMode): String = when 
     ConnectionMode.LAN ->
         "Use your laptop LAN URL (for example http://192.168.x.y:8000) when phone and laptop share the same network. Prefer HTTPS if your LAN endpoint has TLS."
     ConnectionMode.REMOTE ->
-        "Use your Tailscale/VPN or hosted URL. HTTPS-first for Remote (example https://host:8000). If using 192.168.x.y or 10.x, use LAN mode instead."
+        "Use your Tailscale/VPN or hosted URL. HTTPS-first for Remote (canonical $DEFAULT_REMOTE_BASE_URL). If endpoint TLS is disabled, explicit fallback is $DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL. If using 192.168.x.y or 10.x, use LAN mode instead."
 }
 
 private fun connectionModeTokenAuthHelp(mode: ConnectionMode): String = when (mode) {
