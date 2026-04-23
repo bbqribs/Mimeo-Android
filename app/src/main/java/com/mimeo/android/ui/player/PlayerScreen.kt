@@ -818,6 +818,7 @@ fun PlayerScreen(
     onOpenLocusForItem: (Int) -> Unit,
     onRequestBack: () -> Unit = {},
     onOpenDiagnostics: () -> Unit,
+    onChevronTap: () -> Unit = {},
     compactControlsOnly: Boolean = false,
     showCompactControls: Boolean = true,
     controlsMode: PlayerControlsMode = PlayerControlsMode.FULL,
@@ -957,11 +958,7 @@ fun PlayerScreen(
         }
     }
     val storedLastNonNubMode = lastNonNubMode.takeIf { it != PlayerControlsMode.NUB } ?: PlayerControlsMode.FULL
-    val chevronDescription = when (controlsMode) {
-        PlayerControlsMode.FULL -> "Collapse player controls. Long press to hide player controls"
-        PlayerControlsMode.MINIMAL -> "Expand player controls. Long press to hide player controls"
-        PlayerControlsMode.NUB -> "Restore player controls"
-    }
+    val chevronDescription = "Open navigation drawer. Long press cycles player controls."
     val readerChromeHidden = !compactControlsOnly && immersiveReaderMode
     LaunchedEffect(textToolbar) {
         snapshotFlow { textToolbar.status }.collect { status ->
@@ -1667,16 +1664,12 @@ fun PlayerScreen(
     }
     val showDockChevron = true
     val handleChevronTap = {
-        val nextMode = nextPlayerControlsModeOnTap(controlsMode)
-        val nextLastNonNub = if (nextMode == PlayerControlsMode.NUB) storedLastNonNubMode else nextMode
-        onControlsModeChange(nextMode, nextLastNonNub)
+        onChevronTap()
     }
     val handleChevronLongPress = {
-        if (controlsMode == PlayerControlsMode.NUB) {
-            onControlsModeChange(storedLastNonNubMode, storedLastNonNubMode)
-        } else {
-            onControlsModeChange(PlayerControlsMode.NUB, controlsMode)
-        }
+        val nextMode = nextPlayerControlsModeOnLongPress(controlsMode)
+        val nextLastNonNub = if (nextMode == PlayerControlsMode.NUB) storedLastNonNubMode else nextMode
+        onControlsModeChange(nextMode, nextLastNonNub)
     }
     val handleChevronSnap: (Float) -> Unit = { delta ->
         if (abs(delta) >= 32f) {
@@ -3346,11 +3339,11 @@ private fun LocusOverflowMenuItems(
     )
 }
 
-private fun nextPlayerControlsModeOnTap(current: PlayerControlsMode): PlayerControlsMode {
+internal fun nextPlayerControlsModeOnLongPress(current: PlayerControlsMode): PlayerControlsMode {
     return when (current) {
         PlayerControlsMode.FULL -> PlayerControlsMode.MINIMAL
-        PlayerControlsMode.MINIMAL -> PlayerControlsMode.FULL
-        PlayerControlsMode.NUB -> PlayerControlsMode.MINIMAL
+        PlayerControlsMode.MINIMAL -> PlayerControlsMode.NUB
+        PlayerControlsMode.NUB -> PlayerControlsMode.FULL
     }
 }
 

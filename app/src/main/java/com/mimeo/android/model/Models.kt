@@ -222,6 +222,12 @@ enum class PlayerChevronSnapEdge {
 }
 
 @Serializable
+enum class DrawerPanelSide {
+    LEFT,
+    RIGHT,
+}
+
+@Serializable
 enum class ConnectionMode {
     LOCAL,
     LAN,
@@ -307,6 +313,7 @@ data class AppSettings(
     val playerLastNonNubMode: PlayerControlsMode = PlayerControlsMode.FULL,
     val playerChevronSnapEdge: PlayerChevronSnapEdge = PlayerChevronSnapEdge.HOME,
     val playerChevronEdgeOffset: Float = 0.5f,
+    val drawerPanelSide: DrawerPanelSide = DrawerPanelSide.LEFT,
 )
 
 @Serializable

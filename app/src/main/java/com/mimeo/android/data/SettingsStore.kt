@@ -15,6 +15,7 @@ import com.mimeo.android.model.DEFAULT_LOCAL_BASE_URL
 import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
 import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
+import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PendingItemAction
 import com.mimeo.android.model.PendingItemActionType
@@ -112,6 +113,8 @@ class SettingsStore(private val context: Context) {
         stringPreferencesKey("player_chevron_snap_edge")
     private val playerChevronEdgeOffsetKey: Preferences.Key<Float> =
         floatPreferencesKey("player_chevron_edge_offset")
+    private val drawerPanelSideKey: Preferences.Key<String> =
+        stringPreferencesKey("drawer_panel_side")
     private val queueSnapshotsJsonKey: Preferences.Key<String> =
         stringPreferencesKey("queue_snapshots_json")
     private val pendingManualSavesJsonKey: Preferences.Key<String> =
@@ -198,6 +201,9 @@ class SettingsStore(private val context: Context) {
                 ?.let { runCatching { PlayerChevronSnapEdge.valueOf(it) }.getOrNull() }
                 ?: PlayerChevronSnapEdge.HOME,
             playerChevronEdgeOffset = (prefs[playerChevronEdgeOffsetKey] ?: 0.5f).coerceIn(0f, 1f),
+            drawerPanelSide = prefs[drawerPanelSideKey]
+                ?.let { runCatching { DrawerPanelSide.valueOf(it) }.getOrNull() }
+                ?: DrawerPanelSide.LEFT,
         )
     }
 
@@ -310,6 +316,12 @@ class SettingsStore(private val context: Context) {
                 ?: PlayerControlsMode.FULL.name
             prefs[playerChevronSnapEdgeKey] = playerChevronSnapEdge.name
             prefs[playerChevronEdgeOffsetKey] = playerChevronEdgeOffset.coerceIn(0f, 1f)
+        }
+    }
+
+    suspend fun saveDrawerPanelSide(drawerPanelSide: DrawerPanelSide) {
+        context.dataStore.edit { prefs ->
+            prefs[drawerPanelSideKey] = drawerPanelSide.name
         }
     }
 

@@ -43,7 +43,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
@@ -52,6 +54,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.mimeo.android.model.AppSettings
+import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.ui.components.StatusBanner
@@ -75,6 +78,7 @@ private data class PlayerRouteHandlers(
     val onRequestBack: () -> Unit,
     val onOpenDiagnostics: () -> Unit,
     val onChevronSnapChange: (PlayerChevronSnapEdge) -> Unit,
+    val onChevronTap: () -> Unit,
 )
 
 @Composable
@@ -184,48 +188,60 @@ internal fun MainActivityShell(
         vm = vm,
         nav = nav,
         currentRoute = currentRoute,
-    )
-
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        gesturesEnabled = libraryShellVisible,
-        drawerContent = {
+        onChevronTap = {
             if (libraryShellVisible) {
-                MimeoDrawerContent(
-                    drawerItems = drawerItems,
-                    playlists = playlists,
-                    selectedDrawerRoute = selectedDrawerRoute,
-                    selectedPlaylistId = settings.selectedPlaylistId,
-                    onNavItemClick = { route ->
-                        if (route == ROUTE_UP_NEXT && selectedDrawerRoute == ROUTE_UP_NEXT) {
-                            upNextTabTapSignal += 1
-                        }
-                        if (route == ROUTE_UP_NEXT) vm.selectPlaylist(null)
-                        nav.navigate(route) { launchSingleTop = true }
-                        coroutineScope.launch { drawerState.close() }
-                    },
-                    onPlaylistClick = { playlistId ->
-                        vm.selectPlaylist(playlistId)
-                        nav.navigate("playlist/$playlistId") { launchSingleTop = true }
-                        coroutineScope.launch { drawerState.close() }
-                    },
-                    onSmartQueueClick = {
-                        vm.selectPlaylist(null)
-                        nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
-                        coroutineScope.launch { drawerState.close() }
-                    },
-                    onNewPlaylistClick = {
-                        coroutineScope.launch { drawerState.close() }
-                        showNewPlaylistDialog = true
-                    },
-                    onSettingsClick = {
-                        nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true }
-                        coroutineScope.launch { drawerState.close() }
-                    },
-                )
+                coroutineScope.launch { drawerState.open() }
             }
         },
-    ) {
+    )
+
+    val drawerLayoutDirection = when (settings.drawerPanelSide) {
+        DrawerPanelSide.RIGHT -> LayoutDirection.Rtl
+        DrawerPanelSide.LEFT -> LayoutDirection.Ltr
+    }
+
+    androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides drawerLayoutDirection) {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            gesturesEnabled = libraryShellVisible,
+            drawerContent = {
+                if (libraryShellVisible) {
+                    MimeoDrawerContent(
+                        drawerItems = drawerItems,
+                        playlists = playlists,
+                        selectedDrawerRoute = selectedDrawerRoute,
+                        selectedPlaylistId = settings.selectedPlaylistId,
+                        onNavItemClick = { route ->
+                            if (route == ROUTE_UP_NEXT && selectedDrawerRoute == ROUTE_UP_NEXT) {
+                                upNextTabTapSignal += 1
+                            }
+                            if (route == ROUTE_UP_NEXT) vm.selectPlaylist(null)
+                            nav.navigate(route) { launchSingleTop = true }
+                            coroutineScope.launch { drawerState.close() }
+                        },
+                        onPlaylistClick = { playlistId ->
+                            vm.selectPlaylist(playlistId)
+                            nav.navigate("playlist/$playlistId") { launchSingleTop = true }
+                            coroutineScope.launch { drawerState.close() }
+                        },
+                        onSmartQueueClick = {
+                            vm.selectPlaylist(null)
+                            nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
+                            coroutineScope.launch { drawerState.close() }
+                        },
+                        onNewPlaylistClick = {
+                            coroutineScope.launch { drawerState.close() }
+                            showNewPlaylistDialog = true
+                        },
+                        onSettingsClick = {
+                            nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true }
+                            coroutineScope.launch { drawerState.close() }
+                        },
+                    )
+                }
+            },
+        ) {
+            androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         if (showNewPlaylistDialog) {
             AlertDialog(
                 onDismissRequest = {
@@ -541,6 +557,7 @@ internal fun MainActivityShell(
                                     settings = settings,
                                     shellBottomClearance = shellBottomClearance,
                                     onGoQueue = { nav.navigate(ROUTE_UP_NEXT) },
+                                    onChevronTap = playerHandlers.onChevronTap,
                                 )
                             }
                             composable(
@@ -577,6 +594,7 @@ internal fun MainActivityShell(
                                     settings = settings,
                                     shellBottomClearance = shellBottomClearance,
                                     onGoQueue = { nav.navigate(ROUTE_UP_NEXT) },
+                                    onChevronTap = playerHandlers.onChevronTap,
                                 )
                             }
                         }
@@ -598,6 +616,7 @@ internal fun MainActivityShell(
                                     onOpenLocusForItem = playerHandlers.onOpenLocusForItem,
                                     onRequestBack = playerHandlers.onRequestBack,
                                     onOpenDiagnostics = playerHandlers.onOpenDiagnostics,
+                                    onChevronTap = playerHandlers.onChevronTap,
                                     showCompactControls = showCompactControls,
                                     controlsMode = settings.playerControlsMode,
                                     lastNonNubMode = settings.playerLastNonNubMode,
@@ -628,6 +647,8 @@ internal fun MainActivityShell(
                 )
             }
         }
+        }
+    }
     }
 }
 
@@ -643,6 +664,7 @@ private fun LocusPlayerRoute(
     settings: AppSettings,
     shellBottomClearance: Dp,
     onGoQueue: () -> Unit,
+    onChevronTap: () -> Unit,
 ) {
     if (requestedPlayerItemId == null) {
         NoNowPlayingScreen(onGoQueue = onGoQueue)
@@ -659,6 +681,7 @@ private fun LocusPlayerRoute(
         onOpenLocusForItem = playerHandlers.onOpenLocusForItem,
         onRequestBack = playerHandlers.onRequestBack,
         onOpenDiagnostics = playerHandlers.onOpenDiagnostics,
+        onChevronTap = onChevronTap,
         compactControlsOnly = false,
         showCompactControls = showCompactControls,
         controlsMode = settings.playerControlsMode,
@@ -679,6 +702,7 @@ private fun buildPlayerRouteHandlers(
     vm: AppViewModel,
     nav: NavHostController,
     currentRoute: String,
+    onChevronTap: () -> Unit,
 ): PlayerRouteHandlers {
     return PlayerRouteHandlers(
         onShowSnackbar = { message, actionLabel, actionKey ->
@@ -707,6 +731,7 @@ private fun buildPlayerRouteHandlers(
         onChevronSnapChange = { edge ->
             vm.savePlayerChevronSnap(edge, 0.5f)
         },
+        onChevronTap = onChevronTap,
     )
 }
 

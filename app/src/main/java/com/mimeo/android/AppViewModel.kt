@@ -104,6 +104,7 @@ import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
+import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.ParagraphSpacingOption
@@ -1181,6 +1182,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
         viewModelScope.launch {
             settingsStore.savePlayerChevronSnap(edge, edgeOffset)
+        }
+    }
+
+    fun saveDrawerPanelSide(side: DrawerPanelSide) {
+        val current = settings.value
+        _settings.value = current.copy(drawerPanelSide = side)
+        viewModelScope.launch {
+            settingsStore.saveDrawerPanelSide(side)
         }
     }
 
