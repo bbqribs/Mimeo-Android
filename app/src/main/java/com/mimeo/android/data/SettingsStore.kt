@@ -21,6 +21,7 @@ import com.mimeo.android.model.PendingItemActionType
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PendingSaveSource
+import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.model.PlayerChevronSnapEdge
@@ -208,9 +209,14 @@ class SettingsStore(private val context: Context) {
         decodePendingItemActions(prefs[pendingItemActionsJsonKey])
     }
 
-    val playbackSegmentIndexByItemFlow: Flow<Map<Int, Int>> = context.dataStore.data.map { prefs ->
+    val playbackSegmentIndexByItemFlow: Flow<Map<Int, PlaybackPosition>> = context.dataStore.data.map { prefs ->
         decodePlaybackSegmentIndexRecords(prefs[playbackSegmentIndexByItemJsonKey])
-            .associate { record -> record.itemId to record.segmentIndex.coerceAtLeast(0) }
+            .associate { record ->
+                record.itemId to PlaybackPosition(
+                    chunkIndex = record.segmentIndex.coerceAtLeast(0),
+                    offsetInChunkChars = record.offsetInChunkChars.coerceAtLeast(0),
+                )
+            }
     }
 
     val connectionTestSuccessFlow: Flow<Map<ConnectionMode, ConnectionTestSuccessSnapshot>> = context.dataStore.data.map { prefs ->
@@ -736,13 +742,18 @@ class SettingsStore(private val context: Context) {
         }
     }
 
-    suspend fun savePlaybackSegmentIndex(itemId: Int, segmentIndex: Int) {
+    suspend fun savePlaybackSegmentIndex(itemId: Int, segmentIndex: Int, offsetInChunkChars: Int = 0) {
         if (itemId <= 0) return
         context.dataStore.edit { prefs ->
             val existing = decodePlaybackSegmentIndexRecords(prefs[playbackSegmentIndexByItemJsonKey])
             val normalizedSegment = segmentIndex.coerceAtLeast(0)
+            val normalizedOffset = offsetInChunkChars.coerceAtLeast(0)
             val updated = listOf(
-                PlaybackSegmentIndexRecord(itemId = itemId, segmentIndex = normalizedSegment),
+                PlaybackSegmentIndexRecord(
+                    itemId = itemId,
+                    segmentIndex = normalizedSegment,
+                    offsetInChunkChars = normalizedOffset,
+                ),
             ) + existing.filterNot { record -> record.itemId == itemId }
             prefs[playbackSegmentIndexByItemJsonKey] = encodePlaybackSegmentIndexRecords(
                 updated.take(MAX_PLAYBACK_SEGMENT_INDEX_RECORDS),
@@ -935,6 +946,7 @@ private data class PendingManualSaveState(
 private data class PlaybackSegmentIndexRecord(
     val itemId: Int,
     val segmentIndex: Int,
+    val offsetInChunkChars: Int = 0,
 )
 
 @Serializable

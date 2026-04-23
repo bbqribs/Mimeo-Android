@@ -176,6 +176,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -331,7 +332,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _playbackPositionByItem = MutableStateFlow<Map<Int, PlaybackPosition>>(emptyMap())
     val playbackPositionByItem: StateFlow<Map<Int, PlaybackPosition>> = _playbackPositionByItem.asStateFlow()
-    private val _persistedPlaybackSegmentIndexByItem = MutableStateFlow<Map<Int, Int>>(emptyMap())
+    private val _persistedPlaybackSegmentIndexByItem = MutableStateFlow<Map<Int, PlaybackPosition>>(emptyMap())
     val playerSurfaceContentState = PlayerSurfaceContentState()
     private val playbackEngine = PlaybackEngine(
         context = application.applicationContext,
@@ -4344,17 +4345,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             chunkIndex = chunkIndex.coerceAtLeast(0),
             offsetInChunkChars = offsetInChunkChars.coerceAtLeast(0),
         )
-        val previousSegmentIndex = playbackPositionByItem.value[itemId]?.chunkIndex
+        val previousPersistedPosition = playbackPositionByItem.value[itemId]
             ?: _persistedPlaybackSegmentIndexByItem.value[itemId]
         _playbackPositionByItem.update { previous -> previous + (itemId to normalized) }
         viewModelScope.launch {
-            if (previousSegmentIndex != normalized.chunkIndex) {
+            val shouldPersist = when {
+                previousPersistedPosition == null -> true
+                previousPersistedPosition.chunkIndex != normalized.chunkIndex -> true
+                previousPersistedPosition.offsetInChunkChars == normalized.offsetInChunkChars -> false
+                normalized.offsetInChunkChars == 0 -> true
+                else -> abs(previousPersistedPosition.offsetInChunkChars - normalized.offsetInChunkChars) >= 120
+            }
+            if (shouldPersist) {
                 settingsStore.savePlaybackSegmentIndex(
                     itemId = itemId,
                     segmentIndex = normalized.chunkIndex,
+                    offsetInChunkChars = normalized.offsetInChunkChars,
                 )
                 _persistedPlaybackSegmentIndexByItem.update { previous ->
-                    previous + (itemId to normalized.chunkIndex)
+                    previous + (itemId to normalized)
                 }
             }
             val updated = repository.setCurrentPlaybackPosition(
@@ -4438,10 +4447,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun playbackPositionFromPersistedSegment(itemId: Int): PlaybackPosition? {
-        val persistedSegmentIndex = _persistedPlaybackSegmentIndexByItem.value[itemId] ?: return null
+        val persisted = _persistedPlaybackSegmentIndexByItem.value[itemId] ?: return null
         return PlaybackPosition(
-            chunkIndex = persistedSegmentIndex.coerceAtLeast(0),
-            offsetInChunkChars = 0,
+            chunkIndex = persisted.chunkIndex.coerceAtLeast(0),
+            offsetInChunkChars = persisted.offsetInChunkChars.coerceAtLeast(0),
         )
     }
 
