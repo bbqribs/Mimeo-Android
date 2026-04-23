@@ -23,7 +23,7 @@ Most recent audit: `docs/REDESIGN_V2_AUDIT_2026-04-21.md`.
    `Box`. Replace the current "compose `PlayerScreen` above `NavHost`
    whenever `requestedPlayerItemId != null`" overlay hack. Internal playback
    behavior must be preserved byte-for-byte (per plan Risk 3).
-3. [ ] **Up Next drag-to-reorder + TalkBack move-up/move-down + delete
+3. [x] **Up Next drag-to-reorder + TalkBack move-up/move-down + delete
    orphaned `PlaylistsScreen.kt`.** Closes the Phase 6 reorder UX gap.
    Handles per plan §8 (grip icon, always-visible in ordered lists) with
    accessible non-drag alternatives per §14. Delete unused

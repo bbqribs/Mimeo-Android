@@ -703,6 +703,7 @@ private fun MimeoApp(vm: AppViewModel) {
                     drawerItems = drawerItems,
                     playlists = playlists,
                     selectedDrawerRoute = selectedDrawerRoute,
+                    selectedPlaylistId = settings.selectedPlaylistId,
                     onNavItemClick = { route ->
                         if (route == ROUTE_UP_NEXT && selectedDrawerRoute == ROUTE_UP_NEXT) {
                             upNextTabTapSignal += 1
@@ -714,6 +715,11 @@ private fun MimeoApp(vm: AppViewModel) {
                     onPlaylistClick = { playlistId ->
                         vm.selectPlaylist(playlistId)
                         nav.navigate("playlist/$playlistId") { launchSingleTop = true }
+                        coroutineScope.launch { drawerState.close() }
+                    },
+                    onSmartQueueClick = {
+                        vm.selectPlaylist(null)
+                        nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
                         coroutineScope.launch { drawerState.close() }
                     },
                     onNewPlaylistClick = {

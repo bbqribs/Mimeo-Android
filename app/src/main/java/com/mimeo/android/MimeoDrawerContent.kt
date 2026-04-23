@@ -24,8 +24,10 @@ internal fun MimeoDrawerContent(
     drawerItems: List<DrawerDestination>,
     playlists: List<PlaylistSummary>,
     selectedDrawerRoute: String,
+    selectedPlaylistId: Int?,
     onNavItemClick: (route: String) -> Unit,
     onPlaylistClick: (playlistId: Int) -> Unit,
+    onSmartQueueClick: () -> Unit,
     onNewPlaylistClick: () -> Unit,
     onSettingsClick: () -> Unit,
 ) {
@@ -56,6 +58,16 @@ internal fun MimeoDrawerContent(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp),
+            )
+            NavigationDrawerItem(
+                label = { Text("Smart Queue") },
+                selected = selectedPlaylistId == null,
+                onClick = onSmartQueueClick,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                colors = NavigationDrawerItemDefaults.colors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                ),
             )
             playlists.forEach { playlist ->
                 val count = playlist.entries.size

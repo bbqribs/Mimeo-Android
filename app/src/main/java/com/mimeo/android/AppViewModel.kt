@@ -2878,9 +2878,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     "trigger=$loadPolicyTag item=$itemId resolved_source=${if (loaded.usingCache) "cache" else "network"}",
                 )
             }
-            if (loaded.usingCache) {
-                _queueOffline.value = true
-            } else {
+            if (!loaded.usingCache) {
                 _queueOffline.value = false
             }
             val relatedIds = if (loaded.payload.activeContentVersionId != null) {
