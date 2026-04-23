@@ -285,12 +285,21 @@ internal fun resolveOpenStartSource(
     openIntent: PlaybackOpenIntent,
     knownProgress: Int,
     hasChunks: Boolean,
+    savedPlaybackPosition: PlaybackPosition = PlaybackPosition(),
 ): String {
     return when (openIntent) {
         PlaybackOpenIntent.AutoContinue -> "autocontinue:start_of_item"
-        PlaybackOpenIntent.Replay -> "replay:start_of_item"
+        PlaybackOpenIntent.Replay -> {
+            if (hasChunks && knownProgress < DONE_PERCENT_THRESHOLD && hasSavedPlaybackPointer(savedPlaybackPosition)) {
+                "replay:playback_pointer"
+            } else {
+                "replay:start_of_item"
+            }
+        }
         PlaybackOpenIntent.ManualOpen -> {
-            if (knownProgress > 0 && hasChunks) {
+            if (hasChunks && hasSavedPlaybackPointer(savedPlaybackPosition)) {
+                "manual:playback_pointer"
+            } else if (knownProgress > 0 && hasChunks) {
                 "manual:queue_progress_percent"
             } else {
                 "manual:start_of_item"
@@ -330,19 +339,36 @@ internal fun resolveSeededPlaybackPosition(
     knownProgress: Int,
     hasChunks: Boolean,
     openIntent: PlaybackOpenIntent,
+    savedPlaybackPosition: PlaybackPosition = PlaybackPosition(),
     positionForPercent: (Int) -> PlaybackPosition,
 ): PlaybackPosition {
+    val normalizedSaved = PlaybackPosition(
+        chunkIndex = savedPlaybackPosition.chunkIndex.coerceAtLeast(0),
+        offsetInChunkChars = savedPlaybackPosition.offsetInChunkChars.coerceAtLeast(0),
+    )
     return when (openIntent) {
-        PlaybackOpenIntent.AutoContinue,
-        PlaybackOpenIntent.Replay -> PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
+        PlaybackOpenIntent.AutoContinue -> PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
+        PlaybackOpenIntent.Replay -> {
+            if (hasChunks && knownProgress < DONE_PERCENT_THRESHOLD && hasSavedPlaybackPointer(normalizedSaved)) {
+                normalizedSaved
+            } else {
+                PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
+            }
+        }
         PlaybackOpenIntent.ManualOpen -> {
-            if (knownProgress > 0 && hasChunks) {
+            if (hasChunks && hasSavedPlaybackPointer(normalizedSaved)) {
+                normalizedSaved
+            } else if (knownProgress > 0 && hasChunks) {
                 positionForPercent(knownProgress)
             } else {
                 PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
             }
         }
     }
+}
+
+private fun hasSavedPlaybackPointer(position: PlaybackPosition): Boolean {
+    return position.chunkIndex > 0 || position.offsetInChunkChars > 0
 }
 
 internal fun shouldAcceptDoneEventChunk(eventChunkIndex: Int, currentChunkIndex: Int): Boolean {
@@ -792,6 +818,7 @@ fun PlayerScreen(
     onOpenLocusForItem: (Int) -> Unit,
     onRequestBack: () -> Unit = {},
     onOpenDiagnostics: () -> Unit,
+    onChevronTap: () -> Unit = {},
     compactControlsOnly: Boolean = false,
     showCompactControls: Boolean = true,
     controlsMode: PlayerControlsMode = PlayerControlsMode.FULL,
@@ -844,6 +871,7 @@ fun PlayerScreen(
     val queueOffline by vm.queueOffline.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val settings by vm.settings.collectAsState()
+    val playbackResumeStateReady by vm.playbackResumeStateReady.collectAsState()
     val locusContentMode = settings.locusContentMode
     val readerModeEnabled = locusContentMode != LocusContentMode.PLAYBACK_FOCUSED
     val immersiveReaderMode = locusContentMode == LocusContentMode.FULL_TEXT
@@ -930,11 +958,7 @@ fun PlayerScreen(
         }
     }
     val storedLastNonNubMode = lastNonNubMode.takeIf { it != PlayerControlsMode.NUB } ?: PlayerControlsMode.FULL
-    val chevronDescription = when (controlsMode) {
-        PlayerControlsMode.FULL -> "Collapse player controls. Long press to hide player controls"
-        PlayerControlsMode.MINIMAL -> "Expand player controls. Long press to hide player controls"
-        PlayerControlsMode.NUB -> "Restore player controls"
-    }
+    val chevronDescription = "Open navigation drawer. Long press cycles player controls."
     val readerChromeHidden = !compactControlsOnly && immersiveReaderMode
     LaunchedEffect(textToolbar) {
         snapshotFlow { textToolbar.status }.collect { status ->
@@ -1030,7 +1054,8 @@ fun PlayerScreen(
         vm.playbackPause(forceSync = forceSync)
     }
 
-    LaunchedEffect(initialItemId, requestedItemId) {
+    LaunchedEffect(initialItemId, requestedItemId, playbackResumeStateReady) {
+        if (!playbackResumeStateReady) return@LaunchedEffect
         if (resolvedInitial) return@LaunchedEffect
         val resolvedId = requestedItemId ?: vm.resolveInitialPlayerItemId(initialItemId)
         if (hasLockedPlaybackOwner && resolvedId != currentItemId) {
@@ -1639,16 +1664,12 @@ fun PlayerScreen(
     }
     val showDockChevron = true
     val handleChevronTap = {
-        val nextMode = nextPlayerControlsModeOnTap(controlsMode)
-        val nextLastNonNub = if (nextMode == PlayerControlsMode.NUB) storedLastNonNubMode else nextMode
-        onControlsModeChange(nextMode, nextLastNonNub)
+        onChevronTap()
     }
     val handleChevronLongPress = {
-        if (controlsMode == PlayerControlsMode.NUB) {
-            onControlsModeChange(storedLastNonNubMode, storedLastNonNubMode)
-        } else {
-            onControlsModeChange(PlayerControlsMode.NUB, controlsMode)
-        }
+        val nextMode = nextPlayerControlsModeOnLongPress(controlsMode)
+        val nextLastNonNub = if (nextMode == PlayerControlsMode.NUB) storedLastNonNubMode else nextMode
+        onControlsModeChange(nextMode, nextLastNonNub)
     }
     val handleChevronSnap: (Float) -> Unit = { delta ->
         if (abs(delta) >= 32f) {
@@ -3318,11 +3339,11 @@ private fun LocusOverflowMenuItems(
     )
 }
 
-private fun nextPlayerControlsModeOnTap(current: PlayerControlsMode): PlayerControlsMode {
+internal fun nextPlayerControlsModeOnLongPress(current: PlayerControlsMode): PlayerControlsMode {
     return when (current) {
         PlayerControlsMode.FULL -> PlayerControlsMode.MINIMAL
-        PlayerControlsMode.MINIMAL -> PlayerControlsMode.FULL
-        PlayerControlsMode.NUB -> PlayerControlsMode.MINIMAL
+        PlayerControlsMode.MINIMAL -> PlayerControlsMode.NUB
+        PlayerControlsMode.NUB -> PlayerControlsMode.FULL
     }
 }
 

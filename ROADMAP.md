@@ -46,7 +46,7 @@ Most recent audit: `docs/REDESIGN_V2_AUDIT_2026-04-21.md`.
 7. [ ] **Time-based FF/RW follow-up (optional).** Evaluate whether a
    separate time-skip control model is still useful now that sentence /
    paragraph FF/RW is shipped.
-8. [ ] **Persist last segment index per item in DataStore** for
+8. [x] **Persist last segment index per item in DataStore** for
    cross-process resume.
 9. [ ] **Audio focus / media session polish** beyond the bounded drift
    fixes already shipped.

@@ -64,9 +64,11 @@ import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
+import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PendingManualSaveItem
+import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.ui.queue.autoDownloadStatusLines
 import com.mimeo.android.ui.theme.toFontFamily
@@ -125,6 +127,12 @@ fun SettingsScreen(
     }
     var persistentPlayerEnabled by remember(settings.persistentPlayerEnabled) {
         mutableStateOf(settings.persistentPlayerEnabled)
+    }
+    var drawerPanelSide by remember(settings.drawerPanelSide) {
+        mutableStateOf(settings.drawerPanelSide)
+    }
+    var chevronOnRightSide by remember(settings.playerChevronSnapEdge) {
+        mutableStateOf(settings.playerChevronSnapEdge != PlayerChevronSnapEdge.LEFT)
     }
     var autoScrollWhileListening by remember(settings.autoScrollWhileListening) {
         mutableStateOf(settings.autoScrollWhileListening)
@@ -846,6 +854,35 @@ fun SettingsScreen(
                         },
                     )
                 }
+                SettingsDescribedRow(
+                    title = "Drawer on right side",
+                    description = "Move the navigation drawer to the right edge instead of the left edge.",
+                    trailing = {
+                        Switch(
+                            checked = drawerPanelSide == DrawerPanelSide.RIGHT,
+                            onCheckedChange = { checked ->
+                                drawerPanelSide = if (checked) DrawerPanelSide.RIGHT else DrawerPanelSide.LEFT
+                                vm.saveDrawerPanelSide(drawerPanelSide)
+                            },
+                        )
+                    },
+                )
+                SettingsDescribedRow(
+                    title = "Chevron on right side",
+                    description = "Snap the player chevron button to the right edge instead of the left edge.",
+                    trailing = {
+                        Switch(
+                            checked = chevronOnRightSide,
+                            onCheckedChange = { checked ->
+                                chevronOnRightSide = checked
+                                vm.savePlayerChevronSnap(
+                                    edge = if (checked) PlayerChevronSnapEdge.RIGHT else PlayerChevronSnapEdge.LEFT,
+                                    edgeOffset = settings.playerChevronEdgeOffset,
+                                )
+                            },
+                        )
+                    },
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,

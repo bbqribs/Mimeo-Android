@@ -9,7 +9,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.navigation.NavController
-import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.PlayerControlsMode
 import kotlinx.coroutines.delay
 
@@ -29,7 +28,6 @@ data class PlayerShellState(
 fun rememberPlayerShellState(
     vm: AppViewModel,
     nav: NavController,
-    settings: AppSettings,
     currentRoute: String,
     routeItemId: Int?,
 ): PlayerShellState {
@@ -40,20 +38,6 @@ fun rememberPlayerShellState(
     var playbackActive by rememberSaveable { mutableStateOf(false) }
     var manualReadingActive by rememberSaveable { mutableStateOf(false) }
     var readerChromeHidden by rememberSaveable { mutableStateOf(false) }
-
-    val storedLastNonNubMode = settings.playerLastNonNubMode
-        .takeIf { it != PlayerControlsMode.NUB }
-        ?: PlayerControlsMode.FULL
-    var previousRoute by rememberSaveable { mutableStateOf(currentRoute) }
-    var lastLocusMode by rememberSaveable {
-        mutableStateOf(
-            if (settings.playerControlsMode == PlayerControlsMode.NUB) {
-                storedLastNonNubMode
-            } else {
-                settings.playerControlsMode
-            },
-        )
-    }
 
     val requestedPlayerItemId =
         routeItemId
@@ -81,30 +65,6 @@ fun rememberPlayerShellState(
             pendingLocusOpen = false
             pendingLocusItemId = -1
         }
-        if (currentRoute == previousRoute) return@LaunchedEffect
-        val wasOnLocus = previousRoute.startsWith(ROUTE_LOCUS)
-        val nowOnLocus = currentRoute.startsWith(ROUTE_LOCUS)
-        val currentMode = settings.playerControlsMode
-
-        if (wasOnLocus && !nowOnLocus) {
-            lastLocusMode = currentMode
-            if (!playbackActive && currentMode != PlayerControlsMode.NUB) {
-                val nextLastNonNub = currentMode.takeIf { it != PlayerControlsMode.NUB } ?: storedLastNonNubMode
-                vm.savePlayerControlsState(PlayerControlsMode.NUB, nextLastNonNub)
-            }
-        } else if (!wasOnLocus && nowOnLocus) {
-            val restoreMode = lastLocusMode
-            val restoreLastNonNub = restoreMode.takeIf { it != PlayerControlsMode.NUB } ?: storedLastNonNubMode
-            if (currentMode != restoreMode || settings.playerLastNonNubMode != restoreLastNonNub) {
-                vm.savePlayerControlsState(restoreMode, restoreLastNonNub)
-            }
-        } else if (!wasOnLocus && !nowOnLocus) {
-            if (!playbackActive && currentMode != PlayerControlsMode.NUB) {
-                val nextLastNonNub = lastLocusMode.takeIf { it != PlayerControlsMode.NUB } ?: storedLastNonNubMode
-                vm.savePlayerControlsState(PlayerControlsMode.NUB, nextLastNonNub)
-            }
-        }
-        previousRoute = currentRoute
     }
 
     LaunchedEffect(pendingLocusOpen, currentRoute) {
@@ -127,9 +87,6 @@ fun rememberPlayerShellState(
         onReaderChromeVisibilityChange = { hidden -> readerChromeHidden = hidden },
         onControlsModeChange = { mode, lastNonNubMode ->
             vm.savePlayerControlsState(mode, lastNonNubMode)
-            if (currentRoute.startsWith(ROUTE_LOCUS)) {
-                lastLocusMode = mode
-            }
         },
     )
 }

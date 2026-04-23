@@ -12,6 +12,7 @@ class PlaybackOpenIntentTest {
             knownProgress = 65,
             hasChunks = true,
             openIntent = PlaybackOpenIntent.ManualOpen,
+            savedPlaybackPosition = PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0),
             positionForPercent = { PlaybackPosition(chunkIndex = 6, offsetInChunkChars = 50) },
         )
 
@@ -24,6 +25,7 @@ class PlaybackOpenIntentTest {
             knownProgress = 25,
             hasChunks = true,
             openIntent = PlaybackOpenIntent.ManualOpen,
+            savedPlaybackPosition = PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0),
             positionForPercent = { percent ->
                 if (percent == 25) {
                     PlaybackPosition(chunkIndex = 2, offsetInChunkChars = 10)
@@ -42,6 +44,7 @@ class PlaybackOpenIntentTest {
             knownProgress = 0,
             hasChunks = true,
             openIntent = PlaybackOpenIntent.ManualOpen,
+            savedPlaybackPosition = PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0),
             positionForPercent = { PlaybackPosition(chunkIndex = 6, offsetInChunkChars = 50) },
         )
 
@@ -54,6 +57,7 @@ class PlaybackOpenIntentTest {
             knownProgress = 80,
             hasChunks = true,
             openIntent = PlaybackOpenIntent.AutoContinue,
+            savedPlaybackPosition = PlaybackPosition(chunkIndex = 7, offsetInChunkChars = 40),
             positionForPercent = { PlaybackPosition(chunkIndex = 7, offsetInChunkChars = 40) },
         )
 
@@ -66,7 +70,47 @@ class PlaybackOpenIntentTest {
             knownProgress = 100,
             hasChunks = true,
             openIntent = PlaybackOpenIntent.Replay,
+            savedPlaybackPosition = PlaybackPosition(chunkIndex = 7, offsetInChunkChars = 40),
             positionForPercent = { PlaybackPosition(chunkIndex = 7, offsetInChunkChars = 40) },
+        )
+
+        assertEquals(PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0), seeded)
+    }
+
+    @Test
+    fun replayUsesSavedPlaybackPointerWhenProgressIsNotAtEnd() {
+        val seeded = resolveSeededPlaybackPosition(
+            knownProgress = 29,
+            hasChunks = true,
+            openIntent = PlaybackOpenIntent.Replay,
+            savedPlaybackPosition = PlaybackPosition(chunkIndex = 3, offsetInChunkChars = 25),
+            positionForPercent = { PlaybackPosition(chunkIndex = 1, offsetInChunkChars = 10) },
+        )
+
+        assertEquals(PlaybackPosition(chunkIndex = 3, offsetInChunkChars = 25), seeded)
+    }
+
+    @Test
+    fun manualOpenPrefersSavedPlaybackPointerOverQueuePercent() {
+        val seeded = resolveSeededPlaybackPosition(
+            knownProgress = 25,
+            hasChunks = true,
+            openIntent = PlaybackOpenIntent.ManualOpen,
+            savedPlaybackPosition = PlaybackPosition(chunkIndex = 8, offsetInChunkChars = 12),
+            positionForPercent = { PlaybackPosition(chunkIndex = 2, offsetInChunkChars = 10) },
+        )
+
+        assertEquals(PlaybackPosition(chunkIndex = 8, offsetInChunkChars = 12), seeded)
+    }
+
+    @Test
+    fun manualOpenNormalizesNegativeSavedPlaybackPointer() {
+        val seeded = resolveSeededPlaybackPosition(
+            knownProgress = 0,
+            hasChunks = true,
+            openIntent = PlaybackOpenIntent.ManualOpen,
+            savedPlaybackPosition = PlaybackPosition(chunkIndex = -5, offsetInChunkChars = -10),
+            positionForPercent = { PlaybackPosition(chunkIndex = 6, offsetInChunkChars = 50) },
         )
 
         assertEquals(PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0), seeded)

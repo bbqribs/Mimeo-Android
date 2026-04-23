@@ -146,10 +146,12 @@ class PlaybackEngine(
         textPayload = payload
         chunks = loadedChunks
         val knownProgress = host.knownProgressForItem(current.currentItemId)
+        val savedPlaybackPosition = host.getPlaybackPosition(current.currentItemId)
         val seeded = resolveSeededPlaybackPosition(
             knownProgress = knownProgress,
             hasChunks = loadedChunks.isNotEmpty(),
             openIntent = current.openIntent,
+            savedPlaybackPosition = savedPlaybackPosition,
             positionForPercent = ::positionForPercent,
         )
         val safe = normalizedPosition(seeded)
@@ -157,6 +159,7 @@ class PlaybackEngine(
             openIntent = current.openIntent,
             knownProgress = knownProgress,
             hasChunks = loadedChunks.isNotEmpty(),
+            savedPlaybackPosition = savedPlaybackPosition,
         )
         host.setPlaybackPosition(current.currentItemId, safe.chunkIndex, safe.offsetInChunkChars)
         _state.value = current.copy(

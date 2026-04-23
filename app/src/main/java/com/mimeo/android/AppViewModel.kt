@@ -104,6 +104,7 @@ import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
+import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.ParagraphSpacingOption
@@ -176,6 +177,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -331,6 +333,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _playbackPositionByItem = MutableStateFlow<Map<Int, PlaybackPosition>>(emptyMap())
     val playbackPositionByItem: StateFlow<Map<Int, PlaybackPosition>> = _playbackPositionByItem.asStateFlow()
+    private val _persistedPlaybackSegmentIndexByItem = MutableStateFlow<Map<Int, PlaybackPosition>>(emptyMap())
+    private val _playbackResumeStateReady = MutableStateFlow(false)
+    val playbackResumeStateReady: StateFlow<Boolean> = _playbackResumeStateReady.asStateFlow()
+    private var initialSessionStateLoaded = false
+    private var initialPersistedPlaybackStateLoaded = false
     val playerSurfaceContentState = PlayerSurfaceContentState()
     private val playbackEngine = PlaybackEngine(
         context = application.applicationContext,
@@ -511,8 +518,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     pendingInitialPostSignInHydration = false
                     settingsStore.clearQueueSnapshots()
                     settingsStore.clearPendingItemActions()
+                    settingsStore.clearPlaybackSegmentIndexes()
                 }
                 previous = next
+            }
+        }
+        viewModelScope.launch {
+            var initialLoaded = false
+            settingsStore.playbackSegmentIndexByItemFlow.collect { persisted ->
+                _persistedPlaybackSegmentIndexByItem.value = persisted
+                if (!initialLoaded) {
+                    initialLoaded = true
+                    initialPersistedPlaybackStateLoaded = true
+                    markPlaybackResumeStateReadyIfComplete()
+                }
             }
         }
         viewModelScope.launch {
@@ -613,22 +632,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         viewModelScope.launch {
-            val loadResult = repository.getSessionLoadResult()
-            val session = loadResult.session
-            _nowPlayingSession.value = session
-            _sessionIssueMessage.value = if (loadResult.wasCorrupt) {
-                "Saved Now Playing session was invalid. Clear session metadata if this repeats."
-            } else {
-                null
-            }
-            if (session != null) {
-                _playbackPositionByItem.value = session.items.associate { item ->
-                    item.itemId to PlaybackPosition(
-                        chunkIndex = item.chunkIndex.coerceAtLeast(0),
-                        offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
-                    )
+            try {
+                val loadResult = repository.getSessionLoadResult()
+                val session = loadResult.session
+                _nowPlayingSession.value = session
+                _sessionIssueMessage.value = if (loadResult.wasCorrupt) {
+                    "Saved Now Playing session was invalid. Clear session metadata if this repeats."
+                } else {
+                    null
                 }
-                _cachedItemIds.value = resolveOfflineReadyIdsForSession(session.items)
+                if (session != null) {
+                    _playbackPositionByItem.value = session.items.associate { item ->
+                        item.itemId to PlaybackPosition(
+                            chunkIndex = item.chunkIndex.coerceAtLeast(0),
+                            offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
+                        )
+                    }
+                    _cachedItemIds.value = resolveOfflineReadyIdsForSession(session.items)
+                }
+            } finally {
+                initialSessionStateLoaded = true
+                markPlaybackResumeStateReadyIfComplete()
             }
         }
         startConnectivityMonitoring()
@@ -1158,6 +1182,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
         viewModelScope.launch {
             settingsStore.savePlayerChevronSnap(edge, edgeOffset)
+        }
+    }
+
+    fun saveDrawerPanelSide(side: DrawerPanelSide) {
+        val current = settings.value
+        _settings.value = current.copy(drawerPanelSide = side)
+        viewModelScope.launch {
+            settingsStore.saveDrawerPanelSide(side)
         }
     }
 
@@ -3002,6 +3034,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
                 )
             }
+            ?: playbackPositionFromPersistedSegment(itemId)
         val readerPointer = nowPlayingSession.value
             ?.items
             ?.firstOrNull { it.itemId == itemId }
@@ -4326,7 +4359,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun getPlaybackPosition(itemId: Int): PlaybackPosition {
-        return playbackPositionByItem.value[itemId] ?: PlaybackPosition()
+        return playbackPositionByItem.value[itemId]
+            ?: playbackPositionFromPersistedSegment(itemId)
+            ?: PlaybackPosition()
     }
 
     fun setPlaybackPosition(itemId: Int, chunkIndex: Int, offsetInChunkChars: Int) {
@@ -4334,8 +4369,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             chunkIndex = chunkIndex.coerceAtLeast(0),
             offsetInChunkChars = offsetInChunkChars.coerceAtLeast(0),
         )
+        val previousPersistedPosition = playbackPositionByItem.value[itemId]
+            ?: _persistedPlaybackSegmentIndexByItem.value[itemId]
         _playbackPositionByItem.update { previous -> previous + (itemId to normalized) }
         viewModelScope.launch {
+            val shouldPersist = when {
+                previousPersistedPosition == null -> true
+                previousPersistedPosition.chunkIndex != normalized.chunkIndex -> true
+                previousPersistedPosition.offsetInChunkChars == normalized.offsetInChunkChars -> false
+                normalized.offsetInChunkChars == 0 -> true
+                else -> abs(previousPersistedPosition.offsetInChunkChars - normalized.offsetInChunkChars) >= 120
+            }
+            if (shouldPersist) {
+                settingsStore.savePlaybackSegmentIndex(
+                    itemId = itemId,
+                    segmentIndex = normalized.chunkIndex,
+                    offsetInChunkChars = normalized.offsetInChunkChars,
+                )
+                _persistedPlaybackSegmentIndexByItem.update { previous ->
+                    previous + (itemId to normalized)
+                }
+            }
             val updated = repository.setCurrentPlaybackPosition(
                 itemId = itemId,
                 chunkIndex = normalized.chunkIndex,
@@ -4414,6 +4468,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         _sessionIssueMessage.value = null
+    }
+
+    private fun playbackPositionFromPersistedSegment(itemId: Int): PlaybackPosition? {
+        val persisted = _persistedPlaybackSegmentIndexByItem.value[itemId] ?: return null
+        return PlaybackPosition(
+            chunkIndex = persisted.chunkIndex.coerceAtLeast(0),
+            offsetInChunkChars = persisted.offsetInChunkChars.coerceAtLeast(0),
+        )
+    }
+
+    private fun markPlaybackResumeStateReadyIfComplete() {
+        if (!_playbackResumeStateReady.value && initialSessionStateLoaded && initialPersistedPlaybackStateLoaded) {
+            _playbackResumeStateReady.value = true
+        }
     }
 
     private fun expectedActiveVersionFor(itemId: Int): Int? {
