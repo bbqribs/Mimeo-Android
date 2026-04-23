@@ -10,23 +10,23 @@ import android.view.KeyEvent
 
 class PlaybackServiceObservabilityTest {
     @Test
-    fun `media pause key falls back to play when currently paused`() {
+    fun `media pause key always resolves to pause`() {
         val action = resolveMediaButtonDispatchAction(
             keyCode = KeyEvent.KEYCODE_MEDIA_PAUSE,
             isCurrentlyPlaying = false,
         )
 
-        assertEquals(MediaButtonDispatchAction.Play, action)
+        assertEquals(MediaButtonDispatchAction.Pause, action)
     }
 
     @Test
-    fun `media play key falls back to pause when currently playing`() {
+    fun `media play key always resolves to play`() {
         val action = resolveMediaButtonDispatchAction(
             keyCode = KeyEvent.KEYCODE_MEDIA_PLAY,
             isCurrentlyPlaying = true,
         )
 
-        assertEquals(MediaButtonDispatchAction.Pause, action)
+        assertEquals(MediaButtonDispatchAction.Play, action)
     }
 
     @Test
@@ -91,6 +91,25 @@ class PlaybackServiceObservabilityTest {
 
         assertTrue(clues.contains("focus-without-item"))
         assertTrue(clues.contains("session-active-without-item"))
+    }
+
+    @Test
+    fun `drift clues include playing without focus`() {
+        val clues = detectPlaybackDriftClues(
+            PlaybackAuditState(
+                itemId = 10,
+                isPlaying = true,
+                hasAudioFocus = false,
+                mediaSessionActive = true,
+                isForeground = true,
+                anchorPlaying = false,
+                isDeviceInteractive = true,
+                isDeviceLocked = false,
+                appInBackground = false,
+            ),
+        )
+
+        assertTrue(clues.contains("playing-without-focus"))
     }
 
     @Test

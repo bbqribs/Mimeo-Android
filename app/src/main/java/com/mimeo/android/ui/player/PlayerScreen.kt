@@ -1725,6 +1725,9 @@ fun PlayerScreen(
                 intent = PlaybackOpenIntent.ManualOpen,
                 autoPlayAfterLoad = true,
             )
+            actionScope.launch {
+                vm.setNowPlayingCurrentItem(locusItemId)
+            }
             onOpenItem(locusItemId)
             onShowSnackbar("Playing item shown in Locus", null, null)
             return

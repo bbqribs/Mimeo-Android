@@ -48,7 +48,7 @@ Most recent audit: `docs/REDESIGN_V2_AUDIT_2026-04-21.md`.
    paragraph FF/RW is shipped.
 8. [x] **Persist last segment index per item in DataStore** for
    cross-process resume.
-9. [ ] **Audio focus / media session polish** beyond the bounded drift
+9. [x] **Audio focus / media session polish** beyond the bounded drift
    fixes already shipped.
 10. [x] **Conflict handling for stale cached versions** during long
     offline sessions.
