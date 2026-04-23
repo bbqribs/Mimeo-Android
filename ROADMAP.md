@@ -61,11 +61,9 @@ Most recent audit: `docs/REDESIGN_V2_AUDIT_2026-04-21.md`.
 
 ### Testing debt
 
-- [ ] `NoActiveContentStore` Worker→ViewModel integration test: verify IDs
+- [x] `NoActiveContentStore` Worker→ViewModel integration test: verify IDs
   written by the worker during a download run are read back and merged
   into the ViewModel's `noActiveContentItemIds` on the next queue load.
-  Needs ViewModel testing infrastructure (e.g. `TestCoroutineDispatcher`
-  + fake repo) not yet established.
 
 ## Redesign v2 execution track (reference)
 
