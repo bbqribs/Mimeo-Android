@@ -819,6 +819,8 @@ fun PlayerScreen(
     onRequestBack: () -> Unit = {},
     onOpenDiagnostics: () -> Unit,
     onChevronTap: () -> Unit = {},
+    drawerIsOpen: Boolean = false,
+    onCloseDrawer: () -> Unit = {},
     compactControlsOnly: Boolean = false,
     showCompactControls: Boolean = true,
     controlsMode: PlayerControlsMode = PlayerControlsMode.FULL,
@@ -983,7 +985,9 @@ fun PlayerScreen(
         selectionClearArmed = false
     }
     BackHandler(enabled = !compactControlsOnly) {
-        if (selectionClearArmed || hasActiveSelection) {
+        if (drawerIsOpen) {
+            onCloseDrawer()
+        } else if (selectionClearArmed || hasActiveSelection) {
             clearActiveSelection()
         } else {
             onRequestBack()
@@ -1355,6 +1359,13 @@ fun PlayerScreen(
                 textPayload = payload
                 usingCachedText = loaded.usingCache
                 chunks = buildPlaybackChunks(payload)
+                if (loaded.staleCachedVersion) {
+                    onShowSnackbar(
+                        "Showing saved offline copy. A newer version is available; refresh when online.",
+                        null,
+                        null,
+                    )
+                }
                 continuationLog(
                     "loadItem success item=$currentItemId chunks=${chunks.size} usingCache=$usingCachedText autoPlayAfterLoad=$autoPlayAfterLoad",
                 )

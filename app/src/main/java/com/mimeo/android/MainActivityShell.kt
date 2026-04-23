@@ -1,5 +1,6 @@
 package com.mimeo.android
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -130,6 +131,7 @@ internal fun MainActivityShell(
     val selectedDrawerRoute = resolveSelectedDrawerRoute(currentRoute)
     val isOnLocusRoute = currentRoute.startsWith(ROUTE_LOCUS)
     val presentingLocus = isOnLocusRoute
+    val drawerAvailable = !requiresSignIn
     val requestedPlayerItemId = shellState.requestedPlayerItemId
     val readerChromeHidden = shellState.readerChromeHidden
     val playerControlsVisible = !requiresSignIn && requestedPlayerItemId != null && !(presentingLocus && readerChromeHidden)
@@ -189,7 +191,7 @@ internal fun MainActivityShell(
         nav = nav,
         currentRoute = currentRoute,
         onChevronTap = {
-            if (libraryShellVisible) {
+            if (drawerAvailable) {
                 coroutineScope.launch { drawerState.open() }
             }
         },
@@ -201,11 +203,14 @@ internal fun MainActivityShell(
     }
 
     androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides drawerLayoutDirection) {
+        BackHandler(enabled = drawerState.isOpen) {
+            coroutineScope.launch { drawerState.close() }
+        }
         ModalNavigationDrawer(
             drawerState = drawerState,
-            gesturesEnabled = libraryShellVisible,
+            gesturesEnabled = drawerAvailable,
             drawerContent = {
-                if (libraryShellVisible) {
+                if (drawerAvailable) {
                     MimeoDrawerContent(
                         drawerItems = drawerItems,
                         playlists = playlists,
@@ -558,6 +563,8 @@ internal fun MainActivityShell(
                                     shellBottomClearance = shellBottomClearance,
                                     onGoQueue = { nav.navigate(ROUTE_UP_NEXT) },
                                     onChevronTap = playerHandlers.onChevronTap,
+                                    drawerIsOpen = drawerState.isOpen,
+                                    onCloseDrawer = { coroutineScope.launch { drawerState.close() } },
                                 )
                             }
                             composable(
@@ -595,6 +602,8 @@ internal fun MainActivityShell(
                                     shellBottomClearance = shellBottomClearance,
                                     onGoQueue = { nav.navigate(ROUTE_UP_NEXT) },
                                     onChevronTap = playerHandlers.onChevronTap,
+                                    drawerIsOpen = drawerState.isOpen,
+                                    onCloseDrawer = { coroutineScope.launch { drawerState.close() } },
                                 )
                             }
                         }
@@ -665,6 +674,8 @@ private fun LocusPlayerRoute(
     shellBottomClearance: Dp,
     onGoQueue: () -> Unit,
     onChevronTap: () -> Unit,
+    drawerIsOpen: Boolean,
+    onCloseDrawer: () -> Unit,
 ) {
     if (requestedPlayerItemId == null) {
         NoNowPlayingScreen(onGoQueue = onGoQueue)
@@ -682,6 +693,8 @@ private fun LocusPlayerRoute(
         onRequestBack = playerHandlers.onRequestBack,
         onOpenDiagnostics = playerHandlers.onOpenDiagnostics,
         onChevronTap = onChevronTap,
+        drawerIsOpen = drawerIsOpen,
+        onCloseDrawer = onCloseDrawer,
         compactControlsOnly = false,
         showCompactControls = showCompactControls,
         controlsMode = settings.playerControlsMode,

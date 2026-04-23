@@ -18,7 +18,6 @@ import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.model.PlaylistSummary
@@ -36,7 +35,7 @@ internal fun MimeoDrawerContent(
     onSettingsClick: () -> Unit,
 ) {
     BoxWithConstraints {
-        val drawerWidth: Dp = maxWidth * (2f / 3f)
+        val drawerWidth = maxWidth * (2f / 3f)
         ModalDrawerSheet(
             modifier = Modifier.width(drawerWidth),
         ) {
