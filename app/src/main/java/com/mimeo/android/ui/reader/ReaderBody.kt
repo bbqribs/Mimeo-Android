@@ -744,6 +744,17 @@ fun ReaderBody(
             }
         }
         if (
+            shouldClearFollowSuppression(
+                followSuppressedByManualScroll = followSuppressedByManualScroll,
+                manualScrollDetached = manualScrollDetached,
+                triggerKind = triggerKind,
+                nowMs = nowMs,
+                suppressUntilMs = suppressTransitionUntilMs,
+            )
+        ) {
+            followSuppressedByManualScroll = false
+        }
+        if (
             shouldSuppressStandardTriggerDuringCooldown(
                 triggerKind = triggerKind,
                 nowMs = nowMs,

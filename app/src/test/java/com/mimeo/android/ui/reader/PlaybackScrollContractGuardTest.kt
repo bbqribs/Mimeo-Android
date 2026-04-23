@@ -212,5 +212,53 @@ class PlaybackScrollContractGuardTest {
             ),
         )
     }
+
+    @Test
+    fun manualSuppression_clearsAfterCooldownWhenDetachedReleased() {
+        assertTrue(
+            shouldClearFollowSuppression(
+                followSuppressedByManualScroll = true,
+                manualScrollDetached = false,
+                triggerKind = ReaderScrollTriggerKind.NONE,
+                nowMs = 5_000L,
+                suppressUntilMs = 4_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun manualSuppression_staysWhileDetachedOrCooldownActive() {
+        assertFalse(
+            shouldClearFollowSuppression(
+                followSuppressedByManualScroll = true,
+                manualScrollDetached = true,
+                triggerKind = ReaderScrollTriggerKind.NONE,
+                nowMs = 5_000L,
+                suppressUntilMs = 4_000L,
+            ),
+        )
+        assertFalse(
+            shouldClearFollowSuppression(
+                followSuppressedByManualScroll = true,
+                manualScrollDetached = false,
+                triggerKind = ReaderScrollTriggerKind.NONE,
+                nowMs = 3_000L,
+                suppressUntilMs = 4_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun manualSuppression_clearsImmediatelyOnForceReattach() {
+        assertTrue(
+            shouldClearFollowSuppression(
+                followSuppressedByManualScroll = true,
+                manualScrollDetached = true,
+                triggerKind = ReaderScrollTriggerKind.FORCE_REATTACH,
+                nowMs = 1_000L,
+                suppressUntilMs = 10_000L,
+            ),
+        )
+    }
 }
 

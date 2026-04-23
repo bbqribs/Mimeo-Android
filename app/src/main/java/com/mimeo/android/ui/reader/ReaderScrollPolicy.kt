@@ -95,3 +95,16 @@ internal fun shouldUseCenteredJumpAnchor(
     return true
 }
 
+internal fun shouldClearFollowSuppression(
+    followSuppressedByManualScroll: Boolean,
+    manualScrollDetached: Boolean,
+    triggerKind: ReaderScrollTriggerKind,
+    nowMs: Long,
+    suppressUntilMs: Long,
+): Boolean {
+    if (!followSuppressedByManualScroll) return false
+    if (triggerKind == ReaderScrollTriggerKind.FORCE_REATTACH) return true
+    if (manualScrollDetached) return false
+    return nowMs >= suppressUntilMs
+}
+
