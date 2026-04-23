@@ -6,37 +6,36 @@ Most recent audit: `docs/REDESIGN_V2_AUDIT_2026-04-21.md`.
 
 ## Open — priority order
 
-### P0 — redesign closeout
+### P0 — redesign closeout (shipped)
 
-1. [ ] **Up Next screen rearchitecture.** Remove the legacy library-filter
+1. [x] **Up Next screen rearchitecture.** Removed the legacy library-filter
    chips (`All / Favorites / Archive / Bin / Unread / In progress / Done`)
-   from `QueueScreen`. Those views now live in the drawer and duplicating
-   them on Up Next exercises the plan's Risk 2 (Inbox and Up Next
-   confusingly similar). Retain: manual-save `+` entry, seed-source header
-   with re-seed + confirmation, per-row overflow (Play Next / Play Last /
-   remove), session pointer semantics. Decide pending-projection placement
-   (on-Up-Next pending section vs Inbox pending) as part of this ticket.
-2. [ ] **Persistent mini-player + real Locus route (Phase 3 structural).**
-   Add a `MiniPlayer` composable pinned at the bottom of the library shell
-   (title + progress + play/pause + queue icon). Tap expands to Locus. Make
-   `ROUTE_LOCUS` render the real player instead of an empty placeholder
-   `Box`. Replace the current "compose `PlayerScreen` above `NavHost`
-   whenever `requestedPlayerItemId != null`" overlay hack. Internal playback
-   behavior must be preserved byte-for-byte (per plan Risk 3).
-3. [x] **Up Next drag-to-reorder + TalkBack move-up/move-down + delete
-   orphaned `PlaylistsScreen.kt`.** Closes the Phase 6 reorder UX gap.
+   from `QueueScreen`; Up Next is now session-queue-first with retained
+   manual-save `+`, seed-source + explicit re-seed confirmation, and
+   session pointer semantics.
+2. [x] **Persistent mini-player + real Locus route (Phase 3 structural).**
+   `MiniPlayer` is pinned at the bottom of the shell outside Locus routes,
+   and `ROUTE_LOCUS` / `ROUTE_LOCUS_ITEM` now render the real Locus player
+   route (no placeholder `Box` route).
+3. [x] **Up Next drag-to-reorder + TalkBack move-up/move-down + playlist
+   orphan cleanup.** Closes the Phase 6 reorder UX gap.
    Handles per plan §8 (grip icon, always-visible in ordered lists) with
-   accessible non-drag alternatives per §14. Delete unused
-   `ui/playlists/PlaylistsScreen.kt` (no route references it).
+   accessible non-drag alternatives per §14. Legacy standalone playlists
+   screen wiring is removed; `ui/playlists/PlaylistsScreen.kt` is now
+   dialog-only picker UI used by active surfaces.
 
-### P1 — small follow-ups implied by the plan / shipped state
+### P0 — next Android implementation (post-redesign)
 
-4. [ ] **Phase 0 follow-on decomposition of `MainActivity.kt`.** The shell
-   has grown back to ~1300 lines since Phase 0 nominally landed. Extract
-   drawer content, navigation wiring, and the player-overlay controller
-   into dedicated composables/state holders. Pure refactor; zero behavior
-   change. Sequence before or alongside ticket 2.
-5. [ ] **Problem reports v2 attachment contract (CONTRACT CHANGE, backend).**
+4. [ ] **Hosting story v2 UX.** HTTPS-first guidance, per-device token
+   setup polish, safer LAN-mode flow.
+
+### P1 — follow-ups implied by shipped state
+
+5. [x] **Phase 0 follow-on decomposition of `MainActivity.kt`.** Shell and
+   player/nav wiring are extracted into dedicated holders/composables
+   (`MainActivityShell`, `PlayerShellState`) and `MainActivity.kt` is now
+   the lighter host/composition entry point.
+6. [ ] **Problem reports v2 attachment contract (CONTRACT CHANGE, backend).**
    Android opt-in UI/payload path is implemented (default-OFF attachment
    checkboxes + privacy hint + bounded payload). Remaining work is backend
    persistence/export per `docs/PROBLEM_REPORT_ATTACHMENT_V2_CONTRACT_SPEC.md`.
@@ -44,11 +43,9 @@ Most recent audit: `docs/REDESIGN_V2_AUDIT_2026-04-21.md`.
 
 ### P2 — exploratory / deferred
 
-6. [ ] **Time-based FF/RW follow-up (optional).** Evaluate whether a
+7. [ ] **Time-based FF/RW follow-up (optional).** Evaluate whether a
    separate time-skip control model is still useful now that sentence /
    paragraph FF/RW is shipped.
-7. [ ] **Hosting story v2 UX.** HTTPS-first guidance, per-device token
-   setup polish, safer LAN-mode flow.
 8. [ ] **Persist last segment index per item in DataStore** for
    cross-process resume.
 9. [ ] **Audio focus / media session polish** beyond the bounded drift
@@ -75,16 +72,16 @@ Most recent audit: `docs/REDESIGN_V2_AUDIT_2026-04-21.md`.
 Settled rules and phase map live in `docs/REDESIGN_V2_PLAN.md`. Quick
 pointers:
 
-- **Phase 0**: `MainActivity` / root state extraction. Nominally landed;
-  ticket 4 above is the follow-on.
+- **Phase 0**: `MainActivity` / root state extraction: shipped, including
+  follow-on shell/player-state decomposition.
 - **Phase 1 (backend contracts)**: shipped (library `view=` query, batch
   endpoints).
 - **Phase 2 (drawer + library views + playlist visibility)**: shipped.
-- **Phase 3 (mini-player + Locus restructure)**: open; ticket 2 above.
+- **Phase 3 (mini-player + Locus restructure)**: shipped.
 - **Phase 4 (multi-select + batch actions)**: shipped.
 - **Phase 5 (playlist management + reorder)**: shipped.
-- **Phase 6 (Up Next finalization)**: substrate shipped (6A). Remaining
-  reorder / a11y work is ticket 3 above. Cross-device sync deferred to
+- **Phase 6 (Up Next finalization)**: shipped for local session behavior,
+  including reorder + TalkBack move actions. Cross-device sync deferred to
   v2+ (requires backend CONTRACT CHANGE).
 
 Non-goals still in force:
