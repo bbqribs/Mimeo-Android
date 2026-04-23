@@ -1355,6 +1355,13 @@ fun PlayerScreen(
                 textPayload = payload
                 usingCachedText = loaded.usingCache
                 chunks = buildPlaybackChunks(payload)
+                if (loaded.staleCachedVersion) {
+                    onShowSnackbar(
+                        "Showing saved offline copy. A newer version is available; refresh when online.",
+                        null,
+                        null,
+                    )
+                }
                 continuationLog(
                     "loadItem success item=$currentItemId chunks=${chunks.size} usingCache=$usingCachedText autoPlayAfterLoad=$autoPlayAfterLoad",
                 )

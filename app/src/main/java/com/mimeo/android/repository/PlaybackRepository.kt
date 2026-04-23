@@ -35,6 +35,7 @@ data class ItemTextPrefetchAttempt(
 data class ItemTextResult(
     val payload: ItemTextResponse,
     val usingCache: Boolean,
+    val staleCachedVersion: Boolean = false,
 )
 
 data class ProgressPostResult(
@@ -83,6 +84,14 @@ data class SessionLoadResult(
 data class PlaylistMembershipToggleResult(
     val added: Boolean,
 )
+
+internal fun shouldAllowStaleCacheFallback(error: Exception): Boolean {
+    return when (error) {
+        is IOException -> true
+        is ApiException -> error.statusCode in 500..599
+        else -> false
+    }
+}
 
 internal data class SessionReorderPlan(
     val fromIndex: Int,
@@ -313,12 +322,17 @@ class PlaybackRepository(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            val fallback = getCachedItemText(itemId = itemId, expectedActiveVersionId = expectedActiveVersionId)
+            val allowStaleVersionFallback = shouldAllowStaleCacheFallback(error)
+            val fallback = getCachedItemText(
+                itemId = itemId,
+                expectedActiveVersionId = expectedActiveVersionId,
+                allowVersionMismatch = allowStaleVersionFallback,
+            )
             if (BuildConfig.DEBUG) {
                 Log.d(
                     TEXT_LOAD_POLICY_DEBUG_TAG,
                     if (fallback != null) {
-                        "trigger=repository_get_item_text item=$itemId resolved_source=cache_fallback"
+                        "trigger=repository_get_item_text item=$itemId resolved_source=cache_fallback stale_cached_version=${fallback.staleCachedVersion}"
                     } else {
                         "trigger=repository_get_item_text item=$itemId failed=${error::class.simpleName}:${error.message.orEmpty()}"
                     },
@@ -328,12 +342,22 @@ class PlaybackRepository(
         }
     }
 
-    private suspend fun getCachedItemText(itemId: Int, expectedActiveVersionId: Int?): ItemTextResult? {
+    private suspend fun getCachedItemText(
+        itemId: Int,
+        expectedActiveVersionId: Int?,
+        allowVersionMismatch: Boolean = false,
+    ): ItemTextResult? {
         val cached = database.cachedItemDao().findByItemId(itemId) ?: return null
-        if (expectedActiveVersionId != null && cached.activeContentVersionId != expectedActiveVersionId) {
+        val hasVersionMismatch =
+            expectedActiveVersionId != null && cached.activeContentVersionId != expectedActiveVersionId
+        if (hasVersionMismatch && !allowVersionMismatch) {
             return null
         }
-        return ItemTextResult(payload = cached.toPayload(), usingCache = true)
+        return ItemTextResult(
+            payload = cached.toPayload(),
+            usingCache = true,
+            staleCachedVersion = hasVersionMismatch,
+        )
     }
 
     suspend fun postProgress(

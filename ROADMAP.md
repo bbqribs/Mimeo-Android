@@ -50,7 +50,7 @@ Most recent audit: `docs/REDESIGN_V2_AUDIT_2026-04-21.md`.
    cross-process resume.
 9. [ ] **Audio focus / media session polish** beyond the bounded drift
    fixes already shipped.
-10. [ ] **Conflict handling for stale cached versions** during long
+10. [x] **Conflict handling for stale cached versions** during long
     offline sessions.
 11. [ ] **Cleartext → HTTPS-friendly transport** for hosted/mobile use.
 12. [ ] **Scrollbars** for Up Next (draggable, long-queue ergonomics) and
