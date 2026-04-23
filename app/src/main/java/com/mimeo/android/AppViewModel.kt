@@ -331,6 +331,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _playbackPositionByItem = MutableStateFlow<Map<Int, PlaybackPosition>>(emptyMap())
     val playbackPositionByItem: StateFlow<Map<Int, PlaybackPosition>> = _playbackPositionByItem.asStateFlow()
+    private val _persistedPlaybackSegmentIndexByItem = MutableStateFlow<Map<Int, Int>>(emptyMap())
     val playerSurfaceContentState = PlayerSurfaceContentState()
     private val playbackEngine = PlaybackEngine(
         context = application.applicationContext,
@@ -511,8 +512,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     pendingInitialPostSignInHydration = false
                     settingsStore.clearQueueSnapshots()
                     settingsStore.clearPendingItemActions()
+                    settingsStore.clearPlaybackSegmentIndexes()
                 }
                 previous = next
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.playbackSegmentIndexByItemFlow.collect { persisted ->
+                _persistedPlaybackSegmentIndexByItem.value = persisted
             }
         }
         viewModelScope.launch {
@@ -3002,6 +3009,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
                 )
             }
+            ?: playbackPositionFromPersistedSegment(itemId)
         val readerPointer = nowPlayingSession.value
             ?.items
             ?.firstOrNull { it.itemId == itemId }
@@ -4326,7 +4334,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun getPlaybackPosition(itemId: Int): PlaybackPosition {
-        return playbackPositionByItem.value[itemId] ?: PlaybackPosition()
+        return playbackPositionByItem.value[itemId]
+            ?: playbackPositionFromPersistedSegment(itemId)
+            ?: PlaybackPosition()
     }
 
     fun setPlaybackPosition(itemId: Int, chunkIndex: Int, offsetInChunkChars: Int) {
@@ -4334,8 +4344,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             chunkIndex = chunkIndex.coerceAtLeast(0),
             offsetInChunkChars = offsetInChunkChars.coerceAtLeast(0),
         )
+        val previousSegmentIndex = playbackPositionByItem.value[itemId]?.chunkIndex
+            ?: _persistedPlaybackSegmentIndexByItem.value[itemId]
         _playbackPositionByItem.update { previous -> previous + (itemId to normalized) }
         viewModelScope.launch {
+            if (previousSegmentIndex != normalized.chunkIndex) {
+                settingsStore.savePlaybackSegmentIndex(
+                    itemId = itemId,
+                    segmentIndex = normalized.chunkIndex,
+                )
+                _persistedPlaybackSegmentIndexByItem.update { previous ->
+                    previous + (itemId to normalized.chunkIndex)
+                }
+            }
             val updated = repository.setCurrentPlaybackPosition(
                 itemId = itemId,
                 chunkIndex = normalized.chunkIndex,
@@ -4414,6 +4435,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         _sessionIssueMessage.value = null
+    }
+
+    private fun playbackPositionFromPersistedSegment(itemId: Int): PlaybackPosition? {
+        val persistedSegmentIndex = _persistedPlaybackSegmentIndexByItem.value[itemId] ?: return null
+        return PlaybackPosition(
+            chunkIndex = persistedSegmentIndex.coerceAtLeast(0),
+            offsetInChunkChars = 0,
+        )
     }
 
     private fun expectedActiveVersionFor(itemId: Int): Int? {

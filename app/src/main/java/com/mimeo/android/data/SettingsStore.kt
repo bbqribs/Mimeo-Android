@@ -117,6 +117,8 @@ class SettingsStore(private val context: Context) {
         stringPreferencesKey("pending_manual_saves_json")
     private val pendingItemActionsJsonKey: Preferences.Key<String> =
         stringPreferencesKey("pending_item_actions_json")
+    private val playbackSegmentIndexByItemJsonKey: Preferences.Key<String> =
+        stringPreferencesKey("playback_segment_index_by_item_json")
     private val connectionTestSuccessJsonKey: Preferences.Key<String> =
         stringPreferencesKey("connection_test_success_json")
     private val libSortInboxKey: Preferences.Key<String> =
@@ -204,6 +206,11 @@ class SettingsStore(private val context: Context) {
 
     val pendingItemActionsFlow: Flow<List<PendingItemAction>> = context.dataStore.data.map { prefs ->
         decodePendingItemActions(prefs[pendingItemActionsJsonKey])
+    }
+
+    val playbackSegmentIndexByItemFlow: Flow<Map<Int, Int>> = context.dataStore.data.map { prefs ->
+        decodePlaybackSegmentIndexRecords(prefs[playbackSegmentIndexByItemJsonKey])
+            .associate { record -> record.itemId to record.segmentIndex.coerceAtLeast(0) }
     }
 
     val connectionTestSuccessFlow: Flow<Map<ConnectionMode, ConnectionTestSuccessSnapshot>> = context.dataStore.data.map { prefs ->
@@ -729,6 +736,26 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun savePlaybackSegmentIndex(itemId: Int, segmentIndex: Int) {
+        if (itemId <= 0) return
+        context.dataStore.edit { prefs ->
+            val existing = decodePlaybackSegmentIndexRecords(prefs[playbackSegmentIndexByItemJsonKey])
+            val normalizedSegment = segmentIndex.coerceAtLeast(0)
+            val updated = listOf(
+                PlaybackSegmentIndexRecord(itemId = itemId, segmentIndex = normalizedSegment),
+            ) + existing.filterNot { record -> record.itemId == itemId }
+            prefs[playbackSegmentIndexByItemJsonKey] = encodePlaybackSegmentIndexRecords(
+                updated.take(MAX_PLAYBACK_SEGMENT_INDEX_RECORDS),
+            )
+        }
+    }
+
+    suspend fun clearPlaybackSegmentIndexes() {
+        context.dataStore.edit { prefs ->
+            prefs[playbackSegmentIndexByItemJsonKey] = encodePlaybackSegmentIndexRecords(emptyList())
+        }
+    }
+
     suspend fun markPendingManualSaveRetryFailure(
         itemId: Long,
         failureMessage: String,
@@ -826,6 +853,17 @@ class SettingsStore(private val context: Context) {
         }.getOrDefault(emptyList())
     }
 
+    private fun encodePlaybackSegmentIndexRecords(records: List<PlaybackSegmentIndexRecord>): String {
+        return json.encodeToString(PlaybackSegmentIndexState(records = records))
+    }
+
+    private fun decodePlaybackSegmentIndexRecords(raw: String?): List<PlaybackSegmentIndexRecord> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return runCatching {
+            json.decodeFromString<PlaybackSegmentIndexState>(raw).records
+        }.getOrDefault(emptyList())
+    }
+
     private fun pendingItemActionFamily(actionType: PendingItemActionType): String {
         return when (actionType) {
             PendingItemActionType.SET_FAVORITE -> "favorite"
@@ -866,6 +904,7 @@ class SettingsStore(private val context: Context) {
 
     companion object {
         private const val MAX_QUEUE_SNAPSHOT_RECORDS = 16
+        private const val MAX_PLAYBACK_SEGMENT_INDEX_RECORDS = 256
     }
 }
 
@@ -890,6 +929,17 @@ private data class QueueSnapshotRecord(
 @Serializable
 private data class PendingManualSaveState(
     val records: List<PendingManualSaveItem> = emptyList(),
+)
+
+@Serializable
+private data class PlaybackSegmentIndexRecord(
+    val itemId: Int,
+    val segmentIndex: Int,
+)
+
+@Serializable
+private data class PlaybackSegmentIndexState(
+    val records: List<PlaybackSegmentIndexRecord> = emptyList(),
 )
 
 @Serializable
