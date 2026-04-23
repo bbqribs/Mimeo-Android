@@ -425,6 +425,16 @@ internal fun selectAutoDownloadTargetsForNewlySurfacedItems(
         .toList()
 }
 
+internal fun mergeWorkerPersistedNoActiveContentIdsOnQueueLoad(
+    queueItems: List<PlaybackQueueItem>,
+    existingKnownIds: Set<Int>,
+    persistedNoContentIds: Set<Int>,
+): Set<Int> {
+    if (persistedNoContentIds.isEmpty()) return existingKnownIds
+    val queueItemIds = queueItems.mapTo(linkedSetOf()) { it.itemId }
+    return (existingKnownIds + persistedNoContentIds).filterTo(linkedSetOf()) { queueItemIds.contains(it) }
+}
+
 internal fun isLikelyPhysicalDevice(): Boolean {
     val fingerprint = Build.FINGERPRINT.lowercase()
     val model = Build.MODEL.lowercase()

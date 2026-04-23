@@ -2242,7 +2242,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val persistedNoContent = withContext(Dispatchers.IO) { noActiveContentStore.getAll() }
         if (persistedNoContent.isNotEmpty()) {
             _noActiveContentItemIds.update { existing ->
-                retainKnownNoActiveContentIds(queueItems, existing + persistedNoContent)
+                mergeWorkerPersistedNoActiveContentIdsOnQueueLoad(
+                    queueItems = queueItems,
+                    existingKnownIds = existing,
+                    persistedNoContentIds = persistedNoContent,
+                )
             }
             // Prune stale IDs to keep the store small.
             val currentQueueIds = queueItems.mapTo(linkedSetOf()) { it.itemId }
