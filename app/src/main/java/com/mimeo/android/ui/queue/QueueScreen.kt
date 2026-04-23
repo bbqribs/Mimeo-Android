@@ -405,24 +405,7 @@ fun QueueScreen(
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                if (sessionSeedPresentation != null) {
-                    Text(
-                        text = "Seeded from: ${sessionSeedPresentation.seededFromLabel}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (sessionSeedPresentation.seededFromLabel != sessionSeedPresentation.currentSourceLabel) {
-                        Text(
-                            text = "Current source: ${sessionSeedPresentation.currentSourceLabel}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                } else {
+                if (sessionSeedPresentation == null) {
                     Text(
                         text = "Source: $selectedPlaylistName",
                         style = MaterialTheme.typography.labelMedium,
@@ -1608,11 +1591,20 @@ private fun NowPlayingSessionPanel(
                 )
             }
         }
+        val listScrollState = rememberScrollState()
+        LaunchedEffect(currentItemId, itemTopOffsets.size) {
+            if (currentItemId == null) return@LaunchedEffect
+            val currentIndex = localItems.indexOfFirst { it.itemId == currentItemId }
+            if (currentIndex < 0) return@LaunchedEffect
+            val offset = itemTopOffsets[currentIndex]
+                ?: (currentIndex * avgItemHeight()).toInt().toFloat()
+            listScrollState.animateScrollTo(offset.toInt())
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(listScrollState),
         ) {
             localItems.forEachIndexed { index, item ->
                 val isCurrent = item.itemId == currentItemId
@@ -1622,6 +1614,9 @@ private fun NowPlayingSessionPanel(
                     draggingIndex >= 0 -> visualOffsetForItem(index, draggingIndex, currentTargetIndex)
                     else -> 0f
                 }
+                val sourceLabel = item.host
+                    ?: item.sourceLabel?.takeIf { it.isNotBlank() }
+                    ?: item.sourceType?.takeIf { it.isNotBlank() }
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1636,7 +1631,7 @@ private fun NowPlayingSessionPanel(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onOpenItem(item.itemId) }
-                            .padding(start = 8.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
+                            .padding(start = 8.dp, end = 4.dp, top = 8.dp, bottom = 8.dp)
                             .semantics {
                                 customActions = buildList {
                                     if (index > 0) add(CustomAccessibilityAction("Move up") {
@@ -1648,14 +1643,14 @@ private fun NowPlayingSessionPanel(
                                 }
                             },
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Icon(
                             imageVector = Icons.Default.DragHandle,
                             contentDescription = "Drag to reorder",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                             modifier = Modifier
-                                .size(20.dp)
+                                .size(22.dp)
                                 .pointerInput(index) {
                                     detectDragGestures(
                                         onDragStart = {
@@ -1675,33 +1670,43 @@ private fun NowPlayingSessionPanel(
                         )
                         Box(
                             modifier = Modifier
-                                .size(6.dp)
+                                .size(7.dp)
                                 .background(
                                     if (isCurrent) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.outlineVariant,
                                     RoundedCornerShape(50),
                                 ),
                         )
-                        Text(
-                            text = item.title?.ifBlank { null } ?: item.host ?: item.url,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isCurrent) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = item.title?.ifBlank { null } ?: item.url,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (isCurrent) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurface,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (sourceLabel != null) {
+                                Text(
+                                    text = sourceLabel,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
                         if (!isCurrent) {
                             IconButton(
                                 onClick = { onRemoveItem(item.itemId) },
-                                modifier = Modifier.size(28.dp),
+                                modifier = Modifier.size(32.dp),
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Remove from session",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(14.dp),
+                                    modifier = Modifier.size(16.dp),
                                 )
                             }
                         }
