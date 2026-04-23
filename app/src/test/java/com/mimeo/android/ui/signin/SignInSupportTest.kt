@@ -26,13 +26,13 @@ class SignInSupportTest {
             resolveSignInErrorMessage(ApiException(429, """HTTP 429: {"detail":"Too many login attempts. Please wait 5 minutes before trying again."}""")),
         )
         assertEquals(
-            "Could not reach server. Check the URL and your network connection.",
+            "Could not reach server. Check URL scheme (http/https), certificate trust, and network.",
             resolveSignInErrorMessage(IOException("timeout")),
         )
     }
 
     @Test
-    fun `defaults blank and local sign in url to remote http preset`() {
+    fun `defaults blank and local sign in url to remote preset for configured host type`() {
         assertEquals(
             "http://100.84.13.10:8000",
             defaultSignInServerUrl(""),
@@ -56,6 +56,18 @@ class SignInSupportTest {
         assertEquals(
             "http://example.com:8000",
             buildPresetServerUrl(SignInServerPreset.MANUAL, SignInUrlScheme.HTTP, "example.com:8000"),
+        )
+    }
+
+    @Test
+    fun `maps cleartext and tls sign in failures to scheme guidance`() {
+        assertEquals(
+            "Probable URL scheme/security mismatch. Remote/hosted is HTTPS-first; for Tailscale IP without endpoint TLS use HTTP, or use HTTPS with a .ts.net/hosted URL.",
+            resolveSignInErrorMessage(IOException("CLEARTEXT communication to host not permitted by network security policy")),
+        )
+        assertEquals(
+            "Probable URL scheme/security mismatch. Remote/hosted is HTTPS-first; for Tailscale IP without endpoint TLS use HTTP, or use HTTPS with a .ts.net/hosted URL.",
+            resolveSignInErrorMessage(IOException("SSLHandshakeException: handshake failed")),
         )
     }
 

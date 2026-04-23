@@ -8,6 +8,7 @@ import com.mimeo.android.model.DEFAULT_REMOTE_HOST
 import com.mimeo.android.model.inferConnectionModeForHost
 import java.io.IOException
 import java.util.Locale
+import javax.net.ssl.SSLException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -39,6 +40,9 @@ internal fun inferConnectionModeForBaseUrl(baseUrl: String): ConnectionMode {
 }
 
 internal fun resolveSignInErrorMessage(error: Throwable): String {
+    if (looksLikeSchemeOrTlsMismatch(error)) {
+        return "Probable URL scheme/security mismatch. Remote/hosted is HTTPS-first; for Tailscale IP without endpoint TLS use HTTP, or use HTTPS with a .ts.net/hosted URL."
+    }
     return when (error) {
         is ApiException -> {
             val detail = extractApiDetail(error.message)
@@ -50,7 +54,7 @@ internal fun resolveSignInErrorMessage(error: Throwable): String {
                 else -> detail ?: "Could not reach server. Check the URL and your network connection."
             }
         }
-        is IOException -> "Could not reach server. Check the URL and your network connection."
+        is IOException -> "Could not reach server. Check URL scheme (http/https), certificate trust, and network."
         else -> "Could not reach server. Check the URL and your network connection."
     }
 }
@@ -69,7 +73,11 @@ internal fun buildAuthDeviceName(manufacturer: String, model: String): String {
 internal fun defaultSignInServerUrl(initialServerUrl: String): String {
     val trimmed = initialServerUrl.trim()
     return if (trimmed.isBlank() || trimmed == DEFAULT_LOCAL_SIGN_IN_URL) {
-        buildPresetServerUrl(SignInServerPreset.REMOTE, SignInUrlScheme.HTTP, manualUrl = "")
+        buildPresetServerUrl(
+            SignInServerPreset.REMOTE,
+            if (isCarrierGradeNatHost(DEFAULT_REMOTE_SIGN_IN_HOST.substringBefore(':'))) SignInUrlScheme.HTTP else SignInUrlScheme.HTTPS,
+            manualUrl = "",
+        )
     } else {
         trimmed
     }
@@ -130,4 +138,26 @@ private fun extractApiDetail(message: String?): String? {
     return runCatching {
         Json.parseToJsonElement(raw).jsonObject["detail"]?.jsonPrimitive?.contentOrNull
     }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+}
+
+private fun looksLikeSchemeOrTlsMismatch(error: Throwable): Boolean {
+    if (error is SSLException) return true
+    val fullMessage = generateSequence(error) { it.cause }
+        .mapNotNull { it.message }
+        .joinToString(separator = " ")
+        .lowercase(Locale.US)
+    if (fullMessage.isBlank()) return false
+    return fullMessage.contains("cleartxt") ||
+        fullMessage.contains("cleartext") ||
+        fullMessage.contains("ssl") ||
+        fullMessage.contains("tls") ||
+        fullMessage.contains("handshake")
+}
+
+private fun isCarrierGradeNatHost(host: String): Boolean {
+    if (!host.startsWith("100.")) return false
+    val octets = host.split('.')
+    if (octets.size != 4) return false
+    val secondOctet = octets.getOrNull(1)?.toIntOrNull() ?: return false
+    return secondOctet in 64..127
 }
