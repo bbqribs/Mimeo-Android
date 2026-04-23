@@ -32,6 +32,7 @@ Mimeo Android is the mobile client for the Mimeo "read later" system.
 - Always report explicitly: what changed, what passed, what failed, and exact next step if blocked.
 - Always include plain-English manual verification steps.
 - Include copyable command blocks when commands are relevant.
+- Post-merge report: After a ticket is merged, provide a concise full summary of delivered scope, changed files, and test/build results; omit manual verification steps unless explicitly requested.
 
 ## Build and test (when assigned implementation)
 ```bash
