@@ -44,7 +44,7 @@ fun ConnectivityDiagnosticsScreen(vm: AppViewModel) {
         Text("Base URL: ${settings.baseUrl.ifBlank { "(unset)" }}")
         Text("Token: ${if (settings.apiToken.isBlank()) "missing" else "present"}")
         if (isPhysicalDevice) {
-            Text("Physical phone quick check: LAN mode -> http://<PC_LAN_IP>:8000, Remote mode -> http://<tailnet-host>.ts.net:8000 (or 100.x.y.z). 10.0.2.2 is emulator-only.")
+            Text("Physical phone quick check: LAN mode -> http://<PC_LAN_IP>:8000 (or HTTPS if LAN TLS is configured), Remote mode -> HTTPS-first (<tailnet-host>.ts.net or hosted URL). 10.0.2.2 is emulator-only.")
         } else {
             Text("Emulator: use http://10.0.2.2:8000 for host machine backend.")
         }

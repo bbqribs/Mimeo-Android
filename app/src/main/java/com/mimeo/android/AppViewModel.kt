@@ -171,6 +171,7 @@ import com.mimeo.android.ui.signin.resolveSignInErrorMessage
 import com.mimeo.android.ui.theme.MimeoTheme
 import com.mimeo.android.work.WorkScheduler
 import java.io.IOException
+import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -1523,7 +1524,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun testConnection() {
         val current = settings.value
         if (current.apiToken.isBlank()) {
-            _statusMessage.value = ConnectionTestMessageResolver.tokenRequired()
+            _statusMessage.value = ConnectionTestMessageResolver.tokenRequired(
+                mode = current.connectionMode,
+                baseUrl = current.baseUrl,
+            )
             return
         }
         viewModelScope.launch {
@@ -2702,7 +2706,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _diagnosticsRunning.value = true
         _diagnosticsLastError.value = null
 
-        val baseHint = baseUrlHint(baseUrl, isPhysicalDevice)
+        val baseHint = baseUrlHint(
+            mode = current.connectionMode,
+            baseUrl = baseUrl,
+            isPhysicalDevice = isPhysicalDevice,
+        )
         if (baseHint != null) {
             rows += diagnosticRow(
                 name = "base_url",
@@ -2719,7 +2727,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 url = baseUrl.ifBlank { "(unset)" },
                 outcome = ConnectivityDiagnosticOutcome.FAIL,
                 detail = "token missing",
-                hint = "add API token in Settings",
+                hint = ConnectionTestMessageResolver.tokenRequired(
+                    mode = current.connectionMode,
+                    baseUrl = baseUrl,
+                ),
             )
             _diagnosticsRows.value = rows
             _diagnosticsLastError.value = "Token missing"
@@ -4205,8 +4216,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return sourcePlaylistId != SMART_QUEUE_SESSION_CONTEXT_ID
     }
 
-    fun baseUrlHintForDevice(isPhysicalDevice: Boolean): String? =
-        baseUrlHint(settings.value.baseUrl.trim().trimEnd('/'), isPhysicalDevice)
+    fun baseUrlHintForDevice(isPhysicalDevice: Boolean): String? {
+        val current = settings.value
+        return baseUrlHint(
+            mode = current.connectionMode,
+            baseUrl = current.baseUrl.trim().trimEnd('/'),
+            isPhysicalDevice = isPhysicalDevice,
+        )
+    }
 
     fun requestNavigation(route: String) {
         _pendingNavigationRoute.value = route
@@ -4812,16 +4829,70 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         Json.parseToJsonElement(body).jsonObject[field]?.jsonPrimitive?.contentOrNull
     }.getOrNull()
 
-    private fun baseUrlHint(baseUrl: String, isPhysicalDevice: Boolean): String? {
-        if (!isPhysicalDevice) return null
-        val lower = baseUrl.lowercase(Locale.US)
-        return when {
-            lower.contains("127.0.0.1") || lower.contains("localhost") ->
-                "127.0.0.1/localhost points to phone; use http://<PC_LAN_IP>:8000"
-            lower.contains("10.0.2.2") ->
-                "10.0.2.2 is emulator-only; use http://<PC_LAN_IP>:8000 on phone"
-            else -> null
+    private fun baseUrlHint(
+        mode: ConnectionMode,
+        baseUrl: String,
+        isPhysicalDevice: Boolean,
+    ): String? {
+        val host = runCatching {
+            URI(baseUrl.trim()).host.orEmpty()
+        }.getOrDefault(
+            baseUrl.trim()
+                .removePrefix("http://")
+                .removePrefix("https://")
+                .substringBefore('/')
+                .substringBefore(':'),
+        ).lowercase(Locale.US)
+        if (host.isBlank()) return null
+        val isLoopback = host == "127.0.0.1" || host == "localhost"
+        val isEmulator = host == "10.0.2.2"
+        val isLanIp = isLanIpv4Host(host)
+        val isTailnet = host.endsWith(".ts.net") || isTailnetIpv4Host(host)
+
+        if (isPhysicalDevice && (isLoopback || isEmulator)) {
+            return if (isEmulator) {
+                "10.0.2.2 is emulator-only; on a phone use LAN mode with http://<PC_LAN_IP>:8000."
+            } else {
+                "127.0.0.1/localhost points to your phone; on a phone use LAN mode with http://<PC_LAN_IP>:8000."
+            }
         }
+
+        return when (mode) {
+            ConnectionMode.LAN -> when {
+                isTailnet ->
+                    "LAN mode is set but URL looks remote (Tailscale/VPN). Switch to Remote mode for this host."
+                !isLanIp && !isLoopback && !isEmulator ->
+                    "LAN mode works best with private LAN IPs (192.168.x.y / 10.x / 172.16-31.x)."
+                else -> null
+            }
+            ConnectionMode.REMOTE -> when {
+                isLanIp ->
+                    "Remote mode is set but URL is a LAN IP. Use LAN mode on same Wi-Fi, or a Remote URL off-LAN."
+                isLoopback || isEmulator ->
+                    "Remote mode cannot use loopback/emulator hosts. Use a Tailscale/VPN or hosted URL."
+                else -> null
+            }
+            ConnectionMode.LOCAL -> null
+        }
+    }
+
+    private fun isLanIpv4Host(host: String): Boolean {
+        if (!host.matches(Regex("^\\d{1,3}(?:\\.\\d{1,3}){3}$"))) return false
+        val parts = host.split('.').mapNotNull { it.toIntOrNull() }
+        if (parts.size != 4 || parts.any { it !in 0..255 }) return false
+        return when {
+            parts[0] == 10 -> true
+            parts[0] == 192 && parts[1] == 168 -> true
+            parts[0] == 172 && parts[1] in 16..31 -> true
+            else -> false
+        }
+    }
+
+    private fun isTailnetIpv4Host(host: String): Boolean {
+        if (!host.matches(Regex("^\\d{1,3}(?:\\.\\d{1,3}){3}$"))) return false
+        val parts = host.split('.').mapNotNull { it.toIntOrNull() }
+        if (parts.size != 4 || parts.any { it !in 0..255 }) return false
+        return parts[0] == 100 && parts[1] in 64..127
     }
 }
 

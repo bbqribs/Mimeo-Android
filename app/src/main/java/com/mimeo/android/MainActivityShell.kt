@@ -161,7 +161,7 @@ internal fun MainActivityShell(
 
     val bannerStateLabel = when {
         offlineBannerVisible -> "Offline"
-        baseUrlHint != null -> "LAN mismatch"
+        baseUrlHint != null -> "Connection setup"
         else -> "Status"
     }
     val bannerSummary = when {

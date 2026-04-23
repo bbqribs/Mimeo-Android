@@ -16,7 +16,7 @@ class ConnectionTestMessageResolverTest {
         )
 
         assertEquals(
-            "Token rejected. It may be expired or invalid. Create a new device token and update Settings.",
+            "Token rejected. It may be expired or from a different server target. Create a new device token and update Settings.",
             message,
         )
     }
@@ -30,7 +30,7 @@ class ConnectionTestMessageResolverTest {
             message = "Unauthorized",
         )
 
-        assertEquals("Token rejected. Check API token.", message)
+        assertEquals("Token rejected. Check this device token matches the selected server.", message)
     }
 
     @Test
@@ -157,5 +157,17 @@ class ConnectionTestMessageResolverTest {
         )
 
         assertTrue(message.contains("wrong-mode/base URL issue"))
+    }
+
+    @Test
+    fun `token required for remote references host and sign in path`() {
+        val message = ConnectionTestMessageResolver.tokenRequired(
+            mode = ConnectionMode.REMOTE,
+            baseUrl = "https://reader.example.com:8000",
+        )
+
+        assertTrue(message.contains("Device token required", ignoreCase = true))
+        assertTrue(message.contains("Sign in", ignoreCase = true))
+        assertTrue(message.contains("reader.example.com", ignoreCase = true))
     }
 }

@@ -11,6 +11,7 @@ class RemoteModeGuidanceCopyTest {
 
         assertTrue(message.contains("Tailscale", ignoreCase = true) || message.contains("VPN", ignoreCase = true))
         assertTrue(message.contains("LAN mode", ignoreCase = true))
+        assertTrue(message.contains("HTTPS", ignoreCase = true))
     }
 
     @Test

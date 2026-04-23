@@ -402,7 +402,7 @@ fun SettingsScreen(
     ) {
         SettingsSectionHeader(
             title = "Connection / Server",
-            subtitle = "Choose Local, LAN, or Remote mode. Sign-in is primary; manual token entry is for advanced use.",
+            subtitle = "Choose Local, LAN, or Remote mode. Sign In is recommended; manual token entry replaces this device token.",
         )
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(
@@ -496,7 +496,7 @@ fun SettingsScreen(
                 Text(
                     text = formatCurrentConnectionStatusSummary(
                         mode = connectionMode,
-                        selectedBaseUrl = savedModeBaseUrl(),
+                        selectedBaseUrl = selectedModeBaseUrl(),
                         snapshot = currentModeSnapshot,
                     ),
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
@@ -535,7 +535,10 @@ fun SettingsScreen(
                             saveCurrent()
                             if (token.isBlank()) {
                                 testRequested = false
-                                lastConnectionTestResult = "Token required"
+                                lastConnectionTestResult = ConnectionTestMessageResolver.tokenRequired(
+                                    mode = connectionMode,
+                                    baseUrl = selectedModeBaseUrl(),
+                                )
                                 lastConnectionTestedAtMs = System.currentTimeMillis()
                             } else {
                                 testRequested = true
@@ -1558,25 +1561,25 @@ private fun ConnectionMode.displayName(): String = when (this) {
 }
 
 private fun ConnectionMode.description(): String = when (this) {
-    ConnectionMode.LOCAL -> "Local emulator/dev mode (10.0.2.2/localhost style loopback)."
+    ConnectionMode.LOCAL -> "Local emulator/dev mode (10.0.2.2 or localhost loopback)."
     ConnectionMode.LAN -> "Same-network mode (phone + laptop on the same LAN/Wi-Fi)."
-    ConnectionMode.REMOTE -> "Off-LAN mode (Tailscale/VPN path to your laptop-hosted backend)."
+    ConnectionMode.REMOTE -> "Off-LAN mode (Tailscale/VPN or hosted endpoint). Prefer HTTPS."
 }
 
 internal fun connectionModeBaseUrlGuidance(mode: ConnectionMode): String = when (mode) {
     ConnectionMode.LOCAL ->
-        "Use local/emulator loopback URL (typically http://10.0.2.2:8000). On physical phones, 10.0.2.2 is wrong; use LAN or Remote."
+        "Use local/emulator loopback URL (typically http://10.0.2.2:8000). On physical phones, 10.0.2.2/localhost is wrong; use LAN or Remote."
     ConnectionMode.LAN ->
-        "Use your laptop LAN URL (for example http://192.168.x.y:8000) when phone and laptop share the same network."
+        "Use your laptop LAN URL (for example http://192.168.x.y:8000) when phone and laptop share the same network. Prefer HTTPS if your LAN endpoint has TLS."
     ConnectionMode.REMOTE ->
-        "Use your Tailscale/VPN URL (for example http://100.x.y.z:8000 or http://<tailnet-host>.ts.net:8000). If using 192.168.x.y or 10.x, use LAN mode instead."
+        "Use your Tailscale/VPN or hosted URL. HTTPS-first for Remote (example https://host:8000). If using 192.168.x.y or 10.x, use LAN mode instead."
 }
 
 private fun connectionModeTokenAuthHelp(mode: ConnectionMode): String = when (mode) {
     ConnectionMode.REMOTE ->
-        "Remote device tokens can expire. If token is rejected, create a new device token and update this field."
+        "Use a per-device token for this remote host. Sign In creates one for this device; manual paste replaces the saved token."
     else ->
-        "Use a valid API token for this server target."
+        "Use a per-device token for this server. Sign In creates one for this device; manual paste is advanced and replaces the saved token."
 }
 
 internal fun connectionModeTokenGuidance(mode: ConnectionMode): String = connectionModeTokenAuthHelp(mode)
