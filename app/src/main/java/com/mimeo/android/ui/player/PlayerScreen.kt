@@ -285,12 +285,15 @@ internal fun resolveOpenStartSource(
     openIntent: PlaybackOpenIntent,
     knownProgress: Int,
     hasChunks: Boolean,
+    savedPlaybackPosition: PlaybackPosition = PlaybackPosition(),
 ): String {
     return when (openIntent) {
         PlaybackOpenIntent.AutoContinue -> "autocontinue:start_of_item"
         PlaybackOpenIntent.Replay -> "replay:start_of_item"
         PlaybackOpenIntent.ManualOpen -> {
-            if (knownProgress > 0 && hasChunks) {
+            if (hasChunks && hasSavedPlaybackPointer(savedPlaybackPosition)) {
+                "manual:playback_pointer"
+            } else if (knownProgress > 0 && hasChunks) {
                 "manual:queue_progress_percent"
             } else {
                 "manual:start_of_item"
@@ -330,19 +333,30 @@ internal fun resolveSeededPlaybackPosition(
     knownProgress: Int,
     hasChunks: Boolean,
     openIntent: PlaybackOpenIntent,
+    savedPlaybackPosition: PlaybackPosition = PlaybackPosition(),
     positionForPercent: (Int) -> PlaybackPosition,
 ): PlaybackPosition {
+    val normalizedSaved = PlaybackPosition(
+        chunkIndex = savedPlaybackPosition.chunkIndex.coerceAtLeast(0),
+        offsetInChunkChars = savedPlaybackPosition.offsetInChunkChars.coerceAtLeast(0),
+    )
     return when (openIntent) {
         PlaybackOpenIntent.AutoContinue,
         PlaybackOpenIntent.Replay -> PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
         PlaybackOpenIntent.ManualOpen -> {
-            if (knownProgress > 0 && hasChunks) {
+            if (hasChunks && hasSavedPlaybackPointer(normalizedSaved)) {
+                normalizedSaved
+            } else if (knownProgress > 0 && hasChunks) {
                 positionForPercent(knownProgress)
             } else {
                 PlaybackPosition(chunkIndex = 0, offsetInChunkChars = 0)
             }
         }
     }
+}
+
+private fun hasSavedPlaybackPointer(position: PlaybackPosition): Boolean {
+    return position.chunkIndex > 0 || position.offsetInChunkChars > 0
 }
 
 internal fun shouldAcceptDoneEventChunk(eventChunkIndex: Int, currentChunkIndex: Int): Boolean {
