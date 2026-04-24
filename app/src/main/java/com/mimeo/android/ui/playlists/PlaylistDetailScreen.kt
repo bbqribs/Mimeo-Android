@@ -20,6 +20,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
@@ -37,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -54,6 +57,7 @@ import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.mimeo.android.ACTION_KEY_UNDO_PLAYLIST_REMOVE
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackQueueItem
@@ -63,7 +67,6 @@ import com.mimeo.android.ui.common.ListSurfaceScaffold
 import com.mimeo.android.ui.common.SelectionAffordance
 import com.mimeo.android.ui.common.queueCapturePresentation
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 
 /**
  * Ordered list of playlist entries with drag-to-reorder support.
@@ -130,8 +133,10 @@ fun PlaylistDetailScreen(
     }
 
     // Per-item Y positions in the Column for drag hit-testing.
-    val itemTopOffsets = remember { mutableMapOf<Int, Float>() }
-    val itemHeights = remember { mutableMapOf<Int, Float>() }
+    val itemTopOffsets = remember { mutableMapOf<Int, Float>() } // entryId -> top px
+    val itemHeights = remember { mutableMapOf<Int, Float>() } // entryId -> height px
+    var dragStartTopOffsets by remember { mutableStateOf<Map<Int, Float>>(emptyMap()) }
+    var dragStartHeights by remember { mutableStateOf<Map<Int, Float>>(emptyMap()) }
 
     // Drag state
     var draggingIndex by remember { mutableIntStateOf(-1) }
@@ -171,24 +176,25 @@ fun PlaylistDetailScreen(
     fun avgItemHeight(): Float =
         if (itemHeights.isEmpty()) 72f else itemHeights.values.average().toFloat()
 
-    /**
-     * Compute which index the dragged item's visual midpoint is nearest to.
-     */
     fun computeTargetIndex(from: Int, offsetY: Float): Int {
-        if (localEntries.size <= 1) return from
-        val h = itemHeights[from] ?: avgItemHeight()
-        val top = itemTopOffsets[from] ?: (from * avgItemHeight())
-        val midY = top + h / 2f + offsetY
-        var best = from
-        var bestDist = Float.MAX_VALUE
+        if (localEntries.size <= 1 || from !in localEntries.indices) return from
+        val tops = dragStartTopOffsets.takeIf { it.isNotEmpty() } ?: itemTopOffsets
+        val heights = dragStartHeights.takeIf { it.isNotEmpty() } ?: itemHeights
+        val fromEntryId = localEntries[from].id
+        val h = heights[fromEntryId] ?: avgItemHeight()
+        val top = tops[fromEntryId] ?: (from * avgItemHeight())
+        val draggedMidY = top + h / 2f + offsetY
+        var target = from
         localEntries.indices.forEach { i ->
-            val t = itemTopOffsets[i] ?: (i * avgItemHeight())
-            val iH = itemHeights[i] ?: avgItemHeight()
-            val iMid = t + iH / 2f
-            val d = abs(midY - iMid)
-            if (d < bestDist) { bestDist = d; best = i }
+            if (i == from) return@forEach
+            val entryId = localEntries[i].id
+            val t = tops[entryId] ?: (i * avgItemHeight())
+            val iH = heights[entryId] ?: avgItemHeight()
+            val iMidY = t + iH / 2f
+            if (from < i && draggedMidY > iMidY) target = i
+            if (from > i && draggedMidY < iMidY) target = i
         }
-        return best.coerceIn(0, localEntries.lastIndex)
+        return target.coerceIn(0, localEntries.lastIndex)
     }
 
     /**
@@ -198,7 +204,9 @@ fun PlaylistDetailScreen(
      */
     fun visualOffsetForItem(index: Int, from: Int, target: Int): Float {
         if (from < 0 || from == target || index == from) return 0f
-        val draggedHeight = itemHeights[from] ?: avgItemHeight()
+        val draggedEntryId = localEntries[from].id
+        val heights = dragStartHeights.takeIf { it.isNotEmpty() } ?: itemHeights
+        val draggedHeight = heights[draggedEntryId] ?: avgItemHeight()
         return when {
             target > from && index in (from + 1)..target -> -draggedHeight
             target < from && index in target until from  ->  draggedHeight
@@ -218,6 +226,8 @@ fun PlaylistDetailScreen(
         draggingIndex = -1
         dragOffsetY = 0f
         currentTargetIndex = -1
+        dragStartTopOffsets = emptyMap()
+        dragStartHeights = emptyMap()
         if (from < 0) return
         val entryIds = localEntries.map { it.id }
         isSaving = true
@@ -246,27 +256,41 @@ fun PlaylistDetailScreen(
     }
 
     fun removeArticleFromPlaylist(articleId: Int) {
+        val previousArticleOrder = localEntries.map { it.articleId }
         actionScope.launch {
             vm.togglePlaylistMembership(articleId, playlistId)
-                .onSuccess { onShowSnackbar("Removed from playlist.", null, null) }
+                .onSuccess {
+                    vm.rememberLastPlaylistRemoval(playlistId, listOf(articleId), previousArticleOrder)
+                    onShowSnackbar("Removed from playlist.", "Undo", ACTION_KEY_UNDO_PLAYLIST_REMOVE)
+                }
                 .onFailure { onShowSnackbar("Couldn't remove from playlist.", null, null) }
         }
     }
 
     fun removeSelectedFromPlaylist() {
         val articleIds = selectedArticleIdsInOrder()
+        val previousArticleOrder = localEntries.map { it.articleId }
         clearSelection()
         actionScope.launch {
-            var failed = false
+            val removedIds = mutableListOf<Int>()
             articleIds.forEach { articleId ->
                 vm.togglePlaylistMembership(articleId, playlistId)
-                    .onFailure { failed = true }
+                    .onSuccess { removedIds += articleId }
             }
-            onShowSnackbar(
-                if (failed) "Some items couldn't be removed." else "Removed ${articleIds.size} from playlist.",
-                null,
-                null,
-            )
+            if (removedIds.isNotEmpty()) {
+                vm.rememberLastPlaylistRemoval(playlistId, removedIds, previousArticleOrder)
+                onShowSnackbar(
+                    if (removedIds.size == articleIds.size) {
+                        "Removed ${removedIds.size} from playlist."
+                    } else {
+                        "Removed ${removedIds.size}; some failed."
+                    },
+                    "Undo",
+                    ACTION_KEY_UNDO_PLAYLIST_REMOVE,
+                )
+            } else {
+                onShowSnackbar("Couldn't remove selected items.", null, null)
+            }
         }
     }
 
@@ -301,6 +325,17 @@ fun PlaylistDetailScreen(
                     )
                     if (isSaving || (loading && localEntries.isEmpty())) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    }
+                    IconButton(
+                        onClick = vm::refreshPlaylists,
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh playlist",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp),
+                        )
                     }
                     if (playlist != null) {
                         Box {
@@ -366,7 +401,10 @@ fun PlaylistDetailScreen(
                         onClick = ::removeSelectedFromPlaylist,
                         enabled = selectedEntryIds.isNotEmpty(),
                     ) {
-                        Icon(Icons.Default.Delete, contentDescription = "Remove selected from playlist")
+                        Icon(
+                            Icons.Default.Clear,
+                            contentDescription = "Remove selected from playlist",
+                        )
                     }
                 }
             }
@@ -410,72 +448,76 @@ fun PlaylistDetailScreen(
                 .verticalScroll(rememberScrollState()),
         ) {
             localEntries.forEachIndexed { index, entry ->
-                val queueItem = allItemsMap[entry.articleId]
-                val isDragging = draggingIndex == index
-                val itemVisualOffsetY = when {
-                    isDragging -> dragOffsetY
-                    draggingIndex >= 0 -> visualOffsetForItem(
-                        index, draggingIndex, currentTargetIndex
-                    )
-                    else -> 0f
-                }
-                // Wrap row + divider together so the divider moves with its row.
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .zIndex(if (isDragging) 1f else 0f)
-                        .graphicsLayer { translationY = itemVisualOffsetY }
-                        .onGloballyPositioned { coords ->
-                            itemTopOffsets[index] = coords.positionInParent().y
-                            itemHeights[index] = coords.size.height.toFloat()
-                        },
-                ) {
-                    PlaylistDetailRow(
-                        queueItem = queueItem,
-                        isDragging = isDragging,
-                        isSelectionActive = selectionActive,
-                        isSelected = entry.id in selectedEntryIds,
-                        onDragStart = { idx ->
-                            draggingIndex = idx
-                            dragOffsetY = 0f
-                            currentTargetIndex = idx
-                        },
-                        onDrag = { dy ->
-                            dragOffsetY += dy
-                            val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
-                            if (newTarget != currentTargetIndex) {
-                                currentTargetIndex = newTarget
-                            }
-                        },
-                        onDragEnd = { onDragEnd() },
-                        index = index,
-                        onTap = {
-                            val sessionItemId = nowPlayingSession?.currentItem?.itemId ?: -1
-                            val playbackActive = playbackEngineState.isSpeaking || playbackEngineState.isAutoPlaying
-                            val shouldStartSession = entry.articleId > 0 &&
-                                (sessionItemId <= 0 || entry.articleId == sessionItemId || !playbackActive)
-                            if (shouldStartSession) {
-                                vm.startNowPlayingSession(startItemId = entry.articleId)
-                            }
-                            onOpenPlayer(entry.articleId)
-                        },
-                        onToggleSelect = { toggleSelection(entry.id) },
-                        onEnterSelection = { enterSelectionMode(entry.id) },
-                        onPlayNext = { vm.playNext(entry.articleId) },
-                        onPlayLast = { vm.playLast(entry.articleId) },
-                        onMoveToTop = { moveEntry(index, 0) },
-                        onMoveToBottom = { moveEntry(index, localEntries.lastIndex) },
-                        onRemoveFromPlaylist = { removeArticleFromPlaylist(entry.articleId) },
-                    )
-                    if (!isDragging) {
-                        Spacer(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                                ),
+                key(entry.id) {
+                    val queueItem = allItemsMap[entry.articleId]
+                    val isDragging = draggingIndex == index
+                    val itemVisualOffsetY = when {
+                        isDragging -> dragOffsetY
+                        draggingIndex >= 0 -> visualOffsetForItem(
+                            index, draggingIndex, currentTargetIndex
                         )
+                        else -> 0f
+                    }
+                    // Wrap row + divider together so the divider moves with its row.
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .zIndex(if (isDragging) 1f else 0f)
+                            .graphicsLayer { translationY = itemVisualOffsetY }
+                            .onGloballyPositioned { coords ->
+                                itemTopOffsets[entry.id] = coords.positionInParent().y
+                                itemHeights[entry.id] = coords.size.height.toFloat()
+                            },
+                    ) {
+                        PlaylistDetailRow(
+                            queueItem = queueItem,
+                            isDragging = isDragging,
+                            isSelectionActive = selectionActive,
+                            isSelected = entry.id in selectedEntryIds,
+                            onDragStart = { idx ->
+                                dragStartTopOffsets = itemTopOffsets.toMap()
+                                dragStartHeights = itemHeights.toMap()
+                                draggingIndex = idx
+                                dragOffsetY = 0f
+                                currentTargetIndex = idx
+                            },
+                            onDrag = { dy ->
+                                dragOffsetY += dy
+                                val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
+                                if (newTarget != currentTargetIndex) {
+                                    currentTargetIndex = newTarget
+                                }
+                            },
+                            onDragEnd = { onDragEnd() },
+                            index = index,
+                            onTap = {
+                                val sessionItemId = nowPlayingSession?.currentItem?.itemId ?: -1
+                                val playbackActive = playbackEngineState.isSpeaking || playbackEngineState.isAutoPlaying
+                                val shouldStartSession = entry.articleId > 0 &&
+                                    (sessionItemId <= 0 || entry.articleId == sessionItemId || !playbackActive)
+                                if (shouldStartSession) {
+                                    vm.startNowPlayingSession(startItemId = entry.articleId)
+                                }
+                                onOpenPlayer(entry.articleId)
+                            },
+                            onToggleSelect = { toggleSelection(entry.id) },
+                            onEnterSelection = { enterSelectionMode(entry.id) },
+                            onPlayNext = { vm.playNext(entry.articleId) },
+                            onPlayLast = { vm.playLast(entry.articleId) },
+                            onMoveToTop = { moveEntry(index, 0) },
+                            onMoveToBottom = { moveEntry(index, localEntries.lastIndex) },
+                            onRemoveFromPlaylist = { removeArticleFromPlaylist(entry.articleId) },
+                        )
+                        if (!isDragging) {
+                            Spacer(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                    ),
+                            )
+                        }
                     }
                 }
             }
@@ -563,10 +605,13 @@ private fun PlaylistDetailRow(
     var rowMenuExpanded by remember { mutableStateOf(false) }
     val presentation = remember(queueItem) { queueItem?.let(::queueCapturePresentation) }
     val title = presentation?.title ?: "Loading..."
-    val metadata = presentation?.sourceLabel ?: queueItem?.host?.takeIf { queueItem.title != null } ?: queueItem?.url
     val progress = queueItem?.progressPercent?.coerceIn(0, 100) ?: 0
     val status = queueItem?.status
-    val hasProgressState = progress > 0 || (status != null && status != "ready")
+    val source = presentation?.sourceLabel ?: queueItem?.host?.takeIf { queueItem.title != null } ?: queueItem?.url
+    val metadata = source?.let {
+        if (progress > 0) "$it - $progress% read" else it
+    }
+    val statusForLine = status?.takeIf { it != "ready" }
 
     LibraryItemRow(
         title = title,
@@ -601,23 +646,13 @@ private fun PlaylistDetailRow(
                 )
             }
         },
-        progressStateLine = if (hasProgressState) {
+        progressStateLine = if (statusForLine != null) {
             {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    if (progress > 0) {
-                        Text(
-                            text = "$progress% read",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                        )
-                    }
-                    if (status != null && status != "ready") {
-                        ListStatusPill(status = status)
-                    }
+                    ListStatusPill(status = statusForLine)
                 }
             }
         } else {

@@ -222,6 +222,7 @@ internal const val ACTION_KEY_OPEN_DIAGNOSTICS = "open_diagnostics"
 internal const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
 internal const val ACTION_KEY_UNDO_ARCHIVE = "undo_archive"
 internal const val ACTION_KEY_UNDO_BATCH = "undo_batch"
+internal const val ACTION_KEY_UNDO_PLAYLIST_REMOVE = "undo_playlist_remove"
 internal const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
 internal const val DEBUG_TARGET_ITEM_ID = 409
 internal const val INITIAL_SIGN_IN_HYDRATION_DEBUG_TAG = "MimeoSignInHydration"
@@ -586,6 +587,21 @@ private fun MimeoApp(vm: AppViewModel) {
                         vm.undoLastBatch()
                             .onSuccess { vm.showSnackbar("Undone") }
                             .onFailure { vm.showSnackbar("Couldn't undo", "Diagnostics", ACTION_KEY_OPEN_DIAGNOSTICS) }
+                    }
+                    ACTION_KEY_UNDO_PLAYLIST_REMOVE -> {
+                        vm.undoLastPlaylistRemoval()
+                            .onSuccess { restored ->
+                                vm.showSnackbar(
+                                    if (restored == 1) {
+                                        "Playlist removal undone"
+                                    } else {
+                                        "Restored $restored to playlist"
+                                    },
+                                )
+                            }
+                            .onFailure {
+                                vm.showSnackbar("Couldn't undo", "Diagnostics", ACTION_KEY_OPEN_DIAGNOSTICS)
+                            }
                     }
                 }
             }

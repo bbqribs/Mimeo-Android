@@ -373,10 +373,13 @@ private fun LibraryQueueItemRow(
     val title = presentation.title
     val source = presentation.sourceLabel ?: item.url
     val progress = item.progressPercent.coerceIn(0, 100)
+    val metadata = if (progress > 0) "$source - $progress% read" else source
+    val status = item.status
+    val statusForLine = status?.takeIf { it != "ready" }
 
     LibraryItemRow(
         title = title,
-        metadata = source,
+        metadata = metadata,
         isSelected = isSelected,
         onClick = if (isSelectionActive) onToggleSelect else onOpen,
         onLongClick = if (!isSelectionActive) onEnterSelection else null,
@@ -385,24 +388,17 @@ private fun LibraryQueueItemRow(
         } else {
             null
         },
-        progressStateLine = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                if (progress > 0) {
-                    Text(
-                        text = "$progress% read",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
-                }
-                val status = item.status
-                if (status != null && status != "ready") {
-                    ListStatusPill(status = status)
+        progressStateLine = if (statusForLine != null) {
+            {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    ListStatusPill(status = statusForLine)
                 }
             }
+        } else {
+            null
         },
     )
 }
