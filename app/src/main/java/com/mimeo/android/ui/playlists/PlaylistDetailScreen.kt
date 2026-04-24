@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,6 +67,7 @@ import com.mimeo.android.ui.common.ListStatusPill
 import com.mimeo.android.ui.common.ListSurfaceScaffold
 import com.mimeo.android.ui.common.SelectionAffordance
 import com.mimeo.android.ui.common.queueCapturePresentation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -144,6 +146,8 @@ fun PlaylistDetailScreen(
     // Cached target index — updated on every onDrag so onDragEnd can read it reliably.
     var currentTargetIndex by remember { mutableIntStateOf(-1) }
     var isSaving by remember { mutableStateOf(false) }
+    val listScrollState = rememberScrollState()
+    var listViewportHeight by remember { mutableIntStateOf(0) }
 
     // Rename/delete dialog state
     var showOverflowMenu by remember { mutableStateOf(false) }
@@ -176,6 +180,31 @@ fun PlaylistDetailScreen(
     fun avgItemHeight(): Float =
         if (itemHeights.isEmpty()) 72f else itemHeights.values.average().toFloat()
 
+    fun scrollDraggedItemNearEdge(from: Int) {
+        if (from !in localEntries.indices || listViewportHeight <= 0) return
+        val tops = dragStartTopOffsets.takeIf { it.isNotEmpty() } ?: itemTopOffsets
+        val heights = dragStartHeights.takeIf { it.isNotEmpty() } ?: itemHeights
+        val entryId = localEntries[from].id
+        val itemTop = (tops[entryId] ?: (from * avgItemHeight())) + dragOffsetY
+        val itemBottom = itemTop + (heights[entryId] ?: avgItemHeight())
+        val viewportTop = listScrollState.value.toFloat()
+        val viewportBottom = viewportTop + listViewportHeight
+        val edgeSize = 96f
+        val maxStep = 28f
+        val desiredDelta = when {
+            itemTop < viewportTop + edgeSize -> -maxStep
+            itemBottom > viewportBottom - edgeSize -> maxStep
+            else -> 0f
+        }
+        if (desiredDelta == 0f) return
+        val before = listScrollState.value.toFloat()
+        listScrollState.dispatchRawDelta(desiredDelta)
+        val consumed = listScrollState.value.toFloat() - before
+        if (consumed != 0f) {
+            dragOffsetY += consumed
+        }
+    }
+
     fun computeTargetIndex(from: Int, offsetY: Float): Int {
         if (localEntries.size <= 1 || from !in localEntries.indices) return from
         val tops = dragStartTopOffsets.takeIf { it.isNotEmpty() } ?: itemTopOffsets
@@ -183,7 +212,8 @@ fun PlaylistDetailScreen(
         val fromEntryId = localEntries[from].id
         val h = heights[fromEntryId] ?: avgItemHeight()
         val top = tops[fromEntryId] ?: (from * avgItemHeight())
-        val draggedMidY = top + h / 2f + offsetY
+        val draggedTopY = top + offsetY
+        val draggedBottomY = draggedTopY + h
         var target = from
         localEntries.indices.forEach { i ->
             if (i == from) return@forEach
@@ -191,8 +221,8 @@ fun PlaylistDetailScreen(
             val t = tops[entryId] ?: (i * avgItemHeight())
             val iH = heights[entryId] ?: avgItemHeight()
             val iMidY = t + iH / 2f
-            if (from < i && draggedMidY > iMidY) target = i
-            if (from > i && draggedMidY < iMidY) target = i
+            if (from < i && draggedBottomY > iMidY) target = i
+            if (from > i && draggedTopY < iMidY) target = i
         }
         return target.coerceIn(0, localEntries.lastIndex)
     }
@@ -211,6 +241,17 @@ fun PlaylistDetailScreen(
             target > from && index in (from + 1)..target -> -draggedHeight
             target < from && index in target until from  ->  draggedHeight
             else -> 0f
+        }
+    }
+
+    LaunchedEffect(draggingIndex) {
+        while (draggingIndex >= 0) {
+            scrollDraggedItemNearEdge(draggingIndex)
+            val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
+            if (newTarget != currentTargetIndex) {
+                currentTargetIndex = newTarget
+            }
+            delay(16)
         }
     }
 
@@ -445,7 +486,8 @@ fun PlaylistDetailScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .onSizeChanged { listViewportHeight = it.height }
+                .verticalScroll(listScrollState),
         ) {
             localEntries.forEachIndexed { index, entry ->
                 key(entry.id) {
@@ -483,6 +525,7 @@ fun PlaylistDetailScreen(
                             },
                             onDrag = { dy ->
                                 dragOffsetY += dy
+                                scrollDraggedItemNearEdge(draggingIndex)
                                 val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
                                 if (newTarget != currentTargetIndex) {
                                     currentTargetIndex = newTarget
@@ -605,12 +648,8 @@ private fun PlaylistDetailRow(
     var rowMenuExpanded by remember { mutableStateOf(false) }
     val presentation = remember(queueItem) { queueItem?.let(::queueCapturePresentation) }
     val title = presentation?.title ?: "Loading..."
-    val progress = queueItem?.progressPercent?.coerceIn(0, 100) ?: 0
     val status = queueItem?.status
-    val source = presentation?.sourceLabel ?: queueItem?.host?.takeIf { queueItem.title != null } ?: queueItem?.url
-    val metadata = source?.let {
-        if (progress > 0) "$it - $progress% read" else it
-    }
+    val metadata = presentation?.sourceLabel ?: queueItem?.host?.takeIf { queueItem.title != null } ?: queueItem?.url
     val statusForLine = status?.takeIf { it != "ready" }
 
     LibraryItemRow(

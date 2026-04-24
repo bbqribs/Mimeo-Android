@@ -372,14 +372,12 @@ private fun LibraryQueueItemRow(
     val presentation = remember(item) { queueCapturePresentation(item) }
     val title = presentation.title
     val source = presentation.sourceLabel ?: item.url
-    val progress = item.progressPercent.coerceIn(0, 100)
-    val metadata = if (progress > 0) "$source - $progress% read" else source
     val status = item.status
     val statusForLine = status?.takeIf { it != "ready" }
 
     LibraryItemRow(
         title = title,
-        metadata = metadata,
+        metadata = source,
         isSelected = isSelected,
         onClick = if (isSelectionActive) onToggleSelect else onOpen,
         onLongClick = if (!isSelectionActive) onEnterSelection else null,

@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -69,6 +70,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -1493,9 +1495,36 @@ private fun NowPlayingSessionPanel(
     var draggingIndex by remember { mutableIntStateOf(-1) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var currentTargetIndex by remember { mutableIntStateOf(-1) }
+    val listScrollState = rememberScrollState()
+    var listViewportHeight by remember { mutableIntStateOf(0) }
 
     fun avgItemHeight(): Float =
         if (itemHeights.isEmpty()) 72f else itemHeights.values.average().toFloat()
+
+    fun scrollDraggedItemNearEdge(from: Int) {
+        if (from !in localItems.indices || listViewportHeight <= 0) return
+        val tops = dragStartTopOffsets.takeIf { it.isNotEmpty() } ?: itemTopOffsets
+        val heights = dragStartHeights.takeIf { it.isNotEmpty() } ?: itemHeights
+        val itemId = localItems[from].itemId
+        val itemTop = (tops[itemId] ?: (from * avgItemHeight())) + dragOffsetY
+        val itemBottom = itemTop + (heights[itemId] ?: avgItemHeight())
+        val viewportTop = listScrollState.value.toFloat()
+        val viewportBottom = viewportTop + listViewportHeight
+        val edgeSize = 96f
+        val maxStep = 28f
+        val desiredDelta = when {
+            itemTop < viewportTop + edgeSize -> -maxStep
+            itemBottom > viewportBottom - edgeSize -> maxStep
+            else -> 0f
+        }
+        if (desiredDelta == 0f) return
+        val before = listScrollState.value.toFloat()
+        listScrollState.dispatchRawDelta(desiredDelta)
+        val consumed = listScrollState.value.toFloat() - before
+        if (consumed != 0f) {
+            dragOffsetY += consumed
+        }
+    }
 
     fun computeTargetIndex(from: Int, offsetY: Float): Int {
         if (localItems.size <= 1 || from !in localItems.indices) return from
@@ -1504,7 +1533,8 @@ private fun NowPlayingSessionPanel(
         val fromItemId = localItems[from].itemId
         val h = heights[fromItemId] ?: avgItemHeight()
         val top = tops[fromItemId] ?: (from * avgItemHeight())
-        val draggedMidY = top + h / 2f + offsetY
+        val draggedTopY = top + offsetY
+        val draggedBottomY = draggedTopY + h
         var target = from
         localItems.indices.forEach { i ->
             if (i == from) return@forEach
@@ -1512,8 +1542,8 @@ private fun NowPlayingSessionPanel(
             val t = tops[itemId] ?: (i * avgItemHeight())
             val iH = heights[itemId] ?: avgItemHeight()
             val iMidY = t + iH / 2f
-            if (from < i && draggedMidY > iMidY) target = i
-            if (from > i && draggedMidY < iMidY) target = i
+            if (from < i && draggedBottomY > iMidY) target = i
+            if (from > i && draggedTopY < iMidY) target = i
         }
         return target.coerceIn(0, localItems.lastIndex)
     }
@@ -1527,6 +1557,15 @@ private fun NowPlayingSessionPanel(
             target > from && index in (from + 1)..target -> -draggedHeight
             target < from && index in target until from -> draggedHeight
             else -> 0f
+        }
+    }
+
+    LaunchedEffect(draggingIndex) {
+        while (draggingIndex >= 0) {
+            scrollDraggedItemNearEdge(draggingIndex)
+            val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
+            if (newTarget != currentTargetIndex) currentTargetIndex = newTarget
+            delay(16)
         }
     }
 
@@ -1601,7 +1640,6 @@ private fun NowPlayingSessionPanel(
                 )
             }
         }
-        val listScrollState = rememberScrollState()
         LaunchedEffect(currentItemId, itemTopOffsets.size) {
             if (currentItemId == null) return@LaunchedEffect
             val currentIndex = localItems.indexOfFirst { it.itemId == currentItemId }
@@ -1614,6 +1652,7 @@ private fun NowPlayingSessionPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
+                .onSizeChanged { listViewportHeight = it.height }
                 .verticalScroll(listScrollState),
         ) {
             localItems.forEachIndexed { index, item ->
@@ -1642,6 +1681,15 @@ private fun NowPlayingSessionPanel(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onOpenItem(item.itemId) }
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isCurrent) {
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+                                    } else {
+                                        Color.Transparent
+                                    },
+                                    shape = RoundedCornerShape(6.dp),
+                                )
                                 .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp)
                                 .semantics {
                                     customActions = buildList {
@@ -1673,6 +1721,7 @@ private fun NowPlayingSessionPanel(
                                             },
                                             onDrag = { _, dragAmount ->
                                                 dragOffsetY += dragAmount.y
+                                                scrollDraggedItemNearEdge(draggingIndex)
                                                 val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
                                                 if (newTarget != currentTargetIndex) currentTargetIndex = newTarget
                                             },
@@ -1680,15 +1729,6 @@ private fun NowPlayingSessionPanel(
                                             onDragCancel = { onDragEnd() },
                                         )
                                     },
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .background(
-                                        if (isCurrent) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.outlineVariant,
-                                        RoundedCornerShape(50),
-                                    ),
                             )
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
