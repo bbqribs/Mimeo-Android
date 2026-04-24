@@ -1681,6 +1681,10 @@ private fun NowPlayingSessionPanel(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onOpenItem(item.itemId) }
+                                .background(
+                                    color = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else Color.Black,
+                                    shape = RoundedCornerShape(6.dp),
+                                )
                                 .border(
                                     width = 1.dp,
                                     color = if (isCurrent) {
