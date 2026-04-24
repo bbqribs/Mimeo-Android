@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Unarchive
@@ -40,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -54,7 +54,11 @@ import com.mimeo.android.ui.common.ListStatusPill
 import com.mimeo.android.ui.common.ListSurfaceScaffold
 import com.mimeo.android.ui.common.SelectionAffordance
 import com.mimeo.android.ui.common.queueCapturePresentation
+import com.mimeo.android.ui.components.RefreshActionButton
+import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.playlists.BatchPlaylistPickerDialog
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 data class LibraryBatchAction(
     val label: String,
@@ -80,11 +84,13 @@ fun LibraryItemsScreen(
     onSortChange: (LibrarySortOption) -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSearchSubmit: () -> Unit,
-    onRefresh: () -> Unit,
+    onRefresh: suspend () -> Result<Unit>,
     onOpenItem: (Int) -> Unit,
     onBatchAction: (action: String, itemIds: Set<Int>) -> Unit = { _, _ -> },
 ) {
     var pendingExpanded by rememberSaveable { mutableStateOf(false) }
+    val actionScope = rememberCoroutineScope()
+    var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
 
     // Batch add-to-playlist dialog state. Captures selected IDs before selection is cleared.
     var batchPlaylistPickerIds by remember { mutableStateOf(emptySet<Int>()) }
@@ -119,6 +125,24 @@ fun LibraryItemsScreen(
 
     // Exit selection mode on back press.
     BackHandler(enabled = selectionActive) { clearSelection() }
+
+    suspend fun refreshListContent() {
+        if (refreshActionState == RefreshActionVisualState.Refreshing) return
+        refreshActionState = RefreshActionVisualState.Refreshing
+        val result = onRefresh()
+        refreshActionState = if (result.isSuccess) {
+            RefreshActionVisualState.Success
+        } else {
+            RefreshActionVisualState.Failure
+        }
+        delay(700)
+        if (
+            refreshActionState == RefreshActionVisualState.Success ||
+            refreshActionState == RefreshActionVisualState.Failure
+        ) {
+            refreshActionState = RefreshActionVisualState.Idle
+        }
+    }
 
     val sortedItems = remember(items, sortOption) {
         when (sortOption) {
@@ -241,9 +265,13 @@ fun LibraryItemsScreen(
                         keyboardActions = KeyboardActions(onSearch = { onSearchSubmit() }),
                         shape = RoundedCornerShape(8.dp),
                     )
-                    IconButton(onClick = onRefresh) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                    }
+                    RefreshActionButton(
+                        state = refreshActionState,
+                        showConnectivityIssue = false,
+                        onClick = { actionScope.launch { refreshListContent() } },
+                        contentDescription = "Refresh $title",
+                        pullProgress = 0f,
+                    )
                 }
 
                 // Sort chips row

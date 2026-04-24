@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
@@ -67,6 +66,8 @@ import com.mimeo.android.ui.common.ListStatusPill
 import com.mimeo.android.ui.common.ListSurfaceScaffold
 import com.mimeo.android.ui.common.SelectionAffordance
 import com.mimeo.android.ui.common.queueCapturePresentation
+import com.mimeo.android.ui.components.RefreshActionButton
+import com.mimeo.android.ui.components.RefreshActionVisualState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -146,6 +147,7 @@ fun PlaylistDetailScreen(
     // Cached target index — updated on every onDrag so onDragEnd can read it reliably.
     var currentTargetIndex by remember { mutableIntStateOf(-1) }
     var isSaving by remember { mutableStateOf(false) }
+    var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
     val listScrollState = rememberScrollState()
     var listViewportHeight by remember { mutableIntStateOf(0) }
 
@@ -341,6 +343,24 @@ fun PlaylistDetailScreen(
         articleIds.forEach { vm.playLast(it) }
     }
 
+    suspend fun refreshPlaylistContent() {
+        if (refreshActionState == RefreshActionVisualState.Refreshing) return
+        refreshActionState = RefreshActionVisualState.Refreshing
+        val result = vm.refreshPlaylistsOnce()
+        refreshActionState = if (result.isSuccess) {
+            RefreshActionVisualState.Success
+        } else {
+            RefreshActionVisualState.Failure
+        }
+        delay(700)
+        if (
+            refreshActionState == RefreshActionVisualState.Success ||
+            refreshActionState == RefreshActionVisualState.Failure
+        ) {
+            refreshActionState = RefreshActionVisualState.Idle
+        }
+    }
+
     ListSurfaceScaffold(
         modifier = Modifier.fillMaxSize(),
         header = {
@@ -367,17 +387,13 @@ fun PlaylistDetailScreen(
                     if (isSaving || (loading && localEntries.isEmpty())) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     }
-                    IconButton(
-                        onClick = vm::refreshPlaylists,
-                        modifier = Modifier.size(32.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Refresh playlist",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
+                    RefreshActionButton(
+                        state = refreshActionState,
+                        showConnectivityIssue = false,
+                        onClick = { actionScope.launch { refreshPlaylistContent() } },
+                        contentDescription = "Refresh playlist",
+                        pullProgress = 0f,
+                    )
                     if (playlist != null) {
                         Box {
                             IconButton(
