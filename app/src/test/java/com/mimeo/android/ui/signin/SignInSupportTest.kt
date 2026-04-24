@@ -34,11 +34,11 @@ class SignInSupportTest {
     @Test
     fun `defaults blank and local sign in url to remote preset for configured host type`() {
         assertEquals(
-            "http://100.84.13.10:8000",
+            "https://beh-august2015.taildacac5.ts.net",
             defaultSignInServerUrl(""),
         )
         assertEquals(
-            "http://100.84.13.10:8000",
+            "https://beh-august2015.taildacac5.ts.net",
             defaultSignInServerUrl("http://10.0.2.2:8000"),
         )
     }
@@ -46,8 +46,8 @@ class SignInSupportTest {
     @Test
     fun `builds preset urls for remote lan and manual entry`() {
         assertEquals(
-            "http://100.84.13.10:8000",
-            buildPresetServerUrl(SignInServerPreset.REMOTE, SignInUrlScheme.HTTP, ""),
+            "https://beh-august2015.taildacac5.ts.net",
+            buildPresetServerUrl(SignInServerPreset.REMOTE, SignInUrlScheme.HTTPS, ""),
         )
         assertEquals(
             "https://192.168.68.124:8000",
@@ -62,11 +62,11 @@ class SignInSupportTest {
     @Test
     fun `maps cleartext and tls sign in failures to scheme guidance`() {
         assertEquals(
-            "Probable URL scheme/security mismatch. Remote/hosted is HTTPS-first; for Tailscale IP without endpoint TLS use HTTP, or use HTTPS with a .ts.net/hosted URL.",
+            "Probable URL scheme/security mismatch. Remote is HTTPS-first with .ts.net; fallback HTTP is http://100.84.13.10:8000 when endpoint TLS is disabled.",
             resolveSignInErrorMessage(IOException("CLEARTEXT communication to host not permitted by network security policy")),
         )
         assertEquals(
-            "Probable URL scheme/security mismatch. Remote/hosted is HTTPS-first; for Tailscale IP without endpoint TLS use HTTP, or use HTTPS with a .ts.net/hosted URL.",
+            "Probable URL scheme/security mismatch. Remote is HTTPS-first with .ts.net; fallback HTTP is http://100.84.13.10:8000 when endpoint TLS is disabled.",
             resolveSignInErrorMessage(IOException("SSLHandshakeException: handshake failed")),
         )
     }
@@ -75,7 +75,7 @@ class SignInSupportTest {
     fun `infers preset and scheme from sign in url`() {
         assertEquals(
             SignInServerPreset.REMOTE,
-            inferSignInPreset("https://100.84.13.10:8000"),
+            inferSignInPreset("https://beh-august2015.taildacac5.ts.net"),
         )
         assertEquals(
             SignInServerPreset.LAN,
@@ -87,7 +87,7 @@ class SignInSupportTest {
         )
         assertEquals(
             SignInUrlScheme.HTTPS,
-            inferSignInScheme("https://100.84.13.10:8000"),
+            inferSignInScheme("https://beh-august2015.taildacac5.ts.net"),
         )
     }
 }
