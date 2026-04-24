@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -60,6 +61,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -68,6 +70,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -105,7 +108,6 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
-import kotlin.math.abs
 
 private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
 
@@ -1483,42 +1485,87 @@ private fun NowPlayingSessionPanel(
         }
     }
 
-    // Per-item measured bounds for drag hit-testing (index → px).
+    // Per-item measured bounds for drag hit-testing (itemId -> px).
     val itemTopOffsets = remember { mutableMapOf<Int, Float>() }
     val itemHeights = remember { mutableMapOf<Int, Float>() }
+    var dragStartTopOffsets by remember { mutableStateOf<Map<Int, Float>>(emptyMap()) }
+    var dragStartHeights by remember { mutableStateOf<Map<Int, Float>>(emptyMap()) }
 
     // Drag state
     var draggingIndex by remember { mutableIntStateOf(-1) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var currentTargetIndex by remember { mutableIntStateOf(-1) }
+    val listScrollState = rememberScrollState()
+    var listViewportHeight by remember { mutableIntStateOf(0) }
 
     fun avgItemHeight(): Float =
-        if (itemHeights.isEmpty()) 56f else itemHeights.values.average().toFloat()
+        if (itemHeights.isEmpty()) 72f else itemHeights.values.average().toFloat()
+
+    fun scrollDraggedItemNearEdge(from: Int) {
+        if (from !in localItems.indices || listViewportHeight <= 0) return
+        val tops = dragStartTopOffsets.takeIf { it.isNotEmpty() } ?: itemTopOffsets
+        val heights = dragStartHeights.takeIf { it.isNotEmpty() } ?: itemHeights
+        val itemId = localItems[from].itemId
+        val itemTop = (tops[itemId] ?: (from * avgItemHeight())) + dragOffsetY
+        val itemBottom = itemTop + (heights[itemId] ?: avgItemHeight())
+        val viewportTop = listScrollState.value.toFloat()
+        val viewportBottom = viewportTop + listViewportHeight
+        val edgeSize = 96f
+        val maxStep = 28f
+        val desiredDelta = when {
+            itemTop < viewportTop + edgeSize -> -maxStep
+            itemBottom > viewportBottom - edgeSize -> maxStep
+            else -> 0f
+        }
+        if (desiredDelta == 0f) return
+        val before = listScrollState.value.toFloat()
+        listScrollState.dispatchRawDelta(desiredDelta)
+        val consumed = listScrollState.value.toFloat() - before
+        if (consumed != 0f) {
+            dragOffsetY += consumed
+        }
+    }
 
     fun computeTargetIndex(from: Int, offsetY: Float): Int {
-        if (localItems.size <= 1) return from
-        val h = itemHeights[from] ?: avgItemHeight()
-        val top = itemTopOffsets[from] ?: (from * avgItemHeight())
-        val midY = top + h / 2f + offsetY
-        var best = from
-        var bestDist = Float.MAX_VALUE
+        if (localItems.size <= 1 || from !in localItems.indices) return from
+        val tops = dragStartTopOffsets.takeIf { it.isNotEmpty() } ?: itemTopOffsets
+        val heights = dragStartHeights.takeIf { it.isNotEmpty() } ?: itemHeights
+        val fromItemId = localItems[from].itemId
+        val h = heights[fromItemId] ?: avgItemHeight()
+        val top = tops[fromItemId] ?: (from * avgItemHeight())
+        val draggedTopY = top + offsetY
+        val draggedBottomY = draggedTopY + h
+        var target = from
         localItems.indices.forEach { i ->
-            val t = itemTopOffsets[i] ?: (i * avgItemHeight())
-            val iH = itemHeights[i] ?: avgItemHeight()
-            val iMid = t + iH / 2f
-            val d = abs(midY - iMid)
-            if (d < bestDist) { bestDist = d; best = i }
+            if (i == from) return@forEach
+            val itemId = localItems[i].itemId
+            val t = tops[itemId] ?: (i * avgItemHeight())
+            val iH = heights[itemId] ?: avgItemHeight()
+            val iMidY = t + iH / 2f
+            if (from < i && draggedBottomY > iMidY) target = i
+            if (from > i && draggedTopY < iMidY && i < target) target = i
         }
-        return best.coerceIn(0, localItems.lastIndex)
+        return target.coerceIn(0, localItems.lastIndex)
     }
 
     fun visualOffsetForItem(index: Int, from: Int, target: Int): Float {
         if (from < 0 || from == target || index == from) return 0f
-        val draggedHeight = itemHeights[from] ?: avgItemHeight()
+        val draggedItemId = localItems[from].itemId
+        val heights = dragStartHeights.takeIf { it.isNotEmpty() } ?: itemHeights
+        val draggedHeight = heights[draggedItemId] ?: avgItemHeight()
         return when {
             target > from && index in (from + 1)..target -> -draggedHeight
             target < from && index in target until from -> draggedHeight
             else -> 0f
+        }
+    }
+
+    LaunchedEffect(draggingIndex) {
+        while (draggingIndex >= 0) {
+            scrollDraggedItemNearEdge(draggingIndex)
+            val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
+            if (newTarget != currentTargetIndex) currentTargetIndex = newTarget
+            delay(16)
         }
     }
 
@@ -1532,6 +1579,8 @@ private fun NowPlayingSessionPanel(
         draggingIndex = -1
         dragOffsetY = 0f
         currentTargetIndex = -1
+        dragStartTopOffsets = emptyMap()
+        dragStartHeights = emptyMap()
         if (from >= 0 && target >= 0 && target != from) {
             onReorderItem(from, target)
         }
@@ -1591,12 +1640,11 @@ private fun NowPlayingSessionPanel(
                 )
             }
         }
-        val listScrollState = rememberScrollState()
         LaunchedEffect(currentItemId, itemTopOffsets.size) {
             if (currentItemId == null) return@LaunchedEffect
             val currentIndex = localItems.indexOfFirst { it.itemId == currentItemId }
             if (currentIndex < 0) return@LaunchedEffect
-            val offset = itemTopOffsets[currentIndex]
+            val offset = itemTopOffsets[currentItemId]
                 ?: (currentIndex * avgItemHeight()).toInt().toFloat()
             listScrollState.animateScrollTo(offset.toInt())
         }
@@ -1604,119 +1652,128 @@ private fun NowPlayingSessionPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
+                .onSizeChanged { listViewportHeight = it.height }
                 .verticalScroll(listScrollState),
         ) {
             localItems.forEachIndexed { index, item ->
-                val isCurrent = item.itemId == currentItemId
-                val isDragging = draggingIndex == index
-                val itemVisualOffsetY = when {
-                    isDragging -> dragOffsetY
-                    draggingIndex >= 0 -> visualOffsetForItem(index, draggingIndex, currentTargetIndex)
-                    else -> 0f
-                }
-                val sourceLabel = item.host
-                    ?: item.sourceLabel?.takeIf { it.isNotBlank() }
-                    ?: item.sourceType?.takeIf { it.isNotBlank() }
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .zIndex(if (isDragging) 1f else 0f)
-                        .graphicsLayer { translationY = itemVisualOffsetY }
-                        .onGloballyPositioned { coords ->
-                            itemTopOffsets[index] = coords.positionInParent().y
-                            itemHeights[index] = coords.size.height.toFloat()
-                        },
-                ) {
-                    Row(
+                key(item.itemId) {
+                    val isCurrent = item.itemId == currentItemId
+                    val isDragging = draggingIndex == index
+                    val itemVisualOffsetY = when {
+                        isDragging -> dragOffsetY
+                        draggingIndex >= 0 -> visualOffsetForItem(index, draggingIndex, currentTargetIndex)
+                        else -> 0f
+                    }
+                    val sourceLabel = item.host
+                        ?: item.sourceLabel?.takeIf { it.isNotBlank() }
+                        ?: item.sourceType?.takeIf { it.isNotBlank() }
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onOpenItem(item.itemId) }
-                            .padding(start = 8.dp, end = 4.dp, top = 8.dp, bottom = 8.dp)
-                            .semantics {
-                                customActions = buildList {
-                                    if (index > 0) add(CustomAccessibilityAction("Move up") {
-                                        onReorderItem(index, index - 1); true
-                                    })
-                                    if (index < localItems.lastIndex) add(CustomAccessibilityAction("Move down") {
-                                        onReorderItem(index, index + 1); true
-                                    })
-                                }
+                            .zIndex(if (isDragging) 1f else 0f)
+                            .graphicsLayer { translationY = itemVisualOffsetY }
+                            .onGloballyPositioned { coords ->
+                                itemTopOffsets[item.itemId] = coords.positionInParent().y
+                                itemHeights[item.itemId] = coords.size.height.toFloat()
                             },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.DragHandle,
-                            contentDescription = "Drag to reorder",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        Row(
                             modifier = Modifier
-                                .size(22.dp)
-                                .pointerInput(index) {
-                                    detectDragGestures(
-                                        onDragStart = {
-                                            draggingIndex = index
-                                            dragOffsetY = 0f
-                                            currentTargetIndex = index
-                                        },
-                                        onDrag = { _, dragAmount ->
-                                            dragOffsetY += dragAmount.y
-                                            val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
-                                            if (newTarget != currentTargetIndex) currentTargetIndex = newTarget
-                                        },
-                                        onDragEnd = { onDragEnd() },
-                                        onDragCancel = { onDragEnd() },
-                                    )
-                                },
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
+                                .fillMaxWidth()
+                                .clickable { onOpenItem(item.itemId) }
                                 .background(
-                                    if (isCurrent) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.outlineVariant,
-                                    RoundedCornerShape(50),
-                                ),
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = item.title?.ifBlank { null } ?: item.url,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (isCurrent) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurface,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
+                                    color = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else Color.Black,
+                                    shape = RoundedCornerShape(6.dp),
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isCurrent) {
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+                                    } else {
+                                        Color.Transparent
+                                    },
+                                    shape = RoundedCornerShape(6.dp),
+                                )
+                                .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp)
+                                .semantics {
+                                    customActions = buildList {
+                                        if (index > 0) add(CustomAccessibilityAction("Move up") {
+                                            onReorderItem(index, index - 1); true
+                                        })
+                                        if (index < localItems.lastIndex) add(CustomAccessibilityAction("Move down") {
+                                            onReorderItem(index, index + 1); true
+                                        })
+                                    }
+                                },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DragHandle,
+                                contentDescription = "Drag to reorder",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .pointerInput(index) {
+                                        detectDragGestures(
+                                            onDragStart = {
+                                                dragStartTopOffsets = itemTopOffsets.toMap()
+                                                dragStartHeights = itemHeights.toMap()
+                                                draggingIndex = index
+                                                dragOffsetY = 0f
+                                                currentTargetIndex = index
+                                            },
+                                            onDrag = { _, dragAmount ->
+                                                dragOffsetY += dragAmount.y
+                                                scrollDraggedItemNearEdge(draggingIndex)
+                                                val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
+                                                if (newTarget != currentTargetIndex) currentTargetIndex = newTarget
+                                            },
+                                            onDragEnd = { onDragEnd() },
+                                            onDragCancel = { onDragEnd() },
+                                        )
+                                    },
                             )
-                            if (sourceLabel != null) {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = sourceLabel,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
+                                    text = item.title?.ifBlank { null } ?: item.url,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (isCurrent) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                 )
+                                if (sourceLabel != null) {
+                                    Text(
+                                        text = sourceLabel,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                            if (!isCurrent) {
+                                IconButton(
+                                    onClick = { onRemoveItem(item.itemId) },
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Remove from session",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
                             }
                         }
-                        if (!isCurrent) {
-                            IconButton(
-                                onClick = { onRemoveItem(item.itemId) },
-                                modifier = Modifier.size(32.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Remove from session",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
+                        if (index < localItems.lastIndex) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 12.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                            )
                         }
-                    }
-                    if (index < localItems.lastIndex) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                        )
                     }
                 }
             }

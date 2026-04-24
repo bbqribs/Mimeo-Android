@@ -382,11 +382,10 @@ internal fun MainActivityShell(
                                     onSearchQueryChange = { vm.setInboxSearchQuery(it) },
                                     onSearchSubmit = { vm.submitInboxSearch() },
                                     onRefresh = {
-                                        coroutineScope.launch {
-                                            loading = true
-                                            vm.loadInboxItems()
-                                            loading = false
-                                        }
+                                        loading = true
+                                        val result = vm.loadInboxItems()
+                                        loading = false
+                                        result
                                     },
                                     onOpenItem = shellState.openItemInLocus,
                                     onBatchAction = { action, itemIds ->
@@ -429,11 +428,10 @@ internal fun MainActivityShell(
                                     onSearchQueryChange = { vm.setFavoritesSearchQuery(it) },
                                     onSearchSubmit = { vm.submitFavoritesSearch() },
                                     onRefresh = {
-                                        coroutineScope.launch {
-                                            loading = true
-                                            vm.loadFavoriteItems()
-                                            loading = false
-                                        }
+                                        loading = true
+                                        val result = vm.loadFavoriteItems()
+                                        loading = false
+                                        result
                                     },
                                     onOpenItem = shellState.openItemInLocus,
                                     onBatchAction = { action, itemIds ->
@@ -475,11 +473,10 @@ internal fun MainActivityShell(
                                     onSearchQueryChange = { vm.setArchiveSearchQuery(it) },
                                     onSearchSubmit = { vm.submitArchiveSearch() },
                                     onRefresh = {
-                                        coroutineScope.launch {
-                                            loading = true
-                                            vm.loadArchivedItems()
-                                            loading = false
-                                        }
+                                        loading = true
+                                        val result = vm.loadArchivedItems()
+                                        loading = false
+                                        result
                                     },
                                     onOpenItem = shellState.openItemInLocus,
                                     onBatchAction = { action, itemIds ->
@@ -514,11 +511,10 @@ internal fun MainActivityShell(
                                     onSearchQueryChange = { vm.setBinSearchQuery(it) },
                                     onSearchSubmit = { vm.submitBinSearch() },
                                     onRefresh = {
-                                        coroutineScope.launch {
-                                            loading = true
-                                            vm.loadBinItems()
-                                            loading = false
-                                        }
+                                        loading = true
+                                        val result = vm.loadBinItems()
+                                        loading = false
+                                        result
                                     },
                                     onOpenItem = shellState.openItemInLocus,
                                     onBatchAction = { action, itemIds ->

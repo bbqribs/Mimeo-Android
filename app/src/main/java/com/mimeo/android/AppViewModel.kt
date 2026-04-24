@@ -3704,6 +3704,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // Stores the last successful batch action for undo. Overwritten on each new batch dispatch.
     private var lastBatchAction: String = ""
     private var lastBatchItemIds: List<Int> = emptyList()
+    private data class PlaylistRemovalUndoSnapshot(
+        val playlistId: Int,
+        val removedItemIds: List<Int>,
+        val previousArticleOrder: List<Int>,
+    )
+
+    private var lastPlaylistRemovalSnapshot: PlaylistRemovalUndoSnapshot? = null
 
     private fun batchReverseAction(action: String) = when (action) {
         "archive" -> "unarchive"
@@ -3804,6 +3811,82 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    fun rememberLastPlaylistRemoval(
+        playlistId: Int,
+        itemIds: List<Int>,
+        previousArticleOrder: List<Int>,
+    ) {
+        lastPlaylistRemovalSnapshot = PlaylistRemovalUndoSnapshot(
+            playlistId = playlistId,
+            removedItemIds = itemIds.distinct(),
+            previousArticleOrder = previousArticleOrder.distinct(),
+        )
+    }
+
+    suspend fun undoLastPlaylistRemoval(): Result<Int> {
+        val snapshot = lastPlaylistRemovalSnapshot ?: return Result.failure(Exception("Nothing to undo"))
+        val playlistId = snapshot.playlistId
+        val ids = snapshot.removedItemIds
+        if (ids.isEmpty()) return Result.failure(Exception("Nothing to undo"))
+        val current = settings.value
+        return try {
+            var restoredCount = 0
+            ids.forEach { itemId ->
+                val result = repository.togglePlaylistMembership(
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
+                    playlistId = playlistId,
+                    itemId = itemId,
+                    isCurrentlyMember = false,
+                )
+                if (result.added) {
+                    restoredCount += 1
+                    updatePlaylistEntriesLocally(
+                        playlistId = playlistId,
+                        itemId = itemId,
+                        added = true,
+                    )
+                }
+            }
+            refreshPlaylistsOnce().getOrThrow()
+            val refreshedPlaylist = playlists.value.firstOrNull { it.id == playlistId }
+            if (refreshedPlaylist != null && snapshot.previousArticleOrder.isNotEmpty()) {
+                val entriesByArticleId = refreshedPlaylist.entries
+                    .sortedBy { it.position }
+                    .associateBy { it.articleId }
+                val orderedRestoredEntryIds = snapshot.previousArticleOrder.mapNotNull { articleId ->
+                    entriesByArticleId[articleId]?.id
+                }
+                val remainingEntryIds = refreshedPlaylist.entries
+                    .sortedBy { it.position }
+                    .map { it.id }
+                    .filterNot { it in orderedRestoredEntryIds.toSet() }
+                val orderedEntryIds = orderedRestoredEntryIds + remainingEntryIds
+                if (orderedEntryIds.size == refreshedPlaylist.entries.size) {
+                    repository.reorderPlaylistEntries(
+                        current.baseUrl,
+                        current.apiToken,
+                        playlistId,
+                        orderedEntryIds,
+                    )
+                    refreshPlaylistsOnce().getOrThrow()
+                }
+            }
+            if (settings.value.selectedPlaylistId == playlistId) {
+                loadQueue()
+            }
+            lastPlaylistRemovalSnapshot = null
+            Result.success(restoredCount)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
             Result.failure(error)
         }
     }

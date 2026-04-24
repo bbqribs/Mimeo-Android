@@ -1,5 +1,6 @@
 package com.mimeo.android.ui.playlists
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -12,12 +13,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -47,15 +52,24 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.mimeo.android.ACTION_KEY_UNDO_PLAYLIST_REMOVE
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.ui.common.LibraryItemRow
+import com.mimeo.android.ui.common.ListStatusPill
+import com.mimeo.android.ui.common.ListSurfaceScaffold
+import com.mimeo.android.ui.common.SelectionAffordance
+import com.mimeo.android.ui.common.queueCapturePresentation
+import com.mimeo.android.ui.components.RefreshActionButton
+import com.mimeo.android.ui.components.RefreshActionVisualState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 
 /**
  * Ordered list of playlist entries with drag-to-reorder support.
@@ -110,16 +124,22 @@ fun PlaylistDetailScreen(
     // changes from refreshPlaylists do NOT reset localEntries and cause a post-drop flicker.
     val localEntries = remember { mutableStateListOf<PlaylistEntrySummary>() }
     val serverEntryIds = remember(serverEntries) { serverEntries.map { it.id } }
+    var selectionActive by remember { mutableStateOf(false) }
+    var selectedEntryIds by remember { mutableStateOf(emptySet<Int>()) }
     LaunchedEffect(serverEntryIds) {
         if (localEntries.map { it.id } != serverEntryIds) {
             localEntries.clear()
             localEntries.addAll(serverEntries)
+            selectedEntryIds = selectedEntryIds.intersect(serverEntryIds.toSet())
+            if (selectedEntryIds.isEmpty()) selectionActive = false
         }
     }
 
     // Per-item Y positions in the Column for drag hit-testing.
-    val itemTopOffsets = remember { mutableMapOf<Int, Float>() }
-    val itemHeights = remember { mutableMapOf<Int, Float>() }
+    val itemTopOffsets = remember { mutableMapOf<Int, Float>() } // entryId -> top px
+    val itemHeights = remember { mutableMapOf<Int, Float>() } // entryId -> height px
+    var dragStartTopOffsets by remember { mutableStateOf<Map<Int, Float>>(emptyMap()) }
+    var dragStartHeights by remember { mutableStateOf<Map<Int, Float>>(emptyMap()) }
 
     // Drag state
     var draggingIndex by remember { mutableIntStateOf(-1) }
@@ -127,6 +147,9 @@ fun PlaylistDetailScreen(
     // Cached target index — updated on every onDrag so onDragEnd can read it reliably.
     var currentTargetIndex by remember { mutableIntStateOf(-1) }
     var isSaving by remember { mutableStateOf(false) }
+    var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
+    val listScrollState = rememberScrollState()
+    var listViewportHeight by remember { mutableIntStateOf(0) }
 
     // Rename/delete dialog state
     var showOverflowMenu by remember { mutableStateOf(false) }
@@ -134,28 +157,76 @@ fun PlaylistDetailScreen(
     var renameText by remember { mutableStateOf("") }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
+    fun enterSelectionMode(entryId: Int) {
+        selectionActive = true
+        selectedEntryIds = setOf(entryId)
+    }
+
+    fun toggleSelection(entryId: Int) {
+        val next = if (entryId in selectedEntryIds) selectedEntryIds - entryId else selectedEntryIds + entryId
+        selectedEntryIds = next
+        if (next.isEmpty()) selectionActive = false
+    }
+
+    fun clearSelection() {
+        selectionActive = false
+        selectedEntryIds = emptySet()
+    }
+
+    fun selectedArticleIdsInOrder(): List<Int> =
+        localEntries.filter { it.id in selectedEntryIds }.map { it.articleId }
+
+    BackHandler(enabled = selectionActive) { clearSelection() }
+
     /** Average measured item height; falls back to a reasonable default. */
     fun avgItemHeight(): Float =
         if (itemHeights.isEmpty()) 72f else itemHeights.values.average().toFloat()
 
-    /**
-     * Compute which index the dragged item's visual midpoint is nearest to.
-     */
-    fun computeTargetIndex(from: Int, offsetY: Float): Int {
-        if (localEntries.size <= 1) return from
-        val h = itemHeights[from] ?: avgItemHeight()
-        val top = itemTopOffsets[from] ?: (from * avgItemHeight())
-        val midY = top + h / 2f + offsetY
-        var best = from
-        var bestDist = Float.MAX_VALUE
-        localEntries.indices.forEach { i ->
-            val t = itemTopOffsets[i] ?: (i * avgItemHeight())
-            val iH = itemHeights[i] ?: avgItemHeight()
-            val iMid = t + iH / 2f
-            val d = abs(midY - iMid)
-            if (d < bestDist) { bestDist = d; best = i }
+    fun scrollDraggedItemNearEdge(from: Int) {
+        if (from !in localEntries.indices || listViewportHeight <= 0) return
+        val tops = dragStartTopOffsets.takeIf { it.isNotEmpty() } ?: itemTopOffsets
+        val heights = dragStartHeights.takeIf { it.isNotEmpty() } ?: itemHeights
+        val entryId = localEntries[from].id
+        val itemTop = (tops[entryId] ?: (from * avgItemHeight())) + dragOffsetY
+        val itemBottom = itemTop + (heights[entryId] ?: avgItemHeight())
+        val viewportTop = listScrollState.value.toFloat()
+        val viewportBottom = viewportTop + listViewportHeight
+        val edgeSize = 96f
+        val maxStep = 28f
+        val desiredDelta = when {
+            itemTop < viewportTop + edgeSize -> -maxStep
+            itemBottom > viewportBottom - edgeSize -> maxStep
+            else -> 0f
         }
-        return best.coerceIn(0, localEntries.lastIndex)
+        if (desiredDelta == 0f) return
+        val before = listScrollState.value.toFloat()
+        listScrollState.dispatchRawDelta(desiredDelta)
+        val consumed = listScrollState.value.toFloat() - before
+        if (consumed != 0f) {
+            dragOffsetY += consumed
+        }
+    }
+
+    fun computeTargetIndex(from: Int, offsetY: Float): Int {
+        if (localEntries.size <= 1 || from !in localEntries.indices) return from
+        val tops = dragStartTopOffsets.takeIf { it.isNotEmpty() } ?: itemTopOffsets
+        val heights = dragStartHeights.takeIf { it.isNotEmpty() } ?: itemHeights
+        val fromEntryId = localEntries[from].id
+        val h = heights[fromEntryId] ?: avgItemHeight()
+        val top = tops[fromEntryId] ?: (from * avgItemHeight())
+        val draggedTopY = top + offsetY
+        val draggedBottomY = draggedTopY + h
+        var target = from
+        localEntries.indices.forEach { i ->
+            if (i == from) return@forEach
+            val entryId = localEntries[i].id
+            val t = tops[entryId] ?: (i * avgItemHeight())
+            val iH = heights[entryId] ?: avgItemHeight()
+            val iMidY = t + iH / 2f
+            if (from < i && draggedBottomY > iMidY) target = i
+            if (from > i && draggedTopY < iMidY && i < target) target = i
+        }
+        return target.coerceIn(0, localEntries.lastIndex)
     }
 
     /**
@@ -165,11 +236,24 @@ fun PlaylistDetailScreen(
      */
     fun visualOffsetForItem(index: Int, from: Int, target: Int): Float {
         if (from < 0 || from == target || index == from) return 0f
-        val draggedHeight = itemHeights[from] ?: avgItemHeight()
+        val draggedEntryId = localEntries[from].id
+        val heights = dragStartHeights.takeIf { it.isNotEmpty() } ?: itemHeights
+        val draggedHeight = heights[draggedEntryId] ?: avgItemHeight()
         return when {
             target > from && index in (from + 1)..target -> -draggedHeight
             target < from && index in target until from  ->  draggedHeight
             else -> 0f
+        }
+    }
+
+    LaunchedEffect(draggingIndex) {
+        while (draggingIndex >= 0) {
+            scrollDraggedItemNearEdge(draggingIndex)
+            val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
+            if (newTarget != currentTargetIndex) {
+                currentTargetIndex = newTarget
+            }
+            delay(16)
         }
     }
 
@@ -185,6 +269,8 @@ fun PlaylistDetailScreen(
         draggingIndex = -1
         dragOffsetY = 0f
         currentTargetIndex = -1
+        dragStartTopOffsets = emptyMap()
+        dragStartHeights = emptyMap()
         if (from < 0) return
         val entryIds = localEntries.map { it.id }
         isSaving = true
@@ -195,73 +281,198 @@ fun PlaylistDetailScreen(
         }
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
-            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = playlist?.name ?: "Playlist",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                if (isSaving || (loading && localEntries.isEmpty())) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+    fun persistCurrentOrder() {
+        val entryIds = localEntries.map { it.id }
+        isSaving = true
+        actionScope.launch {
+            vm.reorderPlaylistEntries(playlistId, entryIds)
+                .onFailure { onShowSnackbar("Couldn't save order.", null, null) }
+            isSaving = false
+        }
+    }
+
+    fun moveEntry(index: Int, target: Int) {
+        if (index !in localEntries.indices || target !in localEntries.indices || index == target) return
+        val moved = localEntries.removeAt(index)
+        localEntries.add(target, moved)
+        persistCurrentOrder()
+    }
+
+    fun removeArticleFromPlaylist(articleId: Int) {
+        val previousArticleOrder = localEntries.map { it.articleId }
+        actionScope.launch {
+            vm.togglePlaylistMembership(articleId, playlistId)
+                .onSuccess {
+                    vm.rememberLastPlaylistRemoval(playlistId, listOf(articleId), previousArticleOrder)
+                    onShowSnackbar("Removed from playlist.", "Undo", ACTION_KEY_UNDO_PLAYLIST_REMOVE)
                 }
-                if (playlist != null) {
-                    Box {
-                        IconButton(
-                            onClick = { showOverflowMenu = true },
-                            modifier = Modifier.size(32.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.MoreVert,
-                                contentDescription = "Playlist options",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = showOverflowMenu,
-                            onDismissRequest = { showOverflowMenu = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Rename") },
-                                onClick = {
-                                    showOverflowMenu = false
-                                    renameText = playlist.name
-                                    showRenameDialog = true
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Delete") },
-                                onClick = {
-                                    showOverflowMenu = false
-                                    showDeleteDialog = true
-                                },
-                            )
+                .onFailure { onShowSnackbar("Couldn't remove from playlist.", null, null) }
+        }
+    }
+
+    fun removeSelectedFromPlaylist() {
+        val articleIds = selectedArticleIdsInOrder()
+        val previousArticleOrder = localEntries.map { it.articleId }
+        clearSelection()
+        actionScope.launch {
+            val removedIds = mutableListOf<Int>()
+            articleIds.forEach { articleId ->
+                vm.togglePlaylistMembership(articleId, playlistId)
+                    .onSuccess { removedIds += articleId }
+            }
+            if (removedIds.isNotEmpty()) {
+                vm.rememberLastPlaylistRemoval(playlistId, removedIds, previousArticleOrder)
+                onShowSnackbar(
+                    if (removedIds.size == articleIds.size) {
+                        "Removed ${removedIds.size} from playlist."
+                    } else {
+                        "Removed ${removedIds.size}; some failed."
+                    },
+                    "Undo",
+                    ACTION_KEY_UNDO_PLAYLIST_REMOVE,
+                )
+            } else {
+                onShowSnackbar("Couldn't remove selected items.", null, null)
+            }
+        }
+    }
+
+    fun queueSelectedAtEnd() {
+        val articleIds = selectedArticleIdsInOrder()
+        clearSelection()
+        articleIds.forEach { vm.playLast(it) }
+    }
+
+    suspend fun refreshPlaylistContent() {
+        if (refreshActionState == RefreshActionVisualState.Refreshing) return
+        refreshActionState = RefreshActionVisualState.Refreshing
+        val result = vm.refreshPlaylistsOnce()
+        refreshActionState = if (result.isSuccess) {
+            RefreshActionVisualState.Success
+        } else {
+            RefreshActionVisualState.Failure
+        }
+        delay(700)
+        if (
+            refreshActionState == RefreshActionVisualState.Success ||
+            refreshActionState == RefreshActionVisualState.Failure
+        ) {
+            refreshActionState = RefreshActionVisualState.Idle
+        }
+    }
+
+    ListSurfaceScaffold(
+        modifier = Modifier.fillMaxSize(),
+        header = {
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = playlist?.name ?: "Playlist",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (isSaving || (loading && localEntries.isEmpty())) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    }
+                    RefreshActionButton(
+                        state = refreshActionState,
+                        showConnectivityIssue = false,
+                        onClick = { actionScope.launch { refreshPlaylistContent() } },
+                        contentDescription = "Refresh playlist",
+                        pullProgress = 0f,
+                    )
+                    if (playlist != null) {
+                        Box {
+                            IconButton(
+                                onClick = { showOverflowMenu = true },
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = "Playlist options",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showOverflowMenu,
+                                onDismissRequest = { showOverflowMenu = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Rename") },
+                                    onClick = {
+                                        showOverflowMenu = false
+                                        renameText = playlist.name
+                                        showRenameDialog = true
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Delete") },
+                                    onClick = {
+                                        showOverflowMenu = false
+                                        showDeleteDialog = true
+                                    },
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
-
-        when {
-            playlist == null -> {
+        },
+        selectionBar = if (selectionActive) {
+            {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = ::clearSelection) {
+                        Icon(Icons.Default.Close, contentDescription = "Exit selection mode")
+                    }
+                    Text(
+                        text = "${selectedEntryIds.size} selected",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(
+                        onClick = ::queueSelectedAtEnd,
+                        enabled = selectedEntryIds.isNotEmpty(),
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = "Add selected to Up Next")
+                    }
+                    IconButton(
+                        onClick = ::removeSelectedFromPlaylist,
+                        enabled = selectedEntryIds.isNotEmpty(),
+                    ) {
+                        Icon(
+                            Icons.Default.Clear,
+                            contentDescription = "Remove selected from playlist",
+                        )
+                    }
+                }
+            }
+        } else {
+            null
+        },
+        loading = false,
+        empty = playlist == null || (localEntries.isEmpty() && !loading),
+        loadingContent = null,
+        emptyContent = {
+            if (playlist == null) {
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
@@ -273,8 +484,7 @@ fun PlaylistDetailScreen(
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                     )
                 }
-            }
-            localEntries.isEmpty() && !loading -> {
+            } else {
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
@@ -287,74 +497,85 @@ fun PlaylistDetailScreen(
                     )
                 }
             }
-            else -> {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    localEntries.forEachIndexed { index, entry ->
-                        val queueItem = allItemsMap[entry.articleId]
-                        val isDragging = draggingIndex == index
-                        val itemVisualOffsetY = when {
-                            isDragging -> dragOffsetY
-                            draggingIndex >= 0 -> visualOffsetForItem(
-                                index, draggingIndex, currentTargetIndex
+        },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .onSizeChanged { listViewportHeight = it.height }
+                .verticalScroll(listScrollState),
+        ) {
+            localEntries.forEachIndexed { index, entry ->
+                key(entry.id) {
+                    val queueItem = allItemsMap[entry.articleId]
+                    val isDragging = draggingIndex == index
+                    val itemVisualOffsetY = when {
+                        isDragging -> dragOffsetY
+                        draggingIndex >= 0 -> visualOffsetForItem(
+                            index, draggingIndex, currentTargetIndex
+                        )
+                        else -> 0f
+                    }
+                    // Wrap row + divider together so the divider moves with its row.
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .zIndex(if (isDragging) 1f else 0f)
+                            .graphicsLayer { translationY = itemVisualOffsetY }
+                            .onGloballyPositioned { coords ->
+                                itemTopOffsets[entry.id] = coords.positionInParent().y
+                                itemHeights[entry.id] = coords.size.height.toFloat()
+                            },
+                    ) {
+                        PlaylistDetailRow(
+                            queueItem = queueItem,
+                            isDragging = isDragging,
+                            isSelectionActive = selectionActive,
+                            isSelected = entry.id in selectedEntryIds,
+                            onDragStart = { idx ->
+                                dragStartTopOffsets = itemTopOffsets.toMap()
+                                dragStartHeights = itemHeights.toMap()
+                                draggingIndex = idx
+                                dragOffsetY = 0f
+                                currentTargetIndex = idx
+                            },
+                            onDrag = { dy ->
+                                dragOffsetY += dy
+                                scrollDraggedItemNearEdge(draggingIndex)
+                                val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
+                                if (newTarget != currentTargetIndex) {
+                                    currentTargetIndex = newTarget
+                                }
+                            },
+                            onDragEnd = { onDragEnd() },
+                            index = index,
+                            onTap = {
+                                val sessionItemId = nowPlayingSession?.currentItem?.itemId ?: -1
+                                val playbackActive = playbackEngineState.isSpeaking || playbackEngineState.isAutoPlaying
+                                val shouldStartSession = entry.articleId > 0 &&
+                                    (sessionItemId <= 0 || entry.articleId == sessionItemId || !playbackActive)
+                                if (shouldStartSession) {
+                                    vm.startNowPlayingSession(startItemId = entry.articleId)
+                                }
+                                onOpenPlayer(entry.articleId)
+                            },
+                            onToggleSelect = { toggleSelection(entry.id) },
+                            onEnterSelection = { enterSelectionMode(entry.id) },
+                            onPlayNext = { vm.playNext(entry.articleId) },
+                            onPlayLast = { vm.playLast(entry.articleId) },
+                            onMoveToTop = { moveEntry(index, 0) },
+                            onMoveToBottom = { moveEntry(index, localEntries.lastIndex) },
+                            onRemoveFromPlaylist = { removeArticleFromPlaylist(entry.articleId) },
+                        )
+                        if (!isDragging) {
+                            Spacer(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                    ),
                             )
-                            else -> 0f
-                        }
-                        // Wrap card + divider together so the divider moves with its card.
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .zIndex(if (isDragging) 1f else 0f)
-                                .graphicsLayer { translationY = itemVisualOffsetY }
-                                .onGloballyPositioned { coords ->
-                                    itemTopOffsets[index] = coords.positionInParent().y
-                                    itemHeights[index] = coords.size.height.toFloat()
-                                },
-                        ) {
-                            PlaylistDetailRow(
-                                entry = entry,
-                                queueItem = queueItem,
-                                isDragging = isDragging,
-                                onDragStart = { idx ->
-                                    draggingIndex = idx
-                                    dragOffsetY = 0f
-                                    currentTargetIndex = idx
-                                },
-                                onDrag = { dy ->
-                                    dragOffsetY += dy
-                                    val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
-                                    if (newTarget != currentTargetIndex) {
-                                        currentTargetIndex = newTarget
-                                    }
-                                },
-                                onDragEnd = { onDragEnd() },
-                                index = index,
-                                onTap = {
-                                    val sessionItemId = nowPlayingSession?.currentItem?.itemId ?: -1
-                                    val playbackActive = playbackEngineState.isSpeaking || playbackEngineState.isAutoPlaying
-                                    val shouldStartSession = entry.articleId > 0 &&
-                                        (sessionItemId <= 0 || entry.articleId == sessionItemId || !playbackActive)
-                                    if (shouldStartSession) {
-                                        vm.startNowPlayingSession(startItemId = entry.articleId)
-                                    }
-                                    onOpenPlayer(entry.articleId)
-                                },
-                                onPlayNext = { vm.playNext(entry.articleId) },
-                                onPlayLast = { vm.playLast(entry.articleId) },
-                            )
-                            if (!isDragging) {
-                                Spacer(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(1.dp)
-                                        .background(
-                                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                                        ),
-                                )
-                            }
                         }
                     }
                 }
@@ -423,75 +644,76 @@ fun PlaylistDetailScreen(
 
 @Composable
 private fun PlaylistDetailRow(
-    entry: PlaylistEntrySummary,
     queueItem: PlaybackQueueItem?,
     isDragging: Boolean,
+    isSelectionActive: Boolean,
+    isSelected: Boolean,
     onDragStart: (index: Int) -> Unit,
     onDrag: (dy: Float) -> Unit,
     onDragEnd: () -> Unit,
     index: Int,
     onTap: () -> Unit,
+    onToggleSelect: () -> Unit,
+    onEnterSelection: () -> Unit,
     onPlayNext: () -> Unit,
     onPlayLast: () -> Unit,
+    onMoveToTop: () -> Unit,
+    onMoveToBottom: () -> Unit,
+    onRemoveFromPlaylist: () -> Unit,
 ) {
     var rowMenuExpanded by remember { mutableStateOf(false) }
+    val presentation = remember(queueItem) { queueItem?.let(::queueCapturePresentation) }
+    val title = presentation?.title ?: "Loading..."
+    val status = queueItem?.status
+    val metadata = presentation?.sourceLabel ?: queueItem?.host?.takeIf { queueItem.title != null } ?: queueItem?.url
+    val statusForLine = status?.takeIf { it != "ready" }
 
-    ElevatedCard(
-        onClick = onTap,
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else Color.Black,
-        ),
-        elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = if (isDragging) 8.dp else 0.dp,
-        ),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Default.DragHandle,
-                contentDescription = "Drag to reorder",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .size(24.dp)
-                    .pointerInput(index) {
-                        detectDragGestures(
-                            onDragStart = { onDragStart(index) },
-                            onDrag = { _, dragAmount -> onDrag(dragAmount.y) },
-                            onDragEnd = { onDragEnd() },
-                            onDragCancel = { onDragEnd() },
-                        )
-                    },
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                val title = queueItem?.title?.ifBlank { null }
-                    ?: queueItem?.host
-                    ?: queueItem?.url
-                Text(
-                    text = title ?: "Loading\u2026",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (title == null) MaterialTheme.colorScheme.onSurfaceVariant
-                            else MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+    LibraryItemRow(
+        title = title,
+        metadata = metadata,
+        isSelected = isSelected,
+        containerColor = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else Color.Black,
+        titleColor = if (queueItem == null) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+        onClick = if (isSelectionActive) onToggleSelect else onTap,
+        onLongClick = if (!isSelectionActive) onEnterSelection else null,
+        leadingContent = {
+            if (isSelectionActive) {
+                SelectionAffordance(isSelected = isSelected)
+            } else {
+                Icon(
+                    imageVector = Icons.Default.DragHandle,
+                    contentDescription = "Drag to reorder",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .pointerInput(index) {
+                            detectDragGestures(
+                                onDragStart = { onDragStart(index) },
+                                onDrag = { _, dragAmount -> onDrag(dragAmount.y) },
+                                onDragEnd = { onDragEnd() },
+                                onDragCancel = { onDragEnd() },
+                            )
+                        },
                 )
-                val host = queueItem?.host?.takeIf { queueItem.title != null }
-                if (host != null) {
-                    Text(
-                        text = host,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+            }
+        },
+        progressStateLine = if (statusForLine != null) {
+            {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    ListStatusPill(status = statusForLine)
                 }
             }
+        } else {
+            null
+        },
+        trailingContent = {
             Box {
                 IconButton(
                     onClick = { rowMenuExpanded = true },
@@ -522,8 +744,29 @@ private fun PlaylistDetailRow(
                             onPlayLast()
                         },
                     )
+                    DropdownMenuItem(
+                        text = { Text("Move to top") },
+                        onClick = {
+                            rowMenuExpanded = false
+                            onMoveToTop()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Move to bottom") },
+                        onClick = {
+                            rowMenuExpanded = false
+                            onMoveToBottom()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Remove from playlist") },
+                        onClick = {
+                            rowMenuExpanded = false
+                            onRemoveFromPlaylist()
+                        },
+                    )
                 }
             }
-        }
-    }
+        },
+    )
 }
