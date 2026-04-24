@@ -543,24 +543,24 @@ precondition that the lanes above can rely on.
 
 ## 8. Model / workflow guidance
 
-Memorializing the agent workflow so it does not drift across tickets:
+Memorializing the split-ticket workflow so it does not drift across tickets:
 
-- **High-effort model** does design, content authoring, code, and test
-  work. Planning tickets like this one; implementation tickets with
-  non-trivial scope; audits that may uncover contradictions.
-- **Low-effort model** handles git / PR housekeeping: staging, commits
-  with repository-style messages, branch push, PR open / description,
-  post-merge report.
-- **Do not switch model mid-session merely for git housekeeping.** Once a
-  high-effort session is loaded with context, the cost of thrash on a
-  small `git` step is lower than the cost of a cold low-effort session
-  rewarming context.
-- **For high-effort planning tickets (like this one), stop before git
-  operations.** The design work is complete when the artifact is written
-  and reported; commit/push/PR belongs to a separate low-effort session.
-- **Use a fresh low-effort session for commit / push / PR.** It starts
-  cold with only the artifact in diff, which is the right level of
-  context for house-keeping.
+- **High-effort sessions** do design/content/code/test work and stop before
+  git when the ticket says to stop before git.
+- **Do not switch models inside a long high-effort session merely for git
+  housekeeping.** Complete the high-effort scope first.
+- **Use a fresh low-effort session for git/PR housekeeping** (stage, commit,
+  push, PR open/description, post-merge report).
+- **Branch-first rule for low-effort sessions:** if the session starts on
+  `main`, create a new branch before committing unless direct-push is
+  explicitly authorized.
+- **Docs local-ignore rule:** `docs/` and `docs/planning/` are source-of-truth
+  areas and must not be locally ignored as scratch space. If a local ignore is
+  present (for example in `.git/info/exclude`), report it and remove it or use
+  an explicit one-time workaround only with operator acknowledgement.
+
+Operational details and checklists are maintained in
+`docs/planning/AGENT_WORKFLOW.md`.
 
 This applies specifically to this repo's Claude-primary lane. The rule in
 `CLAUDE.md` about single-writer-per-PR and serialized merges across Mimeo +
