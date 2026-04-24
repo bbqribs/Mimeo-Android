@@ -222,7 +222,7 @@ fun PlaylistDetailScreen(
             val iH = heights[entryId] ?: avgItemHeight()
             val iMidY = t + iH / 2f
             if (from < i && draggedBottomY > iMidY) target = i
-            if (from > i && draggedTopY < iMidY) target = i
+            if (from > i && draggedTopY < iMidY && i < target) target = i
         }
         return target.coerceIn(0, localEntries.lastIndex)
     }
