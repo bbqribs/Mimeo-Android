@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -22,11 +23,14 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -87,6 +91,8 @@ fun LibraryItemsScreen(
     onRefresh: suspend () -> Result<Unit>,
     onOpenItem: (Int) -> Unit,
     onBatchAction: (action: String, itemIds: Set<Int>) -> Unit = { _, _ -> },
+    onPlayNext: ((itemId: Int) -> Unit)? = null,
+    onPlayLast: ((itemId: Int) -> Unit)? = null,
 ) {
     var pendingExpanded by rememberSaveable { mutableStateOf(false) }
     val actionScope = rememberCoroutineScope()
@@ -317,6 +323,8 @@ fun LibraryItemsScreen(
                             onOpen = { onOpenItem(item.itemId) },
                             onToggleSelect = { toggleSelection(item.itemId) },
                             onEnterSelection = { enterSelectionMode(item.itemId) },
+                            onPlayNext = onPlayNext?.let { cb -> { cb(item.itemId) } },
+                            onPlayLast = onPlayLast?.let { cb -> { cb(item.itemId) } },
                         )
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 12.dp),
@@ -335,6 +343,8 @@ fun LibraryItemsScreen(
                     onOpen = { onOpenItem(item.itemId) },
                     onToggleSelect = { toggleSelection(item.itemId) },
                     onEnterSelection = { enterSelectionMode(item.itemId) },
+                    onPlayNext = onPlayNext?.let { cb -> { cb(item.itemId) } },
+                    onPlayLast = onPlayLast?.let { cb -> { cb(item.itemId) } },
                 )
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = 12.dp),
@@ -396,6 +406,8 @@ private fun LibraryQueueItemRow(
     onOpen: () -> Unit,
     onToggleSelect: () -> Unit,
     onEnterSelection: () -> Unit,
+    onPlayNext: (() -> Unit)? = null,
+    onPlayLast: (() -> Unit)? = null,
 ) {
     val presentation = remember(item) { queueCapturePresentation(item) }
     val title = presentation.title
@@ -421,6 +433,45 @@ private fun LibraryQueueItemRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     ListStatusPill(status = statusForLine)
+                }
+            }
+        } else {
+            null
+        },
+        trailingContent = if (!isSelectionActive && (onPlayNext != null || onPlayLast != null)) {
+            {
+                var menuExpanded by remember { mutableStateOf(false) }
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "More actions for $title",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        if (onPlayNext != null) {
+                            DropdownMenuItem(
+                                text = { Text("Play Next") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onPlayNext()
+                                },
+                            )
+                        }
+                        if (onPlayLast != null) {
+                            DropdownMenuItem(
+                                text = { Text("Play Last") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onPlayLast()
+                                },
+                            )
+                        }
+                    }
                 }
             }
         } else {
