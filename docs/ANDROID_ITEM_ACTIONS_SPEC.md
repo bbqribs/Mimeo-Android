@@ -4,6 +4,7 @@
 **Status:** Design-only; no implementation in this ticket
 **Date:** 2026-04-10
 **Scope:** Up Next, Locus, and Archive/Bin list views (same overflow model)
+**Extended by:** `docs/ANDROID_QUEUE_ACTIONS_PATTERN_SPEC.md` — adds Play Now / Play Next / Play Last / Add Selected to Up Next / Save queue as playlist, and supersedes the §6 long-press rule (long-press now enters multi-select, not overflow).
 
 ---
 
