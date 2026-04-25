@@ -36,7 +36,7 @@ Phase 4 batch-select infrastructure already shipped. See §4 below.
 | **Play Now** | "Play Now" | Starts playback of this item immediately. Replaces the active item in Up Next (dirty-Up-Next confirm rules apply; see §5). Explicit overflow action — never the default tap. |
 | **Play Next** | "Play Next" | Inserts this item immediately after the current active item in the upcoming queue. Non-destructive; no confirm. |
 | **Play Last** | "Play Last" | Appends this item to the end of the upcoming queue. Non-destructive; no confirm. Equivalent to "Add to Up Next" in single-item context. |
-| **Add Selected to Up Next** | "Add to Up Next" | Batch action: appends all selected items to the end of the upcoming queue, preserving selection order. Non-destructive; no confirm. Canonical batch-bar label. |
+| **Add Selected to Up Next** | "Add to Up Next" | Batch action: appends all selected items to the end of the upcoming queue in current visible list order under the active sort (not selection-tap order; see §8.3 and `docs/REDESIGN_COMPLETION_PLAN.md` §7 A2). Non-destructive; no confirm. Canonical batch-bar label. |
 | **Save current queue as playlist** | "Save queue as playlist…" | Creates a new manual playlist from the current Up Next upcoming items. Only available in Up Next and Locus overflow while a session is active. Prompts for playlist name before saving. |
 
 ---
@@ -248,11 +248,13 @@ entries.
    implement queue actions on history rows. Treat this cell as "deferred,
    not absent."
 
-3. **"Add Selected to Up Next" order guarantee:** Does the batch append
+3. **"Add Selected to Up Next" order guarantee:** ~~Does the batch append
    preserve the visual selection order (order items were tapped) or the
-   list display order? Recommendation: list display order is more
-   predictable; selection order is more intentional. Decide at
-   implementation time; document the decision in the commit.
+   list display order?~~ **Resolved 2026-04-25:** append in current
+   visible list order under the active sort, not selection-tap order.
+   Selection order is invisible to the user and easy to make confusing;
+   visible-list order matches what is on screen. See
+   `docs/REDESIGN_COMPLETION_PLAN.md` §7 A2.
 
 4. **Bluesky harvester multi-select in v1:** Product model §3.1 notes
    this is conditional on whether the harvester surface supports
