@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -393,7 +395,7 @@ fun QueueScreen(
 
     Column(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         // 1. Header card: seed-source labels + Refresh + Save + overflow
         ElevatedCard(
@@ -404,7 +406,7 @@ fun QueueScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                    .padding(horizontal = 10.dp, vertical = 2.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 if (sessionSeedPresentation == null) {
@@ -428,11 +430,13 @@ fun QueueScreen(
                                 onClick = { actionScope.launch { refreshQueueContent() } },
                                 contentDescription = "Refresh queue and sync progress",
                                 pullProgress = 0f,
+                                modifier = Modifier.size(36.dp),
                             )
                         }
                         ActionHintTooltip(label = "Save") {
                             IconButton(
                                 enabled = !manualSaveInProgress,
+                                modifier = Modifier.size(36.dp),
                                 onClick = {
                                     val prefill = buildManualSavePrefill(readClipboardText(context))
                                     manualSaveMode = ManualSaveMode.URL
@@ -454,7 +458,10 @@ fun QueueScreen(
                         }
                         ActionHintTooltip(label = "Queue actions") {
                             Box {
-                                IconButton(onClick = { topActionsMenuExpanded = true }) {
+                                IconButton(
+                                    onClick = { topActionsMenuExpanded = true },
+                                    modifier = Modifier.size(36.dp),
+                                ) {
                                     Icon(
                                         painter = painterResource(id = R.drawable.msr_more_vert_24),
                                         contentDescription = "Queue actions",
@@ -1471,6 +1478,7 @@ private fun NowPlayingSessionPanel(
     reseedEnabled: Boolean,
     onReseed: () -> Unit,
     modifier: Modifier = Modifier,
+    trailingActions: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val showCurrentSource = seededFromLabel != currentSourceLabel
 
@@ -1592,7 +1600,7 @@ private fun NowPlayingSessionPanel(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -1619,6 +1627,7 @@ private fun NowPlayingSessionPanel(
                     )
                 }
             }
+            trailingActions?.invoke(this)
             TextButton(
                 enabled = reseedEnabled,
                 onClick = onReseed,
@@ -1708,33 +1717,40 @@ private fun NowPlayingSessionPanel(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.DragHandle,
-                                contentDescription = "Drag to reorder",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .pointerInput(index) {
-                                        detectDragGestures(
-                                            onDragStart = {
-                                                dragStartTopOffsets = itemTopOffsets.toMap()
-                                                dragStartHeights = itemHeights.toMap()
-                                                draggingIndex = index
-                                                dragOffsetY = 0f
-                                                currentTargetIndex = index
-                                            },
-                                            onDrag = { _, dragAmount ->
-                                                dragOffsetY += dragAmount.y
-                                                scrollDraggedItemNearEdge(draggingIndex)
-                                                val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
-                                                if (newTarget != currentTargetIndex) currentTargetIndex = newTarget
-                                            },
-                                            onDragEnd = { onDragEnd() },
-                                            onDragCancel = { onDragEnd() },
-                                        )
-                                    },
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
+                            if (!isCurrent) {
+                                Icon(
+                                    imageVector = Icons.Default.DragHandle,
+                                    contentDescription = "Drag to reorder",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .pointerInput(index) {
+                                            detectDragGestures(
+                                                onDragStart = {
+                                                    dragStartTopOffsets = itemTopOffsets.toMap()
+                                                    dragStartHeights = itemHeights.toMap()
+                                                    draggingIndex = index
+                                                    dragOffsetY = 0f
+                                                    currentTargetIndex = index
+                                                },
+                                                onDrag = { _, dragAmount ->
+                                                    dragOffsetY += dragAmount.y
+                                                    scrollDraggedItemNearEdge(draggingIndex)
+                                                    val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
+                                                    if (newTarget != currentTargetIndex) currentTargetIndex = newTarget
+                                                },
+                                                onDragEnd = { onDragEnd() },
+                                                onDragCancel = { onDragEnd() },
+                                            )
+                                        },
+                                )
+                            } else {
+                                Spacer(Modifier.size(24.dp))
+                            }
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
                                 Text(
                                     text = item.title?.ifBlank { null } ?: item.url,
                                     style = MaterialTheme.typography.bodyLarge,
