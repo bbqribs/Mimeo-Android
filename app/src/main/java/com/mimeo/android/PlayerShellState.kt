@@ -3,6 +3,7 @@ package com.mimeo.android
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -31,7 +32,8 @@ fun rememberPlayerShellState(
     currentRoute: String,
     routeItemId: Int?,
 ): PlayerShellState {
-    val sessionNowPlayingItemId = vm.currentNowPlayingItemId()
+    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
+    val sessionNowPlayingItemId = nowPlayingSession?.currentItem?.itemId
 
     var pendingLocusOpen by rememberSaveable { mutableStateOf(false) }
     var pendingLocusItemId by rememberSaveable { mutableIntStateOf(-1) }

@@ -97,6 +97,7 @@ fun LibraryItemsScreen(
     onRefresh: suspend () -> Result<Unit>,
     onOpenItem: (Int) -> Unit,
     onBatchAction: (action: String, itemIds: Set<Int>) -> Unit = { _, _ -> },
+    onPlayNow: ((itemId: Int) -> Unit)? = null,
     onPlayNext: ((itemId: Int) -> Unit)? = null,
     onPlayLast: ((itemId: Int) -> Unit)? = null,
 ) {
@@ -353,6 +354,7 @@ fun LibraryItemsScreen(
                             onOpen = { onOpenItem(item.itemId) },
                             onToggleSelect = { toggleSelection(item.itemId) },
                             onEnterSelection = { enterSelectionMode(item.itemId) },
+                            onPlayNow = onPlayNow?.let { cb -> { cb(item.itemId) } },
                             onPlayNext = onPlayNext?.let { cb -> { cb(item.itemId) } },
                             onPlayLast = onPlayLast?.let { cb -> { cb(item.itemId) } },
                         )
@@ -373,6 +375,7 @@ fun LibraryItemsScreen(
                     onOpen = { onOpenItem(item.itemId) },
                     onToggleSelect = { toggleSelection(item.itemId) },
                     onEnterSelection = { enterSelectionMode(item.itemId) },
+                    onPlayNow = onPlayNow?.let { cb -> { cb(item.itemId) } },
                     onPlayNext = onPlayNext?.let { cb -> { cb(item.itemId) } },
                     onPlayLast = onPlayLast?.let { cb -> { cb(item.itemId) } },
                 )
@@ -455,6 +458,7 @@ private fun LibraryQueueItemRow(
     onOpen: () -> Unit,
     onToggleSelect: () -> Unit,
     onEnterSelection: () -> Unit,
+    onPlayNow: (() -> Unit)? = null,
     onPlayNext: (() -> Unit)? = null,
     onPlayLast: (() -> Unit)? = null,
 ) {
@@ -487,7 +491,7 @@ private fun LibraryQueueItemRow(
         } else {
             null
         },
-        trailingContent = if (!isSelectionActive && (onPlayNext != null || onPlayLast != null)) {
+        trailingContent = if (!isSelectionActive && (onPlayNow != null || onPlayNext != null || onPlayLast != null)) {
             {
                 var menuExpanded by remember { mutableStateOf(false) }
                 Box {
@@ -502,6 +506,15 @@ private fun LibraryQueueItemRow(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false },
                     ) {
+                        if (onPlayNow != null) {
+                            DropdownMenuItem(
+                                text = { Text("Play Now") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onPlayNow()
+                                },
+                            )
+                        }
                         if (onPlayNext != null) {
                             DropdownMenuItem(
                                 text = { Text("Play Next") },
