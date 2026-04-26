@@ -275,8 +275,8 @@ Behavior additions implied by the design direction:
 | "Clear upcoming" action | Not implemented | Currently only "Clear session" exists. "Clear upcoming" must preserve history and active item. |
 | "Save queue as playlist" | Not implemented | Belongs in Up Next toolbar and Locus overflow only. Requires a name-entry dialog. |
 | Speed control in mini-player | Not implemented | Currently speed is only in the full Locus top bar. Design direction says "speed control retained" for the mini-player. |
-| Play Now overflow action in library | Not implemented | Lane 5 addition. Must follow dirty-Up-Next confirm rules when upcoming exists. |
-| "Add Selected to Up Next" batch action in library | Not implemented | Lane 5 addition. Already present in playlist detail. |
+| Play Now overflow action in library | **Shipped (A3)** | Non-destructive insert-and-play: inserts at current queue position, preserves upcoming items, starts audio. No confirm. Inbox / Favorites / Archive only; Bin excluded. |
+| "Add Selected to Up Next" batch action in library | **Shipped (A2)** | Appends in visible list order. Inbox / Favorites / Archive only; Bin excluded. |
 | Sectioned library layout | Not implemented | Design direction adopts Sectioned Library with date or logical section headers. |
 | Smart playlist pinned/live split | Not yet implemented (Lane 6) | Pinned section above live section; per-row pin/unpin. |
 | Bluesky rolling smart playlist surface | Not yet implemented (Lane 7) | Harvester-config header; article rows using shared row grammar. |
@@ -337,7 +337,7 @@ Preserved from `DESIGN_WIREFRAME_RECONCILIATION.md` plus newly observed:
 - Sentence-jump ff/rw behavior must be explicitly confirmed or replaced with time-based before any implementation change. Do not assume the icon change = behavior change.
 - Refresh does not auto-re-seed Up Next. These are separate actions.
 - Play Next / Play Last are non-destructive; no confirmation dialog.
-- Play Now (on library rows) requires dirty-Up-Next confirmation when upcoming items exist.
+- Play Now (on library rows, shipped A3) is non-destructive: inserts at the current queue position, preserves upcoming items, starts audio. No confirm required in any queue state. A future destructive "Replace queue" action would be a separate action with its own confirm.
 - Undo snackbar on playlist remove must survive any redesign of the overflow or batch bar.
 - Mini-player persists while navigating between non-Locus surfaces.
 - Chevron in mini-player opens the navigation drawer.

@@ -144,9 +144,11 @@ silently is a regression. This list is referenced by every Lane 4 / Lane
 ### 4.4 Queue actions
 
 - Play Next / Play Last are non-destructive and never confirm.
-- Play Now (when introduced) confirms only when Up Next has upcoming
-  items (dirty-Up-Next confirm). Play Now on an empty/history-only
-  queue does not confirm.
+- Play Now (library rows, shipped A3) is non-destructive: inserts the
+  item at the current play position and starts audio, preserving
+  existing upcoming items. No confirm required in any queue state.
+  A future destructive "Replace queue / Start fresh" action is deferred;
+  if introduced, it must be a distinct action with confirm.
 - Refresh does not auto-re-seed. Re-seed is an explicit action with its
   own confirmation when the session diverges.
 - "Save queue as playlist" exists only in Up Next and Locus contexts.
@@ -284,11 +286,13 @@ the existing specs.
    queue actions spec §8.3. Bin excluded.
    References: queue actions spec §3, §4.4, §10 Slice B.
 
-3. **A3 — Library "Play Now" row overflow.**
-   Add Play Now to Inbox / Favorites / Archive row overflow at
-   position 1. Wire dirty-Up-Next confirm (§4.4 of this doc;
-   queue actions spec §5.2). Bin excluded.
-   References: queue actions spec §3, §4.2.
+3. **A3 — Library "Play Now" row overflow.** *(Shipped 2026-04-26)*
+   Play Now added to Inbox / Favorites / Archive row overflow at
+   position 1. Implemented as non-destructive insert-and-play: inserts
+   the item at the current queue position, preserves upcoming items,
+   starts audio via the engine's autoPlayAfterLoad path. No dirty-Up-Next
+   confirm (see §4.4 updated). Bin excluded.
+   References: queue actions spec §2, §3, §4.2.
 
 ### B. Design / spec clarification before implementation
 
