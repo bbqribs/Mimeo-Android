@@ -6,6 +6,11 @@ does not authorize code changes. Not a final record.
 **Scope:** Android UI direction after reconciling Claude Design wireframes
 with the post-redesign product model.
 
+**Authoritative completion plan:** `docs/REDESIGN_COMPLETION_PLAN.md` is the
+execution-facing translation of this synthesis. Where this doc and the
+completion plan disagree, the completion plan reflects the operator's
+latest decisions and supersedes the entries here.
+
 **Companion doc:** `docs/DESIGN_BEHAVIOR_RECONCILIATION.md` maps current
 shipped Android behaviors against the directions established here, including
 an at-risk behavior inventory and a prompt brief for the next Claude Design
@@ -187,3 +192,4 @@ git diff -- docs\DESIGN_WIREFRAME_RECONCILIATION.md ROADMAP.md
 Review the document against the source product model and wireframe artifacts.
 Confirm that selected directions, rejected directions, and unresolved
 questions match operator intent before opening git/PR housekeeping.
+

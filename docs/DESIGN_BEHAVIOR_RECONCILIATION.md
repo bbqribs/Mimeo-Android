@@ -4,6 +4,12 @@
 **Date:** 2026-04-25
 **Scope:** Maps current shipped Android behaviors against the Claude Design wireframe direction established in `docs/DESIGN_WIREFRAME_RECONCILIATION.md`.
 
+**Authoritative completion plan:** `docs/REDESIGN_COMPLETION_PLAN.md`
+translates this behavior inventory into the next execution sequence and
+carries the §4 behavior preservation contract that implementation tickets
+must cite. The behavior inventory below is unchanged; the completion plan
+is the forward-looking decision layer.
+
 ## Source context
 
 - Wireframe reconciliation: `docs/DESIGN_WIREFRAME_RECONCILIATION.md`
@@ -369,3 +375,4 @@ Get-Content -Raw docs\DESIGN_WIREFRAME_RECONCILIATION.md
 ```
 
 Review both documents against the product model and queue actions spec. Confirm that all at-risk behaviors identified here are understood before opening any implementation ticket for Lane 4 (Up Next) or Lane 5 (queue actions).
+
