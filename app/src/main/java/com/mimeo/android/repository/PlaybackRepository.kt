@@ -822,6 +822,55 @@ class PlaybackRepository(
         return updatedRow.toSession(stored)
     }
 
+    suspend fun playNowInSession(item: PlaybackQueueItem): NowPlayingSession {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession()
+        if (row == null) {
+            return startSession(listOf(item), item.itemId, null)
+        }
+        val stored = parseStoredNowPlaying(row.queueJson).toMutableList()
+        if (stored.isEmpty()) {
+            dao.clear()
+            return startSession(listOf(item), item.itemId, null)
+        }
+        var currentIndex = row.currentIndex.coerceIn(0, stored.lastIndex)
+        val existingIdx = stored.indexOfFirst { it.itemId == item.itemId }
+        if (existingIdx == currentIndex) {
+            // Item is already the active item — no-op.
+            return row.toSession(stored)
+        }
+        if (existingIdx >= 0) {
+            stored.removeAt(existingIdx)
+            if (existingIdx < currentIndex) currentIndex--
+        }
+        val newItem = StoredNowPlayingItem(
+            itemId = item.itemId,
+            title = item.title,
+            url = item.url,
+            host = item.host,
+            sourceType = item.sourceType,
+            sourceLabel = item.sourceLabel,
+            sourceUrl = item.sourceUrl,
+            captureKind = item.captureKind,
+            sourceAppPackage = item.sourceAppPackage,
+            status = item.status,
+            activeContentVersionId = item.activeContentVersionId,
+            lastReadPercent = item.lastReadPercent,
+            chunkIndex = 0,
+            offsetInChunkChars = 0,
+            readerScrollOffset = 0,
+        )
+        // Insert at currentIndex: new item becomes active, old active shifts to upcoming.
+        stored.add(currentIndex, newItem)
+        val updatedRow = row.copy(
+            currentIndex = currentIndex,
+            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            updatedAt = System.currentTimeMillis(),
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(stored)
+    }
+
     suspend fun appendItemToSession(item: PlaybackQueueItem): NowPlayingSession? {
         val dao = database.nowPlayingDao()
         val row = dao.getSession() ?: return null

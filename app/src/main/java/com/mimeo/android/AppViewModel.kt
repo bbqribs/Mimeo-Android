@@ -4231,6 +4231,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun playNow(itemId: Int) {
+        val allItems = queueItems.value + inboxItems.value + archivedItems.value + favoriteItems.value + binItems.value
+        val item = allItems.firstOrNull { it.itemId == itemId } ?: return
+        viewModelScope.launch {
+            val session = repository.playNowInSession(item)
+            applySessionSnapshot(session)
+            val intent = if (isItemCompletedForPlaybackStart(itemId)) {
+                PlaybackOpenIntent.Replay
+            } else {
+                PlaybackOpenIntent.ManualOpen
+            }
+            playbackOpenItem(itemId, intent, autoPlayAfterLoad = true)
+        }
+    }
+
     fun playNext(itemId: Int) {
         val allItems = queueItems.value + inboxItems.value + archivedItems.value + favoriteItems.value + binItems.value
         val item = allItems.firstOrNull { it.itemId == itemId } ?: return

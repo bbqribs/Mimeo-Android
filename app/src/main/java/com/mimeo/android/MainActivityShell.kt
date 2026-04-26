@@ -121,7 +121,6 @@ internal fun MainActivityShell(
     val binSearchQuery by vm.binSearchQuery.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
-
     var showNewPlaylistDialog by remember { mutableStateOf(false) }
     var newPlaylistDialogName by remember { mutableStateOf("") }
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
@@ -401,6 +400,7 @@ internal fun MainActivityShell(
                                             loading = false
                                         }
                                     },
+                                    onPlayNow = { vm.playNow(it) },
                                     onPlayNext = { vm.playNext(it) },
                                     onPlayLast = { vm.playLast(it) },
                                 )
@@ -450,6 +450,7 @@ internal fun MainActivityShell(
                                             loading = false
                                         }
                                     },
+                                    onPlayNow = { vm.playNow(it) },
                                     onPlayNext = { vm.playNext(it) },
                                     onPlayLast = { vm.playLast(it) },
                                 )
@@ -498,6 +499,7 @@ internal fun MainActivityShell(
                                             loading = false
                                         }
                                     },
+                                    onPlayNow = { vm.playNow(it) },
                                     onPlayNext = { vm.playNext(it) },
                                     onPlayLast = { vm.playLast(it) },
                                 )
