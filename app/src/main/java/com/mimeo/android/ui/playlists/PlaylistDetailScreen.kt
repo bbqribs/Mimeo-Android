@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
@@ -28,12 +27,17 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -98,8 +102,6 @@ fun PlaylistDetailScreen(
     val favoriteItems by vm.favoriteItems.collectAsState()
     val binItems by vm.binItems.collectAsState()
     val loading by vm.queueLoading.collectAsState()
-    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
-    val playbackEngineState by vm.playbackEngineState.collectAsState()
     val actionScope = rememberCoroutineScope()
 
     LaunchedEffect(playlistId) {
@@ -340,7 +342,7 @@ fun PlaylistDetailScreen(
     fun queueSelectedAtEnd() {
         val articleIds = selectedArticleIdsInOrder()
         clearSelection()
-        articleIds.forEach { vm.playLast(it) }
+        vm.playLastBatch(articleIds)
     }
 
     suspend fun refreshPlaylistContent() {
@@ -440,7 +442,10 @@ fun PlaylistDetailScreen(
                         .padding(horizontal = 4.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = ::clearSelection) {
+                    PlaylistSelectionIconButton(
+                        label = "Exit selection mode",
+                        onClick = ::clearSelection,
+                    ) {
                         Icon(Icons.Default.Close, contentDescription = "Exit selection mode")
                     }
                     Text(
@@ -448,18 +453,23 @@ fun PlaylistDetailScreen(
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f),
                     )
-                    IconButton(
+                    PlaylistSelectionIconButton(
+                        label = "Add selected to Up Next",
                         onClick = ::queueSelectedAtEnd,
                         enabled = selectedEntryIds.isNotEmpty(),
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = "Add selected to Up Next")
+                        Icon(
+                            Icons.AutoMirrored.Filled.PlaylistAdd,
+                            contentDescription = "Add selected to Up Next",
+                        )
                     }
-                    IconButton(
+                    PlaylistSelectionIconButton(
+                        label = "Remove selected from playlist",
                         onClick = ::removeSelectedFromPlaylist,
                         enabled = selectedEntryIds.isNotEmpty(),
                     ) {
                         Icon(
-                            Icons.Default.Clear,
+                            Icons.Default.Delete,
                             contentDescription = "Remove selected from playlist",
                         )
                     }
@@ -549,16 +559,7 @@ fun PlaylistDetailScreen(
                             },
                             onDragEnd = { onDragEnd() },
                             index = index,
-                            onTap = {
-                                val sessionItemId = nowPlayingSession?.currentItem?.itemId ?: -1
-                                val playbackActive = playbackEngineState.isSpeaking || playbackEngineState.isAutoPlaying
-                                val shouldStartSession = entry.articleId > 0 &&
-                                    (sessionItemId <= 0 || entry.articleId == sessionItemId || !playbackActive)
-                                if (shouldStartSession) {
-                                    vm.startNowPlayingSession(startItemId = entry.articleId)
-                                }
-                                onOpenPlayer(entry.articleId)
-                            },
+                            onTap = { onOpenPlayer(entry.articleId) },
                             onToggleSelect = { toggleSelection(entry.id) },
                             onEnterSelection = { enterSelectionMode(entry.id) },
                             onPlayNext = { vm.playNext(entry.articleId) },
@@ -640,6 +641,28 @@ fun PlaylistDetailScreen(
         )
     }
 
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PlaylistSelectionIconButton(
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState(),
+    ) {
+        IconButton(
+            onClick = onClick,
+            enabled = enabled,
+        ) {
+            content()
+        }
+    }
 }
 
 @Composable
