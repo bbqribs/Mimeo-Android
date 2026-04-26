@@ -31,13 +31,18 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -85,6 +90,7 @@ fun LibraryItemsScreen(
     batchActions: List<LibraryBatchAction> = emptyList(),
     playlists: List<PlaylistSummary> = emptyList(),
     onBatchAddToPlaylist: ((playlistId: Int, playlistName: String, itemIds: Set<Int>) -> Unit)? = null,
+    onBatchAddToUpNext: ((itemIds: List<Int>) -> Unit)? = null,
     onSortChange: (LibrarySortOption) -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSearchSubmit: () -> Unit,
@@ -177,7 +183,10 @@ fun LibraryItemsScreen(
                         .padding(horizontal = 4.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = ::clearSelection) {
+                    LibrarySelectionIconButton(
+                        label = "Exit selection mode",
+                        onClick = ::clearSelection,
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Exit selection mode",
@@ -207,7 +216,8 @@ fun LibraryItemsScreen(
                         } else {
                             batchAction.label
                         }
-                        IconButton(
+                        LibrarySelectionIconButton(
+                            label = resolvedLabel,
                             onClick = {
                                 onBatchAction(resolvedAction, selectedIds)
                                 clearSelection()
@@ -221,7 +231,8 @@ fun LibraryItemsScreen(
                         }
                     }
                     if (onBatchAddToPlaylist != null) {
-                        IconButton(
+                        LibrarySelectionIconButton(
+                            label = "Add to Playlist",
                             onClick = {
                                 batchPlaylistPickerIds = selectedIds
                                 showBatchPlaylistPicker = true
@@ -232,6 +243,25 @@ fun LibraryItemsScreen(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.PlaylistAdd,
                                 contentDescription = "Add to Playlist",
+                            )
+                        }
+                    }
+                    if (onBatchAddToUpNext != null) {
+                        val capturedSelectedIds = selectedIds
+                        LibrarySelectionIconButton(
+                            label = "Add to Up Next",
+                            onClick = {
+                                val orderedIds = sortedItems
+                                    .filter { it.itemId in capturedSelectedIds }
+                                    .map { it.itemId }
+                                clearSelection()
+                                onBatchAddToUpNext(orderedIds)
+                            },
+                            enabled = selectedIds.isNotEmpty(),
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.PlaylistAdd,
+                                contentDescription = "Add selected to Up Next",
                             )
                         }
                     }
@@ -368,6 +398,25 @@ fun LibraryItemsScreen(
                 batchPlaylistPickerIds = emptySet()
             },
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LibrarySelectionIconButton(
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState(),
+    ) {
+        IconButton(onClick = onClick, enabled = enabled) {
+            content()
+        }
     }
 }
 
