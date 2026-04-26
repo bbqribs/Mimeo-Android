@@ -33,7 +33,7 @@ Phase 4 batch-select infrastructure already shipped. See §4 below.
 
 | Action | Canonical label | Semantics |
 |--------|-----------------|-----------|
-| **Play Now** | "Play Now" | Starts playback of this item immediately. Replaces the active item in Up Next (dirty-Up-Next confirm rules apply; see §5). Explicit overflow action — never the default tap. |
+| **Play Now** | "Play Now" | Starts playback of this item immediately. Non-destructive: inserts the item at the current play position (deduplicating if already present), preserving any existing active and upcoming items. Starts audio without navigating to Locus. No confirm required. Explicit overflow action — never the default tap. If a future destructive "Replace queue / Start fresh" action is needed, it must be a separate action with its own confirm. |
 | **Play Next** | "Play Next" | Inserts this item immediately after the current active item in the upcoming queue. Non-destructive; no confirm. |
 | **Play Last** | "Play Last" | Appends this item to the end of the upcoming queue. Non-destructive; no confirm. Equivalent to "Add to Up Next" in single-item context. |
 | **Add Selected to Up Next** | "Add to Up Next" | Batch action: appends all selected items to the end of the upcoming queue in current visible list order under the active sort (not selection-tap order; see §8.3 and `docs/REDESIGN_COMPLETION_PLAN.md` §7 A2). Non-destructive; no confirm. Canonical batch-bar label. |
@@ -67,8 +67,8 @@ surface (rationale in the notes column).
   state. Restore first, then queue.
 - **Play Now on library rows:** Subordinate to the redesign v2 §6 rule
   that default tap does not mutate Up Next. "Play Now" is an explicit
-  overflow action, not the default tap. It follows dirty-Up-Next
-  confirmation rules (§5.2).
+  overflow action, not the default tap. It is non-destructive (see §2)
+  and requires no confirm.
 - **Bluesky harvester / Play Now:** Not in v1; harvester does not
   auto-play. Per product model §3.1, explicit Play Next / Play Last are
   the v1 entry points.
@@ -185,8 +185,6 @@ These actions require explicit confirmation before executing.
 
 | Action | Trigger | Confirm dialog copy |
 |--------|---------|---------------------|
-| Play Now (when Up Next has upcoming items) | Tap "Play Now" in overflow | "Replace current queue and play now?" with "Replace" (destructive) / "Cancel". Reuses dirty-Up-Next confirm pattern from redesign v2 §6. |
-| Play Now (when Up Next is empty or history-only) | Tap "Play Now" in overflow | No confirm needed. Up Next has no upcoming to replace. |
 | Save queue as playlist | Tap "Save queue as playlist…" | Name entry dialog. Not destructive; no separate confirm beyond the dialog itself. |
 | Clear upcoming | Existing affordance in Up Next | Existing confirm pattern; not redefined here. |
 | Replace queue from playlist | Existing affordance | Existing dirty-Up-Next confirm pattern; not redefined here. |
@@ -236,10 +234,16 @@ entries.
 
 ## 8. Open questions (preserve; do not answer in this spec)
 
-1. **"Play Now" on library rows with an empty or history-only Up Next:**
+1. ~~**"Play Now" on library rows with an empty or history-only Up Next:**
    The confirm dialog is skipped (§5.2). Should there be any snackbar
    feedback ("Now playing") to confirm the action? Or does Locus opening
-   serve as sufficient feedback? Answer at implementation time.
+   serve as sufficient feedback? Answer at implementation time.~~
+   **Resolved (A3, 2026-04-26):** Play Now is non-destructive in all
+   cases — it inserts at the current queue position and starts audio
+   without navigating to Locus. No confirm dialog exists or is needed.
+   The mini-player appearing with audio starting serves as feedback.
+   A future destructive "Replace queue" action is deferred and would
+   require its own confirm regardless of queue state.
 
 2. **History-row overflow in Up Next:** §3 lists Play Next / Play Last for
    history rows. The interaction semantics for history rows are an open
