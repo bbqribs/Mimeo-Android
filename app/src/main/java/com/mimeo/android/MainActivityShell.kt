@@ -382,6 +382,7 @@ internal fun MainActivityShell(
                                             vm.batchAddToPlaylist(playlistId, playlistName, itemIds.toList())
                                         }
                                     },
+                                    onBatchAddToUpNext = { itemIds -> vm.playLastBatch(itemIds) },
                                     onSortChange = { vm.setInboxSort(it) },
                                     onSearchQueryChange = { vm.setInboxSearchQuery(it) },
                                     onSearchSubmit = { vm.submitInboxSearch() },
@@ -430,6 +431,7 @@ internal fun MainActivityShell(
                                             vm.batchAddToPlaylist(playlistId, playlistName, itemIds.toList())
                                         }
                                     },
+                                    onBatchAddToUpNext = { itemIds -> vm.playLastBatch(itemIds) },
                                     onSortChange = { vm.setFavoritesSort(it) },
                                     onSearchQueryChange = { vm.setFavoritesSearchQuery(it) },
                                     onSearchSubmit = { vm.submitFavoritesSearch() },
@@ -477,6 +479,7 @@ internal fun MainActivityShell(
                                             vm.batchAddToPlaylist(playlistId, playlistName, itemIds.toList())
                                         }
                                     },
+                                    onBatchAddToUpNext = { itemIds -> vm.playLastBatch(itemIds) },
                                     onSortChange = { vm.setArchiveSort(it) },
                                     onSearchQueryChange = { vm.setArchiveSearchQuery(it) },
                                     onSearchSubmit = { vm.submitArchiveSearch() },
