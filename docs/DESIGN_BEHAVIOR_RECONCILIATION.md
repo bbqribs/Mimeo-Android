@@ -375,3 +375,4 @@ Get-Content -Raw docs\DESIGN_WIREFRAME_RECONCILIATION.md
 ```
 
 Review both documents against the product model and queue actions spec. Confirm that all at-risk behaviors identified here are understood before opening any implementation ticket for Lane 4 (Up Next) or Lane 5 (queue actions).
+

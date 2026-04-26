@@ -192,3 +192,4 @@ git diff -- docs\DESIGN_WIREFRAME_RECONCILIATION.md ROADMAP.md
 Review the document against the source product model and wireframe artifacts.
 Confirm that selected directions, rejected directions, and unresolved
 questions match operator intent before opening git/PR housekeeping.
+
