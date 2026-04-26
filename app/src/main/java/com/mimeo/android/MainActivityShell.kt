@@ -400,6 +400,8 @@ internal fun MainActivityShell(
                                             loading = false
                                         }
                                     },
+                                    onPlayNext = { vm.playNext(it) },
+                                    onPlayLast = { vm.playLast(it) },
                                 )
                             }
                             composable(ROUTE_FAVORITES) {
@@ -446,6 +448,8 @@ internal fun MainActivityShell(
                                             loading = false
                                         }
                                     },
+                                    onPlayNext = { vm.playNext(it) },
+                                    onPlayLast = { vm.playLast(it) },
                                 )
                             }
                             composable(ROUTE_ARCHIVE) {
@@ -491,6 +495,8 @@ internal fun MainActivityShell(
                                             loading = false
                                         }
                                     },
+                                    onPlayNext = { vm.playNext(it) },
+                                    onPlayLast = { vm.playLast(it) },
                                 )
                             }
                             composable(ROUTE_BIN) {
