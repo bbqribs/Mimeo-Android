@@ -4,6 +4,7 @@ Source of truth for redesign scope: `docs/REDESIGN_V2_PLAN.md`.
 Drift guard: `docs/REDESIGN_V2_DECISION_SNAPSHOT.md`.
 Most recent audit: `docs/REDESIGN_V2_AUDIT_2026-04-21.md`.
 Redesign completion plan (post-shipped-redesign forward sequence): `docs/REDESIGN_COMPLETION_PLAN.md`.
+Mini-player control spec for the next polish implementation ticket: `docs/ANDROID_MINIPLAYER_CONTROL_SPEC.md`.
 Post-redesign product model planning (canonical in Mimeo): `C:\Users\brend\Documents\Coding\Mimeo\docs\planning\PRODUCT_MODEL_POST_REDESIGN.md` (Android pointer: `docs/planning/PRODUCT_MODEL_POST_REDESIGN.md`).
 Workflow + transition guidance: `docs/planning/AGENT_WORKFLOW.md` and `docs/planning/PROJECT_HANDOFF.md`.
 Planning-doc ownership decision: `docs/planning/DOCS_OWNERSHIP_DECISION.md`.

@@ -46,9 +46,8 @@ have given us a defensible direction for most of these surfaces, with a
 small set of unresolved decisions called out below.
 
 What is **still unsettled** is the Locus/player bridge, full-player
-necessity, history-row interaction beyond "current/anchored," ff/rw
-semantics (sentence-based vs time-based), and history retention/privacy
-controls.
+necessity, history-row interaction beyond "current/anchored," mini-player
+icon/visual treatment details, and history retention/privacy controls.
 
 Why the redesign should continue as **smaller bounded tickets** rather
 than one large UI rewrite:
@@ -72,7 +71,7 @@ than one large UI rewrite:
 | Surface | Accepted direction | Why | Current implementation gap | Risk if implemented naively |
 |---|---|---|---|---|
 | **Up Next** | Wireframe 1 Conservative Up Next: muted history above, prominent active anchor in middle (not draggable), upcoming with drag handles below; Clear upcoming near the Upcoming section header; Clear all in overflow/contextual destructive area; floating anchor pill for snap-to-active. | Matches product model three-region structure. Comfortable density preserves long-queue ergonomics. Anchor pill is non-modal and operator-preferred. | Up Next is currently a flat session list with active item border-only distinction; no history grouping; no Clear upcoming; no Save queue as playlist; no snap-to-active. | History rows might become accidentally selectable, draggable, or refresh-clearable; "Clear session" semantics will need to bifurcate carefully. |
-| **Mini-player** | Decompressed two-row (or otherwise multi-row) layout. Title/source on top row separated from playback controls. Always-visible speed pill. Single consolidated stateful play/pause. Rewind and fast-forward present (icon/label treatment unresolved). Persistent on non-Locus routes. Chevron continues to open drawer. | Current single-row dock is too cramped for both readability and reachability. Operator feedback explicitly rejects compressing speed into long-press or hidden affordances. | Today's mini-player has no speed control at all; play/pause is consolidated; ff/rw exist as sentence jumps; layout is single-row. | Compressing the new layout to fit the existing dock height would re-create the cramped problem. ff/rw semantics decision (sentence vs time) must be made before icons change. |
+| **Mini-player** | Decompressed two-row (or otherwise multi-row) layout. Title/source on top row separated from playback controls. Always-visible speed pill. Single consolidated stateful play/pause. Rewind and fast-forward remain sentence-level for v1, with long-press paragraph jumps recorded. Persistent on non-Locus routes. Chevron continues to open drawer. | Current single-row dock is too cramped for both readability and reachability. Operator feedback explicitly rejects compressing speed into long-press or hidden affordances. The new mini-player control spec records the current sentence/paragraph behavior without changing playback semantics. | Today's mini-player has no speed control at all; play/pause is consolidated; ff/rw exist as sentence jumps; layout is single-row. | Compressing the new layout to fit the existing dock height would re-create the cramped problem. Icon/visual treatment can be refined during implementation, but must not imply time-based skip semantics. |
 | **Locus / player** | Reader remains primary. Mini-player docks below reader (already shipped). Speed must remain reachable even with auto-hiding top bar. Bridge between Locus and Up Next active item is unresolved and **not implementation-ready**. | Operator cannot yet explain the Locus/player bridge in plain English; deferring avoids accidental commitment to a confusing model. | No "Save queue as playlist" in Locus overflow; no explicit bridge affordance when reader item = active session item. | A premature bridge UI could re-introduce the "Player Queue as separate surface" concept that the operator has already rejected. |
 | **Library** | Sectioned Library. Shared row anatomy from list layout spec. Date or logical section headers. Visible overflow. "Add Selected to Up Next" added to batch bar. "Play Now" added to row overflow. | Sectioning is the operator-preferred direction; row grammar is shared with playlist/smart-playlist surfaces. "Add Selected to Up Next" parity with playlist detail is explicit in the queue actions spec. | "Add Selected to Up Next" missing from library batch bar; "Play Now" missing from row overflow; sectioning policy not yet decided (date / source / read-state). | Adding a visible play button on the row face would violate the "tap is read; explicit is queue" rule. Pull-to-refresh that auto-re-seeds would violate the no-auto-reseed rule. |
 | **Manual playlist** | Conservative Playlist. Manual order visible. Drag handles on every row. Tap → Locus only (must not implicitly start a session, which today's code can do). Row overflow: Play Now / Play Next / Play Last / Move to top / Move to bottom / Remove. Undo on remove is preserved. | Manual order is the playlist's identity. Implicit session-start on tap blurs the "tap is read" rule. | Tap currently can call `vm.startNowPlayingSession(...)`; "Play Now" missing; otherwise close to spec. | Splitting tap from session-start touches `onOpenPlayer` plumbing; care needed to avoid breaking the active-item highlight. |
@@ -202,6 +201,7 @@ for execution.
 | Mini-player layout | **Two-row (or otherwise decompressed)** layout. Title/source on top row separated from playback controls. | Mini-player control spec ticket designs around the multi-row layout, not the current single-row dock. |
 | Speed control on mini-player | **Always-visible speed pill** on the mini-player. | Mini-player control spec ticket places the speed pill in the layout; long-press / hidden treatments are rejected. |
 | Play/pause in mini-player and Locus | **Single consolidated stateful button.** | Already true in Locus; mini-player ticket preserves this and rejects competing-buttons treatments. |
+| Mini-player ff/rw semantics | **Sentence-level for v1.** Short press remains previous/next sentence; long press remains previous/next paragraph. | Recorded in `docs/ANDROID_MINIPLAYER_CONTROL_SPEC.md`. Time-based skip is deferred and would require a separate operator decision. |
 | Clear upcoming placement | **Likely near the Upcoming section header.** Final placement still confirmable in the Up Next layout ticket. | Up Next layout ticket lays out the Upcoming section header with the Clear upcoming control colocated. |
 | Clear all session placement | **Overflow / contextual destructive area**, not primary chrome. | Up Next overflow menu carries this; operator-rejected as a header-level button. |
 | History-row tap behavior | **Anchored / current solution preferred** (tap on a history row behaves consistent with the active-item anchoring model). Contextual / onboarding hint may be useful initially, then disable / disappear. Final hint copy and lifecycle deferred to the Up Next history ticket. | Up Next history ticket implements the anchored behavior + optional first-run hint. Other candidates (restart playback, add to upcoming) are not selected. |
@@ -214,14 +214,12 @@ for execution.
 
 ### 6.1 Blocking implementation now
 
-- **Mini-player ff/rw semantics (sentence-based vs time-based).** The
-  current behavior is sentence-based. The new layout will surface
-  rewind/forward icons more prominently. Without an explicit choice,
-  implementing icons risks implying a behavior change. **Operator
-  decision needed before mini-player polish ticket starts.**
-- **Mini-player rewind/forward icon and label treatment.** Once the
-  semantic above is chosen, the icon (curved arrow, time text, sentence
-  glyph) and accessibility label follow.
+Mini-player ff/rw semantics are no longer a blocker for B1. The
+mini-player control spec chooses the current sentence-level behavior for
+v1 and records the current long-press paragraph behavior. Icon and
+visual treatment may be refined in the implementation ticket, but must
+preserve sentence/paragraph labels and must not imply time-based skips.
+
 - **Library sectioning policy (date / source / read-state).** Sectioned
   Library cannot ship without a section grouping rule. **Operator
   decision needed before sectioned-library implementation ticket.**
@@ -297,17 +295,18 @@ the existing specs.
 ### B. Design / spec clarification before implementation
 
 These need at most one design decision or one short spec doc before
-becoming implementation tickets. Operator should resolve the listed
-question before opening the implementation ticket.
+becoming implementation tickets. Where a question is still listed,
+operator should resolve it before opening the implementation ticket.
 
-4. **B1 — Mini-player control spec.**
-   Decision input: ff/rw sentence-vs-time semantics. Output: a short
-   spec (or addendum to `ANDROID_ITEM_ACTIONS_SPEC.md` v1.1 / new
-   `ANDROID_MINIPLAYER_SPEC.md`) covering: two-row layout, title/source
-   row, controls row with consolidated play/pause, ff/rw, always-visible
-   speed pill, chevron drawer behavior preserved, persistence rules.
-   Once written, the implementation ticket is small.
-   References: §2 Mini-player row, §5 mini-player decisions.
+4. **B1 — Mini-player control spec.** *(Written 2026-04-27)*
+   `docs/ANDROID_MINIPLAYER_CONTROL_SPEC.md` is ready to cite from the
+   implementation ticket. It covers the two-row layout, title/source row,
+   controls row with consolidated play/pause, sentence-level ff/rw with
+   long-press paragraph jumps, always-visible speed pill, chevron drawer
+   behavior, persistence rules, and unresolved items that remain out of
+   scope.
+   References: §2 Mini-player row, §5 mini-player decisions,
+   `docs/ANDROID_MINIPLAYER_CONTROL_SPEC.md`.
 
 5. **B2 — Up Next history / Clear upcoming / snap-to-active layout
    spec.**
@@ -358,16 +357,16 @@ Listed in approximate priority order; not necessarily the next tickets.
 
 The operator has limited Claude Design slots remaining this week. The
 next significant design ask should be the **single most leveraged**
-prompt available. The strongest candidate is the **Up Next layout
+prompt available. The strongest candidate remains the **Up Next layout
 spec** (B2) — it depends on already-made decisions, the operator
 already has a strong direction, and a single design pass producing
-concrete pixel-level treatments would unblock both the Up Next
-implementation ticket and the mini-player polish ticket (which sits
-adjacent).
+concrete pixel-level treatments would unblock the Up Next
+implementation ticket.
 
-If the operator has a second slot, the next strongest is the
-**mini-player layout spec** (B1) — but only after the operator has
-chosen ff/rw sentence-vs-time semantics (one decision, see §6.1).
+B1 no longer requires a Claude Design slot before implementation. The
+mini-player control spec is written and chooses sentence-level ff/rw for
+v1; implementation can proceed from
+`docs/ANDROID_MINIPLAYER_CONTROL_SPEC.md` when scheduled.
 
 What follows is a draft prompt skeleton. Fill in the bracketed choices
 before sending.
