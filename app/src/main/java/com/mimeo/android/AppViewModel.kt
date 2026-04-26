@@ -4255,6 +4255,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun playLastBatch(itemIds: List<Int>) {
+        val requestedIds = itemIds.distinct()
+        if (requestedIds.isEmpty()) return
+        val allItemsById = (queueItems.value + inboxItems.value + archivedItems.value + favoriteItems.value + binItems.value)
+            .associateBy { it.itemId }
+        val items = requestedIds.mapNotNull { allItemsById[it] }
+        if (items.isEmpty()) return
+        viewModelScope.launch {
+            val session = repository.appendItemsToSession(items)
+            if (session == null) {
+                showSnackbar("No active Up Next session.")
+                return@launch
+            }
+            applySessionSnapshot(session)
+            showSnackbar("${items.size} items added to Up Next")
+        }
+    }
+
     suspend fun reseedNowPlayingSessionFromCurrentSource(): Result<SessionReseedResult> {
         val sourceLabel = currentSourceContextLabel()
         return runCatching {

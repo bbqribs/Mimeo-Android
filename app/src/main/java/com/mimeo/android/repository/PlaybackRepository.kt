@@ -865,6 +865,43 @@ class PlaybackRepository(
         return updatedRow.toSession(stored)
     }
 
+    suspend fun appendItemsToSession(items: List<PlaybackQueueItem>): NowPlayingSession? {
+        val orderedItems = items.distinctBy { it.itemId }
+        if (orderedItems.isEmpty()) return getSession()
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson).toMutableList()
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+
+        val currentItemId = stored.getOrNull(row.currentIndex.coerceIn(0, stored.lastIndex))?.itemId
+        val appendItemIds = orderedItems
+            .map { it.itemId }
+            .filter { it != currentItemId }
+            .toSet()
+        if (appendItemIds.isEmpty()) return row.toSession(stored)
+
+        stored.removeAll { it.itemId in appendItemIds }
+        val updatedCurrentIndex = currentItemId
+            ?.let { id -> stored.indexOfFirst { it.itemId == id }.takeIf { it >= 0 } }
+            ?: row.currentIndex.coerceIn(0, stored.lastIndex)
+
+        orderedItems
+            .filter { it.itemId in appendItemIds }
+            .forEach { item -> stored.add(item.toStoredNowPlayingItem()) }
+
+        val updatedAt = System.currentTimeMillis()
+        val updatedRow = row.copy(
+            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            currentIndex = updatedCurrentIndex,
+            updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(stored)
+    }
+
     suspend fun removeItemFromSession(itemId: Int): NowPlayingSession? {
         val dao = database.nowPlayingDao()
         val row = dao.getSession() ?: return null
@@ -1063,4 +1100,23 @@ class PlaybackRepository(
             sourcePlaylistId = sourcePlaylistId,
         )
     }
+
+    private fun PlaybackQueueItem.toStoredNowPlayingItem(): StoredNowPlayingItem =
+        StoredNowPlayingItem(
+            itemId = itemId,
+            title = title,
+            url = url,
+            host = host,
+            sourceType = sourceType,
+            sourceLabel = sourceLabel,
+            sourceUrl = sourceUrl,
+            captureKind = captureKind,
+            sourceAppPackage = sourceAppPackage,
+            status = status,
+            activeContentVersionId = activeContentVersionId,
+            lastReadPercent = lastReadPercent,
+            chunkIndex = 0,
+            offsetInChunkChars = 0,
+            readerScrollOffset = 0,
+        )
 }
