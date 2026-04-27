@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -75,6 +76,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
@@ -83,6 +85,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.mimeo.android.AppViewModel
@@ -258,6 +261,10 @@ fun QueueScreen(
     onShowSnackbar: (String, String?, String?) -> Unit,
     focusItemId: Int? = null,
     upNextTabTapSignal: Int = 0,
+    snapToActiveSignal: Int = 0,
+    snapBottomClearance: Dp = 0.dp,
+    renderSnapPillLocally: Boolean = true,
+    onSnapPillVisibilityChange: (Boolean) -> Unit = {},
     onOpenPlayer: (Int) -> Unit,
     onOpenDiagnostics: () -> Unit,
 ) {
@@ -686,6 +693,10 @@ fun QueueScreen(
                         actionScope.launch { executeReseedFromCurrentSource() }
                     }
                 },
+                snapBottomClearance = snapBottomClearance,
+                snapToActiveSignal = snapToActiveSignal,
+                renderSnapPillLocally = renderSnapPillLocally,
+                onSnapPillVisibilityChange = onSnapPillVisibilityChange,
             )
         } else {
             ElevatedCard(
@@ -1478,6 +1489,10 @@ private fun NowPlayingSessionPanel(
     reseedEnabled: Boolean,
     onReseed: () -> Unit,
     modifier: Modifier = Modifier,
+    snapBottomClearance: Dp = 0.dp,
+    snapToActiveSignal: Int = 0,
+    renderSnapPillLocally: Boolean = true,
+    onSnapPillVisibilityChange: (Boolean) -> Unit = {},
     trailingActions: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val showCurrentSource = seededFromLabel != currentSourceLabel
@@ -1504,16 +1519,32 @@ private fun NowPlayingSessionPanel(
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var currentTargetIndex by remember { mutableIntStateOf(-1) }
     val listScrollState = rememberScrollState()
+    val snapScope = rememberCoroutineScope()
     var listViewportHeight by remember { mutableIntStateOf(0) }
+    var activeTopOffset by remember { mutableStateOf<Float?>(null) }
+    var activeMeasuredHeight by remember { mutableFloatStateOf(0f) }
 
     fun avgItemHeight(): Float =
         if (itemHeights.isEmpty()) 72f else itemHeights.values.average().toFloat()
 
+    fun activeIndex(): Int =
+        session.currentItem?.itemId?.let { currentItemId ->
+            localItems.indexOfFirst { it.itemId == currentItemId }
+        }?.takeIf { it >= 0 }
+            ?: session.currentIndex.coerceIn(0, (localItems.size - 1).coerceAtLeast(0))
+
+    fun upcomingStartIndex(): Int = (activeIndex() + 1).coerceIn(0, localItems.size)
+
+    fun upcomingItems(): List<NowPlayingSessionItem> = localItems.drop(upcomingStartIndex())
+
+    fun absoluteIndexForUpcoming(upcomingIndex: Int): Int = upcomingStartIndex() + upcomingIndex
+
     fun scrollDraggedItemNearEdge(from: Int) {
-        if (from !in localItems.indices || listViewportHeight <= 0) return
+        val upcoming = upcomingItems()
+        if (from !in upcoming.indices || listViewportHeight <= 0) return
         val tops = dragStartTopOffsets.takeIf { it.isNotEmpty() } ?: itemTopOffsets
         val heights = dragStartHeights.takeIf { it.isNotEmpty() } ?: itemHeights
-        val itemId = localItems[from].itemId
+        val itemId = upcoming[from].itemId
         val itemTop = (tops[itemId] ?: (from * avgItemHeight())) + dragOffsetY
         val itemBottom = itemTop + (heights[itemId] ?: avgItemHeight())
         val viewportTop = listScrollState.value.toFloat()
@@ -1535,30 +1566,33 @@ private fun NowPlayingSessionPanel(
     }
 
     fun computeTargetIndex(from: Int, offsetY: Float): Int {
-        if (localItems.size <= 1 || from !in localItems.indices) return from
+        val upcoming = upcomingItems()
+        if (upcoming.size <= 1 || from !in upcoming.indices) return from
         val tops = dragStartTopOffsets.takeIf { it.isNotEmpty() } ?: itemTopOffsets
         val heights = dragStartHeights.takeIf { it.isNotEmpty() } ?: itemHeights
-        val fromItemId = localItems[from].itemId
+        val fromItemId = upcoming[from].itemId
         val h = heights[fromItemId] ?: avgItemHeight()
         val top = tops[fromItemId] ?: (from * avgItemHeight())
         val draggedTopY = top + offsetY
         val draggedBottomY = draggedTopY + h
         var target = from
-        localItems.indices.forEach { i ->
+        upcoming.indices.forEach { i ->
             if (i == from) return@forEach
-            val itemId = localItems[i].itemId
+            val itemId = upcoming[i].itemId
             val t = tops[itemId] ?: (i * avgItemHeight())
             val iH = heights[itemId] ?: avgItemHeight()
             val iMidY = t + iH / 2f
             if (from < i && draggedBottomY > iMidY) target = i
             if (from > i && draggedTopY < iMidY && i < target) target = i
         }
-        return target.coerceIn(0, localItems.lastIndex)
+        return target.coerceIn(0, upcoming.lastIndex)
     }
 
     fun visualOffsetForItem(index: Int, from: Int, target: Int): Float {
         if (from < 0 || from == target || index == from) return 0f
-        val draggedItemId = localItems[from].itemId
+        val upcoming = upcomingItems()
+        if (from !in upcoming.indices) return 0f
+        val draggedItemId = upcoming[from].itemId
         val heights = dragStartHeights.takeIf { it.isNotEmpty() } ?: itemHeights
         val draggedHeight = heights[draggedItemId] ?: avgItemHeight()
         return when {
@@ -1580,21 +1614,35 @@ private fun NowPlayingSessionPanel(
     fun onDragEnd() {
         val from = draggingIndex
         val target = currentTargetIndex
-        if (from >= 0 && target >= 0 && target != from) {
-            val moved = localItems.removeAt(from)
-            localItems.add(target, moved)
+        val absoluteFrom = if (from >= 0) absoluteIndexForUpcoming(from) else -1
+        val absoluteTarget = if (target >= 0) absoluteIndexForUpcoming(target) else -1
+        val shouldReorder =
+            absoluteFrom in localItems.indices &&
+            absoluteTarget in localItems.indices &&
+            absoluteTarget != absoluteFrom
+        if (shouldReorder) {
+            val moved = localItems.removeAt(absoluteFrom)
+            localItems.add(absoluteTarget, moved)
         }
         draggingIndex = -1
         dragOffsetY = 0f
         currentTargetIndex = -1
         dragStartTopOffsets = emptyMap()
         dragStartHeights = emptyMap()
-        if (from >= 0 && target >= 0 && target != from) {
-            onReorderItem(from, target)
+        if (shouldReorder) {
+            onReorderItem(absoluteFrom, absoluteTarget)
         }
     }
 
     val currentItemId = session.currentItem?.itemId
+    val currentIndex = localItems.indexOfFirst { it.itemId == currentItemId }
+        .takeIf { it >= 0 }
+        ?: session.currentIndex.coerceIn(0, (localItems.size - 1).coerceAtLeast(0))
+    val activeItem = localItems.getOrNull(currentIndex)
+    val upcomingStartIndex = (currentIndex + 1).coerceIn(0, localItems.size)
+    val upcomingItems = localItems.drop(upcomingStartIndex)
+    val density = LocalDensity.current
+    val minVisibleActiveHeightPx = with(density) { 24.dp.toPx() }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -1649,82 +1697,165 @@ private fun NowPlayingSessionPanel(
                 )
             }
         }
-        LaunchedEffect(currentItemId, itemTopOffsets.size) {
+        LaunchedEffect(currentItemId) {
             if (currentItemId == null) return@LaunchedEffect
-            val currentIndex = localItems.indexOfFirst { it.itemId == currentItemId }
-            if (currentIndex < 0) return@LaunchedEffect
-            val offset = itemTopOffsets[currentItemId]
-                ?: (currentIndex * avgItemHeight()).toInt().toFloat()
+            val offset = activeTopOffset ?: 0f
             listScrollState.animateScrollTo(offset.toInt())
         }
-        Column(
+        LaunchedEffect(snapToActiveSignal) {
+            if (snapToActiveSignal > 0) {
+                listScrollState.animateScrollTo(0)
+            }
+        }
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .onSizeChanged { listViewportHeight = it.height }
-                .verticalScroll(listScrollState),
+                .onSizeChanged { listViewportHeight = it.height },
         ) {
-            localItems.forEachIndexed { index, item ->
-                key(item.itemId) {
-                    val isCurrent = item.itemId == currentItemId
-                    val isDragging = draggingIndex == index
-                    val itemVisualOffsetY = when {
-                        isDragging -> dragOffsetY
-                        draggingIndex >= 0 -> visualOffsetForItem(index, draggingIndex, currentTargetIndex)
-                        else -> 0f
-                    }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(listScrollState),
+            ) {
+                activeItem?.let { item ->
                     val sourceLabel = item.host
                         ?: item.sourceLabel?.takeIf { it.isNotBlank() }
                         ?: item.sourceType?.takeIf { it.isNotBlank() }
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .zIndex(if (isDragging) 1f else 0f)
-                            .graphicsLayer { translationY = itemVisualOffsetY }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
                             .onGloballyPositioned { coords ->
-                                itemTopOffsets[item.itemId] = coords.positionInParent().y
-                                itemHeights[item.itemId] = coords.size.height.toFloat()
+                                val top = coords.positionInParent().y
+                                val height = coords.size.height.toFloat()
+                                itemTopOffsets[item.itemId] = top
+                                itemHeights[item.itemId] = height
+                                activeTopOffset = top
+                                activeMeasuredHeight = height
                             },
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
+                        Text(
+                            text = "Now Playing",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onOpenItem(item.itemId) }
                                 .background(
-                                    color = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else Color.Black,
-                                    shape = RoundedCornerShape(6.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f),
+                                    shape = RoundedCornerShape(8.dp),
                                 )
                                 .border(
                                     width = 1.dp,
-                                    color = if (isCurrent) {
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
-                                    } else {
-                                        Color.Transparent
-                                    },
-                                    shape = RoundedCornerShape(6.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                                    shape = RoundedCornerShape(8.dp),
                                 )
-                                .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp)
-                                .semantics {
-                                    customActions = buildList {
-                                        if (index > 0) add(CustomAccessibilityAction("Move up") {
-                                            onReorderItem(index, index - 1); true
-                                        })
-                                        if (index < localItems.lastIndex) add(CustomAccessibilityAction("Move down") {
-                                            onReorderItem(index, index + 1); true
-                                        })
-                                    }
-                                },
+                                .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            if (!isCurrent) {
+                            Spacer(Modifier.size(24.dp))
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                Text(
+                                    text = item.title?.ifBlank { null } ?: item.url,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (sourceLabel != null) {
+                                    Text(
+                                        text = sourceLabel,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Upcoming · ${upcomingItems.size}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                if (upcomingItems.isEmpty()) {
+                    Text(
+                        text = "No upcoming items.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    )
+                }
+                upcomingItems.forEachIndexed { index, item ->
+                    key(item.itemId) {
+                        val absoluteIndex = upcomingStartIndex + index
+                        val isDragging = draggingIndex == index
+                        val itemVisualOffsetY = when {
+                            isDragging -> dragOffsetY
+                            draggingIndex >= 0 -> visualOffsetForItem(index, draggingIndex, currentTargetIndex)
+                            else -> 0f
+                        }
+                        val sourceLabel = item.host
+                            ?: item.sourceLabel?.takeIf { it.isNotBlank() }
+                            ?: item.sourceType?.takeIf { it.isNotBlank() }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .zIndex(if (isDragging) 1f else 0f)
+                                .graphicsLayer { translationY = itemVisualOffsetY }
+                                .onGloballyPositioned { coords ->
+                                    itemTopOffsets[item.itemId] = coords.positionInParent().y
+                                    itemHeights[item.itemId] = coords.size.height.toFloat()
+                                },
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onOpenItem(item.itemId) }
+                                    .background(
+                                        color = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else Color.Black,
+                                        shape = RoundedCornerShape(6.dp),
+                                    )
+                                    .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp)
+                                    .semantics {
+                                        customActions = buildList {
+                                            if (index > 0) add(CustomAccessibilityAction("Move up") {
+                                                onReorderItem(absoluteIndex, absoluteIndex - 1); true
+                                            })
+                                            if (index < upcomingItems.lastIndex) add(CustomAccessibilityAction("Move down") {
+                                                onReorderItem(absoluteIndex, absoluteIndex + 1); true
+                                            })
+                                        }
+                                    },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
                                 Icon(
                                     imageVector = Icons.Default.DragHandle,
                                     contentDescription = "Drag to reorder",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier
                                         .size(24.dp)
-                                        .pointerInput(index) {
+                                        .pointerInput(item.itemId, index) {
                                             detectDragGestures(
                                                 onDragStart = {
                                                     dragStartTopOffsets = itemTopOffsets.toMap()
@@ -1744,33 +1875,27 @@ private fun NowPlayingSessionPanel(
                                             )
                                         },
                                 )
-                            } else {
-                                Spacer(Modifier.size(24.dp))
-                            }
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(2.dp),
-                            ) {
-                                Text(
-                                    text = item.title?.ifBlank { null } ?: item.url,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (isCurrent) MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                if (sourceLabel != null) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                ) {
                                     Text(
-                                        text = sourceLabel,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
+                                        text = item.title?.ifBlank { null } ?: item.url,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 2,
                                         overflow = TextOverflow.Ellipsis,
                                     )
+                                    if (sourceLabel != null) {
+                                        Text(
+                                            text = sourceLabel,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
                                 }
-                            }
-                            if (!isCurrent) {
                                 IconButton(
                                     onClick = { onRemoveItem(item.itemId) },
                                     modifier = Modifier.size(32.dp),
@@ -1783,17 +1908,59 @@ private fun NowPlayingSessionPanel(
                                     )
                                 }
                             }
-                        }
-                        if (index < localItems.lastIndex) {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 12.dp),
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
-                            )
+                            if (index < upcomingItems.lastIndex) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 12.dp),
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                                )
+                            }
                         }
                     }
                 }
             }
+            val activeHeight = activeMeasuredHeight
+            val activeVisibleHeight = (activeHeight - listScrollState.value.toFloat()).coerceAtLeast(0f)
+            val showSnapToActive = activeItem != null &&
+                listViewportHeight > 0 &&
+                activeHeight > 0f &&
+                activeVisibleHeight < minVisibleActiveHeightPx
+            LaunchedEffect(showSnapToActive) {
+                onSnapPillVisibilityChange(showSnapToActive)
+            }
+            if (renderSnapPillLocally && showSnapToActive) {
+                JumpToNowPlayingPill(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = snapBottomClearance),
+                    onClick = {
+                        snapScope.launch { listScrollState.animateScrollTo(0) }
+                    },
+                )
+            }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+    }
+}
+
+@Composable
+fun JumpToNowPlayingPill(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(18.dp)
+    Box(
+        modifier = modifier
+            .height(34.dp)
+            .clickable(onClick = onClick)
+            .background(MaterialTheme.colorScheme.primaryContainer, shape)
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "Jump to Now Playing",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            maxLines = 1,
+        )
     }
 }
