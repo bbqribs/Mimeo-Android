@@ -221,9 +221,11 @@ v1 and records the current long-press paragraph behavior. Icon and
 visual treatment may be refined in the implementation ticket, but must
 preserve sentence/paragraph labels and must not imply time-based skips.
 
-- **Library sectioning policy (date / source / read-state).** Sectioned
-  Library cannot ship without a section grouping rule. **Operator
-  decision needed before sectioned-library implementation ticket.**
+- ~~**Library sectioning policy (date / source / read-state).**~~ **Resolved
+  (2026-04-27).** Date-based sections on NEWEST sort only; Bin excluded;
+  `createdAt` as the date field; no backend/API changes. See
+  `docs/ANDROID_SECTIONED_LIBRARY_POLICY.md`. C5 implementation ticket
+  may now be opened.
 
 ### 6.2 Needs design exploration
 
