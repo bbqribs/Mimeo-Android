@@ -282,6 +282,8 @@ fun QueueScreen(
 
     var topActionsMenuExpanded by remember { mutableStateOf(false) }
     var showReseedConfirmation by remember { mutableStateOf(false) }
+    var showClearUpcomingConfirmation by remember { mutableStateOf(false) }
+    var showClearAllSessionConfirmation by remember { mutableStateOf(false) }
     var showPendingSavesHub by remember { mutableStateOf(false) }
     var pendingHubStatusMessage by remember { mutableStateOf<String?>(null) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
@@ -518,6 +520,14 @@ fun QueueScreen(
                                             }
                                         },
                                     )
+                                    DropdownMenuItem(
+                                        text = { Text("Clear all session") },
+                                        enabled = nowPlayingSession != null,
+                                        onClick = {
+                                            topActionsMenuExpanded = false
+                                            showClearAllSessionConfirmation = true
+                                        },
+                                    )
                                 }
                             }
                         }
@@ -679,7 +689,7 @@ fun QueueScreen(
                     vm.reorderNowPlayingSessionItem(fromIndex = from, toIndex = to)
                 },
                 onRemoveItem = { itemId -> vm.removeItemFromSession(itemId) },
-                onClearSession = { vm.clearNowPlayingSession() },
+                onClearUpcoming = { showClearUpcomingConfirmation = true },
                 reseedEnabled = canReseedFromCurrentSource,
                 onReseed = {
                     if (shouldConfirmReseedFromCurrentSource(
@@ -744,6 +754,63 @@ fun QueueScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showReseedConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (showClearUpcomingConfirmation) {
+        val upcomingCount = nowPlayingSession?.let { session ->
+            val safeIndex = session.currentIndex.coerceIn(0, (session.items.size - 1).coerceAtLeast(0))
+            (session.items.size - safeIndex - 1).coerceAtLeast(0)
+        } ?: 0
+        AlertDialog(
+            onDismissRequest = { showClearUpcomingConfirmation = false },
+            title = { Text("Clear upcoming?") },
+            text = {
+                Text(
+                    "This removes $upcomingCount upcoming item${if (upcomingCount == 1) "" else "s"} after Now Playing. The active item and earlier session items stay in place.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = upcomingCount > 0,
+                    onClick = {
+                        showClearUpcomingConfirmation = false
+                        vm.clearUpcomingNowPlayingItems()
+                    },
+                ) {
+                    Text("Clear upcoming")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearUpcomingConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (showClearAllSessionConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showClearAllSessionConfirmation = false },
+            title = { Text("Clear all session?") },
+            text = {
+                Text("This clears the whole local Now Playing session, including the active item and all upcoming items.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearAllSessionConfirmation = false
+                        vm.clearNowPlayingSession()
+                    },
+                ) {
+                    Text("Clear all session")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearAllSessionConfirmation = false }) {
                     Text("Cancel")
                 }
             },
@@ -1485,7 +1552,7 @@ private fun NowPlayingSessionPanel(
     onOpenItem: (Int) -> Unit,
     onReorderItem: (fromIndex: Int, toIndex: Int) -> Unit,
     onRemoveItem: (Int) -> Unit,
-    onClearSession: () -> Unit,
+    onClearUpcoming: () -> Unit,
     reseedEnabled: Boolean,
     onReseed: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1685,17 +1752,6 @@ private fun NowPlayingSessionPanel(
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
-            IconButton(
-                onClick = onClearSession,
-                modifier = Modifier.size(32.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Clear session queue",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
         }
         LaunchedEffect(currentItemId) {
             if (currentItemId == null) return@LaunchedEffect
@@ -1796,6 +1852,15 @@ private fun NowPlayingSessionPanel(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )
+                    TextButton(
+                        enabled = upcomingItems.isNotEmpty(),
+                        onClick = onClearUpcoming,
+                    ) {
+                        Text(
+                            text = "Clear upcoming",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
                 }
                 if (upcomingItems.isEmpty()) {
                     Text(

@@ -124,6 +124,14 @@ internal fun computeSessionReorderPlan(
     )
 }
 
+internal fun computeClearUpcomingKeepCount(
+    itemCount: Int,
+    currentIndex: Int,
+): Int {
+    if (itemCount <= 0) return 0
+    return currentIndex.coerceIn(0, itemCount - 1) + 1
+}
+
 @Serializable
 private data class StoredNowPlayingItem(
     val itemId: Int,
@@ -1005,6 +1013,32 @@ class PlaybackRepository(
         )
         dao.upsert(updatedRow)
         return updatedRow.toSession(stored)
+    }
+
+    suspend fun clearUpcomingFromSession(): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson)
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        val keepCount = computeClearUpcomingKeepCount(
+            itemCount = stored.size,
+            currentIndex = row.currentIndex,
+        )
+        if (keepCount >= stored.size) {
+            return row.toSession(stored)
+        }
+        val retained = stored.take(keepCount)
+        val updatedAt = System.currentTimeMillis()
+        val updatedRow = row.copy(
+            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), retained),
+            currentIndex = row.currentIndex.coerceIn(0, retained.lastIndex),
+            updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(retained)
     }
 
     suspend fun clearSession() {
