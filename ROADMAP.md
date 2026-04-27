@@ -102,6 +102,13 @@ block. Not a forward-looking list.
 
 ### Redesign v2 + recent polish (2026 Q1 – Q2)
 
+- Up Next layout slices 1–3 (2026-04-27): active/upcoming region
+  scaffolding; active anchor (not draggable); history hidden (deferred);
+  snap-to-active pill; Clear upcoming near Upcoming header; Clear all
+  session in Up Next overflow/contextual destructive area; Save queue as
+  playlist from Up Next overflow (saves active item + upcoming items in
+  session order; hidden pre-active/history rows excluded). No backend or
+  API contract changes.
 - Phase 6A: device-local session queue substrate — remove-from-session
   per row, clear-session button, duplicate-move semantics for Play
   Next / Play Last, `From: [playlist]` seed-source label, snackbar
