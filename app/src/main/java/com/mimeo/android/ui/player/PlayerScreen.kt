@@ -99,6 +99,8 @@ import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -156,11 +158,15 @@ private const val DEBUG_PLAYBACK = false
 private const val PROGRESS_SYNC_DEBOUNCE_MS = 2_000L
 private const val PROGRESS_CHAR_STEP = 120
 private const val DONE_PERCENT_THRESHOLD = 98
-private val CHEVRON_DOCK_HORIZONTAL_PADDING = 8.dp
-private val CHEVRON_DOCK_VERTICAL_OFFSET = (-2).dp
-private val CHEVRON_RESERVED_SPACE = 52.dp
+private val CHEVRON_DOCK_HORIZONTAL_PADDING = 4.dp
+private val CHEVRON_DOCK_VERTICAL_OFFSET = (-7).dp
+private val CHEVRON_RESERVED_SPACE = 76.dp
 private val CONTROL_CLUSTER_GAP = 4.dp
 private val CONTROL_SLOT_SIZE = 48.dp
+private val COMPACT_FULL_CONTROL_SLOT_SIZE = 42.dp
+private val COMPACT_FULL_CONTROL_GAP = 2.dp
+private val COMPACT_CONTROL_CHIP_WIDTH = 68.dp
+private val COMPACT_CONTROL_CHIP_HEIGHT = 34.dp
 private val PLAYER_UPPER_LANE_HEIGHT = 28.dp
 private val PLAYER_TRANSPORT_ROW_HEIGHT = 48.dp
 private val NUB_CHEVRON_BOTTOM_MARGIN = 3.dp
@@ -1557,6 +1563,17 @@ fun PlayerScreen(
                 ?.sourceLabel
                 .orEmpty()
         }
+    val nowPlayingSourceLabel = queueItemsById[playbackOwnerItemId]
+        ?.sourceLabel
+        ?.takeIf { it.isNotBlank() }
+        ?: nowPlayingSession
+            ?.currentItem
+            ?.sourceLabel
+            ?.takeIf { it.isNotBlank() }
+        ?: textPayload
+            ?.takeIf { it.itemId == playbackOwnerItemId }
+            ?.sourceLabel
+            ?.takeIf { it.isNotBlank() }
     val nowPlayingUrl = queueItemsById[playbackOwnerItemId]?.url.orEmpty()
         .ifBlank { nowPlayingSession?.currentItem?.url.orEmpty() }
     val locusActionBarTitle = resolveLocusActionBarTitle(
@@ -1791,7 +1808,10 @@ fun PlayerScreen(
             progressPercent = currentPercent,
             minimal = controlsMode == PlayerControlsMode.MINIMAL,
             nowPlayingTitle = nowPlayingTitle,
+            nowPlayingSourceLabel = nowPlayingSourceLabel,
             continuousMarquee = settings.continuousNowPlayingMarquee,
+            playbackSpeed = settings.playbackSpeed,
+            showSpeedPill = controlsMode == PlayerControlsMode.FULL,
             onOpenLocusForItem = {
                 val nowMs = SystemClock.elapsedRealtime()
                 if (nowMs - lastReaderManualScrollAtMs < MANUAL_SCROLL_TAP_REATTACH_BLOCK_MS) {
@@ -1890,6 +1910,7 @@ fun PlayerScreen(
             onNextItem = {
                 vm.playbackAdvanceToNextItem()
             },
+            onSpeedChange = { speed -> vm.savePlaybackSpeed(speed) },
         )
     }
     val renderPlayerDock: @Composable () -> Unit = {
@@ -1906,6 +1927,7 @@ fun PlayerScreen(
                 onChevronLongPress = handleChevronLongPress,
                 onChevronSnap = handleChevronSnap,
                 onBackgroundTap = openLocusFromDock,
+                backgroundTapEnabled = !compactControlsOnly,
                 content = renderPlayerControlBar,
             )
 
@@ -1917,6 +1939,7 @@ fun PlayerScreen(
                 onChevronLongPress = handleChevronLongPress,
                 onChevronSnap = handleChevronSnap,
                 onBackgroundTap = openLocusFromDock,
+                backgroundTapEnabled = !compactControlsOnly,
                 content = renderPlayerControlBar,
             )
 
@@ -2738,16 +2761,24 @@ private fun ActionHintTooltip(
 private fun SpeedControlButton(
     speed: Float,
     onSpeedChange: (Float) -> Unit,
+    showIcon: Boolean = true,
+    compact: Boolean = false,
+    contentDescription: String = "Playback speed",
 ) {
     var expanded by remember { mutableStateOf(false) }
     var draftSpeed by remember { mutableFloatStateOf(normalizePlaybackSpeed(speed)) }
-    val shape = RoundedCornerShape(10.dp)
+    val shape = RoundedCornerShape(if (compact) 18.dp else 10.dp)
     val highlightColor = MaterialTheme.colorScheme.primary
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val emphasize = pressed || expanded
     val backgroundColor by animateColorAsState(
-        targetValue = if (emphasize) highlightColor.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface.copy(alpha = 0f),
+        targetValue = when {
+            compact && emphasize -> highlightColor.copy(alpha = 0.20f)
+            compact -> highlightColor.copy(alpha = 0.12f)
+            emphasize -> highlightColor.copy(alpha = 0.08f)
+            else -> MaterialTheme.colorScheme.surface.copy(alpha = 0f)
+        },
         animationSpec = tween(durationMillis = 150),
         label = "speedTriggerBackground",
     )
@@ -2768,6 +2799,22 @@ private fun SpeedControlButton(
                     spotColor = highlightColor.copy(alpha = glowAlpha),
                 )
                 .background(backgroundColor, shape)
+                .then(
+                    if (compact) {
+                        Modifier
+                            .requiredWidth(COMPACT_CONTROL_CHIP_WIDTH)
+                            .height(COMPACT_CONTROL_CHIP_HEIGHT)
+                    } else {
+                        Modifier
+                    },
+                )
+                .then(
+                    if (compact) {
+                        Modifier.border(1.dp, highlightColor.copy(alpha = 0.38f), shape)
+                    } else {
+                        Modifier
+                    },
+                )
                 .clickable(
                     interactionSource = interactionSource,
                     indication = null,
@@ -2780,37 +2827,59 @@ private fun SpeedControlButton(
                         expanded = true
                     }
                 }
-                .padding(start = 8.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                .semantics { this.contentDescription = contentDescription }
+                .padding(
+                    start = if (compact) 10.dp else if (showIcon) 8.dp else 10.dp,
+                    end = if (compact) 10.dp else if (showIcon) 6.dp else 10.dp,
+                    top = if (compact) 5.dp else 6.dp,
+                    bottom = if (compact) 5.dp else 6.dp,
+                ),
         ) {
             Row(
+                modifier = if (compact) Modifier.fillMaxSize() else Modifier,
                 horizontalArrangement = Arrangement.spacedBy(3.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.msr_speed_20),
-                    contentDescription = "Playback speed",
-                    tint = highlightColor,
-                    modifier = Modifier.size(24.dp),
-                )
-                Row(
-                    modifier = Modifier.requiredWidth(58.dp),
-                    verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = Arrangement.End,
-                ) {
+                if (showIcon) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.msr_speed_20),
+                        contentDescription = null,
+                        tint = highlightColor,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+                if (compact) {
                     Text(
-                        text = String.format(Locale.US, "%.2f", normalizePlaybackSpeed(triggerDisplaySpeed)),
+                        text = formatPlaybackSpeed(triggerDisplaySpeed),
+                        modifier = Modifier.weight(1f),
                         color = highlightColor,
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelMedium,
                         fontFamily = FontFamily.Monospace,
-                        fontSize = 18.sp,
-                        textAlign = TextAlign.End,
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        textAlign = TextAlign.Center,
                     )
-                    Text(
-                        text = "×",
-                        color = highlightColor.copy(alpha = 0.75f),
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 14.sp,
-                    )
+                } else {
+                    Row(
+                        modifier = Modifier.requiredWidth(if (showIcon) 58.dp else 42.dp),
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        Text(
+                            text = String.format(Locale.US, "%.2f", normalizePlaybackSpeed(triggerDisplaySpeed)),
+                            color = highlightColor,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 18.sp,
+                            textAlign = TextAlign.End,
+                        )
+                        Text(
+                            text = "×",
+                            color = highlightColor.copy(alpha = 0.75f),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 14.sp,
+                        )
+                    }
                 }
             }
         }
@@ -3370,6 +3439,7 @@ private fun FullPlayerDock(
     onChevronLongPress: () -> Unit,
     onChevronSnap: (Float) -> Unit,
     onBackgroundTap: () -> Unit,
+    backgroundTapEnabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -3377,10 +3447,16 @@ private fun FullPlayerDock(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.Black)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onBackgroundTap,
+            .then(
+                if (backgroundTapEnabled) {
+                    Modifier.clickable(
+                        interactionSource = interactionSource,
+                        indication = null,
+                        onClick = onBackgroundTap,
+                    )
+                } else {
+                    Modifier
+                },
             ),
     ) {
         content()
@@ -3415,6 +3491,7 @@ private fun MinimalPlayerDock(
     onChevronLongPress: () -> Unit,
     onChevronSnap: (Float) -> Unit,
     onBackgroundTap: () -> Unit,
+    backgroundTapEnabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -3422,10 +3499,16 @@ private fun MinimalPlayerDock(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.Black)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onBackgroundTap,
+            .then(
+                if (backgroundTapEnabled) {
+                    Modifier.clickable(
+                        interactionSource = interactionSource,
+                        indication = null,
+                        onClick = onBackgroundTap,
+                    )
+                } else {
+                    Modifier
+                },
             ),
     ) {
         content()
@@ -3535,9 +3618,12 @@ private fun PlayerChromeChevron(
     modifier: Modifier = Modifier,
 ) {
     var dragAccumulation by remember { mutableFloatStateOf(0f) }
+    val shape = RoundedCornerShape(18.dp)
+    val highlightColor = MaterialTheme.colorScheme.primary
     Box(
         modifier = modifier
-            .size(40.dp)
+            .requiredWidth(COMPACT_CONTROL_CHIP_WIDTH)
+            .height(COMPACT_CONTROL_CHIP_HEIGHT)
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
                     onHorizontalDrag = { change, dragAmount ->
@@ -3557,10 +3643,8 @@ private fun PlayerChromeChevron(
                 onClick = onTap,
                 onLongClick = onLongPress,
             )
-            .background(
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.78f),
-                shape = CircleShape,
-            ),
+            .background(highlightColor.copy(alpha = 0.12f), shape)
+            .border(1.dp, highlightColor.copy(alpha = 0.38f), shape),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -3569,7 +3653,7 @@ private fun PlayerChromeChevron(
             modifier = Modifier
                 .size(24.dp)
                 .graphicsLayer(scaleX = if (pointLeft) -1f else 1f),
-            tint = MaterialTheme.colorScheme.onPrimary,
+            tint = highlightColor,
         )
     }
 }
@@ -3580,7 +3664,10 @@ private fun PlayerControlBar(
     progressPercent: Int,
     minimal: Boolean,
     nowPlayingTitle: String,
+    nowPlayingSourceLabel: String?,
     continuousMarquee: Boolean,
+    playbackSpeed: Float,
+    showSpeedPill: Boolean,
     onOpenLocusForItem: () -> Unit,
     canSeek: Boolean,
     canMoveBackward: Boolean,
@@ -3596,10 +3683,12 @@ private fun PlayerControlBar(
     onNextSegmentLongPress: () -> Unit,
     onPreviousItem: () -> Unit,
     onNextItem: () -> Unit,
+    onSpeedChange: (Float) -> Unit,
 ) {
     val sliderInteractionSource = remember { MutableInteractionSource() }
-    val controlPanelInteractionSource = remember { MutableInteractionSource() }
     val isDraggingSlider by sliderInteractionSource.collectIsDraggedAsState()
+    val controlSlotSize = if (!minimal && showSpeedPill) COMPACT_FULL_CONTROL_SLOT_SIZE else CONTROL_SLOT_SIZE
+    val controlGap = if (!minimal && showSpeedPill) COMPACT_FULL_CONTROL_GAP else CONTROL_CLUSTER_GAP
     var sliderValue by remember { mutableFloatStateOf(progressPercent.coerceIn(0, 100) / 100f) }
     LaunchedEffect(progressPercent, isDraggingSlider) {
         if (!isDraggingSlider) {
@@ -3607,13 +3696,7 @@ private fun PlayerControlBar(
         }
     }
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(
-                interactionSource = controlPanelInteractionSource,
-                indication = null,
-                onClick = onOpenLocusForItem,
-            ),
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         if (nowPlayingTitle.isNotBlank()) {
@@ -3635,7 +3718,7 @@ private fun PlayerControlBar(
                 Text(
                     text = nowPlayingTitle,
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1f, fill = true)
                         .basicMarquee(
                             iterations = if (continuousMarquee) Int.MAX_VALUE else 1,
                             initialDelayMillis = 3_000,
@@ -3648,6 +3731,18 @@ private fun PlayerControlBar(
                         fontSize = (MaterialTheme.typography.labelMedium.fontSize.value + 1f).sp,
                     ),
                 )
+                if (!nowPlayingSourceLabel.isNullOrBlank()) {
+                    Text(
+                        text = nowPlayingSourceLabel,
+                        modifier = Modifier.padding(start = 8.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontStyle = FontStyle.Italic,
+                            color = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                }
             }
         }
         if (!minimal) {
@@ -3683,27 +3778,40 @@ private fun PlayerControlBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = CHEVRON_RESERVED_SPACE, end = CHEVRON_RESERVED_SPACE)
+                .padding(
+                    start = if (!minimal && showSpeedPill) 4.dp else CHEVRON_RESERVED_SPACE,
+                    end = CHEVRON_RESERVED_SPACE,
+                )
                 .height(PLAYER_TRANSPORT_ROW_HEIGHT)
                 .padding(vertical = 0.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
+            if (!minimal && showSpeedPill) {
+                SpeedControlButton(
+                    speed = playbackSpeed,
+                    onSpeedChange = onSpeedChange,
+                    showIcon = false,
+                    compact = true,
+                    contentDescription = "Playback speed: ${formatPlaybackSpeed(playbackSpeed)}. Tap to change.",
+                )
+                Spacer(modifier = Modifier.width(controlGap))
+            }
             if (!minimal) {
-                IconButton(onClick = onPreviousItem, modifier = Modifier.size(CONTROL_SLOT_SIZE)) {
+                IconButton(onClick = onPreviousItem, modifier = Modifier.size(controlSlotSize)) {
                     Icon(
                         painter = painterResource(id = R.drawable.msr_skip_previous_24),
                         contentDescription = "Previous item",
                         modifier = Modifier.size(24.dp),
                     )
                 }
-            } else {
-                Spacer(modifier = Modifier.size(CONTROL_SLOT_SIZE))
+            } else if (!showSpeedPill) {
+                Spacer(modifier = Modifier.size(controlSlotSize))
             }
-            Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
+            Spacer(modifier = Modifier.width(controlGap))
             Box(
                 modifier = Modifier
-                    .size(CONTROL_SLOT_SIZE)
+                    .size(controlSlotSize)
                     .combinedClickable(
                         enabled = canMoveBackward,
                         onClick = onPreviousSegment,
@@ -3717,10 +3825,10 @@ private fun PlayerControlBar(
                     modifier = Modifier.size(24.dp),
                 )
             }
-            Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
+            Spacer(modifier = Modifier.width(controlGap))
             Box(
                 modifier = Modifier
-                    .size(CONTROL_SLOT_SIZE)
+                    .size(controlSlotSize)
                     .combinedClickable(
                         enabled = canPlay,
                         onClick = onPlayPause,
@@ -3733,13 +3841,13 @@ private fun PlayerControlBar(
                         id = if (isPlaying) R.drawable.msr_pause_24 else R.drawable.msr_play_arrow_24,
                     ),
                     contentDescription = if (isPlaying) "Pause playback" else "Play",
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(if (!minimal && showSpeedPill) 30.dp else 32.dp),
                 )
             }
-            Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
+            Spacer(modifier = Modifier.width(controlGap))
             Box(
                 modifier = Modifier
-                    .size(CONTROL_SLOT_SIZE)
+                    .size(controlSlotSize)
                     .combinedClickable(
                         enabled = canMoveForward,
                         onClick = onNextSegment,
@@ -3753,17 +3861,17 @@ private fun PlayerControlBar(
                     modifier = Modifier.size(24.dp),
                 )
             }
-            Spacer(modifier = Modifier.width(CONTROL_CLUSTER_GAP))
+            Spacer(modifier = Modifier.width(controlGap))
             if (!minimal) {
-                IconButton(onClick = onNextItem, modifier = Modifier.size(CONTROL_SLOT_SIZE)) {
+                IconButton(onClick = onNextItem, modifier = Modifier.size(controlSlotSize)) {
                     Icon(
                         painter = painterResource(id = R.drawable.msr_skip_next_24),
                         contentDescription = "Next item",
                         modifier = Modifier.size(24.dp),
                     )
                 }
-            } else {
-                Spacer(modifier = Modifier.size(CONTROL_SLOT_SIZE))
+            } else if (!showSpeedPill) {
+                Spacer(modifier = Modifier.size(controlSlotSize))
             }
         }
     }
