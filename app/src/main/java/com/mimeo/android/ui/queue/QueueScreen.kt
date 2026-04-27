@@ -284,6 +284,11 @@ fun QueueScreen(
     var showReseedConfirmation by remember { mutableStateOf(false) }
     var showClearUpcomingConfirmation by remember { mutableStateOf(false) }
     var showClearAllSessionConfirmation by remember { mutableStateOf(false) }
+    var showSaveQueueAsPlaylistDialog by remember { mutableStateOf(false) }
+    var saveQueuePlaylistNameInput by rememberSaveable { mutableStateOf("") }
+    var saveQueueNameError by remember { mutableStateOf<String?>(null) }
+    var saveQueueInProgress by remember { mutableStateOf(false) }
+    val saveQueueNameFocusRequester = remember { FocusRequester() }
     var showPendingSavesHub by remember { mutableStateOf(false) }
     var pendingHubStatusMessage by remember { mutableStateOf<String?>(null) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
@@ -313,6 +318,7 @@ fun QueueScreen(
         playlists.firstOrNull { it.id == id }?.name
     } ?: "Smart queue"
     val canReseedFromCurrentSource = !loading
+    val hasQueueContent = nowPlayingSession?.currentItem != null
     val sessionSeedPresentation = nowPlayingSession?.let { session ->
         resolveSessionSeedSourcePresentation(
             sessionSourcePlaylistId = session.sourcePlaylistId,
@@ -526,6 +532,16 @@ fun QueueScreen(
                                         onClick = {
                                             topActionsMenuExpanded = false
                                             showClearAllSessionConfirmation = true
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Save queue as playlist…") },
+                                        enabled = hasQueueContent && !saveQueueInProgress,
+                                        onClick = {
+                                            topActionsMenuExpanded = false
+                                            saveQueuePlaylistNameInput = ""
+                                            saveQueueNameError = null
+                                            showSaveQueueAsPlaylistDialog = true
                                         },
                                     )
                                 }
@@ -811,6 +827,105 @@ fun QueueScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearAllSessionConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    // Save queue as playlist dialog
+    if (showSaveQueueAsPlaylistDialog) {
+        suspend fun executeSaveQueueAsPlaylist() {
+            val trimmedName = saveQueuePlaylistNameInput.trim()
+            if (trimmedName.isEmpty()) {
+                saveQueueNameError = "Enter a playlist name"
+                return
+            }
+            val session = nowPlayingSession ?: run {
+                showSaveQueueAsPlaylistDialog = false
+                return
+            }
+            val activeIdx = session.currentIndex.coerceIn(0, (session.items.size - 1).coerceAtLeast(0))
+            val itemIds = session.items.drop(activeIdx).map { it.itemId }
+            if (itemIds.isEmpty()) {
+                saveQueueNameError = "No items to save"
+                return
+            }
+            saveQueueInProgress = true
+            try {
+                val result = vm.saveQueueAsPlaylist(trimmedName, itemIds)
+                showSaveQueueAsPlaylistDialog = false
+                saveQueuePlaylistNameInput = ""
+                saveQueueNameError = null
+                result
+                    .onSuccess { playlistName ->
+                        onShowSnackbar(
+                            "Saved ${itemIds.size} item${if (itemIds.size == 1) "" else "s"} to “$playlistName”",
+                            null,
+                            null,
+                        )
+                    }
+                    .onFailure { error ->
+                        onShowSnackbar("Couldn't save playlist: ${error.message}", null, null)
+                    }
+            } finally {
+                saveQueueInProgress = false
+            }
+        }
+
+        LaunchedEffect(showSaveQueueAsPlaylistDialog) {
+            if (showSaveQueueAsPlaylistDialog) saveQueueNameFocusRequester.requestFocus()
+        }
+
+        AlertDialog(
+            onDismissRequest = {
+                if (!saveQueueInProgress) {
+                    showSaveQueueAsPlaylistDialog = false
+                    saveQueueNameError = null
+                }
+            },
+            title = { Text("Save queue as playlist…") },
+            text = {
+                OutlinedTextField(
+                    value = saveQueuePlaylistNameInput,
+                    onValueChange = {
+                        saveQueuePlaylistNameInput = it
+                        saveQueueNameError = null
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(saveQueueNameFocusRequester),
+                    singleLine = true,
+                    enabled = !saveQueueInProgress,
+                    label = { Text("Playlist name") },
+                    isError = saveQueueNameError != null,
+                    supportingText = { saveQueueNameError?.let { Text(it) } },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (saveQueuePlaylistNameInput.isNotBlank() && !saveQueueInProgress) {
+                                actionScope.launch { executeSaveQueueAsPlaylist() }
+                            }
+                        },
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = saveQueuePlaylistNameInput.isNotBlank() && !saveQueueInProgress,
+                    onClick = { actionScope.launch { executeSaveQueueAsPlaylist() } },
+                ) {
+                    Text(if (saveQueueInProgress) "Saving…" else "Save")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !saveQueueInProgress,
+                    onClick = {
+                        showSaveQueueAsPlaylistDialog = false
+                        saveQueueNameError = null
+                    },
+                ) {
                     Text("Cancel")
                 }
             },

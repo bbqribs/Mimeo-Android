@@ -2634,6 +2634,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    suspend fun saveQueueAsPlaylist(name: String, itemIds: List<Int>): Result<String> {
+        val current = settings.value
+        if (current.apiToken.isBlank()) return Result.failure(IllegalStateException("Token required"))
+        return try {
+            val created = repository.createPlaylist(current.baseUrl, current.apiToken, name.trim())
+            _playlists.update { listOf(created) + it.filterNot { existing -> existing.id == created.id } }
+            if (itemIds.isNotEmpty()) {
+                repository.batchAddItemsToPlaylist(current.baseUrl, current.apiToken, created.id, itemIds)
+            }
+            Result.success(created.name)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     fun renamePlaylist(playlistId: Int, name: String) {
         val current = settings.value
         if (current.apiToken.isBlank()) {
