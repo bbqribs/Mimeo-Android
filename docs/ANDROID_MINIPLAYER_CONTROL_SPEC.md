@@ -1,9 +1,9 @@
 # Android Mini-player Control Spec
 
-**Status:** Design-only. Authoritative for mini-player polish implementation.
+**Status:** Spec shipped (mini-player v1 merged, 2026-04-27).
 **Date:** 2026-04-27
 **Scope:** Mini-player layout, controls, semantics, and persistence rules.
-Covers the post-redesign two-row layout with always-visible speed pill.
+Covers the shipped post-redesign two-row layout with always-visible speed pill.
 Does not authorize code changes by itself.
 
 **References:**
@@ -13,6 +13,21 @@ Does not authorize code changes by itself.
 - `docs/ANDROID_QUEUE_ACTIONS_PATTERN_SPEC.md` (queue action grammar)
 
 ---
+
+## Shipped Implementation Summary
+
+Mini-player v1 shipped with:
+
+- Two-row/decompressed layout.
+- Title/source row separated from playback controls.
+- Always-visible speed chip.
+- Single consolidated stateful play/pause preserved.
+- Short-press sentence-level rewind/forward preserved.
+- Long-press paragraph rewind/forward preserved.
+- Chevron drawer behavior and non-Locus persistence preserved.
+
+Time-based skip, icon-set changes, Locus bridge chip, and Up Next history
+remain deferred.
 
 ## 1. Purpose and status
 
@@ -29,10 +44,9 @@ model and must remain compact but not cramped.
 - Persistent on non-Locus routes.
 - Chevron preserved (opens drawer).
 
-**Current implementation gaps (as of 2026-04-27):**
-- Single-row layout — too cramped (operator-rejected, completion plan §3).
-- Speed control absent from mini-player entirely.
-- Icon/label treatment does not yet clarify sentence-level semantics.
+**Shipped state (as of 2026-04-27):** the v1 implementation matches the
+confirmed direction above. Remaining gaps are deferred design/product
+items, not blockers for the shipped mini-player v1.
 
 ---
 
@@ -221,21 +235,21 @@ ticket's preservation checklist (per REDESIGN_COMPLETION_PLAN.md §9).
 
 ---
 
-## 7. Implementation slice recommendation
+## 7. Implementation status
 
-**One bounded ticket:** Mini-player two-row layout + always-visible speed
-pill + clarified sentence-jump a11y labels.
+**Shipped bounded ticket:** Mini-player two-row layout +
+always-visible speed pill + clarified sentence-jump a11y labels.
 
 **Scope:**
-- Expand the mini-player dock from single-row to two-row layout.
-- Add a speed pill to the controls row, always visible, reactive to
-  current speed state.
-- Preserve all five §5 contract behaviors explicitly in the
-  implementation checklist.
-- Verify a11y labels on Rewind and Forward match §4.2.
-- Verify speed pill a11y label.
-- Verify chevron opens drawer after layout refactor.
-- Verify NUB mode renders correctly in the two-row structure.
+- Two-row mini-player dock.
+- Always-visible speed pill in the controls row, reactive to current
+  speed state.
+- §5 contract behaviors preserved.
+- Rewind/Forward a11y labels match §4.2.
+- Speed pill a11y label present.
+- Chevron opens drawer after layout refactor.
+- NUB mode remains in scope for manual verification after future chrome
+  changes.
 
 **Explicitly out of scope for this ticket:**
 - Time-based ff/rw skip.
@@ -245,10 +259,9 @@ pill + clarified sentence-jump a11y labels.
 - Up Next history or snap-to-active affordance.
 - Auto-hide of any mini-player chrome.
 
-**Estimated risk:** Low. The control logic is unchanged. The layout change
-is additive (splitting one row into two). The speed pill connects to an
-existing ViewModel state value; the UI surface for speed selection already
-exists in the Locus top bar and can be reused or referenced.
+**Residual risk:** Low. The control logic is unchanged; future work should
+avoid changing sentence/paragraph semantics accidentally while revisiting
+icons or time-based skip.
 
 **References for implementation ticket:**
 - `docs/ANDROID_MINIPLAYER_CONTROL_SPEC.md` (this doc)
@@ -277,5 +290,4 @@ Confirm:
 - §5 preservation contract matches §4.6 of the completion plan.
 - §6 unresolved items carry forward all genuinely open questions without
   resolving them prematurely.
-- §7 implementation slice is bounded and does not creep into deferred
-  surfaces.
+- §7 records shipped scope and does not creep into deferred surfaces.
