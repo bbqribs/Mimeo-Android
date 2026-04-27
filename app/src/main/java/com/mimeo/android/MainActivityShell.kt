@@ -549,6 +549,7 @@ internal fun MainActivityShell(
                                     sortOption = binSort,
                                     availableSorts = LibrarySortOption.BIN_SORTS,
                                     searchQuery = binSearchQuery,
+                                    isBin = true,
                                     batchActions = listOf(
                                         LibraryBatchAction("Restore", Icons.Default.Restore, "restore"),
                                     ),

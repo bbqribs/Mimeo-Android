@@ -68,6 +68,48 @@ import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.playlists.BatchPlaylistPickerDialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeParseException
+
+private sealed interface LibraryListEntry {
+    data class Header(val label: String, val key: String) : LibraryListEntry
+    data class Item(val item: PlaybackQueueItem) : LibraryListEntry
+}
+
+private fun dateBucketLabel(createdAt: String?, today: LocalDate): String {
+    val date = parseCreatedAtDate(createdAt) ?: return "Older"
+    val thisWeekMonday = today.with(DayOfWeek.MONDAY)
+    val lastMonth = today.minusMonths(1)
+    return when {
+        date == today -> "Today"
+        date == today.minusDays(1) -> "Yesterday"
+        !date.isBefore(thisWeekMonday) -> "This Week"
+        date.year == today.year && date.month == today.month -> "This Month"
+        date.year == lastMonth.year && date.month == lastMonth.month -> "Last Month"
+        else -> "Older"
+    }
+}
+
+private fun parseCreatedAtDate(createdAt: String?): LocalDate? {
+    val value = createdAt?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val zone = ZoneId.systemDefault()
+    return parseDateOrNull { Instant.parse(value).atZone(zone).toLocalDate() }
+        ?: parseDateOrNull { OffsetDateTime.parse(value).atZoneSameInstant(zone).toLocalDate() }
+        ?: parseDateOrNull { LocalDateTime.parse(value).atZone(zone).toLocalDate() }
+        ?: parseDateOrNull { LocalDate.parse(value) }
+}
+
+private inline fun parseDateOrNull(parse: () -> LocalDate): LocalDate? =
+    try {
+        parse()
+    } catch (_: DateTimeParseException) {
+        null
+    }
 
 data class LibraryBatchAction(
     val label: String,
@@ -87,6 +129,7 @@ fun LibraryItemsScreen(
     availableSorts: List<LibrarySortOption> = LibrarySortOption.entries,
     searchQuery: String,
     isInbox: Boolean = false,
+    isBin: Boolean = false,
     batchActions: List<LibraryBatchAction> = emptyList(),
     playlists: List<PlaylistSummary> = emptyList(),
     onBatchAddToPlaylist: ((playlistId: Int, playlistName: String, itemIds: Set<Int>) -> Unit)? = null,
@@ -172,6 +215,27 @@ fun LibraryItemsScreen(
 
     val pendingItems = if (isInbox) sortedItems.filter { it.status in PENDING_STATUSES } else emptyList()
     val readyItems = if (isInbox) sortedItems.filter { it.status !in PENDING_STATUSES } else sortedItems
+
+    val sectionedReadyItems: List<LibraryListEntry> = remember(readyItems, sortOption, searchQuery, isBin) {
+        if (isBin || sortOption != LibrarySortOption.NEWEST || searchQuery.isNotBlank()) {
+            readyItems.map { LibraryListEntry.Item(it) }
+        } else {
+            val today = LocalDate.now()
+            var lastBucket: String? = null
+            var headerIndex = 0
+            buildList {
+                readyItems.forEach { item ->
+                    val bucket = dateBucketLabel(item.createdAt, today)
+                    if (bucket != lastBucket) {
+                        add(LibraryListEntry.Header(label = bucket, key = "section_header_${headerIndex}_$bucket"))
+                        headerIndex += 1
+                        lastBucket = bucket
+                    }
+                    add(LibraryListEntry.Item(item))
+                }
+            }
+        }
+    }
 
     ListSurfaceScaffold(
         modifier = Modifier.fillMaxWidth(),
@@ -366,23 +430,42 @@ fun LibraryItemsScreen(
                 }
             }
 
-            // Ready / main items
-            items(items = readyItems, key = { it.itemId }) { item ->
-                LibraryQueueItemRow(
-                    item = item,
-                    isSelectionActive = selectionActive,
-                    isSelected = item.itemId in selectedIds,
-                    onOpen = { onOpenItem(item.itemId) },
-                    onToggleSelect = { toggleSelection(item.itemId) },
-                    onEnterSelection = { enterSelectionMode(item.itemId) },
-                    onPlayNow = onPlayNow?.let { cb -> { cb(item.itemId) } },
-                    onPlayNext = onPlayNext?.let { cb -> { cb(item.itemId) } },
-                    onPlayLast = onPlayLast?.let { cb -> { cb(item.itemId) } },
-                )
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
-                )
+            // Ready / main items — with optional date section headers for NEWEST sort.
+            items(
+                items = sectionedReadyItems,
+                key = { entry ->
+                    when (entry) {
+                        is LibraryListEntry.Header -> entry.key
+                        is LibraryListEntry.Item -> entry.item.itemId
+                    }
+                },
+                contentType = { entry ->
+                    when (entry) {
+                        is LibraryListEntry.Header -> "header"
+                        is LibraryListEntry.Item -> "item"
+                    }
+                },
+            ) { entry ->
+                when (entry) {
+                    is LibraryListEntry.Header -> DateSectionHeader(label = entry.label)
+                    is LibraryListEntry.Item -> {
+                        LibraryQueueItemRow(
+                            item = entry.item,
+                            isSelectionActive = selectionActive,
+                            isSelected = entry.item.itemId in selectedIds,
+                            onOpen = { onOpenItem(entry.item.itemId) },
+                            onToggleSelect = { toggleSelection(entry.item.itemId) },
+                            onEnterSelection = { enterSelectionMode(entry.item.itemId) },
+                            onPlayNow = onPlayNow?.let { cb -> { cb(entry.item.itemId) } },
+                            onPlayNext = onPlayNext?.let { cb -> { cb(entry.item.itemId) } },
+                            onPlayLast = onPlayLast?.let { cb -> { cb(entry.item.itemId) } },
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                        )
+                    }
+                }
             }
         }
     }
@@ -448,6 +531,18 @@ private fun PendingSectionHeader(
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+@Composable
+private fun DateSectionHeader(label: String) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    )
 }
 
 @Composable
