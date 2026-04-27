@@ -309,14 +309,16 @@ operator should resolve it before opening the implementation ticket.
    `docs/ANDROID_MINIPLAYER_CONTROL_SPEC.md`.
 
 5. **B2 — Up Next history / Clear upcoming / snap-to-active layout
-   spec.**
-   Decision input: history-row tap behavior was decided (anchored).
-   Output: a layout spec covering the three regions, muted history
-   styling, anchor pill behavior, "Clear upcoming" placement near the
-   Upcoming header, "Clear all" overflow, history non-selectability /
-   non-draggability, and the optional first-run hint lifecycle. Does
-   not include history persistence (deferred — see §6.2).
-   References: §2 Up Next row, §4.3, §5 decisions.
+   spec.** *(Written 2026-04-27)*
+   `docs/ANDROID_UP_NEXT_LAYOUT_SPEC.md` is ready to cite from the
+   implementation ticket. It covers the three regions, muted/deferred
+   history, active anchor behavior, anchor pill behavior, "Clear
+   upcoming" placement near the Upcoming header, "Clear all" overflow,
+   history non-selectability / non-draggability, Save queue as playlist
+   placement, and the optional first-run hint. It does not include
+   history persistence (deferred — see §6.2).
+   References: §2 Up Next row, §4.3, §5 decisions,
+   `docs/ANDROID_UP_NEXT_LAYOUT_SPEC.md`.
 
 6. **B3 — Locus/player integration spike.**
    Pure design / writing. Operator drives. Goal: produce a plain-English
