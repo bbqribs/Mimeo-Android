@@ -45,8 +45,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -58,6 +58,7 @@ import androidx.navigation.navArgument
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.PlayerChevronSnapEdge
+import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.library.LibraryBatchAction
@@ -66,6 +67,7 @@ import com.mimeo.android.ui.library.LibrarySortOption
 import com.mimeo.android.ui.player.MiniPlayer
 import com.mimeo.android.ui.player.PlayerScreen
 import com.mimeo.android.ui.playlists.PlaylistDetailScreen
+import com.mimeo.android.ui.queue.JumpToNowPlayingPill
 import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
 import com.mimeo.android.ui.settings.SettingsScreen
@@ -82,6 +84,20 @@ private data class PlayerRouteHandlers(
     val onChevronSnapChange: (PlayerChevronSnapEdge) -> Unit,
     val onChevronTap: () -> Unit,
 )
+
+private fun snapToActiveBottomClearance(
+    showMiniPlayer: Boolean,
+    controlsMode: PlayerControlsMode,
+    shellBottomClearance: Dp,
+): Dp {
+    if (!showMiniPlayer) return 0.dp
+    val playerPanelHeight = when (controlsMode) {
+        PlayerControlsMode.FULL -> 96.dp
+        PlayerControlsMode.MINIMAL -> 72.dp
+        PlayerControlsMode.NUB -> 1.dp
+    }
+    return playerPanelHeight + shellBottomClearance
+}
 
 @Composable
 internal fun MainActivityShell(
@@ -126,10 +142,13 @@ internal fun MainActivityShell(
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var upNextTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var playerOpenRequestSignal by rememberSaveable { mutableIntStateOf(0) }
+    var snapToActiveSignal by rememberSaveable { mutableIntStateOf(0) }
+    var showUpNextSnapPill by remember { mutableStateOf(false) }
     var offlineBannerVisible by rememberSaveable { mutableStateOf(false) }
 
     val selectedDrawerRoute = resolveSelectedDrawerRoute(currentRoute)
     val isOnLocusRoute = currentRoute.startsWith(ROUTE_LOCUS)
+    val isOnUpNextRoute = currentRoute.startsWith(ROUTE_UP_NEXT)
     val presentingLocus = isOnLocusRoute
     val drawerAvailable = !requiresSignIn
     val requestedPlayerItemId = shellState.requestedPlayerItemId
@@ -143,6 +162,11 @@ internal fun MainActivityShell(
         else -> 16.dp
     }
     val shellBottomClearance = 12.dp
+    val snapBottomClearance = snapToActiveBottomClearance(
+        showMiniPlayer = showMiniPlayer,
+        controlsMode = settings.playerControlsMode,
+        shellBottomClearance = shellBottomClearance,
+    )
     val baseUrlHint = vm.baseUrlHintForDevice(isLikelyPhysicalDevice())
     val baseAddress = settings.baseUrl.trim().removePrefix("http://").removePrefix("https://")
     val statusLooksError = statusMessage?.let { message ->
@@ -153,6 +177,12 @@ internal fun MainActivityShell(
             lower.contains("forbidden") ||
             lower.contains("timeout")
     } ?: false
+
+    LaunchedEffect(isOnUpNextRoute) {
+        if (!isOnUpNextRoute) {
+            showUpNextSnapPill = false
+        }
+    }
 
     LaunchedEffect(queueOffline) {
         if (!queueOffline) {
@@ -599,6 +629,10 @@ internal fun MainActivityShell(
                                     onShowSnackbar = playerHandlers.onShowSnackbar,
                                     focusItemId = focusItemId,
                                     upNextTabTapSignal = upNextTabTapSignal,
+                                    snapToActiveSignal = snapToActiveSignal,
+                                    snapBottomClearance = snapBottomClearance,
+                                    renderSnapPillLocally = !showMiniPlayer,
+                                    onSnapPillVisibilityChange = { showUpNextSnapPill = it },
                                     onOpenPlayer = shellState.openItemInLocus,
                                     onOpenDiagnostics = playerHandlers.onOpenDiagnostics,
                                 )
@@ -661,6 +695,14 @@ internal fun MainActivityShell(
                                         .background(Color.Black),
                                 )
                             }
+                        }
+                        if (showMiniPlayer && isOnUpNextRoute && showUpNextSnapPill) {
+                            JumpToNowPlayingPill(
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(bottom = snapBottomClearance),
+                                onClick = { snapToActiveSignal += 1 },
+                            )
                         }
                     }
                 }
