@@ -4,7 +4,7 @@ Source of truth for redesign scope: `docs/REDESIGN_V2_PLAN.md`.
 Drift guard: `docs/REDESIGN_V2_DECISION_SNAPSHOT.md`.
 Most recent audit: `docs/REDESIGN_V2_AUDIT_2026-04-21.md`.
 Redesign completion plan (post-shipped-redesign forward sequence): `docs/REDESIGN_COMPLETION_PLAN.md`.
-Mini-player control spec for the next polish implementation ticket: `docs/ANDROID_MINIPLAYER_CONTROL_SPEC.md`.
+Mini-player control spec (v1 shipped; time-based skip deferred): `docs/ANDROID_MINIPLAYER_CONTROL_SPEC.md`.
 Up Next layout spec for history / active / upcoming / snap-to-active: `docs/ANDROID_UP_NEXT_LAYOUT_SPEC.md`.
 Post-redesign product model planning (canonical in Mimeo): `C:\Users\brend\Documents\Coding\Mimeo\docs\planning\PRODUCT_MODEL_POST_REDESIGN.md` (Android pointer: `docs/planning/PRODUCT_MODEL_POST_REDESIGN.md`).
 Workflow + transition guidance: `docs/planning/AGENT_WORKFLOW.md` and `docs/planning/PROJECT_HANDOFF.md`.
@@ -109,6 +109,18 @@ block. Not a forward-looking list.
   playlist from Up Next overflow (saves active item + upcoming items in
   session order; hidden pre-active/history rows excluded). No backend or
   API contract changes.
+- Mini-player v1 (2026-04-27): two-row/decompressed controls with
+  title/source separated from playback controls; always-visible speed
+  chip; consolidated play/pause preserved; sentence-level ff/rw and
+  long-press paragraph jumps preserved. Time-based skip remains deferred.
+- Playlist/library queue-action polish (2026-04-27): playlist row tap
+  opens Locus only; library batch Add Selected to Up Next shipped;
+  library Play Now shipped as non-destructive insert-and-play; playlist
+  batch queue placement chooser shipped with Play Next and Play Last /
+  Add to bottom, preserving selected items in visible playlist order.
+- Locus/player spike (2026-04-27): resolved that Locus is the full
+  player. No separate full-player route or Player Queue surface is
+  planned. Optional small Locus bridge chip remains deferred.
 - Phase 6A: device-local session queue substrate — remove-from-session
   per row, clear-session button, duplicate-move semantics for Play
   Next / Play Last, `From: [playlist]` seed-source label, snackbar

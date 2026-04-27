@@ -44,9 +44,11 @@ privacy controls, backend contracts, or cross-device sync.
   - `app/src/main/java/com/mimeo/android/ui/queue/QueueScreen.kt`
   - `app/src/main/java/com/mimeo/android/AppViewModel.kt`
 
-## 3. Current Behavior Summary
+## 3. Pre-slice Behavior Summary
 
-Current Up Next is a session-first screen with a flat session list.
+Before slices 1-3 shipped, Up Next was a session-first screen with a
+flat session list. This section is retained as historical context for
+why the shipped layout changed.
 
 | Area | Current behavior |
 |---|---|
@@ -260,27 +262,21 @@ The hint is optional for the first implementation slice.
 | Save queue as playlist | Up Next overflow/action area | Must not appear on ordinary row overflow. |
 | Snap to active | Floating anchor pill | Must not change playback/session state. |
 
-## 14. First Implementation Slice Recommendation
+## 14. Shipped Implementation Slices
 
-Recommended first bounded slice:
+The first bounded implementation slices have shipped:
 
-1. Introduce visual region scaffolding around the current session model.
-2. Render the active item as the prominent Now Playing anchor.
-3. Render only items after the active index as Upcoming for reorder/remove.
-4. Keep History hidden until persistence exists, unless current-session
-   pre-active rows can be rendered safely as non-draggable history.
-5. Add snap-to-active.
-6. Add Clear upcoming only if the existing session model can remove all
-   upcoming rows without changing active/history semantics. Otherwise keep
-   it specified but defer implementation.
-7. Keep Clear all session in overflow/contextual destructive placement.
-8. Add Save queue as playlist from Up Next overflow/action area only if
-   the playlist-save implementation ticket is in scope; otherwise leave the
-   placement specified for that ticket.
+1. Visual region scaffolding around the current session model.
+2. Active item rendered as the prominent Now Playing anchor.
+3. Items after the active index rendered as Upcoming for reorder/remove.
+4. History kept hidden until persistence exists.
+5. Snap-to-active pill.
+6. Clear upcoming.
+7. Clear all session in overflow/contextual destructive placement.
+8. Save queue as playlist from Up Next overflow/action area.
 
-Do not implement persisted history, retention/privacy controls, backend
-contracts, cross-device sync, or history-row queue actions in this first
-slice.
+Persisted history, retention/privacy controls, backend contracts,
+cross-device sync, and history-row queue actions remain deferred.
 
 ## 15. Stop Conditions for Implementation Tickets
 

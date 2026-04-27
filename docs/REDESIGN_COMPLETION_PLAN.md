@@ -1,6 +1,6 @@
 # Android redesign completion plan
 
-**Status:** Planning. Authoritative for the next round of redesign tickets.
+**Status:** Planning checkpoint. Authoritative for the next round of redesign tickets.
 This doc translates the Claude Design explorations and the behavior
 reconciliation into a bounded execution sequence.
 **Date:** 2026-04-25
@@ -36,18 +36,18 @@ playlists with reorder, and a device-local Up Next session substrate.
 Phases 0–6 of `REDESIGN_V2_PLAN.md` are functionally closed, with
 cross-device Up Next sync explicitly deferred.
 
-What is **design-informed but not implemented** is the post-redesign
-product model layer on top of that scaffolding: a three-region Up Next
-(history / active / upcoming), Sectioned Library, mini-player polish
-(consolidated play/pause + speed reachable + ff/rw), Save queue as
-playlist, smart playlists, and the Bluesky harvester surface. The
-Claude Design wireframes and the operator's reconciliation feedback
-have given us a defensible direction for most of these surfaces, with a
-small set of unresolved decisions called out below.
+Recent redesign slices have now shipped on top of that scaffolding:
+three-region Up Next scaffolding for active/upcoming, snap-to-active,
+Clear upcoming, Clear all session, Save queue as playlist, mini-player
+v1, playlist tap-to-Locus, library Add Selected to Up Next, library Play
+Now, and playlist batch queue placement. Remaining product-model work is
+Sectioned Library, persisted history, smart playlists, and the Bluesky
+harvester surface.
 
-What is **still unsettled** is the Locus/player bridge, full-player
-necessity, history-row interaction beyond "current/anchored," mini-player
-icon/visual treatment details, and history retention/privacy controls.
+What is **still unsettled or deferred** is history retention/privacy
+controls, history-row queue actions, the Sectioned Library grouping
+policy, smart-playlist pin behavior, Bluesky representation, optional
+Locus bridge chip implementation, and time-based skip.
 
 Why the redesign should continue as **smaller bounded tickets** rather
 than one large UI rewrite:
@@ -68,13 +68,13 @@ than one large UI rewrite:
 
 ## 2. Accepted direction by surface
 
-| Surface | Accepted direction | Why | Current implementation gap | Risk if implemented naively |
+| Surface | Accepted direction | Why | Shipped state / remaining gap | Risk if implemented naively |
 |---|---|---|---|---|
 | **Up Next** | Wireframe 1 Conservative Up Next: muted history above, prominent active anchor in middle (not draggable), upcoming with drag handles below; Clear upcoming near the Upcoming section header; Clear all in overflow/contextual destructive area; floating anchor pill for snap-to-active. | Matches product model three-region structure. Comfortable density preserves long-queue ergonomics. Anchor pill is non-modal and operator-preferred. | **Slices 1–3 shipped (2026-04-27):** Active/upcoming scaffolding, active anchor (not draggable), history hidden, snap-to-active pill, Clear upcoming near Upcoming header, Clear all session in overflow, Save queue as playlist in overflow (saves active + upcoming only; history excluded). Remaining gap: history region display and history persistence (deferred). | History rows might become accidentally selectable, draggable, or refresh-clearable if history display is later introduced without following the spec rules. |
-| **Mini-player** | Decompressed two-row (or otherwise multi-row) layout. Title/source on top row separated from playback controls. Always-visible speed pill. Single consolidated stateful play/pause. Rewind and fast-forward remain sentence-level for v1, with long-press paragraph jumps recorded. Persistent on non-Locus routes. Chevron continues to open drawer. | Current single-row dock is too cramped for both readability and reachability. Operator feedback explicitly rejects compressing speed into long-press or hidden affordances. The new mini-player control spec records the current sentence/paragraph behavior without changing playback semantics. | Today's mini-player has no speed control at all; play/pause is consolidated; ff/rw exist as sentence jumps; layout is single-row. | Compressing the new layout to fit the existing dock height would re-create the cramped problem. Icon/visual treatment can be refined during implementation, but must not imply time-based skip semantics. |
-| **Locus / player** | Reader remains primary. Mini-player docks below reader (already shipped). Speed must remain reachable even with auto-hiding top bar. Bridge between Locus and Up Next active item is unresolved and **not implementation-ready**. | Operator cannot yet explain the Locus/player bridge in plain English; deferring avoids accidental commitment to a confusing model. | No "Save queue as playlist" in Locus overflow; no explicit bridge affordance when reader item = active session item. | A premature bridge UI could re-introduce the "Player Queue as separate surface" concept that the operator has already rejected. |
-| **Library** | Sectioned Library. Shared row anatomy from list layout spec. Date or logical section headers. Visible overflow. "Add Selected to Up Next" added to batch bar. "Play Now" added to row overflow. | Sectioning is the operator-preferred direction; row grammar is shared with playlist/smart-playlist surfaces. "Add Selected to Up Next" parity with playlist detail is explicit in the queue actions spec. | "Add Selected to Up Next" missing from library batch bar; "Play Now" missing from row overflow; sectioning policy not yet decided (date / source / read-state). | Adding a visible play button on the row face would violate the "tap is read; explicit is queue" rule. Pull-to-refresh that auto-re-seeds would violate the no-auto-reseed rule. |
-| **Manual playlist** | Conservative Playlist. Manual order visible. Drag handles on every row. Tap → Locus only (must not implicitly start a session, which today's code can do). Row overflow: Play Now / Play Next / Play Last / Move to top / Move to bottom / Remove. Undo on remove is preserved. | Manual order is the playlist's identity. Implicit session-start on tap blurs the "tap is read" rule. | Tap currently can call `vm.startNowPlayingSession(...)`; "Play Now" missing; otherwise close to spec. | Splitting tap from session-start touches `onOpenPlayer` plumbing; care needed to avoid breaking the active-item highlight. |
+| **Mini-player** | Decompressed two-row layout. Title/source on top row separated from playback controls. Always-visible speed pill. Single consolidated stateful play/pause. Rewind and fast-forward remain sentence-level for v1, with long-press paragraph jumps recorded. Persistent on non-Locus routes. Chevron continues to open drawer. | Shipped mini-player v1 resolves the cramped single-row / no-speed-control gap while preserving playback semantics. | Shipped (2026-04-27). Remaining deferred work: time-based skip, icon-set rethink, and any future Locus speed/chrome follow-up. | Future icon or skip changes could accidentally imply time-based semantics; keep labels aligned with sentence/paragraph behavior unless a new ticket changes it. |
+| **Locus / player** | Reader remains primary. Locus is the full player. Mini-player is hidden on Locus and docks only on non-Locus routes. Optional bridge chip may indicate "Now playing" when reader item differs from active session item. | B3 spike resolved the model without a separate full-player route or Player Queue surface. | Structural player work resolved. Optional bridge chip deferred. | A premature bridge UI could re-introduce the "Player Queue as separate surface" concept that the operator has already rejected. |
+| **Library** | Sectioned Library. Shared row anatomy from list layout spec. Date or logical section headers. Visible overflow. "Add Selected to Up Next" added to batch bar. "Play Now" added to row overflow. | Sectioning is the operator-preferred direction; row grammar is shared with playlist/smart-playlist surfaces. "Add Selected to Up Next" parity with playlist detail is explicit in the queue actions spec. | Add Selected to Up Next and Play Now shipped. Remaining gap: sectioning policy not yet decided (date / source / read-state). | Adding a visible play button on the row face would violate the "tap is read; explicit is queue" rule. Pull-to-refresh that auto-re-seeds would violate the no-auto-reseed rule. |
+| **Manual playlist** | Conservative Playlist. Manual order visible. Drag handles on every row. Tap -> Locus only. Row overflow/batch actions support explicit queue placement: Play Now / Play Next / Play Last or Add to bottom. Selected items preserve visible playlist order. Undo on remove is preserved. | Manual order is the playlist's identity. Explicit queue placement keeps "tap is read" separate from "queue this." | A1 tap correction and playlist batch placement chooser shipped. Remaining future work is ordinary playlist polish, not a known redesign blocker. | Future batch-bar refactors must preserve visible-order insertion and undo on remove. |
 | **Smart playlist** | Sectioned Smart Playlist. Filter summary header. Pinned section + live-matching section. Sort controls. Pin/unpin per row. Freeze as manual playlist as secondary. Smart playlist may seed Up Next via explicit action; never auto-mutates Up Next. | Aligns with product model Model B (saved filter + optional manual pin/order layer). Avoids smart playlist behaving as live Up Next. | Smart playlists are not yet implemented on Android. | Treating a smart playlist as Up Next continuity. Unclear archive/binned policy for pinned items. |
 | **Bluesky rolling surface** | Sectioned Bluesky. Harvester/config header above the list. Article rows use shared row grammar. Play Next / Play Last / Add Selected to Up Next available; Play Now and image-shaped rows out of v1. | Treat Bluesky as a smart-playlist-shaped surface fed by a harvester. Keeps the row grammar consistent and avoids special-casing. | Not implemented. | Auto-promotion to Up Next; thumbnail row treatment; cross-device sync UI — all already rejected. |
 | **Drawer / settings** | No structural change beyond what is already shipped. Chevron-opens-drawer is load-bearing. Hamburger button stays. Auto-hide of action bars (queue actions spec §6) requires a "disable auto-hide" setting before any auto-hide ships. | Drawer model is settled. Auto-hide is an accessibility hazard without an opt-out. | Auto-hide for action bars is not implemented; the disable-auto-hide setting is not yet present. | Implementing auto-hide for action bars without the disable-auto-hide setting violates the accessibility rule. |
@@ -101,7 +101,7 @@ operator decision.
 | Compressed single-row mini-player dock as-is | Mini-player | Operator: too cramped; speed not reachable; title/source/controls compete for one row. |
 | Speed control hidden behind long-press or auto-hiding chrome only | Mini-player, Locus | Operator: speed must be reachable. |
 | Separate competing play and pause buttons | Mini-player, Locus | Operator: one consolidated stateful control. |
-| Player Queue as a distinct surface before Locus/player spike | Locus, Up Next | Operator: bridge is unclear; do not commit to a Player Queue surface yet. |
+| Player Queue as a distinct surface | Locus, Up Next | B3 resolved that Locus is the full player and Up Next is the queue surface. No separate Player Queue route. |
 | Image/thumbnail row shape for Bluesky in v1 | Bluesky | Out of v1; row grammar stays consistent with library. |
 
 ---
@@ -118,8 +118,8 @@ silently is a regression. This list is referenced by every Lane 4 / Lane
 - Default tap on any **library** row (Inbox, Favorites, Archive, Bin)
   opens the item in **Locus**. Tap never mutates Up Next.
 - Default tap on any **playlist detail** row opens the item in Locus.
-  Tap must not implicitly start a now-playing session. (This is
-  currently violated in `PlaylistDetailScreen.kt`; see §7-A1.)
+  Tap must not implicitly start a now-playing session. A1 shipped this
+  correction.
 - Default tap on any **Up Next upcoming** row opens the item in Locus
   and resumes / seeds playback per existing semantics.
 - Default tap on **Bin** rows is disabled today and remains disabled.
@@ -171,8 +171,7 @@ silently is a regression. This list is referenced by every Lane 4 / Lane
 - Chevron in the mini-player **opens the navigation drawer**. This is
   load-bearing for drawer access.
 - Tapping the now-playing title strip opens the full Locus view.
-- Speed control must remain reachable from the mini-player. (Currently
-  it is **not** reachable, which is a known gap.)
+- Speed control must remain reachable from the mini-player.
 
 ### 4.7 Locus / player
 
@@ -200,15 +199,15 @@ for execution.
 | Decision | Resolution | Application |
 |---|---|---|
 | Snap-to-active affordance | **Floating anchor pill.** Non-modal, on top of the Up Next list, appearing when the active item scrolls out of view. Tap returns to the active item. | Up Next layout ticket carries this as the anchor mechanism. Persistent toolbar pill or menu item are not selected. |
-| Mini-player layout | **Two-row (or otherwise decompressed)** layout. Title/source on top row separated from playback controls. | Mini-player control spec ticket designs around the multi-row layout, not the current single-row dock. |
-| Speed control on mini-player | **Always-visible speed pill** on the mini-player. | Mini-player control spec ticket places the speed pill in the layout; long-press / hidden treatments are rejected. |
+| Mini-player layout | **Two-row (or otherwise decompressed)** layout. Title/source on top row separated from playback controls. | Shipped in mini-player v1. |
+| Speed control on mini-player | **Always-visible speed pill** on the mini-player. | Shipped in mini-player v1; long-press / hidden treatments remain rejected. |
 | Play/pause in mini-player and Locus | **Single consolidated stateful button.** | Already true in Locus; mini-player ticket preserves this and rejects competing-buttons treatments. |
 | Mini-player ff/rw semantics | **Sentence-level for v1.** Short press remains previous/next sentence; long press remains previous/next paragraph. | Recorded in `docs/ANDROID_MINIPLAYER_CONTROL_SPEC.md`. Time-based skip is deferred and would require a separate operator decision. |
-| Clear upcoming placement | **Likely near the Upcoming section header.** Final placement still confirmable in the Up Next layout ticket. | Up Next layout ticket lays out the Upcoming section header with the Clear upcoming control colocated. |
+| Clear upcoming placement | **Near the Upcoming section header.** | Shipped in Up Next slice 2. |
 | Clear all session placement | **Overflow / contextual destructive area**, not primary chrome. | Up Next overflow menu carries this; operator-rejected as a header-level button. |
 | History-row tap behavior | **Anchored / current solution preferred** (tap on a history row behaves consistent with the active-item anchoring model). Contextual / onboarding hint may be useful initially, then disable / disappear. Final hint copy and lifecycle deferred to the Up Next history ticket. | Up Next history ticket implements the anchored behavior + optional first-run hint. Other candidates (restart playback, add to upcoming) are not selected. |
-| Locus / player bridge signal | **Unclear; not implementation-ready.** | No bridge UI ships until the operator can describe it in plain English. Locus/player integration is a design spike, not an implementation ticket. |
-| Full player necessity | **Unresolved**, gated by the Locus/player spike. | No full-player redesign ticket is opened until the spike resolves. |
+| Locus / player bridge signal | **Optional small bridge chip deferred.** | B3 resolved the model: Locus is the full player; a small "Now playing" chip may be added later when reader item differs from active session item. |
+| Full player necessity | **Resolved: no separate full-player route.** | Locus is the full player; Up Next is the queue surface. |
 
 ---
 
@@ -228,9 +227,9 @@ preserve sentence/paragraph labels and must not imply time-based skips.
 
 ### 6.2 Needs design exploration
 
-- **Locus / player integration.** Operator cannot describe the bridge
-  signal in plain English. A focused design spike (Claude Design or
-  in-house) must produce a behavioral description before any UI work.
+- **Optional Locus bridge chip.** B3 resolved the structural model:
+  Locus is the full player and no separate Player Queue route is needed.
+  The remaining bridge chip is a small deferred follow-up, not a blocker.
 - **Up Next history persistence and privacy controls.** Retention
   policy (count, time, none), purge / hide / disable controls,
   per-device vs cross-device. Tied to product model §2.3 Q2–Q4.
@@ -239,21 +238,17 @@ preserve sentence/paragraph labels and must not imply time-based skips.
   model §4.5.
 - **Bluesky representation model (F1 / F2 / F3).** Recommended F3, not
   ratified.
-- **"Clear upcoming" exact placement and "Clear all" exact overflow
-  copy.** Roughly decided (header vs overflow), final visual treatment
-  is part of the Up Next layout spec ticket.
 - **Onboarding / contextual hints lifecycle.** Useful early, must be
   dismissible / disable-able. The general hint pattern is unowned.
 
 ### 6.3 Can be deferred safely
 
-- Full-player redesign (gated by Locus/player spike).
+- Full-player redesign / Player Queue route (resolved as not needed by
+  B3; only reopen with a new operator decision).
 - Persisted Up Next history backend (depends on product model §2.3
   resolution).
 - Cross-device Up Next sync (already deferred; backend CONTRACT
   CHANGE).
-- "Clear all session" affordance — only needed if operators consistently
-  ask for it; "Clear upcoming" + "Re-seed" likely cover most cases.
 - Auto-hide for action bars (blocked on the disable-auto-hide setting
   per queue actions spec §6).
 
@@ -269,15 +264,14 @@ which they should be picked up.
 These can be opened and shipped without further design work, citing
 the existing specs.
 
-1. **A1 — Playlist detail tap behavior correction.**
+1. **A1 — Playlist detail tap behavior correction.** *(Shipped 2026-04-27)*
    Remove the implicit `vm.startNowPlayingSession(...)` call from the
    playlist row tap path. Tap should open Locus only. Active-item
    highlight inside the playlist remains; session start happens via
-   row overflow ("Play Now" once shipped) or by tapping the active item
-   in Up Next.
+   explicit queue actions or by tapping the active item in Up Next.
    References: §4.1, §4.5, queue actions spec §4.1.
 
-2. **A2 — Library "Add Selected to Up Next" batch action.**
+2. **A2 — Library "Add Selected to Up Next" batch action.** *(Shipped 2026-04-27)*
    Add the canonical batch-bar action to Inbox / Favorites / Archive
    batch bars. **Append order: current visible list order under the
    active sort, not tap/selection order.** Selection order is invisible
@@ -300,13 +294,12 @@ These need at most one design decision or one short spec doc before
 becoming implementation tickets. Where a question is still listed,
 operator should resolve it before opening the implementation ticket.
 
-4. **B1 — Mini-player control spec.** *(Written 2026-04-27)*
-   `docs/ANDROID_MINIPLAYER_CONTROL_SPEC.md` is ready to cite from the
-   implementation ticket. It covers the two-row layout, title/source row,
-   controls row with consolidated play/pause, sentence-level ff/rw with
-   long-press paragraph jumps, always-visible speed pill, chevron drawer
-   behavior, persistence rules, and unresolved items that remain out of
-   scope.
+4. **B1 — Mini-player v1.** *(Spec written and implementation shipped 2026-04-27)*
+   Two-row/decompressed mini-player controls shipped with title/source
+   separated from playback controls, always-visible speed pill,
+   consolidated play/pause, sentence-level ff/rw, long-press paragraph
+   jumps, chevron drawer behavior, and existing persistence rules.
+   Time-based skip remains deferred.
    References: §2 Mini-player row, §5 mini-player decisions,
    `docs/ANDROID_MINIPLAYER_CONTROL_SPEC.md`.
 
@@ -325,14 +318,14 @@ operator should resolve it before opening the implementation ticket.
    References: §2 Up Next row, §4.3, §5 decisions,
    `docs/ANDROID_UP_NEXT_LAYOUT_SPEC.md`.
 
-6. **B3 — Locus/player integration spike.** *(Written 2026-04-27)*
+6. **B3 — Locus/player integration spike.** *(Resolved 2026-04-27)*
    Pure design / writing. Operator drives. Goal: produce a plain-English
    description of when/why a Locus → player bridge appears, and what
    "full player" means relative to Locus + Up Next + mini-player. No
    implementation. Output gates B5/C-tier full-player work.
    **Outcome:** Locus is the full player; no separate player route needed.
-   Bridge signal = small "Now playing" chip in Locus when reader item ≠
-   active session item. C4 resolved as not needed (see below).
+   Optional bridge signal = small "Now playing" chip in Locus when reader
+   item != active session item. C4 resolved as not needed (see below).
    References: §6.2, queue actions spec §3 Locus row,
    `docs/ANDROID_LOCUS_PLAYER_INTEGRATION_SPIKE.md`.
 
@@ -371,19 +364,20 @@ Listed in approximate priority order; not necessarily the next tickets.
 
 The operator has limited Claude Design slots remaining this week. The
 next significant design ask should be the **single most leveraged**
-prompt available. The strongest candidate remains the **Up Next layout
-spec** (B2) — it depends on already-made decisions, the operator
-already has a strong direction, and a single design pass producing
-concrete pixel-level treatments would unblock the Up Next
-implementation ticket.
+prompt available. B1 mini-player and B2 Up Next slices 1-3 no longer
+need a Claude Design slot because they have shipped. The strongest
+remaining candidates are:
 
-B1 no longer requires a Claude Design slot before implementation. The
-mini-player control spec is written and chooses sentence-level ff/rw for
-v1; implementation can proceed from
-`docs/ANDROID_MINIPLAYER_CONTROL_SPEC.md` when scheduled.
+- **Sectioned Library policy and visual treatment** once the grouping
+  rule is chosen.
+- **Optional Locus bridge chip** if the operator wants a visual pass on
+  the small "Now playing" affordance.
+- **Persisted Up Next history** only after retention/privacy decisions
+  are made.
 
-What follows is a draft prompt skeleton. Fill in the bracketed choices
-before sending.
+The old B2 Up Next prompt is retained below only as historical reference
+for future persisted-history design. Do not use it to reopen shipped
+slices 1-3.
 
 ### Draft brief: Up Next layout (B2)
 

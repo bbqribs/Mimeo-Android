@@ -1,7 +1,7 @@
 # Android Queue Actions Pattern Spec
 
 **Version:** 1.0
-**Status:** Design-only. Authoritative for Lane 5 implementation.
+**Status:** Design/spec checkpoint. Authoritative for remaining Lane 5 implementation.
 **Date:** 2026-04-25
 **Scope:** Play Now / Play Next / Play Last / Add Selected to Up Next / Save current queue as playlist — across all list and item surfaces.
 **Canonical authority:** `C:\Users\brend\Documents\Coding\Mimeo\docs\planning\PRODUCT_MODEL_POST_REDESIGN.md` §3 (Android pointer: `docs/planning/PRODUCT_MODEL_POST_REDESIGN.md`)
@@ -17,8 +17,8 @@ was authored before multi-select (Phase 4) and session-queue actions
 (Phases 5C, 6A) shipped. This spec adds the queue-action layer on top of
 that baseline using the grammar from product model §3.
 
-**This spec does not change shipped behavior.** It defines the forward model
-that implementation tickets in Lane 5 will build toward.
+This spec now records the shipped queue-action behavior as well as the
+forward model that remaining Lane 5 tickets will build toward.
 
 **One supersession note:** Item-actions spec v1.0 §6 defines long-press →
 open overflow menu on Up Next rows. Product model §3.2 rule 3 supersedes
@@ -35,7 +35,7 @@ Phase 4 batch-select infrastructure already shipped. See §4 below.
 |--------|-----------------|-----------|
 | **Play Now** | "Play Now" | Starts playback of this item immediately. Non-destructive: inserts the item at the current play position (deduplicating if already present), preserving any existing active and upcoming items. Starts audio without navigating to Locus. No confirm required. Explicit overflow action — never the default tap. If a future destructive "Replace queue / Start fresh" action is needed, it must be a separate action with its own confirm. |
 | **Play Next** | "Play Next" | Inserts this item immediately after the current active item in the upcoming queue. Non-destructive; no confirm. |
-| **Play Last** | "Play Last" | Appends this item to the end of the upcoming queue. Non-destructive; no confirm. Equivalent to "Add to Up Next" in single-item context. |
+| **Play Last** | "Play Last" / "Add to bottom" | Appends this item to the end of the upcoming queue. Non-destructive; no confirm. Equivalent to "Add to Up Next" in single-item context. Playlist batch chooser may render this as "Play Last" or "Add to bottom" depending on available space/copy context. |
 | **Add Selected to Up Next** | "Add to Up Next" | Batch action: appends all selected items to the end of the upcoming queue in current visible list order under the active sort (not selection-tap order; see §8.3 and `docs/REDESIGN_COMPLETION_PLAN.md` §7 A2). Non-destructive; no confirm. Canonical batch-bar label. |
 | **Save current queue as playlist** | "Save queue as playlist…" | Creates a new manual playlist from the active item plus all upcoming items, in session order. Hidden pre-active/history rows are excluded. Only available in Up Next and Locus overflow while a session is active. Prompts for playlist name before saving. |
 
@@ -155,7 +155,9 @@ When multi-select is active, the batch action bar appears and exposes:
 **"Add to Up Next"** is the canonical batch-bar label (product model
 §3.1 note: `Add Selected to Up Next` is the canonical name; the batch
 bar renders it as "Add to Up Next" for space). It appends all selected
-items in selection order to the end of the upcoming queue.
+items in current visible list order under the active sort, not
+selection-tap order. Playlist batch placement chooser uses the same
+visible-order guarantee for both Play Next and Play Last / Add to bottom.
 
 Batch actions are appended to existing batch infrastructure from Phase 4.
 No other existing batch actions are removed.
@@ -225,6 +227,7 @@ entries.
 | Play Now | "Play Now" |
 | Play Next | "Play Next" |
 | Play Last | "Play Last" |
+| Add to bottom (playlist batch chooser) | "Add to bottom" |
 | Add to Up Next (batch bar) | "Add to Up Next" |
 | Save queue as playlist (overflow) | "Save queue as playlist…" |
 | Remove from Up Next (overflow) | "Remove from queue" |
@@ -286,14 +289,22 @@ entries.
 
 ---
 
-## 10. First implementation slice recommendation
+## 10. Shipped and remaining implementation slices
 
-**Slice A: Library rows — Play Next + Play Last in row overflow.**
+**Shipped slices (2026-04-27):**
+
+- Library rows: Play Now shipped as non-destructive insert-and-play.
+- Library batch bar: Add Selected to Up Next shipped; selected items
+  append in visible list order.
+- Playlist batch placement chooser shipped: Play Next and Play Last /
+  Add to bottom; selected items preserve visible playlist order.
+
+**Remaining candidate: Library rows — Play Next + Play Last in row
+overflow.**
 
 Surfaces: Inbox, Favorites, Archive rows only (not Bin — see §3 notes).
 Actions: Add "Play Next" and "Play Last" to the row `⋮` overflow at
-positions 2 and 3 (after "Play Now" if Play Now is not being shipped in
-the same slice; or at positions 1–2 if Play Now is deferred to Slice B).
+positions 2 and 3 after the shipped "Play Now" entry.
 
 Rationale:
 - These are additive, non-destructive actions. No confirm required (§5.1).
