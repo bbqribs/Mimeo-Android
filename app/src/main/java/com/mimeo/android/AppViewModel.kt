@@ -4326,6 +4326,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun clearUpcomingNowPlayingItems() {
+        viewModelScope.launch {
+            val session = repository.clearUpcomingFromSession()
+            if (session == null) {
+                _nowPlayingSession.value = null
+                _playbackPositionByItem.value = emptyMap()
+                _sessionIssueMessage.value = null
+            } else {
+                applySessionSnapshot(session)
+            }
+            _statusMessage.value = "Upcoming items cleared."
+        }
+    }
+
     fun restartNowPlayingSession() {
         viewModelScope.launch {
             val restarted = repository.restartSession()

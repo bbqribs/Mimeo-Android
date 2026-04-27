@@ -69,4 +69,24 @@ class SessionReorderPlanTest {
         assertEquals(0, plan?.toIndex)
         assertEquals(0, plan?.currentIndex)
     }
+
+    @Test
+    fun clearUpcomingKeepsHistoryAndActiveItemOnly() {
+        val keepCount = computeClearUpcomingKeepCount(
+            itemCount = 6,
+            currentIndex = 2,
+        )
+
+        assertEquals(3, keepCount)
+    }
+
+    @Test
+    fun clearUpcomingClampsCurrentIndexBeforeKeepingActiveItem() {
+        val keepCount = computeClearUpcomingKeepCount(
+            itemCount = 4,
+            currentIndex = 99,
+        )
+
+        assertEquals(4, keepCount)
+    }
 }
