@@ -109,6 +109,13 @@ block. Not a forward-looking list.
   playlist from Up Next overflow (saves active item + upcoming items in
   session order; hidden pre-active/history rows excluded). No backend or
   API contract changes.
+- Sectioned Library Slice 1 (2026-04-27): Inbox / Favorites / Archive
+  show static date section headers only for Newest sort with blank
+  search. Buckets are Today, Yesterday, This Week, This Month, Last
+  Month, Older. Inbox pending stays separate above date sections. Bin,
+  active search, and non-Newest sorts remain flat. Existing row tap,
+  long-press selection, overflow queue actions, batch actions, refresh,
+  search, and sort behavior preserved.
 - Mini-player v1 (2026-04-27): two-row/decompressed controls with
   title/source separated from playback controls; always-visible speed
   chip; consolidated play/pause preserved; sentence-level ff/rw and
