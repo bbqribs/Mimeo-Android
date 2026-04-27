@@ -40,14 +40,15 @@ Recent redesign slices have now shipped on top of that scaffolding:
 three-region Up Next scaffolding for active/upcoming, snap-to-active,
 Clear upcoming, Clear all session, Save queue as playlist, mini-player
 v1, playlist tap-to-Locus, library Add Selected to Up Next, library Play
-Now, and playlist batch queue placement. Remaining product-model work is
-Sectioned Library, persisted history, smart playlists, and the Bluesky
-harvester surface.
+Now, playlist batch queue placement, and Sectioned Library Slice 1.
+Remaining product-model work is persisted history, smart playlists, and
+the Bluesky harvester surface.
 
 What is **still unsettled or deferred** is history retention/privacy
-controls, history-row queue actions, the Sectioned Library grouping
-policy, smart-playlist pin behavior, Bluesky representation, optional
-Locus bridge chip implementation, and time-based skip.
+controls, history-row queue actions, later Sectioned Library variants
+(Archive archivedAt grouping, OLDEST sectioning, sticky headers),
+smart-playlist pin behavior, Bluesky representation, optional Locus
+bridge chip implementation, and time-based skip.
 
 Why the redesign should continue as **smaller bounded tickets** rather
 than one large UI rewrite:
@@ -73,7 +74,7 @@ than one large UI rewrite:
 | **Up Next** | Wireframe 1 Conservative Up Next: muted history above, prominent active anchor in middle (not draggable), upcoming with drag handles below; Clear upcoming near the Upcoming section header; Clear all in overflow/contextual destructive area; floating anchor pill for snap-to-active. | Matches product model three-region structure. Comfortable density preserves long-queue ergonomics. Anchor pill is non-modal and operator-preferred. | **Slices 1–3 shipped (2026-04-27):** Active/upcoming scaffolding, active anchor (not draggable), history hidden, snap-to-active pill, Clear upcoming near Upcoming header, Clear all session in overflow, Save queue as playlist in overflow (saves active + upcoming only; history excluded). Remaining gap: history region display and history persistence (deferred). | History rows might become accidentally selectable, draggable, or refresh-clearable if history display is later introduced without following the spec rules. |
 | **Mini-player** | Decompressed two-row layout. Title/source on top row separated from playback controls. Always-visible speed pill. Single consolidated stateful play/pause. Rewind and fast-forward remain sentence-level for v1, with long-press paragraph jumps recorded. Persistent on non-Locus routes. Chevron continues to open drawer. | Shipped mini-player v1 resolves the cramped single-row / no-speed-control gap while preserving playback semantics. | Shipped (2026-04-27). Remaining deferred work: time-based skip, icon-set rethink, and any future Locus speed/chrome follow-up. | Future icon or skip changes could accidentally imply time-based semantics; keep labels aligned with sentence/paragraph behavior unless a new ticket changes it. |
 | **Locus / player** | Reader remains primary. Locus is the full player. Mini-player is hidden on Locus and docks only on non-Locus routes. Optional bridge chip may indicate "Now playing" when reader item differs from active session item. | B3 spike resolved the model without a separate full-player route or Player Queue surface. | Structural player work resolved. Optional bridge chip deferred. | A premature bridge UI could re-introduce the "Player Queue as separate surface" concept that the operator has already rejected. |
-| **Library** | Sectioned Library. Shared row anatomy from list layout spec. Date or logical section headers. Visible overflow. "Add Selected to Up Next" added to batch bar. "Play Now" added to row overflow. | Sectioning is the operator-preferred direction; row grammar is shared with playlist/smart-playlist surfaces. "Add Selected to Up Next" parity with playlist detail is explicit in the queue actions spec. | Add Selected to Up Next and Play Now shipped. Remaining gap: sectioning policy not yet decided (date / source / read-state). | Adding a visible play button on the row face would violate the "tap is read; explicit is queue" rule. Pull-to-refresh that auto-re-seeds would violate the no-auto-reseed rule. |
+| **Library** | Sectioned Library. Shared row anatomy from list layout spec. Static date section headers for the first shipped slice. Visible overflow. "Add Selected to Up Next" added to batch bar. "Play Now" added to row overflow. | Sectioning is the operator-preferred direction; row grammar is shared with playlist/smart-playlist surfaces. "Add Selected to Up Next" parity with playlist detail is explicit in the queue actions spec. | **Slice 1 shipped (2026-04-27):** Inbox / Favorites / Archive show static date section headers only when sort is Newest and search is blank. Buckets: Today, Yesterday, This Week, This Month, Last Month, Older. Inbox pending remains separate above date sections. Bin, active search, and non-Newest sorts remain flat. Row tap, long-press selection, overflow queue actions, batch actions, refresh, search, and sort behavior preserved. Remaining deferred variants: Archive archivedAt grouping, OLDEST sectioning, sticky headers. | Adding a visible play button on the row face would violate the "tap is read; explicit is queue" rule. Pull-to-refresh that auto-re-seeds would violate the no-auto-reseed rule. |
 | **Manual playlist** | Conservative Playlist. Manual order visible. Drag handles on every row. Tap -> Locus only. Row overflow/batch actions support explicit queue placement: Play Now / Play Next / Play Last or Add to bottom. Selected items preserve visible playlist order. Undo on remove is preserved. | Manual order is the playlist's identity. Explicit queue placement keeps "tap is read" separate from "queue this." | A1 tap correction and playlist batch placement chooser shipped. Remaining future work is ordinary playlist polish, not a known redesign blocker. | Future batch-bar refactors must preserve visible-order insertion and undo on remove. |
 | **Smart playlist** | Sectioned Smart Playlist. Filter summary header. Pinned section + live-matching section. Sort controls. Pin/unpin per row. Freeze as manual playlist as secondary. Smart playlist may seed Up Next via explicit action; never auto-mutates Up Next. | Aligns with product model Model B (saved filter + optional manual pin/order layer). Avoids smart playlist behaving as live Up Next. | Smart playlists are not yet implemented on Android. | Treating a smart playlist as Up Next continuity. Unclear archive/binned policy for pinned items. |
 | **Bluesky rolling surface** | Sectioned Bluesky. Harvester/config header above the list. Article rows use shared row grammar. Play Next / Play Last / Add Selected to Up Next available; Play Now and image-shaped rows out of v1. | Treat Bluesky as a smart-playlist-shaped surface fed by a harvester. Keeps the row grammar consistent and avoids special-casing. | Not implemented. | Auto-promotion to Up Next; thumbnail row treatment; cross-device sync UI — all already rejected. |
@@ -240,6 +241,9 @@ preserve sentence/paragraph labels and must not imply time-based skips.
   model §4.5.
 - **Bluesky representation model (F1 / F2 / F3).** Recommended F3, not
   ratified.
+- **Later Sectioned Library variants.** Archive archivedAt grouping,
+  OLDEST sectioning, and sticky headers remain deferred and should not
+  be folded into Slice 1 cleanup.
 - **Onboarding / contextual hints lifecycle.** Useful early, must be
   dismissible / disable-able. The general hint pattern is unowned.
 
@@ -356,9 +360,11 @@ Listed in approximate priority order; not necessarily the next tickets.
     See `docs/ANDROID_LOCUS_PLAYER_INTEGRATION_SPIKE.md` §3.
 
 11. **C5 — Sectioned Library implementation.**
-    Gated on operator decision about section grouping rule (§6.1). The
-    shared row grammar is already mostly in place; sectioning is the
-    remaining work.
+    **Slice 1 shipped (2026-04-27).** Inbox / Favorites / Archive use
+    static date headers for Newest sort with blank search; Bin, active
+    search, and non-Newest sorts stay flat. Pending Inbox items remain
+    above the date sections. Later variants remain deferred: Archive
+    archivedAt grouping, OLDEST sectioning, sticky headers.
 
 ---
 
@@ -370,8 +376,8 @@ prompt available. B1 mini-player and B2 Up Next slices 1-3 no longer
 need a Claude Design slot because they have shipped. The strongest
 remaining candidates are:
 
-- **Sectioned Library policy and visual treatment** once the grouping
-  rule is chosen.
+- **Later Sectioned Library variants** only if Archive archivedAt
+  grouping, OLDEST sectioning, or sticky headers are explicitly reopened.
 - **Optional Locus bridge chip** if the operator wants a visual pass on
   the small "Now playing" affordance.
 - **Persisted Up Next history** only after retention/privacy decisions

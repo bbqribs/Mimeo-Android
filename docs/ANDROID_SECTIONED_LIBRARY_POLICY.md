@@ -1,7 +1,7 @@
 # Android Sectioned Library Policy
 
-**Status:** Decision — implementation-facing. Resolves the §6.1 blocker in
-`docs/REDESIGN_COMPLETION_PLAN.md`. Authoritative for C5 implementation ticket.
+**Status:** Slice 1 shipped (2026-04-27). Authoritative for shipped
+Sectioned Library Slice 1 behavior and deferred sectioning variants.
 **Date:** 2026-04-27
 **Scope:** Inbox, Favorites, Archive, Bin — Android Library surfaces only.
 **Non-goals:** Smart playlists, Bluesky, Up Next, any backend/API changes, row
@@ -11,9 +11,11 @@ actions, queue-action semantics.
 
 ## 1. Current behavior summary
 
-All Library surfaces (Inbox, Favorites, Archive, Bin) render flat
-`LazyColumn` lists with no visual grouping except the existing Inbox
-"Pending (N)" collapsible section.
+Sectioned Library Slice 1 ships static date section headers for Inbox,
+Favorites, and Archive only when `sortOption == NEWEST` and search is
+blank. Bin, active search, and non-NEWEST sorts remain flat. The existing
+Inbox "Pending (N)" collapsible section remains separate above date
+sections.
 
 **Existing behaviors that must be fully preserved:**
 
@@ -58,16 +60,16 @@ locally. It does **not** carry `archivedAt` or `trashedAt`. This means:
 
 ---
 
-## 3. Recommended v1 policy
+## 3. Shipped Slice 1 Policy
 
 **Option A — Date-based, conditional on active sort.**
 
-The operator's starting bias is correct and matches the data constraints.
-Specifically:
+The shipped v1 behavior matches the policy decision and data constraints:
 
-- Show date-based section headers **only when the active sort is NEWEST**.
+- Show date-based section headers **only when the active sort is NEWEST**
+  and search is blank.
 - Deactivate headers (flat list) for OLDEST, OPENED, PROGRESS, ARCHIVED_AT,
-  and TRASHED_AT sorts.
+  and TRASHED_AT sorts, and whenever search is active.
 - Bin excluded from sectioning in v1.
 
 **Why NEWEST only, not OLDEST:**
@@ -177,14 +179,17 @@ special-casing.
 
 ---
 
-## 5. Implementation slice recommendation
+## 5. Shipped implementation slice
 
 ### Slice 1 (v1) — Date headers on Inbox, Favorites, Archive (NEWEST only)
+
+**Status:** Shipped 2026-04-27.
 
 **Surfaces:** Inbox, Favorites, Archive. Bin excluded.
 
 **Sort trigger:** Section headers active only when `sortOption == NEWEST`.
-All other sort modes render flat list (existing behavior).
+All other sort modes render flat list (existing behavior). Active search
+also renders a flat list.
 
 **Data required:** `createdAt` on `PlaybackQueueItem`. Already present.
 No backend/API changes. No new fields.
@@ -221,6 +226,10 @@ No backend/API changes. No new fields.
   in the API response, but it needs a model + mapping update.
 - Bin — excluded.
 - OPENED or PROGRESS sort sectioning — not recommended.
+
+**Shipped behavior preservation:** Existing row tap, long-press selection,
+overflow queue actions, batch actions, refresh, search, and sort behavior
+are preserved.
 
 ---
 
@@ -270,6 +279,7 @@ Confirm:
 - §6 non-goals match the ticket's explicit scope restrictions.
 - §7 unresolved questions are flagged without being answered here.
 
-Before opening the C5 implementation ticket, verify that
-`docs/REDESIGN_COMPLETION_PLAN.md` §6.1 still lists the sectioning policy
-as the remaining Library blocker, and update it to reference this doc.
+Before opening any follow-up sectioning ticket, verify that it is not
+reopening Slice 1 behavior and that Archive archivedAt grouping, OLDEST
+sectioning, sticky headers, smart playlists, and Bluesky remain deferred
+unless explicitly assigned.
