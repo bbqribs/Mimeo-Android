@@ -153,6 +153,8 @@ fun PlaylistDetailScreen(
     val listScrollState = rememberScrollState()
     var listViewportHeight by remember { mutableIntStateOf(0) }
 
+    var showQueueChooser by remember { mutableStateOf(false) }
+
     // Rename/delete dialog state
     var showOverflowMenu by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -345,6 +347,12 @@ fun PlaylistDetailScreen(
         vm.playLastBatch(articleIds)
     }
 
+    fun playNextSelected() {
+        val articleIds = selectedArticleIdsInOrder()
+        clearSelection()
+        vm.playNextBatch(articleIds)
+    }
+
     suspend fun refreshPlaylistContent() {
         if (refreshActionState == RefreshActionVisualState.Refreshing) return
         refreshActionState = RefreshActionVisualState.Refreshing
@@ -453,15 +461,35 @@ fun PlaylistDetailScreen(
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f),
                     )
-                    PlaylistSelectionIconButton(
-                        label = "Add selected to Up Next",
-                        onClick = ::queueSelectedAtEnd,
-                        enabled = selectedEntryIds.isNotEmpty(),
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.PlaylistAdd,
-                            contentDescription = "Add selected to Up Next",
-                        )
+                    Box {
+                        IconButton(
+                            onClick = { showQueueChooser = true },
+                            enabled = selectedEntryIds.isNotEmpty(),
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.PlaylistAdd,
+                                contentDescription = "Add selected to Up Next",
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showQueueChooser,
+                            onDismissRequest = { showQueueChooser = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Play Next") },
+                                onClick = {
+                                    showQueueChooser = false
+                                    playNextSelected()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Play Last") },
+                                onClick = {
+                                    showQueueChooser = false
+                                    queueSelectedAtEnd()
+                                },
+                            )
+                        }
                     }
                     PlaylistSelectionIconButton(
                         label = "Remove selected from playlist",

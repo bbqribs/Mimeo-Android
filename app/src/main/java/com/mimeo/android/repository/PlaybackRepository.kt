@@ -830,6 +830,37 @@ class PlaybackRepository(
         return updatedRow.toSession(stored)
     }
 
+    suspend fun insertItemsAfterCurrent(items: List<PlaybackQueueItem>): NowPlayingSession? {
+        val orderedItems = items.distinctBy { it.itemId }
+        if (orderedItems.isEmpty()) return getSession()
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson).toMutableList()
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        val currentItemId = stored.getOrNull(row.currentIndex.coerceIn(0, stored.lastIndex))?.itemId
+        val insertItemIds = orderedItems.map { it.itemId }.filter { it != currentItemId }.toSet()
+        if (insertItemIds.isEmpty()) return row.toSession(stored)
+        stored.removeAll { it.itemId in insertItemIds }
+        val newCurrentIndex = currentItemId
+            ?.let { id -> stored.indexOfFirst { it.itemId == id }.takeIf { it >= 0 } }
+            ?: row.currentIndex.coerceIn(0, stored.lastIndex)
+        val insertAt = (newCurrentIndex + 1).coerceIn(0, stored.size)
+        orderedItems
+            .filter { it.itemId in insertItemIds }
+            .forEachIndexed { i, item -> stored.add(insertAt + i, item.toStoredNowPlayingItem()) }
+        val updatedAt = System.currentTimeMillis()
+        val updatedRow = row.copy(
+            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            currentIndex = newCurrentIndex,
+            updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(stored)
+    }
+
     suspend fun playNowInSession(item: PlaybackQueueItem): NowPlayingSession {
         val dao = database.nowPlayingDao()
         val row = dao.getSession()
