@@ -325,12 +325,16 @@ operator should resolve it before opening the implementation ticket.
    References: §2 Up Next row, §4.3, §5 decisions,
    `docs/ANDROID_UP_NEXT_LAYOUT_SPEC.md`.
 
-6. **B3 — Locus/player integration spike.**
+6. **B3 — Locus/player integration spike.** *(Written 2026-04-27)*
    Pure design / writing. Operator drives. Goal: produce a plain-English
    description of when/why a Locus → player bridge appears, and what
    "full player" means relative to Locus + Up Next + mini-player. No
    implementation. Output gates B5/C-tier full-player work.
-   References: §6.2, queue actions spec §3 Locus row.
+   **Outcome:** Locus is the full player; no separate player route needed.
+   Bridge signal = small "Now playing" chip in Locus when reader item ≠
+   active session item. C4 resolved as not needed (see below).
+   References: §6.2, queue actions spec §3 Locus row,
+   `docs/ANDROID_LOCUS_PLAYER_INTEGRATION_SPIKE.md`.
 
 ### C. Deferred higher-risk implementation
 
@@ -350,8 +354,11 @@ Listed in approximate priority order; not necessarily the next tickets.
 9. **C3 — Bluesky harvester rolling surface.**
    Requires Bluesky representation model ratification. Lane 7 backend.
 
-10. **C4 — Full player (if still needed) / Player Queue.**
-    Gated on B3 spike outcome. May be unnecessary.
+10. **C4 — Full player / Player Queue.**
+    **Resolved — not needed (2026-04-27).** B3 spike confirmed Locus is the
+    full player. No separate route or Player Queue surface will be created
+    unless a future operator decision explicitly reopens this.
+    See `docs/ANDROID_LOCUS_PLAYER_INTEGRATION_SPIKE.md` §3.
 
 11. **C5 — Sectioned Library implementation.**
     Gated on operator decision about section grouping rule (§6.1). The
