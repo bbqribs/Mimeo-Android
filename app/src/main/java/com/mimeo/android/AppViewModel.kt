@@ -4296,12 +4296,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (items.isEmpty()) return
         viewModelScope.launch {
             val session = repository.appendItemsToSession(items)
-            if (session == null) {
-                showSnackbar("No active Up Next session.")
-                return@launch
-            }
+                ?: repository.startSession(items, items.first().itemId, null)
             applySessionSnapshot(session)
-            showSnackbar("${items.size} items added to Up Next")
+            showSnackbar("${items.size} item${if (items.size == 1) "" else "s"} added to Up Next.")
+        }
+    }
+
+    fun playNextBatch(itemIds: List<Int>) {
+        val requestedIds = itemIds.distinct()
+        if (requestedIds.isEmpty()) return
+        val allItemsById = (queueItems.value + inboxItems.value + archivedItems.value + favoriteItems.value + binItems.value)
+            .associateBy { it.itemId }
+        val items = requestedIds.mapNotNull { allItemsById[it] }
+        if (items.isEmpty()) return
+        viewModelScope.launch {
+            val session = repository.insertItemsAfterCurrent(items)
+                ?: repository.startSession(items, items.first().itemId, null)
+            applySessionSnapshot(session)
+            showSnackbar("${items.size} item${if (items.size == 1) "" else "s"} added as Play Next.")
         }
     }
 
