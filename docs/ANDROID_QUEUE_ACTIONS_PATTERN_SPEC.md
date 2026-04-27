@@ -37,7 +37,7 @@ Phase 4 batch-select infrastructure already shipped. See §4 below.
 | **Play Next** | "Play Next" | Inserts this item immediately after the current active item in the upcoming queue. Non-destructive; no confirm. |
 | **Play Last** | "Play Last" | Appends this item to the end of the upcoming queue. Non-destructive; no confirm. Equivalent to "Add to Up Next" in single-item context. |
 | **Add Selected to Up Next** | "Add to Up Next" | Batch action: appends all selected items to the end of the upcoming queue in current visible list order under the active sort (not selection-tap order; see §8.3 and `docs/REDESIGN_COMPLETION_PLAN.md` §7 A2). Non-destructive; no confirm. Canonical batch-bar label. |
-| **Save current queue as playlist** | "Save queue as playlist…" | Creates a new manual playlist from the current Up Next upcoming items. Only available in Up Next and Locus overflow while a session is active. Prompts for playlist name before saving. |
+| **Save current queue as playlist** | "Save queue as playlist…" | Creates a new manual playlist from the active item plus all upcoming items, in session order. Hidden pre-active/history rows are excluded. Only available in Up Next and Locus overflow while a session is active. Prompts for playlist name before saving. |
 
 ---
 

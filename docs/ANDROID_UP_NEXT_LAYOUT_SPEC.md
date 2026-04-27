@@ -1,9 +1,22 @@
 # Android Up Next Layout Spec
 
-**Status:** Planning/spec only. Does not authorize code changes.
+**Status:** Spec shipped (slices 1–3 merged, 2026-04-27). History
+persistence remains deferred.
 **Date:** 2026-04-27
 **Scope:** Android Up Next layout and interaction contract after
 mini-player v1. No backend, storage, or cross-device sync contracts.
+
+## Shipped Implementation Summary (slices 1–3)
+
+| Slice | Scope | Status |
+|---|---|---|
+| 1 | Active/upcoming scaffolding; active anchor (not draggable); history hidden; snap-to-active pill | Shipped |
+| 2 | Clear upcoming near Upcoming header; Clear all session in Up Next overflow/contextual destructive area | Shipped |
+| 3 | Save queue as playlist in Up Next overflow; saves active item + upcoming items in session order; hidden pre-active/history rows excluded | Shipped |
+
+History region, history persistence, retention/privacy controls, and
+history-row queue actions remain deferred. No backend or API contract
+changes were introduced.
 
 ## 1. Purpose
 
@@ -192,7 +205,8 @@ contents are unambiguous there.
 |---|---|
 | Placement | Put in Up Next-level overflow and/or a screen-level action area. Prefer overflow if toolbar space is tight. |
 | Availability | Available only while a session exists and there is queue content worth saving. |
-| Scope | Saves the current Up Next queue/session according to the queue-actions spec. Do not expose from ordinary row overflow. |
+| Scope | Saves the active item plus all upcoming items in session order. Hidden pre-active/history rows are excluded. Do not expose from ordinary row overflow. |
+| Inclusion rule | Active item (Now Playing anchor) + upcoming items in session order. Pre-active/history rows are not included even if they exist in the session data structure. |
 | Dialog | Prompt for playlist name before saving. Exact duplicate-name handling is deferred to implementation. |
 | Row surfaces | Do not place "Save queue as playlist..." on History, Active, or Upcoming row overflow. |
 

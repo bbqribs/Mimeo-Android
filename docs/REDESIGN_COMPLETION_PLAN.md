@@ -70,7 +70,7 @@ than one large UI rewrite:
 
 | Surface | Accepted direction | Why | Current implementation gap | Risk if implemented naively |
 |---|---|---|---|---|
-| **Up Next** | Wireframe 1 Conservative Up Next: muted history above, prominent active anchor in middle (not draggable), upcoming with drag handles below; Clear upcoming near the Upcoming section header; Clear all in overflow/contextual destructive area; floating anchor pill for snap-to-active. | Matches product model three-region structure. Comfortable density preserves long-queue ergonomics. Anchor pill is non-modal and operator-preferred. | Up Next is currently a flat session list with active item border-only distinction; no history grouping; no Clear upcoming; no Save queue as playlist; no snap-to-active. | History rows might become accidentally selectable, draggable, or refresh-clearable; "Clear session" semantics will need to bifurcate carefully. |
+| **Up Next** | Wireframe 1 Conservative Up Next: muted history above, prominent active anchor in middle (not draggable), upcoming with drag handles below; Clear upcoming near the Upcoming section header; Clear all in overflow/contextual destructive area; floating anchor pill for snap-to-active. | Matches product model three-region structure. Comfortable density preserves long-queue ergonomics. Anchor pill is non-modal and operator-preferred. | **Slices 1–3 shipped (2026-04-27):** Active/upcoming scaffolding, active anchor (not draggable), history hidden, snap-to-active pill, Clear upcoming near Upcoming header, Clear all session in overflow, Save queue as playlist in overflow (saves active + upcoming only; history excluded). Remaining gap: history region display and history persistence (deferred). | History rows might become accidentally selectable, draggable, or refresh-clearable if history display is later introduced without following the spec rules. |
 | **Mini-player** | Decompressed two-row (or otherwise multi-row) layout. Title/source on top row separated from playback controls. Always-visible speed pill. Single consolidated stateful play/pause. Rewind and fast-forward remain sentence-level for v1, with long-press paragraph jumps recorded. Persistent on non-Locus routes. Chevron continues to open drawer. | Current single-row dock is too cramped for both readability and reachability. Operator feedback explicitly rejects compressing speed into long-press or hidden affordances. The new mini-player control spec records the current sentence/paragraph behavior without changing playback semantics. | Today's mini-player has no speed control at all; play/pause is consolidated; ff/rw exist as sentence jumps; layout is single-row. | Compressing the new layout to fit the existing dock height would re-create the cramped problem. Icon/visual treatment can be refined during implementation, but must not imply time-based skip semantics. |
 | **Locus / player** | Reader remains primary. Mini-player docks below reader (already shipped). Speed must remain reachable even with auto-hiding top bar. Bridge between Locus and Up Next active item is unresolved and **not implementation-ready**. | Operator cannot yet explain the Locus/player bridge in plain English; deferring avoids accidental commitment to a confusing model. | No "Save queue as playlist" in Locus overflow; no explicit bridge affordance when reader item = active session item. | A premature bridge UI could re-introduce the "Player Queue as separate surface" concept that the operator has already rejected. |
 | **Library** | Sectioned Library. Shared row anatomy from list layout spec. Date or logical section headers. Visible overflow. "Add Selected to Up Next" added to batch bar. "Play Now" added to row overflow. | Sectioning is the operator-preferred direction; row grammar is shared with playlist/smart-playlist surfaces. "Add Selected to Up Next" parity with playlist detail is explicit in the queue actions spec. | "Add Selected to Up Next" missing from library batch bar; "Play Now" missing from row overflow; sectioning policy not yet decided (date / source / read-state). | Adding a visible play button on the row face would violate the "tap is read; explicit is queue" rule. Pull-to-refresh that auto-re-seeds would violate the no-auto-reseed rule. |
@@ -151,6 +151,8 @@ silently is a regression. This list is referenced by every Lane 4 / Lane
 - Refresh does not auto-re-seed. Re-seed is an explicit action with its
   own confirmation when the session diverges.
 - "Save queue as playlist" exists only in Up Next and Locus contexts.
+  Saves active item + upcoming items in session order; hidden
+  pre-active/history rows are excluded.
 
 ### 4.5 Playlist detail
 
@@ -309,14 +311,17 @@ operator should resolve it before opening the implementation ticket.
    `docs/ANDROID_MINIPLAYER_CONTROL_SPEC.md`.
 
 5. **B2 — Up Next history / Clear upcoming / snap-to-active layout
-   spec.** *(Written 2026-04-27)*
-   `docs/ANDROID_UP_NEXT_LAYOUT_SPEC.md` is ready to cite from the
-   implementation ticket. It covers the three regions, muted/deferred
-   history, active anchor behavior, anchor pill behavior, "Clear
-   upcoming" placement near the Upcoming header, "Clear all" overflow,
-   history non-selectability / non-draggability, Save queue as playlist
-   placement, and the optional first-run hint. It does not include
-   history persistence (deferred — see §6.2).
+   spec.** *(Spec written 2026-04-27; slices 1–3 shipped 2026-04-27)*
+   Three slices merged:
+   - **Slice 1:** Active/upcoming scaffolding; active anchor (not
+     draggable); history hidden; snap-to-active pill.
+   - **Slice 2:** Clear upcoming near Upcoming header; Clear all session
+     in Up Next overflow/contextual destructive area.
+   - **Slice 3:** Save queue as playlist in Up Next overflow. Saves
+     active item + upcoming items in session order; hidden
+     pre-active/history rows excluded. No backend/API contract changes.
+   History persistence, retention/privacy controls, and history-row
+   queue actions remain deferred (see §6.2 and §6.3).
    References: §2 Up Next row, §4.3, §5 decisions,
    `docs/ANDROID_UP_NEXT_LAYOUT_SPEC.md`.
 
