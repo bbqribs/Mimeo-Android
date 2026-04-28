@@ -4441,6 +4441,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    suspend fun seedNowPlayingSessionFromSmartPlaylist(
+        playlistId: Int,
+        playlistName: String,
+        items: List<PlaybackQueueItem>,
+    ): Result<SessionReseedResult> {
+        val sourceLabel = smartPlaylistSessionSourceLabel(playlistName)
+        return runCatching {
+            val session = repository.reseedSessionFromSource(
+                sourceItems = items,
+                preferredCurrentItemId = nowPlayingSession.value?.currentItem?.itemId,
+                sourcePlaylistId = resolveSmartPlaylistSessionSourceId(playlistId),
+            )
+            if (session == null) {
+                _nowPlayingSession.value = null
+                _playbackPositionByItem.value = emptyMap()
+                _sessionIssueMessage.value = null
+                SessionReseedResult(sourceLabel = sourceLabel, rebuiltItemCount = 0)
+            } else {
+                applySessionSnapshot(session)
+                SessionReseedResult(sourceLabel = sourceLabel, rebuiltItemCount = session.items.size)
+            }
+        }
+    }
+
     fun removeItemFromSession(itemId: Int) {
         viewModelScope.launch {
             val session = repository.removeItemFromSession(itemId)

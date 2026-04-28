@@ -234,6 +234,7 @@ internal const val INITIAL_SIGN_IN_HYDRATION_RETRY_DELAY_MS = 300L
 internal const val INITIAL_SIGN_IN_BACKGROUND_HYDRATION_ATTEMPTS = 10
 internal const val INITIAL_SIGN_IN_BACKGROUND_HYDRATION_RETRY_DELAY_MS = 500L
 internal const val SMART_QUEUE_SESSION_CONTEXT_ID = -1
+internal const val SMART_VIEW_SESSION_SOURCE_PREFIX = "Smart view"
 internal const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 internal const val SHARE_REFRESH_COALESCE_MS = 300L
 internal const val SHARE_REFRESH_KEYED_DEDUPE_WINDOW_MS = 1_500L
@@ -316,6 +317,20 @@ internal fun resolveNextPlaylistScopedSessionIndex(
 
 internal fun resolveSessionSourcePlaylistId(selectedPlaylistId: Int?): Int {
     return selectedPlaylistId ?: SMART_QUEUE_SESSION_CONTEXT_ID
+}
+
+internal fun resolveSmartPlaylistSessionSourceId(smartPlaylistId: Int): Int {
+    return -smartPlaylistId - 2
+}
+
+internal fun resolveSmartPlaylistIdFromSessionSourceId(sourceId: Int?): Int? {
+    return sourceId
+        ?.takeIf { it < SMART_QUEUE_SESSION_CONTEXT_ID }
+        ?.let { -it - 2 }
+}
+
+internal fun smartPlaylistSessionSourceLabel(name: String): String {
+    return "$SMART_VIEW_SESSION_SOURCE_PREFIX: $name"
 }
 
 data class PendingRetryBatchResult(

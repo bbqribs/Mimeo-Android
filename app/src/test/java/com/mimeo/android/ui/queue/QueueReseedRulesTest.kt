@@ -2,8 +2,10 @@ package com.mimeo.android.ui.queue
 
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.NowPlayingSessionItem
+import com.mimeo.android.resolveSmartPlaylistSessionSourceId
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaylistSummary
+import com.mimeo.android.model.SmartPlaylistSummary
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -21,6 +23,35 @@ class QueueReseedRulesTest {
 
         assertEquals("Podcasts", presentation.seededFromLabel)
         assertEquals("Smart queue", presentation.currentSourceLabel)
+    }
+
+    @Test
+    fun resolvesSeedPresentation_forSmartPlaylistSnapshotSource() {
+        val presentation = resolveSessionSeedSourcePresentation(
+            sessionSourcePlaylistId = resolveSmartPlaylistSessionSourceId(7),
+            selectedPlaylistId = null,
+            playlists = emptyList(),
+            smartPlaylists = listOf(
+                SmartPlaylistSummary(
+                    id = 7,
+                    name = "Unread Python",
+                ),
+            ),
+        )
+
+        assertEquals("Smart view: Unread Python", presentation.seededFromLabel)
+        assertEquals("Smart queue", presentation.currentSourceLabel)
+    }
+
+    @Test
+    fun resolvesSeedPresentation_forMissingSmartPlaylistName() {
+        val presentation = resolveSessionSeedSourcePresentation(
+            sessionSourcePlaylistId = resolveSmartPlaylistSessionSourceId(99),
+            selectedPlaylistId = null,
+            playlists = emptyList(),
+        )
+
+        assertEquals("Smart view (99)", presentation.seededFromLabel)
     }
 
     @Test
