@@ -70,6 +70,7 @@ fun SmartPlaylistDetailScreen(
     playlistId: Int,
     vm: AppViewModel,
     onOpenPlayer: (Int) -> Unit,
+    onNavigateAfterDelete: () -> Unit,
 ) {
     val actionScope = rememberCoroutineScope()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
@@ -86,6 +87,9 @@ fun SmartPlaylistDetailScreen(
     var showFreezeDialog by remember { mutableStateOf(false) }
     var freezeName by remember { mutableStateOf("") }
     var freezeInProgress by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var deleteInProgress by remember { mutableStateOf(false) }
     var pinActionInProgress by remember { mutableStateOf(false) }
 
     fun displayedItems(): List<PlaybackQueueItem> = pinnedItems + liveItems
@@ -251,6 +255,10 @@ fun SmartPlaylistDetailScreen(
                 },
                 freezeEnabled = detail != null && !loading && !freezeInProgress,
                 onFreezeManual = { showFreezeDialog = true },
+                editEnabled = detail != null && !loading,
+                onEdit = { showEditDialog = true },
+                deleteEnabled = detail != null && !loading && !deleteInProgress,
+                onDelete = { showDeleteDialog = true },
             )
         },
         selectionBar = if (selectionActive) {
@@ -473,6 +481,69 @@ fun SmartPlaylistDetailScreen(
             },
         )
     }
+
+    val editDetail = detail
+    if (showEditDialog && editDetail != null) {
+        SmartPlaylistFormDialog(
+            title = "Edit smart playlist",
+            initialState = SmartPlaylistFormState.fromDetail(editDetail),
+            confirmLabel = "Save",
+            onDismiss = { showEditDialog = false },
+            onSubmit = { request ->
+                vm.updateSmartPlaylist(editDetail.id, request)
+            },
+            onSaved = { updated ->
+                detail = updated
+                showEditDialog = false
+                vm.showSnackbar("Updated smart playlist \"${updated.name}\".")
+                actionScope.launch { loadContent(showSpinner = false) }
+            },
+        )
+    }
+
+    if (showDeleteDialog && editDetail != null) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!deleteInProgress) showDeleteDialog = false
+            },
+            title = { Text("Delete smart playlist?") },
+            text = {
+                Text(
+                    "Delete \"${editDetail.name}\" and its pins. Matching saved items are not deleted.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !deleteInProgress,
+                    onClick = {
+                        deleteInProgress = true
+                        actionScope.launch {
+                            vm.deleteSmartPlaylist(editDetail.id)
+                                .onSuccess {
+                                    showDeleteDialog = false
+                                    vm.showSnackbar("Deleted smart playlist \"${editDetail.name}\".")
+                                    onNavigateAfterDelete()
+                                }
+                                .onFailure { error ->
+                                    vm.showSnackbar(error.message ?: "Couldn't delete smart playlist.")
+                                }
+                            deleteInProgress = false
+                        }
+                    },
+                ) {
+                    Text(if (deleteInProgress) "Deleting..." else "Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !deleteInProgress,
+                    onClick = { showDeleteDialog = false },
+                ) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -487,6 +558,10 @@ private fun SmartPlaylistHeader(
     onSeedUpNext: () -> Unit,
     freezeEnabled: Boolean,
     onFreezeManual: () -> Unit,
+    editEnabled: Boolean,
+    onEdit: () -> Unit,
+    deleteEnabled: Boolean,
+    onDelete: () -> Unit,
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -567,6 +642,22 @@ private fun SmartPlaylistHeader(
                             onClick = {
                                 menuExpanded = false
                                 onFreezeManual()
+                            },
+                        )
+                        DropdownMenuItem(
+                            enabled = editEnabled,
+                            text = { Text("Edit filters") },
+                            onClick = {
+                                menuExpanded = false
+                                onEdit()
+                            },
+                        )
+                        DropdownMenuItem(
+                            enabled = deleteEnabled,
+                            text = { Text("Delete smart playlist") },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
                             },
                         )
                     }

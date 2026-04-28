@@ -2,7 +2,9 @@ package com.mimeo.android.model
 
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.encodeToString
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -54,5 +56,28 @@ class SmartPlaylistSerializationTest {
 
         assertEquals("manual", playlist.kind)
         assertFalse(playlist.kind.equals("smart", ignoreCase = true))
+    }
+
+    @Test
+    fun encodesSmartPlaylistWritePayloadForDedicatedEndpoint() {
+        val payload = SmartPlaylistWriteRequest(
+            name = "Unread Python",
+            filterDefinition = SmartPlaylistFilterDefinition(
+                keyword = "python",
+                sourceLabels = listOf("HN", "Lobsters"),
+                includeArchived = "false",
+                favoritesOnly = true,
+                readStatus = "unread",
+            ),
+            sort = "saved_asc",
+        )
+
+        val encoded = json.parseToJsonElement(json.encodeToString(payload)).jsonObject
+        val filter = encoded["filter_definition"]!!.jsonObject
+
+        assertEquals("Unread Python", encoded["name"]!!.jsonPrimitive.content)
+        assertEquals("python", filter["keyword"]!!.jsonPrimitive.content)
+        assertEquals("unread", filter["read_status"]!!.jsonPrimitive.content)
+        assertEquals("saved_asc", encoded["sort"]!!.jsonPrimitive.content)
     }
 }
