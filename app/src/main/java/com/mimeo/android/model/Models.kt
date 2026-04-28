@@ -2,6 +2,7 @@
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 enum class ParagraphSpacingOption {
     SMALL,
@@ -73,8 +74,23 @@ data class PlaybackQueueResponse(
 data class PlaylistSummary(
     val id: Int,
     val name: String,
+    val kind: String = "manual",
     val entries: List<PlaylistEntrySummary> = emptyList(),
 )
+
+@Serializable
+data class SmartPlaylistSummary(
+    val id: Int,
+    val name: String,
+    val kind: String = "smart",
+    @SerialName("filter_definition") val filterDefinition: JsonObject = JsonObject(emptyMap()),
+    val sort: String = "saved_desc",
+    @SerialName("pin_count") val pinCount: Int = 0,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String? = null,
+)
+
+typealias SmartPlaylistDetail = SmartPlaylistSummary
 
 @Serializable
 data class PlaylistEntrySummary(

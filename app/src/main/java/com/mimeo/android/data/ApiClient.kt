@@ -9,7 +9,10 @@ import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.ItemTextContentBlock
 import com.mimeo.android.model.ArticleSummary
 import com.mimeo.android.model.PlaylistSummary
+import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaybackQueueResponse
+import com.mimeo.android.model.SmartPlaylistDetail
+import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.model.ProgressPayload
 import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.model.RawHttpResponse
@@ -344,6 +347,40 @@ class ApiClient(
             .build()
         executeJson(request) { payload ->
             json.decodeFromString(ListSerializer(PlaylistSummary.serializer()), payload)
+        }
+    }
+
+    suspend fun getSmartPlaylists(baseUrl: String, token: String): List<SmartPlaylistSummary> = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/smart-playlists"))
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .get()
+            .build()
+        executeJson(request) { payload ->
+            json.decodeFromString(ListSerializer(SmartPlaylistSummary.serializer()), payload)
+        }
+    }
+
+    suspend fun getSmartPlaylist(baseUrl: String, token: String, playlistId: Int): SmartPlaylistDetail = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/smart-playlists/$playlistId"))
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .get()
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<SmartPlaylistDetail>(payload) }
+    }
+
+    suspend fun getSmartPlaylistItems(baseUrl: String, token: String, playlistId: Int): List<PlaybackQueueItem> = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/smart-playlists/$playlistId/items"))
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .get()
+            .build()
+        executeJson(request) { payload ->
+            json.decodeFromString(ListSerializer(PlaybackQueueItem.serializer()), payload)
         }
     }
 

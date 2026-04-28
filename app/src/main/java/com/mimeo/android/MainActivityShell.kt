@@ -60,6 +60,7 @@ import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.PlaylistSummary
+import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.library.LibraryBatchAction
 import com.mimeo.android.ui.library.LibraryItemsScreen
@@ -67,6 +68,7 @@ import com.mimeo.android.ui.library.LibrarySortOption
 import com.mimeo.android.ui.player.MiniPlayer
 import com.mimeo.android.ui.player.PlayerScreen
 import com.mimeo.android.ui.playlists.PlaylistDetailScreen
+import com.mimeo.android.ui.playlists.SmartPlaylistDetailScreen
 import com.mimeo.android.ui.queue.JumpToNowPlayingPill
 import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
@@ -122,6 +124,7 @@ internal fun MainActivityShell(
         )
     }
     val playlists by vm.playlists.collectAsState()
+    val smartPlaylists by vm.smartPlaylists.collectAsState()
     val signInState by vm.signInState.collectAsState()
     val inboxItems by vm.inboxItems.collectAsState()
     val favoriteItems by vm.favoriteItems.collectAsState()
@@ -238,6 +241,12 @@ internal fun MainActivityShell(
         }
     }
 
+    LaunchedEffect(requiresSignIn) {
+        if (!requiresSignIn) {
+            vm.refreshSmartPlaylists()
+        }
+    }
+
     androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides drawerLayoutDirection) {
         BackHandler(enabled = drawerState.isOpen) {
             coroutineScope.launch { drawerState.close() }
@@ -250,6 +259,7 @@ internal fun MainActivityShell(
                     MimeoDrawerContent(
                         drawerItems = drawerItems,
                         playlists = playlists,
+                        smartPlaylists = smartPlaylists,
                         selectedDrawerRoute = selectedDrawerRoute,
                         selectedPlaylistId = settings.selectedPlaylistId,
                         onNavItemClick = { route ->
@@ -263,6 +273,10 @@ internal fun MainActivityShell(
                         onPlaylistClick = { playlistId ->
                             vm.selectPlaylist(playlistId)
                             nav.navigate("playlist/$playlistId") { launchSingleTop = true }
+                            coroutineScope.launch { drawerState.close() }
+                        },
+                        onSmartPlaylistClick = { playlistId ->
+                            nav.navigate("smartPlaylist/$playlistId") { launchSingleTop = true }
                             coroutineScope.launch { drawerState.close() }
                         },
                         onSmartQueueClick = {
@@ -356,7 +370,7 @@ internal fun MainActivityShell(
                                 Text("☰", style = MaterialTheme.typography.titleMedium)
                             }
                             Text(
-                                text = drawerRouteLabel(selectedDrawerRoute, playlists),
+                                text = drawerRouteLabel(selectedDrawerRoute, playlists, smartPlaylists),
                                 style = MaterialTheme.typography.titleMedium,
                             )
                         }
@@ -584,6 +598,17 @@ internal fun MainActivityShell(
                                     onOpenPlayer = shellState.openItemInLocus,
                                     onShowSnackbar = playerHandlers.onShowSnackbar,
                                     onNavigateBack = { nav.popBackStack() },
+                                )
+                            }
+                            composable(
+                                ROUTE_SMART_PLAYLIST_DETAIL,
+                                arguments = listOf(navArgument("playlistId") { type = NavType.IntType }),
+                            ) { backStack ->
+                                val playlistId = backStack.arguments?.getInt("playlistId") ?: return@composable
+                                SmartPlaylistDetailScreen(
+                                    playlistId = playlistId,
+                                    vm = vm,
+                                    onOpenPlayer = shellState.openItemInLocus,
                                 )
                             }
                             composable(ROUTE_SETTINGS) {
@@ -824,6 +849,7 @@ private fun NoNowPlayingScreen(onGoQueue: () -> Unit) {
 private fun resolveSelectedDrawerRoute(currentRoute: String): String = when {
     currentRoute.startsWith(ROUTE_SETTINGS_DIAGNOSTICS) -> ROUTE_SETTINGS
     currentRoute.startsWith(ROUTE_SETTINGS) -> ROUTE_SETTINGS
+    currentRoute.startsWith("smartPlaylist/") -> currentRoute
     currentRoute.startsWith("playlist/") -> currentRoute
     currentRoute.startsWith(ROUTE_UP_NEXT) -> ROUTE_UP_NEXT
     currentRoute.startsWith(ROUTE_ARCHIVE) -> ROUTE_ARCHIVE
@@ -833,7 +859,11 @@ private fun resolveSelectedDrawerRoute(currentRoute: String): String = when {
     else -> ROUTE_UP_NEXT
 }
 
-private fun drawerRouteLabel(route: String, playlists: List<PlaylistSummary>): String = when {
+private fun drawerRouteLabel(
+    route: String,
+    playlists: List<PlaylistSummary>,
+    smartPlaylists: List<SmartPlaylistSummary> = emptyList(),
+): String = when {
     route == ROUTE_INBOX -> "Inbox"
     route == ROUTE_FAVORITES -> "Favorites"
     route == ROUTE_ARCHIVE -> "Archive"
@@ -843,6 +873,10 @@ private fun drawerRouteLabel(route: String, playlists: List<PlaylistSummary>): S
     route.startsWith("playlist/") -> {
         val id = route.removePrefix("playlist/").toIntOrNull()
         playlists.firstOrNull { it.id == id }?.name ?: "Playlist"
+    }
+    route.startsWith("smartPlaylist/") -> {
+        val id = route.removePrefix("smartPlaylist/").toIntOrNull()
+        smartPlaylists.firstOrNull { it.id == id }?.name ?: "Smart Playlist"
     }
     else -> "Mimeo"
 }
