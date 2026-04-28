@@ -69,6 +69,7 @@ import com.mimeo.android.ui.player.MiniPlayer
 import com.mimeo.android.ui.player.PlayerScreen
 import com.mimeo.android.ui.playlists.PlaylistDetailScreen
 import com.mimeo.android.ui.playlists.SmartPlaylistDetailScreen
+import com.mimeo.android.ui.playlists.SmartPlaylistFormDialog
 import com.mimeo.android.ui.queue.JumpToNowPlayingPill
 import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
@@ -142,6 +143,7 @@ internal fun MainActivityShell(
     val statusMessage by vm.statusMessage.collectAsState()
     var showNewPlaylistDialog by remember { mutableStateOf(false) }
     var newPlaylistDialogName by remember { mutableStateOf("") }
+    var showNewSmartPlaylistDialog by remember { mutableStateOf(false) }
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var upNextTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var playerOpenRequestSignal by rememberSaveable { mutableIntStateOf(0) }
@@ -288,6 +290,10 @@ internal fun MainActivityShell(
                             coroutineScope.launch { drawerState.close() }
                             showNewPlaylistDialog = true
                         },
+                        onNewSmartPlaylistClick = {
+                            coroutineScope.launch { drawerState.close() }
+                            showNewSmartPlaylistDialog = true
+                        },
                         onSettingsClick = {
                             nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true }
                             coroutineScope.launch { drawerState.close() }
@@ -331,6 +337,20 @@ internal fun MainActivityShell(
                             newPlaylistDialogName = ""
                         },
                     ) { Text("Cancel") }
+                },
+            )
+        }
+
+        if (showNewSmartPlaylistDialog) {
+            SmartPlaylistFormDialog(
+                title = "New smart playlist",
+                confirmLabel = "Create",
+                onDismiss = { showNewSmartPlaylistDialog = false },
+                onSubmit = vm::createSmartPlaylist,
+                onSaved = { created ->
+                    showNewSmartPlaylistDialog = false
+                    vm.showSnackbar("Created smart playlist \"${created.name}\".")
+                    nav.navigate("smartPlaylist/${created.id}") { launchSingleTop = true }
                 },
             )
         }
@@ -609,6 +629,12 @@ internal fun MainActivityShell(
                                     playlistId = playlistId,
                                     vm = vm,
                                     onOpenPlayer = shellState.openItemInLocus,
+                                    onNavigateAfterDelete = {
+                                        nav.navigate(ROUTE_UP_NEXT) {
+                                            popUpTo(ROUTE_UP_NEXT) { inclusive = false }
+                                            launchSingleTop = true
+                                        }
+                                    },
                                 )
                             }
                             composable(ROUTE_SETTINGS) {

@@ -35,6 +35,7 @@ internal fun MimeoDrawerContent(
     onSmartPlaylistClick: (playlistId: Int) -> Unit,
     onSmartQueueClick: () -> Unit,
     onNewPlaylistClick: () -> Unit,
+    onNewSmartPlaylistClick: () -> Unit,
     onSettingsClick: () -> Unit,
 ) {
     BoxWithConstraints {
@@ -157,6 +158,12 @@ internal fun MimeoDrawerContent(
                         label = { Text("+ New Playlist") },
                         selected = false,
                         onClick = onNewPlaylistClick,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    )
+                    NavigationDrawerItem(
+                        label = { Text("+ New Smart Playlist") },
+                        selected = false,
+                        onClick = onNewSmartPlaylistClick,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
                     )
                 }

@@ -115,6 +115,7 @@ import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.SmartPlaylistDetail
 import com.mimeo.android.model.SmartPlaylistSummary
+import com.mimeo.android.model.SmartPlaylistWriteRequest
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PendingItemAction
@@ -2750,6 +2751,118 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         "Created manual playlist \"${created.name}\", but couldn't refresh playlists.",
                     )
                 }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                updateSyncBadgeState()
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun createSmartPlaylist(payload: SmartPlaylistWriteRequest): Result<SmartPlaylistSummary> {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        return try {
+            val created = repository.createSmartPlaylist(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                payload = payload,
+            )
+            if (!created.kind.equals("smart", ignoreCase = true)) {
+                return Result.failure(
+                    IllegalStateException("Create endpoint returned a manual playlist instead of a smart playlist."),
+                )
+            }
+            _smartPlaylists.update { rows ->
+                listOf(created) + rows.filterNot { existing -> existing.id == created.id }
+            }
+            refreshSmartPlaylistsOnce()
+                .map { created }
+                .recoverCatching {
+                    throw IllegalStateException(
+                        "Created smart playlist \"${created.name}\", but couldn't refresh smart playlists.",
+                    )
+                }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                updateSyncBadgeState()
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun updateSmartPlaylist(
+        playlistId: Int,
+        payload: SmartPlaylistWriteRequest,
+    ): Result<SmartPlaylistSummary> {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        return try {
+            val updated = repository.updateSmartPlaylist(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                playlistId = playlistId,
+                payload = payload,
+            )
+            if (!updated.kind.equals("smart", ignoreCase = true)) {
+                return Result.failure(
+                    IllegalStateException("Update endpoint returned a manual playlist instead of a smart playlist."),
+                )
+            }
+            _smartPlaylists.update { rows ->
+                listOf(updated) + rows.filterNot { existing -> existing.id == updated.id }
+            }
+            refreshSmartPlaylistsOnce()
+                .map { updated }
+                .recoverCatching {
+                    throw IllegalStateException(
+                        "Updated smart playlist \"${updated.name}\", but couldn't refresh smart playlists.",
+                    )
+                }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                updateSyncBadgeState()
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun deleteSmartPlaylist(playlistId: Int): Result<Unit> {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        return try {
+            repository.deleteSmartPlaylist(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                playlistId = playlistId,
+            )
+            _smartPlaylists.update { rows -> rows.filterNot { it.id == playlistId } }
+            _currentSmartPlaylistItems.value = emptyList()
+            refreshSmartPlaylistsOnce()
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {

@@ -19,6 +19,7 @@ import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.model.SmartPlaylistDetail
 import com.mimeo.android.model.SmartPlaylistSummary
+import com.mimeo.android.model.SmartPlaylistWriteRequest
 import com.mimeo.android.work.WorkScheduler
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -254,6 +255,27 @@ class PlaybackRepository(
 
     suspend fun getSmartPlaylistItems(baseUrl: String, token: String, playlistId: Int): List<PlaybackQueueItem> {
         return apiClient.getSmartPlaylistItems(baseUrl, token, playlistId)
+    }
+
+    suspend fun createSmartPlaylist(
+        baseUrl: String,
+        token: String,
+        payload: SmartPlaylistWriteRequest,
+    ): SmartPlaylistSummary {
+        return apiClient.createSmartPlaylist(baseUrl, token, payload)
+    }
+
+    suspend fun updateSmartPlaylist(
+        baseUrl: String,
+        token: String,
+        playlistId: Int,
+        payload: SmartPlaylistWriteRequest,
+    ): SmartPlaylistSummary {
+        return apiClient.updateSmartPlaylist(baseUrl, token, playlistId, payload)
+    }
+
+    suspend fun deleteSmartPlaylist(baseUrl: String, token: String, playlistId: Int) {
+        apiClient.deleteSmartPlaylist(baseUrl, token, playlistId)
     }
 
     suspend fun pinSmartPlaylistItem(

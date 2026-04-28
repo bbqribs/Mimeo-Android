@@ -93,6 +93,27 @@ data class SmartPlaylistSummary(
 typealias SmartPlaylistDetail = SmartPlaylistSummary
 
 @Serializable
+data class SmartPlaylistFilterDefinition(
+    val keyword: String? = null,
+    @SerialName("source_labels") val sourceLabels: List<String>? = null,
+    val domains: List<String>? = null,
+    @SerialName("capture_kinds") val captureKinds: List<String>? = null,
+    @SerialName("saved_after") val savedAfter: String? = null,
+    @SerialName("saved_before") val savedBefore: String? = null,
+    @SerialName("date_window") val dateWindow: String? = null,
+    @SerialName("include_archived") val includeArchived: String = "false",
+    @SerialName("favorites_only") val favoritesOnly: Boolean = false,
+    @SerialName("read_status") val readStatus: String = "any",
+)
+
+@Serializable
+data class SmartPlaylistWriteRequest(
+    val name: String? = null,
+    @SerialName("filter_definition") val filterDefinition: SmartPlaylistFilterDefinition? = null,
+    val sort: String? = null,
+)
+
+@Serializable
 data class SmartPlaylistPinRequest(
     @SerialName("article_id") val articleId: Int,
     val position: Int? = null,
