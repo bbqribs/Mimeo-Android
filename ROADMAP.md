@@ -100,7 +100,7 @@ Non-goals still in force:
 History of shipped work, kept for reference. Newest at the top of each
 block. Not a forward-looking list.
 
-- [x] **Smart playlists Android read/display shipped**: Android now uses dedicated `/smart-playlists` endpoints, displays smart playlists separately from manual playlists, treats smart detail as live/dynamic/read-only, supports row tap-to-Locus and queue actions on smart rows, and supports batch Add Selected to Up Next. Manual playlist ID guards remain for `selectedPlaylistId` and `defaultSavePlaylistId`.
+- [x] **Smart playlists Android read/display + Up Next seed shipped**: Android now uses dedicated `/smart-playlists` endpoints, displays smart playlists separately from manual playlists, treats smart detail as live/dynamic/read-only, supports row tap-to-Locus and smart row Play Now / Play Next / Play Last, supports batch Add Selected to Up Next, and ships "Use as Up Next". Smart seeding uses the currently displayed rows in displayed order, requires confirmation before replacing an existing non-empty Up Next, labels the source as `Smart view: {name}`, and is snapshot-only with confirmation copy that says no live sync. No backend/API change, cross-device continuity, live sync, or manual playlist reseed behavior change was introduced. Android smart create/edit/delete UI, pin/unpin/reorder UI, and freeze-as-manual remain deferred.
 
 - Up Next layout slices 1–3 (2026-04-27): active/upcoming region
   scaffolding; active anchor (not draggable); history hidden (deferred);
