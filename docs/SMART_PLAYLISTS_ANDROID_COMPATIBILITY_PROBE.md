@@ -159,11 +159,13 @@ This probe captured pre-implementation compatibility risk. Current shipped state
 - Smart detail is live/dynamic/read-only.
 - Smart rows support row tap to Locus and queue actions.
 - Batch Add Selected to Up Next is supported.
+- Smart playlist detail ships "Use as Up Next".
+- Smart Up Next seeding is explicit and snapshot-only: it uses the currently displayed smart playlist rows in displayed order, requires confirmation before replacing an existing non-empty Up Next, says snapshot/no live sync in confirmation copy, and labels the Up Next source as `Smart view: {name}`.
+- No backend/API change, cross-device continuity, live sync, or manual playlist reseed behavior change was introduced.
 - Manual playlist ID guards remain for `selectedPlaylistId` and `defaultSavePlaylistId`.
 
 Deferred items remain:
 - Android smart playlist create/edit/delete UI.
 - Android pin/unpin/reorder UI.
 - Android freeze-as-manual action.
-- Up Next seed from smart playlist.
 - Mixed manual+smart response from `GET /playlists`.
