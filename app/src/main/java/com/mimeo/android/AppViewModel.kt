@@ -113,6 +113,8 @@ import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.model.SmartPlaylistDetail
+import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PendingItemAction
@@ -211,6 +213,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val rebuiltItemCount: Int,
     )
 
+    data class SmartPlaylistContent(
+        val detail: SmartPlaylistDetail,
+        val items: List<PlaybackQueueItem>,
+    )
+
     private val settingsStore = SettingsStore(application.applicationContext)
     private val apiClient = ApiClient()
     private val database = AppDatabase.getInstance(application.applicationContext)
@@ -269,6 +276,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val pendingManualRetryInProgress: StateFlow<Boolean> = _pendingManualRetryInProgress.asStateFlow()
     private val _playlists = MutableStateFlow<List<PlaylistSummary>>(emptyList())
     val playlists: StateFlow<List<PlaylistSummary>> = _playlists.asStateFlow()
+    private val _smartPlaylists = MutableStateFlow<List<SmartPlaylistSummary>>(emptyList())
+    val smartPlaylists: StateFlow<List<SmartPlaylistSummary>> = _smartPlaylists.asStateFlow()
+    private val _currentSmartPlaylistItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
 
     private val _queueLoading = MutableStateFlow(false)
     val queueLoading: StateFlow<Boolean> = _queueLoading.asStateFlow()
@@ -509,6 +519,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     refreshAutoDownloadDiagnostics()
                     _queueOffline.value = false
                     _playlists.value = emptyList()
+                    _smartPlaylists.value = emptyList()
+                    _currentSmartPlaylistItems.value = emptyList()
                 }
                 if (previous.apiToken.isBlank() && next.apiToken.isNotBlank()) {
                     authFailureHandledThisSession = false
@@ -1639,16 +1651,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         val flushedPendingActions = flushPendingItemActions()
         _queueLoading.value = true
+        var queuePlaylistId = current.selectedPlaylistId
         return@withLock try {
             runCatching {
                 repository.listPlaylists(current.baseUrl, current.apiToken)
             }.getOrNull()?.let { loaded ->
-                _playlists.value = loaded
+                _playlists.value = manualPlaylistsOnly(loaded)
+                queuePlaylistId = manualPlaylistIdOrNull(current.selectedPlaylistId)
+                if (current.selectedPlaylistId != null && queuePlaylistId == null) {
+                    _settings.update { it.copy(selectedPlaylistId = null) }
+                    settingsStore.saveSelectedPlaylistId(null)
+                    _statusMessage.value = "Selected playlist removed; switched to Smart queue"
+                }
+            }
+            runCatching {
+                repository.listSmartPlaylists(current.baseUrl, current.apiToken)
+            }.getOrNull()?.let { loaded ->
+                _smartPlaylists.value = loaded
             }
             val queueResult = repository.loadQueueAndPrefetch(
                 current.baseUrl,
                 current.apiToken,
-                playlistId = current.selectedPlaylistId,
+                playlistId = queuePlaylistId,
                 prefetchCount = 0,
                 sortField = queueServerSortField,
                 sortDir = queueServerSortDir,
@@ -1665,7 +1689,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
             offlineReadyIds = ensurePendingItemsOfflineReady(
                 queueItems = queueItems,
-                selectedPlaylistId = current.selectedPlaylistId,
+                selectedPlaylistId = queuePlaylistId,
                 offlineReadyIds = offlineReadyIds,
                 current = current,
             )
@@ -1713,17 +1737,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 offlineReadyIds = offlineReadyIds,
                 knownNoActiveIds = _noActiveContentItemIds.value,
             )
-            settingsStore.saveQueueSnapshot(current.selectedPlaylistId, queue.copy(items = queueItems))
+            settingsStore.saveQueueSnapshot(queuePlaylistId, queue.copy(items = queueItems))
             syncPendingSaveProcessingFailures(
                 queueItems = queueItems,
-                selectedPlaylistId = current.selectedPlaylistId,
+                selectedPlaylistId = queuePlaylistId,
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
                 notifySnackbars = notifyPendingFailureSnackbars,
             )
             reconcilePendingSavesWithQueue(
                 queueItems = queueItems,
-                selectedPlaylistId = current.selectedPlaylistId,
+                selectedPlaylistId = queuePlaylistId,
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
             )
@@ -1746,7 +1770,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val refreshedQueueResult = repository.loadQueueAndPrefetch(
                     current.baseUrl,
                     current.apiToken,
-                    playlistId = current.selectedPlaylistId,
+                    playlistId = queuePlaylistId,
                     prefetchCount = 0,
                     sortField = queueServerSortField,
                     sortDir = queueServerSortDir,
@@ -1758,7 +1782,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 var refreshedOfflineReadyIds = resolveOfflineReadyIds(refreshedQueueItems)
                 refreshedOfflineReadyIds = ensurePendingItemsOfflineReady(
                     queueItems = refreshedQueueItems,
-                    selectedPlaylistId = current.selectedPlaylistId,
+                    selectedPlaylistId = queuePlaylistId,
                     offlineReadyIds = refreshedOfflineReadyIds,
                     current = current,
                 )
@@ -1798,17 +1822,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     offlineReadyIds = refreshedOfflineReadyIds,
                     knownNoActiveIds = _noActiveContentItemIds.value,
                 )
-                settingsStore.saveQueueSnapshot(current.selectedPlaylistId, refreshedQueue.copy(items = refreshedQueueItems))
+                settingsStore.saveQueueSnapshot(queuePlaylistId, refreshedQueue.copy(items = refreshedQueueItems))
                 syncPendingSaveProcessingFailures(
                     queueItems = refreshedQueueItems,
-                    selectedPlaylistId = current.selectedPlaylistId,
+                    selectedPlaylistId = queuePlaylistId,
                     baseUrl = current.baseUrl,
                     token = current.apiToken,
                     notifySnackbars = notifyPendingFailureSnackbars,
                 )
                 reconcilePendingSavesWithQueue(
                     queueItems = refreshedQueueItems,
-                    selectedPlaylistId = current.selectedPlaylistId,
+                    selectedPlaylistId = queuePlaylistId,
                     baseUrl = current.baseUrl,
                     token = current.apiToken,
                 )
@@ -1828,7 +1852,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (
                 e.statusCode in 500..599 &&
                 applySavedQueueSnapshot(
-                    selectedPlaylistId = current.selectedPlaylistId,
+                    selectedPlaylistId = queuePlaylistId,
                     markOffline = true,
                     statusMessage = null,
                 )
@@ -1844,7 +1868,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (
                 networkError &&
                 applySavedQueueSnapshot(
-                    selectedPlaylistId = current.selectedPlaylistId,
+                    selectedPlaylistId = queuePlaylistId,
                     markOffline = true,
                     statusMessage = null,
                 )
@@ -1905,7 +1929,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val result = apiClient.getQueue(
                     baseUrl = current.baseUrl,
                     token = current.apiToken,
-                    playlistId = current.selectedPlaylistId,
+                    playlistId = manualPlaylistIdOrNull(current.selectedPlaylistId),
                     offset = offset,
                     limit = ApiClient.QUEUE_LOAD_MORE_LIMIT,
                     sortField = queueServerSortField,
@@ -2511,19 +2535,42 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         return try {
             val loaded = repository.listPlaylists(current.baseUrl, current.apiToken)
-            _playlists.value = loaded
+            val manualPlaylists = manualPlaylistsOnly(loaded)
+            _playlists.value = manualPlaylists
             val selected = current.selectedPlaylistId
-            if (selected != null && loaded.none { it.id == selected }) {
+            if (selected != null && manualPlaylists.none { it.id == selected }) {
                 _settings.update { it.copy(selectedPlaylistId = null) }
                 settingsStore.saveSelectedPlaylistId(null)
                 _statusMessage.value = "Selected playlist removed; switched to Smart queue"
             }
             val defaultSave = current.defaultSavePlaylistId
-            if (defaultSave != null && loaded.none { it.id == defaultSave }) {
+            if (defaultSave != null && manualPlaylists.none { it.id == defaultSave }) {
                 _settings.update { it.copy(defaultSavePlaylistId = null) }
                 settingsStore.saveDefaultSavePlaylistId(null)
                 _statusMessage.value = "Default save playlist removed; switched to Smart queue"
             }
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(Unit)
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                updateSyncBadgeState()
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun refreshSmartPlaylistsOnce(): Result<Unit> {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        return try {
+            _smartPlaylists.value = repository.listSmartPlaylists(current.baseUrl, current.apiToken)
             _queueOffline.value = false
             updateSyncBadgeState()
             Result.success(Unit)
@@ -2545,12 +2592,52 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun refreshSmartPlaylists() {
+        viewModelScope.launch {
+            refreshSmartPlaylistsOnce()
+        }
+    }
+
+    suspend fun loadSmartPlaylistContent(playlistId: Int): Result<SmartPlaylistContent> {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        return try {
+            val detail = repository.getSmartPlaylist(current.baseUrl, current.apiToken, playlistId)
+            val items = applyFavoriteOverrides(
+                applyPendingBinProjectionToNonBinItems(
+                    repository.getSmartPlaylistItems(current.baseUrl, current.apiToken, playlistId),
+                ),
+            )
+            _smartPlaylists.update { rows ->
+                listOf(detail) + rows.filterNot { it.id == detail.id }
+            }
+            _currentSmartPlaylistItems.value = items
+            _queueOffline.value = false
+            updateSyncBadgeState()
+            Result.success(SmartPlaylistContent(detail = detail, items = items))
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                updateSyncBadgeState()
+            }
+            Result.failure(error)
+        }
+    }
+
     fun selectPlaylist(playlistId: Int?) {
         viewModelScope.launch {
-            _settings.update { current -> current.copy(selectedPlaylistId = playlistId) }
-            settingsStore.saveSelectedPlaylistId(playlistId)
+            val manualPlaylistId = playlistId?.takeIf { id -> _playlists.value.any { it.id == id } }
+            _settings.update { current -> current.copy(selectedPlaylistId = manualPlaylistId) }
+            settingsStore.saveSelectedPlaylistId(manualPlaylistId)
             val snapshotApplied = applySavedQueueSnapshot(
-                selectedPlaylistId = playlistId,
+                selectedPlaylistId = manualPlaylistId,
                 markOffline = false,
                 statusMessage = null,
             )
@@ -2566,8 +2653,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveDefaultSavePlaylistId(playlistId: Int?) {
         viewModelScope.launch {
-            _settings.update { current -> current.copy(defaultSavePlaylistId = playlistId) }
-            settingsStore.saveDefaultSavePlaylistId(playlistId)
+            val manualPlaylistId = playlistId?.takeIf { id -> _playlists.value.any { it.id == id } }
+            _settings.update { current -> current.copy(defaultSavePlaylistId = manualPlaylistId) }
+            settingsStore.saveDefaultSavePlaylistId(manualPlaylistId)
         }
     }
 
@@ -2998,16 +3086,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return Result.failure(IllegalStateException("Token required"))
         }
         return try {
+            var queuePlaylistId = current.selectedPlaylistId
             runCatching {
                 repository.listPlaylists(current.baseUrl, current.apiToken)
             }.getOrNull()?.let { loaded ->
-                _playlists.value = loaded
+                _playlists.value = manualPlaylistsOnly(loaded)
+                queuePlaylistId = manualPlaylistIdOrNull(current.selectedPlaylistId)
             }
 
             val queueResult = repository.loadQueueAndPrefetch(
                 current.baseUrl,
                 current.apiToken,
-                playlistId = current.selectedPlaylistId,
+                playlistId = queuePlaylistId,
                 prefetchCount = 0,
                 sortField = queueServerSortField,
                 sortDir = queueServerSortDir,
@@ -3024,7 +3114,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val resolvedOfflineReadyIds = resolveOfflineReadyIds(queueItems)
             _cachedItemIds.update { previous -> previous + resolvedOfflineReadyIds }
             reconcileCachedItemVisibility()
-            settingsStore.saveQueueSnapshot(current.selectedPlaylistId, queue.copy(items = queueItems))
+            settingsStore.saveQueueSnapshot(queuePlaylistId, queue.copy(items = queueItems))
             repository.reconcileSessionWithQueue(queueItems)?.let { updated ->
                 _nowPlayingSession.value = updated
             }
@@ -4133,6 +4223,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun manualPlaylistsOnly(rows: List<PlaylistSummary>): List<PlaylistSummary> =
+        rows.filterNot { it.kind.equals("smart", ignoreCase = true) }
+
+    private fun manualPlaylistIdOrNull(playlistId: Int?): Int? =
+        playlistId?.takeIf { id -> _playlists.value.any { it.id == id } }
+
+    private fun allQueueActionItems(): List<PlaybackQueueItem> =
+        queueItems.value +
+            inboxItems.value +
+            archivedItems.value +
+            favoriteItems.value +
+            binItems.value +
+            _currentSmartPlaylistItems.value
+
     private fun latestPendingBinActionByItemId(): Map<Int, PendingItemActionType> {
         val coalesced = coalescePendingItemActions(_pendingItemActions.value)
         return coalesced
@@ -4249,7 +4353,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playNow(itemId: Int) {
-        val allItems = queueItems.value + inboxItems.value + archivedItems.value + favoriteItems.value + binItems.value
+        val allItems = allQueueActionItems()
         val item = allItems.firstOrNull { it.itemId == itemId } ?: return
         viewModelScope.launch {
             val session = repository.playNowInSession(item)
@@ -4264,7 +4368,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playNext(itemId: Int) {
-        val allItems = queueItems.value + inboxItems.value + archivedItems.value + favoriteItems.value + binItems.value
+        val allItems = allQueueActionItems()
         val item = allItems.firstOrNull { it.itemId == itemId } ?: return
         val label = "\"${item.title?.take(40) ?: "Item"}\""
         val alreadyInSession = nowPlayingSession.value?.items?.any { it.itemId == itemId } == true
@@ -4276,7 +4380,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playLast(itemId: Int) {
-        val allItems = queueItems.value + inboxItems.value + archivedItems.value + favoriteItems.value + binItems.value
+        val allItems = allQueueActionItems()
         val item = allItems.firstOrNull { it.itemId == itemId } ?: return
         val label = "\"${item.title?.take(40) ?: "Item"}\""
         val alreadyInSession = nowPlayingSession.value?.items?.any { it.itemId == itemId } == true
@@ -4290,7 +4394,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun playLastBatch(itemIds: List<Int>) {
         val requestedIds = itemIds.distinct()
         if (requestedIds.isEmpty()) return
-        val allItemsById = (queueItems.value + inboxItems.value + archivedItems.value + favoriteItems.value + binItems.value)
+        val allItemsById = allQueueActionItems()
             .associateBy { it.itemId }
         val items = requestedIds.mapNotNull { allItemsById[it] }
         if (items.isEmpty()) return
@@ -4305,7 +4409,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun playNextBatch(itemIds: List<Int>) {
         val requestedIds = itemIds.distinct()
         if (requestedIds.isEmpty()) return
-        val allItemsById = (queueItems.value + inboxItems.value + archivedItems.value + favoriteItems.value + binItems.value)
+        val allItemsById = allQueueActionItems()
             .associateBy { it.itemId }
         val items = requestedIds.mapNotNull { allItemsById[it] }
         if (items.isEmpty()) return

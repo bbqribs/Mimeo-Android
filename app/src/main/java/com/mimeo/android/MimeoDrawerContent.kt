@@ -21,15 +21,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.model.PlaylistSummary
+import com.mimeo.android.model.SmartPlaylistSummary
 
 @Composable
 internal fun MimeoDrawerContent(
     drawerItems: List<DrawerDestination>,
     playlists: List<PlaylistSummary>,
+    smartPlaylists: List<SmartPlaylistSummary>,
     selectedDrawerRoute: String,
     selectedPlaylistId: Int?,
     onNavItemClick: (route: String) -> Unit,
     onPlaylistClick: (playlistId: Int) -> Unit,
+    onSmartPlaylistClick: (playlistId: Int) -> Unit,
     onSmartQueueClick: () -> Unit,
     onNewPlaylistClick: () -> Unit,
     onSettingsClick: () -> Unit,
@@ -113,6 +116,42 @@ internal fun MimeoDrawerContent(
                                 selectedTextColor = MaterialTheme.colorScheme.primary,
                             ),
                         )
+                    }
+                    if (smartPlaylists.isNotEmpty()) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        )
+                        Text(
+                            text = "Smart Playlists",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp),
+                        )
+                        smartPlaylists.forEach { playlist ->
+                            NavigationDrawerItem(
+                                label = {
+                                    Column {
+                                        Text(
+                                            text = playlist.name,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = "Live dynamic",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                },
+                                selected = selectedDrawerRoute == "smartPlaylist/${playlist.id}",
+                                onClick = { onSmartPlaylistClick(playlist.id) },
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                                colors = NavigationDrawerItemDefaults.colors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                ),
+                            )
+                        }
                     }
                     NavigationDrawerItem(
                         label = { Text("+ New Playlist") },
