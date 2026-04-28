@@ -347,10 +347,10 @@ Listed in approximate priority order; not necessarily the next tickets.
    made.
 
 8. **C2 — Smart playlist pinned/live surface.**
-   Android read/display plus explicit Up Next seed is shipped. Remaining
-   Android work is create/edit/delete UI, pin/unpin/reorder UI, and
-   freeze-as-manual. Pin behavior under archive/bin/filter change still
-   requires a §6.2 decision before Android pin UI.
+   Android read/display plus explicit Up Next seed and Android
+   pin/unpin/reorder UI are shipped. Remaining Android work is
+   create/edit/delete UI and freeze-as-manual. Pin behavior under
+   archive/bin/filter change remains a product-policy follow-up.
 
 9. **C3 — Bluesky harvester rolling surface.**
    Requires Bluesky representation model ratification. Lane 7 backend.
