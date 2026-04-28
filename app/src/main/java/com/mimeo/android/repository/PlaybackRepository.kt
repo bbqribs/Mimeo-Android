@@ -283,6 +283,15 @@ class PlaybackRepository(
         apiClient.reorderSmartPlaylistPins(baseUrl, token, playlistId, itemIds)
     }
 
+    suspend fun freezeSmartPlaylist(
+        baseUrl: String,
+        token: String,
+        playlistId: Int,
+        name: String? = null,
+    ): PlaylistSummary {
+        return apiClient.freezeSmartPlaylist(baseUrl, token, playlistId, name)
+    }
+
     suspend fun listTrashedItems(baseUrl: String, token: String): List<ArticleSummary> {
         return apiClient.getTrashedItems(baseUrl, token)
     }

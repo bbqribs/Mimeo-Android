@@ -27,6 +27,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -42,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mimeo.android.ACTION_KEY_OPEN_PLAYLIST_PREFIX
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.SmartPlaylistDetail
@@ -80,6 +83,9 @@ fun SmartPlaylistDetailScreen(
     var selectedIds by remember { mutableStateOf(emptySet<Int>()) }
     var showSeedConfirmation by remember { mutableStateOf(false) }
     var seedInProgress by remember { mutableStateOf(false) }
+    var showFreezeDialog by remember { mutableStateOf(false) }
+    var freezeName by remember { mutableStateOf("") }
+    var freezeInProgress by remember { mutableStateOf(false) }
     var pinActionInProgress by remember { mutableStateOf(false) }
 
     fun displayedItems(): List<PlaybackQueueItem> = pinnedItems + liveItems
@@ -169,6 +175,33 @@ fun SmartPlaylistDetailScreen(
         }
     }
 
+    suspend fun freezeAsManualSnapshot() {
+        val currentDetail = detail ?: return
+        if (freezeInProgress) return
+        freezeInProgress = true
+        try {
+            vm.freezeSmartPlaylistAsManual(
+                playlistId = currentDetail.id,
+                name = freezeName,
+            )
+                .onSuccess { created ->
+                    showFreezeDialog = false
+                    freezeName = ""
+                    vm.showSnackbar(
+                        message = "Created manual snapshot \"${created.name}\". Smart playlist unchanged.",
+                        actionLabel = "Open",
+                        actionKey = "$ACTION_KEY_OPEN_PLAYLIST_PREFIX${created.id}",
+                        duration = SnackbarDuration.Long,
+                    )
+                }
+                .onFailure { error ->
+                    vm.showSnackbar(error.message ?: "Couldn't freeze smart playlist.")
+                }
+        } finally {
+            freezeInProgress = false
+        }
+    }
+
     suspend fun runPinMutation(
         fallbackMessage: String,
         action: suspend () -> Result<AppViewModel.SmartPlaylistContent>,
@@ -216,6 +249,8 @@ fun SmartPlaylistDetailScreen(
                         actionScope.launch { seedUpNextFromSnapshot() }
                     }
                 },
+                freezeEnabled = detail != null && !loading && !freezeInProgress,
+                onFreezeManual = { showFreezeDialog = true },
             )
         },
         selectionBar = if (selectionActive) {
@@ -399,6 +434,45 @@ fun SmartPlaylistDetailScreen(
             },
         )
     }
+
+    if (showFreezeDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!freezeInProgress) showFreezeDialog = false
+            },
+            title = { Text("Freeze as manual playlist") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "This creates a manual snapshot of the current smart playlist. The smart playlist stays live; future smart playlist changes will not update the frozen manual playlist.",
+                    )
+                    OutlinedTextField(
+                        value = freezeName,
+                        onValueChange = { freezeName = it },
+                        label = { Text("Playlist name (optional)") },
+                        singleLine = true,
+                        enabled = !freezeInProgress,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !freezeInProgress,
+                    onClick = { actionScope.launch { freezeAsManualSnapshot() } },
+                ) {
+                    Text(if (freezeInProgress) "Freezing..." else "Freeze snapshot")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !freezeInProgress,
+                    onClick = { showFreezeDialog = false },
+                ) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -411,6 +485,8 @@ private fun SmartPlaylistHeader(
     onRefresh: () -> Unit,
     seedEnabled: Boolean,
     onSeedUpNext: () -> Unit,
+    freezeEnabled: Boolean,
+    onFreezeManual: () -> Unit,
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -468,6 +544,33 @@ private fun SmartPlaylistHeader(
                     contentDescription = "Refresh smart playlist",
                     pullProgress = 0f,
                 )
+                Box {
+                    var menuExpanded by remember { mutableStateOf(false) }
+                    IconButton(
+                        onClick = { menuExpanded = true },
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Smart playlist actions",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            enabled = freezeEnabled,
+                            text = { Text("Freeze as manual playlist") },
+                            onClick = {
+                                menuExpanded = false
+                                onFreezeManual()
+                            },
+                        )
+                    }
+                }
             }
             if (detail != null) {
                 Text(

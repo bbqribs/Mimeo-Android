@@ -213,4 +213,63 @@ class ApiClientCompletionSemanticsTest {
             server.shutdown()
         }
     }
+
+    @Test
+    fun freezeSmartPlaylistSendsOptionalNameAndDecodesManualPlaylist() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody("""{"id":12,"name":"Python Snapshot","kind":"manual","entries":[]}"""),
+        )
+        server.start()
+        try {
+            val client = ApiClient(okHttpClient = OkHttpClient.Builder().followRedirects(false).build())
+            val created = client.freezeSmartPlaylist(
+                baseUrl = server.url("/").toString(),
+                token = "token",
+                playlistId = 7,
+                name = "Python Snapshot",
+            )
+
+            val request = server.takeRequest()
+            val body = request.body.readUtf8()
+            assertEquals("POST", request.method)
+            assertEquals("/smart-playlists/7/freeze", request.path)
+            assertTrue(body.contains("\"name\":\"Python Snapshot\""))
+            assertEquals(12, created.id)
+            assertEquals("Python Snapshot", created.name)
+            assertEquals("manual", created.kind)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun freezeSmartPlaylistUsesBackendDefaultWhenNameBlank() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody("""{"id":13,"name":"Copy of Smart","kind":"manual","entries":[]}"""),
+        )
+        server.start()
+        try {
+            val client = ApiClient(okHttpClient = OkHttpClient.Builder().followRedirects(false).build())
+            client.freezeSmartPlaylist(
+                baseUrl = server.url("/").toString(),
+                token = "token",
+                playlistId = 8,
+                name = "   ",
+            )
+
+            val request = server.takeRequest()
+            val body = request.body.readUtf8()
+            assertEquals("POST", request.method)
+            assertEquals("/smart-playlists/8/freeze", request.path)
+            assertEquals("{}", body)
+        } finally {
+            server.shutdown()
+        }
+    }
 }
