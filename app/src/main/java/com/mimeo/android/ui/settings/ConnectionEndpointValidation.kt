@@ -1,6 +1,7 @@
 package com.mimeo.android.ui.settings
 
 import com.mimeo.android.model.ConnectionMode
+import com.mimeo.android.model.DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL
 import java.net.URI
 import java.util.Locale
 
@@ -43,6 +44,17 @@ internal fun validateConnectionEndpoint(
     val isLikelyTailnetIp = isTailnetIpv4(lowerHost)
     val isLikelyTailnetHost = lowerHost.endsWith(".ts.net")
     val isPublicOrCustomHost = !isLoopback && !isEmulatorHost && !isLanIp && !isLikelyTailnetIp && !isLikelyTailnetHost
+    val isIpv4Host = isIpv4(lowerHost)
+
+    if (scheme == "https" && isLikelyTailnetIp) {
+        warnings += "HTTPS with a raw Tailscale IP is usually mismatched. Prefer https://<machine>.<tailnet>.ts.net, or use raw IP fallback over HTTP: $DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL."
+    }
+    if (scheme == "http" && isLikelyTailnetHost) {
+        warnings += "HTTP with a .ts.net host is usually mismatched. Try https://$lowerHost instead."
+    }
+    if (scheme == "http" && isIpv4Host && !isLanIp && !isLikelyTailnetIp) {
+        warnings += "Raw IP HTTP should be fallback-only on trusted networks. Prefer HTTPS when available."
+    }
 
     when (mode) {
         ConnectionMode.LOCAL -> {
@@ -85,7 +97,7 @@ internal fun validateConnectionEndpoint(
             }
             if (scheme == "http") {
                 warnings += if (isLikelyTailnetIp || isLikelyTailnetHost) {
-                    "HTTP over Tailscale/VPN can work, but HTTPS is preferred when available."
+                    "Remote mode is HTTPS-first. Prefer https://<machine>.<tailnet>.ts.net; use raw Tailscale IP HTTP only as fallback."
                 } else {
                     "Remote setup should be HTTPS-first. Use HTTP only for trusted encrypted tunnels."
                 }
@@ -113,4 +125,10 @@ private fun isTailnetIpv4(host: String): Boolean {
     val parts = host.split('.').mapNotNull { it.toIntOrNull() }
     if (parts.size != 4 || parts.any { it !in 0..255 }) return false
     return parts[0] == 100 && parts[1] in 64..127
+}
+
+private fun isIpv4(host: String): Boolean {
+    if (!host.matches(Regex("^\\d{1,3}(?:\\.\\d{1,3}){3}$"))) return false
+    val parts = host.split('.').mapNotNull { it.toIntOrNull() }
+    return parts.size == 4 && parts.all { it in 0..255 }
 }

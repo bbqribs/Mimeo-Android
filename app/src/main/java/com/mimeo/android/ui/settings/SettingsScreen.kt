@@ -1600,18 +1600,18 @@ private fun ConnectionMode.displayName(): String = when (this) {
 }
 
 private fun ConnectionMode.description(): String = when (this) {
-    ConnectionMode.LOCAL -> "Local emulator/dev mode (10.0.2.2 or localhost loopback)."
-    ConnectionMode.LAN -> "Same-network mode (phone + laptop on the same LAN/Wi-Fi)."
-    ConnectionMode.REMOTE -> "Off-LAN mode (Tailscale/VPN or hosted endpoint). Canonical HTTPS: $DEFAULT_REMOTE_BASE_URL."
+    ConnectionMode.LOCAL -> "Local emulator/dev mode (emulator host loopback via 10.0.2.2)."
+    ConnectionMode.LAN -> "Same-network mode (phone + host on the same LAN/Wi-Fi)."
+    ConnectionMode.REMOTE -> "Off-LAN mode (Tailscale/VPN or hosted endpoint). HTTPS-first: $DEFAULT_REMOTE_BASE_URL."
 }
 
 internal fun connectionModeBaseUrlGuidance(mode: ConnectionMode): String = when (mode) {
     ConnectionMode.LOCAL ->
-        "Use local/emulator loopback URL (typically http://10.0.2.2:8000). On physical phones, 10.0.2.2/localhost is wrong; use LAN or Remote."
+        "Use http://10.0.2.2:8000 for Android emulator access to your host machine. On physical phones, 10.0.2.2/localhost/127.0.0.1 points to the phone itself; use LAN or Remote."
     ConnectionMode.LAN ->
-        "Use your laptop LAN URL (for example http://192.168.x.y:8000) when phone and laptop share the same network. Prefer HTTPS if your LAN endpoint has TLS."
+        "Use http://<LAN-IP>:8000 when phone and host are on the same LAN. Use HTTPS only if you explicitly configured LAN TLS."
     ConnectionMode.REMOTE ->
-        "Use your Tailscale/VPN or hosted URL. HTTPS-first for Remote (canonical $DEFAULT_REMOTE_BASE_URL). If endpoint TLS is disabled, explicit fallback is $DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL. If using 192.168.x.y or 10.x, use LAN mode instead."
+        "Use HTTPS-first Tailscale remote URL: https://<machine>.<tailnet>.ts.net (canonical $DEFAULT_REMOTE_BASE_URL). Raw Tailscale IP HTTP is fallback-only when TLS is unavailable: $DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL. If using 192.168.x.y or 10.x, use LAN mode instead."
 }
 
 private fun connectionModeTokenAuthHelp(mode: ConnectionMode): String = when (mode) {

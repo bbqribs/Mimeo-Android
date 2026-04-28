@@ -5459,7 +5459,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return if (isEmulator) {
                 "10.0.2.2 is emulator-only; on a phone use LAN mode with http://<PC_LAN_IP>:8000."
             } else {
-                "127.0.0.1/localhost points to your phone; on a phone use LAN mode with http://<PC_LAN_IP>:8000."
+                "127.0.0.1/localhost points to your phone itself; use LAN mode with http://<PC_LAN_IP>:8000."
             }
         }
 
@@ -5476,6 +5476,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     "Remote mode is set but URL is a LAN IP. Use LAN mode on same Wi-Fi, or a Remote URL off-LAN."
                 isLoopback || isEmulator ->
                     "Remote mode cannot use loopback/emulator hosts. Use a Tailscale/VPN or hosted URL."
+                isTailnet && baseUrl.trim().startsWith("http://", ignoreCase = true) ->
+                    "Remote mode is HTTPS-first. Prefer https://<machine>.<tailnet>.ts.net; keep raw Tailscale IP HTTP as fallback only."
                 else -> null
             }
             ConnectionMode.LOCAL -> null

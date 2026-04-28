@@ -69,7 +69,7 @@ class ConnectionEndpointValidationTest {
     fun `remote tailnet http remains allowed with preference warning`() {
         val tailnet = validateConnectionEndpoint(ConnectionMode.REMOTE, "http://100.93.62.125:8000")
         assertNull(tailnet.blockingError)
-        assertTrue(tailnet.warnings.any { it.contains("HTTPS", ignoreCase = true) })
+        assertTrue(tailnet.warnings.any { it.contains("HTTPS-first", ignoreCase = true) })
     }
 
     @Test
@@ -96,5 +96,23 @@ class ConnectionEndpointValidationTest {
 
         assertNull(validation.blockingError)
         assertTrue(validation.warnings.any { it.contains("Prefer HTTPS", ignoreCase = true) })
+    }
+
+    @Test
+    fun `https tailscale ip warns to prefer ts dot net https or raw ip http fallback`() {
+        val validation = validateConnectionEndpoint(ConnectionMode.REMOTE, "https://100.93.62.125:8000")
+
+        assertNull(validation.blockingError)
+        assertTrue(validation.warnings.any { it.contains(".ts.net", ignoreCase = true) })
+        assertTrue(validation.warnings.any { it.contains("fallback", ignoreCase = true) })
+    }
+
+    @Test
+    fun `http ts dot net warns to use https`() {
+        val validation = validateConnectionEndpoint(ConnectionMode.REMOTE, "http://my-host.taildacac5.ts.net")
+
+        assertNull(validation.blockingError)
+        assertTrue(validation.warnings.any { it.contains("usually mismatched", ignoreCase = true) })
+        assertTrue(validation.warnings.any { it.contains("https://my-host.taildacac5.ts.net", ignoreCase = true) })
     }
 }

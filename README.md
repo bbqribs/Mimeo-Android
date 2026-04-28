@@ -79,13 +79,15 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 
 ## Base URL notes
 - Android emulator -> host machine backend: `http://10.0.2.2:8000`
-- Physical device -> use host LAN IP (for example `http://192.168.x.y:8000`)
+- Physical device on same LAN -> use host LAN IP (for example `http://192.168.x.y:8000`)
+- Physical device off-LAN (Tailscale) -> prefer `https://<machine>.<tailnet>.ts.net`
+- Raw Tailscale IP HTTP is fallback-only when TLS is unavailable.
 - `127.0.0.1` on Android points to the device itself, not your host backend.
 - If your PC IP is `192.168.68.124`, set app base URL to `http://192.168.68.124:8000`.
 - Current Stage 2 defaults/presets:
   - `Local`: `http://10.0.2.2:8000`
   - `LAN`: `http://192.168.68.124:8000`
-  - `Remote`: `http://100.84.13.10:8000`
+  - `Remote`: `https://beh-august2015.taildacac5.ts.net` (fallback HTTP: `http://100.84.13.10:8000`)
 
 ## Remote mode (Tailscale / off-LAN)
 Use this when your phone is not on the same home LAN as the backend host.
@@ -99,8 +101,9 @@ Use this when your phone is not on the same home LAN as the backend host.
    ```
 4. In Android app Settings:
    - Connection mode: `Remote`
-   - Remote Base URL: `http://<tailscale-ip>:8000` (or your Tailnet DNS/HTTPS URL if configured)
-   - API token: your device token
+   - Remote Base URL (preferred): `https://<machine>.<tailnet>.ts.net`
+   - Remote Base URL fallback only: `http://<tailscale-ip>:8000` when TLS is unavailable
+   - API token: your device token (or use Sign In to create a per-device session token)
 5. Tap **Test connection** and confirm it reports connected.
 
 Notes:

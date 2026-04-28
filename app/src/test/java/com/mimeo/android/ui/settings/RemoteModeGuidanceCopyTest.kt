@@ -9,18 +9,20 @@ class RemoteModeGuidanceCopyTest {
     fun `remote base url guidance mentions tailscale and lan distinction`() {
         val message = connectionModeBaseUrlGuidance(ConnectionMode.REMOTE)
 
-        assertTrue(message.contains("Tailscale", ignoreCase = true) || message.contains("VPN", ignoreCase = true))
+        assertTrue(message.contains("Tailscale", ignoreCase = true))
+        assertTrue(message.contains(".ts.net", ignoreCase = true))
         assertTrue(message.contains("LAN mode", ignoreCase = true))
-        assertTrue(message.contains("HTTPS", ignoreCase = true))
+        assertTrue(message.contains("HTTPS-first", ignoreCase = true))
         assertTrue(message.contains("beh-august2015.taildacac5.ts.net", ignoreCase = true))
-        assertTrue(message.contains("100.84.13.10:8000", ignoreCase = true))
+        assertTrue(message.contains("fallback", ignoreCase = true))
     }
 
     @Test
-    fun `lan guidance mentions lan ip example`() {
+    fun `lan guidance mentions lan ip and http default`() {
         val message = connectionModeBaseUrlGuidance(ConnectionMode.LAN)
 
-        assertTrue(message.contains("192.168", ignoreCase = true))
+        assertTrue(message.contains("<LAN-IP>", ignoreCase = true))
+        assertTrue(message.contains("http://", ignoreCase = true))
     }
 
     @Test
