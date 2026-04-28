@@ -256,6 +256,33 @@ class PlaybackRepository(
         return apiClient.getSmartPlaylistItems(baseUrl, token, playlistId)
     }
 
+    suspend fun pinSmartPlaylistItem(
+        baseUrl: String,
+        token: String,
+        playlistId: Int,
+        itemId: Int,
+    ) {
+        apiClient.pinSmartPlaylistItem(baseUrl, token, playlistId, itemId)
+    }
+
+    suspend fun unpinSmartPlaylistItem(
+        baseUrl: String,
+        token: String,
+        playlistId: Int,
+        itemId: Int,
+    ) {
+        apiClient.unpinSmartPlaylistItem(baseUrl, token, playlistId, itemId)
+    }
+
+    suspend fun reorderSmartPlaylistPins(
+        baseUrl: String,
+        token: String,
+        playlistId: Int,
+        itemIds: List<Int>,
+    ) {
+        apiClient.reorderSmartPlaylistPins(baseUrl, token, playlistId, itemIds)
+    }
+
     suspend fun listTrashedItems(baseUrl: String, token: String): List<ArticleSummary> {
         return apiClient.getTrashedItems(baseUrl, token)
     }

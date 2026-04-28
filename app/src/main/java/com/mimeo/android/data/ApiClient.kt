@@ -12,6 +12,8 @@ import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.model.SmartPlaylistDetail
+import com.mimeo.android.model.SmartPlaylistPinRequest
+import com.mimeo.android.model.SmartPlaylistPinReorderItem
 import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.model.ProgressPayload
 import com.mimeo.android.model.QueueFetchDebugSnapshot
@@ -382,6 +384,60 @@ class ApiClient(
         executeJson(request) { payload ->
             json.decodeFromString(ListSerializer(PlaybackQueueItem.serializer()), payload)
         }
+    }
+
+    suspend fun pinSmartPlaylistItem(
+        baseUrl: String,
+        token: String,
+        playlistId: Int,
+        itemId: Int,
+        position: Int? = null,
+    ) = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(
+            SmartPlaylistPinRequest(articleId = itemId, position = position),
+        ).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/smart-playlists/$playlistId/pins"))
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .post(body)
+            .build()
+        executeNoBody(request)
+    }
+
+    suspend fun unpinSmartPlaylistItem(
+        baseUrl: String,
+        token: String,
+        playlistId: Int,
+        itemId: Int,
+    ) = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/smart-playlists/$playlistId/pins/$itemId"))
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .delete()
+            .build()
+        executeNoBody(request)
+    }
+
+    suspend fun reorderSmartPlaylistPins(
+        baseUrl: String,
+        token: String,
+        playlistId: Int,
+        itemIds: List<Int>,
+    ) = withContext(Dispatchers.IO) {
+        val payload = itemIds.mapIndexed { idx, itemId ->
+            SmartPlaylistPinReorderItem(articleId = itemId, position = idx + 1)
+        }
+        val body = json.encodeToString(ListSerializer(SmartPlaylistPinReorderItem.serializer()), payload)
+            .toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/smart-playlists/$playlistId/pins/reorder"))
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .put(body)
+            .build()
+        executeNoBody(request)
     }
 
     suspend fun createPlaylist(baseUrl: String, token: String, name: String): PlaylistSummary = withContext(Dispatchers.IO) {

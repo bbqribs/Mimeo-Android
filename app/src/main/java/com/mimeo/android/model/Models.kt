@@ -93,6 +93,18 @@ data class SmartPlaylistSummary(
 typealias SmartPlaylistDetail = SmartPlaylistSummary
 
 @Serializable
+data class SmartPlaylistPinRequest(
+    @SerialName("article_id") val articleId: Int,
+    val position: Int? = null,
+)
+
+@Serializable
+data class SmartPlaylistPinReorderItem(
+    @SerialName("article_id") val articleId: Int,
+    val position: Int,
+)
+
+@Serializable
 data class PlaylistEntrySummary(
     val id: Int,
     @SerialName("article_id") val articleId: Int,
