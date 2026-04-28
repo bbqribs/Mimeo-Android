@@ -55,6 +55,9 @@ data class QueueExplainResponse(
 private data class PlaylistNamePayload(val name: String)
 
 @Serializable
+private data class SmartPlaylistFreezePayload(val name: String)
+
+@Serializable
 private data class PlaylistItemPayload(
     @kotlinx.serialization.SerialName("item_id") val itemId: Int,
 )
@@ -438,6 +441,26 @@ class ApiClient(
             .put(body)
             .build()
         executeNoBody(request)
+    }
+
+    suspend fun freezeSmartPlaylist(
+        baseUrl: String,
+        token: String,
+        playlistId: Int,
+        name: String? = null,
+    ): PlaylistSummary = withContext(Dispatchers.IO) {
+        val trimmedName = name?.trim()?.takeIf { it.isNotEmpty() }
+        val payload = trimmedName
+            ?.let { json.encodeToString(SmartPlaylistFreezePayload(it)) }
+            ?: "{}"
+        val body = payload.toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/smart-playlists/$playlistId/freeze"))
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .post(body)
+            .build()
+        executeJson(request) { responsePayload -> json.decodeFromString<PlaylistSummary>(responsePayload) }
     }
 
     suspend fun createPlaylist(baseUrl: String, token: String, name: String): PlaylistSummary = withContext(Dispatchers.IO) {

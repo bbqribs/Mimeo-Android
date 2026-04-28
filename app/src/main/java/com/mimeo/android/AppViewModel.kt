@@ -2720,6 +2720,50 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    suspend fun freezeSmartPlaylistAsManual(
+        playlistId: Int,
+        name: String?,
+    ): Result<PlaylistSummary> {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        return try {
+            val created = repository.freezeSmartPlaylist(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                playlistId = playlistId,
+                name = name,
+            )
+            if (created.kind.equals("smart", ignoreCase = true)) {
+                return Result.failure(
+                    IllegalStateException("Freeze endpoint returned a smart playlist instead of a manual playlist."),
+                )
+            }
+            _playlists.update { rows ->
+                listOf(created) + rows.filterNot { existing -> existing.id == created.id }
+            }
+            refreshPlaylistsOnce()
+                .map { created }
+                .recoverCatching {
+                    throw IllegalStateException(
+                        "Created manual playlist \"${created.name}\", but couldn't refresh playlists.",
+                    )
+                }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            if (isNetworkError(error)) {
+                _queueOffline.value = true
+                updateSyncBadgeState()
+            }
+            Result.failure(error)
+        }
+    }
+
     fun selectPlaylist(playlistId: Int?) {
         viewModelScope.launch {
             val manualPlaylistId = playlistId?.takeIf { id -> _playlists.value.any { it.id == id } }

@@ -224,6 +224,7 @@ internal const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
 internal const val ACTION_KEY_UNDO_ARCHIVE = "undo_archive"
 internal const val ACTION_KEY_UNDO_BATCH = "undo_batch"
 internal const val ACTION_KEY_UNDO_PLAYLIST_REMOVE = "undo_playlist_remove"
+internal const val ACTION_KEY_OPEN_PLAYLIST_PREFIX = "open_playlist:"
 internal const val QUEUE_DEBUG_TAG = "MimeoQueueFetch"
 internal const val DEBUG_TARGET_ITEM_ID = 409
 internal const val INITIAL_SIGN_IN_HYDRATION_DEBUG_TAG = "MimeoSignInHydration"
@@ -579,10 +580,20 @@ private fun MimeoApp(vm: AppViewModel) {
                 duration = message.duration,
             )
             if (result == SnackbarResult.ActionPerformed) {
-                when (message.actionKey) {
-                    ACTION_KEY_OPEN_DIAGNOSTICS -> nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) { launchSingleTop = true }
-                    ACTION_KEY_OPEN_SETTINGS -> nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true }
-                    ACTION_KEY_UNDO_ARCHIVE -> {
+                when {
+                    message.actionKey == ACTION_KEY_OPEN_DIAGNOSTICS ->
+                        nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) { launchSingleTop = true }
+                    message.actionKey == ACTION_KEY_OPEN_SETTINGS ->
+                        nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true }
+                    message.actionKey?.startsWith(ACTION_KEY_OPEN_PLAYLIST_PREFIX) == true -> {
+                        message.actionKey
+                            .removePrefix(ACTION_KEY_OPEN_PLAYLIST_PREFIX)
+                            .toIntOrNull()
+                            ?.let { playlistId ->
+                                nav.navigate("playlist/$playlistId") { launchSingleTop = true }
+                            }
+                    }
+                    message.actionKey == ACTION_KEY_UNDO_ARCHIVE -> {
                         vm.undoLastArchive()
                             .onSuccess { outcome ->
                                 val message = if (outcome.actionType == UndoableActionType.BIN) {
@@ -599,12 +610,12 @@ private fun MimeoApp(vm: AppViewModel) {
                                 vm.showSnackbar("Couldn't undo last action", "Diagnostics", ACTION_KEY_OPEN_DIAGNOSTICS)
                             }
                     }
-                    ACTION_KEY_UNDO_BATCH -> {
+                    message.actionKey == ACTION_KEY_UNDO_BATCH -> {
                         vm.undoLastBatch()
                             .onSuccess { vm.showSnackbar("Undone") }
                             .onFailure { vm.showSnackbar("Couldn't undo", "Diagnostics", ACTION_KEY_OPEN_DIAGNOSTICS) }
                     }
-                    ACTION_KEY_UNDO_PLAYLIST_REMOVE -> {
+                    message.actionKey == ACTION_KEY_UNDO_PLAYLIST_REMOVE -> {
                         vm.undoLastPlaylistRemoval()
                             .onSuccess { restored ->
                                 vm.showSnackbar(
