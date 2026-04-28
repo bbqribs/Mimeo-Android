@@ -14,6 +14,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
@@ -69,7 +71,8 @@ fun SmartPlaylistDetailScreen(
     val actionScope = rememberCoroutineScope()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     var detail by remember { mutableStateOf<SmartPlaylistDetail?>(null) }
-    var items by remember { mutableStateOf<List<PlaybackQueueItem>>(emptyList()) }
+    var pinnedItems by remember { mutableStateOf<List<PlaybackQueueItem>>(emptyList()) }
+    var liveItems by remember { mutableStateOf<List<PlaybackQueueItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
@@ -77,6 +80,17 @@ fun SmartPlaylistDetailScreen(
     var selectedIds by remember { mutableStateOf(emptySet<Int>()) }
     var showSeedConfirmation by remember { mutableStateOf(false) }
     var seedInProgress by remember { mutableStateOf(false) }
+    var pinActionInProgress by remember { mutableStateOf(false) }
+
+    fun displayedItems(): List<PlaybackQueueItem> = pinnedItems + liveItems
+
+    fun applyContent(content: AppViewModel.SmartPlaylistContent) {
+        detail = content.detail
+        pinnedItems = content.pinnedItems
+        liveItems = content.liveItems
+        selectedIds = selectedIds.intersect(content.items.map { it.itemId }.toSet())
+        if (selectedIds.isEmpty()) selectionActive = false
+    }
 
     fun clearSelection() {
         selectionActive = false
@@ -100,10 +114,7 @@ fun SmartPlaylistDetailScreen(
         val result = vm.loadSmartPlaylistContent(playlistId)
         result
             .onSuccess { content ->
-                detail = content.detail
-                items = content.items
-                selectedIds = selectedIds.intersect(content.items.map { it.itemId }.toSet())
-                if (selectedIds.isEmpty()) selectionActive = false
+                applyContent(content)
             }
             .onFailure { error ->
                 errorMessage = error.message ?: "Couldn't load smart playlist."
@@ -117,10 +128,7 @@ fun SmartPlaylistDetailScreen(
         val result = vm.loadSmartPlaylistContent(playlistId)
         refreshActionState = if (result.isSuccess) {
             val content = result.getOrThrow()
-            detail = content.detail
-            items = content.items
-            selectedIds = selectedIds.intersect(content.items.map { it.itemId }.toSet())
-            if (selectedIds.isEmpty()) selectionActive = false
+            applyContent(content)
             errorMessage = null
             RefreshActionVisualState.Success
         } else {
@@ -144,7 +152,7 @@ fun SmartPlaylistDetailScreen(
             vm.seedNowPlayingSessionFromSmartPlaylist(
                 playlistId = currentDetail.id,
                 playlistName = currentDetail.name,
-                items = items,
+                items = displayedItems(),
             )
                 .onSuccess { result ->
                     if (result.rebuiltItemCount > 0) {
@@ -161,6 +169,28 @@ fun SmartPlaylistDetailScreen(
         }
     }
 
+    suspend fun runPinMutation(
+        fallbackMessage: String,
+        action: suspend () -> Result<AppViewModel.SmartPlaylistContent>,
+    ) {
+        if (pinActionInProgress) return
+        pinActionInProgress = true
+        try {
+            action()
+                .onSuccess { content ->
+                    applyContent(content)
+                    errorMessage = null
+                }
+                .onFailure { error ->
+                    val message = error.message ?: fallbackMessage
+                    errorMessage = message
+                    vm.showSnackbar(message)
+                }
+        } finally {
+            pinActionInProgress = false
+        }
+    }
+
     LaunchedEffect(playlistId) {
         vm.refreshSmartPlaylists()
         loadContent(showSpinner = true)
@@ -173,7 +203,8 @@ fun SmartPlaylistDetailScreen(
         header = {
             SmartPlaylistHeader(
                 detail = detail,
-                itemCount = items.size,
+                itemCount = displayedItems().size,
+                pinnedCount = pinnedItems.size,
                 loading = loading,
                 refreshActionState = refreshActionState,
                 onRefresh = { actionScope.launch { refreshContent() } },
@@ -206,7 +237,7 @@ fun SmartPlaylistDetailScreen(
                     IconButton(
                         enabled = selectedIds.isNotEmpty(),
                         onClick = {
-                            val orderedIds = items
+                            val orderedIds = displayedItems()
                                 .filter { it.itemId in selectedIds }
                                 .map { it.itemId }
                             clearSelection()
@@ -224,7 +255,7 @@ fun SmartPlaylistDetailScreen(
             null
         },
         loading = loading,
-        empty = items.isEmpty(),
+        empty = displayedItems().isEmpty(),
         loadingContent = { DefaultListSurfaceMessage("Loading smart playlist...") },
         emptyContent = {
             DefaultListSurfaceMessage(
@@ -233,17 +264,105 @@ fun SmartPlaylistDetailScreen(
         },
     ) {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
-            items(items = items, key = { it.itemId }) { item ->
+            if (pinnedItems.isNotEmpty()) {
+                item(key = "pinned-header") {
+                    SmartPlaylistSectionHeader(
+                        title = "Pinned",
+                        count = pinnedItems.size,
+                    )
+                }
+                items(items = pinnedItems, key = { "pinned-${it.itemId}" }) { item ->
+                    val index = pinnedItems.indexOfFirst { it.itemId == item.itemId }
+                    SmartPlaylistItemRow(
+                        item = item,
+                        isPinned = true,
+                        isSelectionActive = selectionActive,
+                        isSelected = item.itemId in selectedIds,
+                        pinActionEnabled = !pinActionInProgress,
+                        canMoveUp = index > 0,
+                        canMoveDown = index >= 0 && index < pinnedItems.lastIndex,
+                        onOpen = { onOpenPlayer(item.itemId) },
+                        onToggleSelect = { toggleSelection(item.itemId) },
+                        onEnterSelection = { enterSelectionMode(item.itemId) },
+                        onPlayNow = { vm.playNow(item.itemId) },
+                        onPlayNext = { vm.playNext(item.itemId) },
+                        onPlayLast = { vm.playLast(item.itemId) },
+                        onPin = {},
+                        onUnpin = {
+                            actionScope.launch {
+                                runPinMutation("Couldn't unpin item.") {
+                                    vm.unpinSmartPlaylistItem(playlistId, item.itemId)
+                                }
+                            }
+                        },
+                        onMoveUp = {
+                            if (index > 0) {
+                                val nextIds = pinnedItems.map { it.itemId }.toMutableList()
+                                val moved = nextIds.removeAt(index)
+                                nextIds.add(index - 1, moved)
+                                actionScope.launch {
+                                    runPinMutation("Couldn't reorder pinned items.") {
+                                        vm.reorderSmartPlaylistPins(playlistId, nextIds)
+                                    }
+                                }
+                            }
+                        },
+                        onMoveDown = {
+                            if (index >= 0 && index < pinnedItems.lastIndex) {
+                                val nextIds = pinnedItems.map { it.itemId }.toMutableList()
+                                val moved = nextIds.removeAt(index)
+                                nextIds.add(index + 1, moved)
+                                actionScope.launch {
+                                    runPinMutation("Couldn't reorder pinned items.") {
+                                        vm.reorderSmartPlaylistPins(playlistId, nextIds)
+                                    }
+                                }
+                            }
+                        },
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                    )
+                }
+            }
+
+            item(key = "live-header") {
+                SmartPlaylistSectionHeader(
+                    title = "Live results",
+                    count = liveItems.size,
+                )
+            }
+            if (liveItems.isEmpty() && pinnedItems.isNotEmpty()) {
+                item(key = "live-empty") {
+                    DefaultListSurfaceMessage("No additional live results below pinned items.")
+                }
+            }
+            items(items = liveItems, key = { "live-${it.itemId}" }) { item ->
                 SmartPlaylistItemRow(
                     item = item,
+                    isPinned = false,
                     isSelectionActive = selectionActive,
                     isSelected = item.itemId in selectedIds,
+                    pinActionEnabled = !pinActionInProgress,
+                    canMoveUp = false,
+                    canMoveDown = false,
                     onOpen = { onOpenPlayer(item.itemId) },
                     onToggleSelect = { toggleSelection(item.itemId) },
                     onEnterSelection = { enterSelectionMode(item.itemId) },
                     onPlayNow = { vm.playNow(item.itemId) },
                     onPlayNext = { vm.playNext(item.itemId) },
                     onPlayLast = { vm.playLast(item.itemId) },
+                    onPin = {
+                        actionScope.launch {
+                            runPinMutation("Couldn't pin item.") {
+                                vm.pinSmartPlaylistItem(playlistId, item.itemId)
+                            }
+                        }
+                    },
+                    onUnpin = {},
+                    onMoveUp = {},
+                    onMoveDown = {},
                 )
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = 12.dp),
@@ -286,6 +405,7 @@ fun SmartPlaylistDetailScreen(
 private fun SmartPlaylistHeader(
     detail: SmartPlaylistDetail?,
     itemCount: Int,
+    pinnedCount: Int,
     loading: Boolean,
     refreshActionState: RefreshActionVisualState,
     onRefresh: () -> Unit,
@@ -317,7 +437,17 @@ private fun SmartPlaylistHeader(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = "Live dynamic read-only view - $itemCount item${if (itemCount == 1) "" else "s"}",
+                        text = buildString {
+                            append("Live dynamic view - ")
+                            append(itemCount)
+                            append(" item")
+                            if (itemCount != 1) append("s")
+                            if (pinnedCount > 0) {
+                                append(", ")
+                                append(pinnedCount)
+                                append(" pinned")
+                            }
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -351,16 +481,49 @@ private fun SmartPlaylistHeader(
 }
 
 @Composable
+private fun SmartPlaylistSectionHeader(
+    title: String,
+    count: Int,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = "$count",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
 private fun SmartPlaylistItemRow(
     item: PlaybackQueueItem,
+    isPinned: Boolean,
     isSelectionActive: Boolean,
     isSelected: Boolean,
+    pinActionEnabled: Boolean,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
     onOpen: () -> Unit,
     onToggleSelect: () -> Unit,
     onEnterSelection: () -> Unit,
     onPlayNow: () -> Unit,
     onPlayNext: () -> Unit,
     onPlayLast: () -> Unit,
+    onPin: () -> Unit,
+    onUnpin: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
 ) {
     val presentation = remember(item) { queueCapturePresentation(item) }
     val statusForLine = item.status?.takeIf { it != "ready" }
@@ -391,43 +554,79 @@ private fun SmartPlaylistItemRow(
         trailingContent = if (!isSelectionActive) {
             {
                 var menuExpanded by remember { mutableStateOf(false) }
-                Box {
-                    IconButton(
-                        onClick = { menuExpanded = true },
-                        modifier = Modifier.size(32.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "More actions for ${presentation.title}",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp),
-                        )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isPinned) {
+                        IconButton(
+                            enabled = pinActionEnabled && canMoveUp,
+                            onClick = onMoveUp,
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowUp,
+                                contentDescription = "Move pinned item up",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        IconButton(
+                            enabled = pinActionEnabled && canMoveDown,
+                            onClick = onMoveDown,
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Move pinned item down",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
                     }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Play Now") },
-                            onClick = {
-                                menuExpanded = false
-                                onPlayNow()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Play Next") },
-                            onClick = {
-                                menuExpanded = false
-                                onPlayNext()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Play Last") },
-                            onClick = {
-                                menuExpanded = false
-                                onPlayLast()
-                            },
-                        )
+                    Box {
+                        IconButton(
+                            onClick = { menuExpanded = true },
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "More actions for ${presentation.title}",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Play Now") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onPlayNow()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Play Next") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onPlayNext()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Play Last") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onPlayLast()
+                                },
+                            )
+                            DropdownMenuItem(
+                                enabled = pinActionEnabled,
+                                text = { Text(if (isPinned) "Unpin" else "Pin") },
+                                onClick = {
+                                    menuExpanded = false
+                                    if (isPinned) onUnpin() else onPin()
+                                },
+                            )
+                        }
                     }
                 }
             }

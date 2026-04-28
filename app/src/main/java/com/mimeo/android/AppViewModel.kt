@@ -207,6 +207,13 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 
+internal fun smartPlaylistPinnedItemIds(
+    items: List<PlaybackQueueItem>,
+    pinCount: Int,
+): Set<Int> = items
+    .take(pinCount.coerceIn(0, items.size))
+    .mapTo(linkedSetOf()) { it.itemId }
+
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     data class SessionReseedResult(
         val sourceLabel: String,
@@ -215,8 +222,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     data class SmartPlaylistContent(
         val detail: SmartPlaylistDetail,
-        val items: List<PlaybackQueueItem>,
-    )
+        val pinnedItems: List<PlaybackQueueItem>,
+        val liveItems: List<PlaybackQueueItem>,
+    ) {
+        val items: List<PlaybackQueueItem>
+            get() = pinnedItems + liveItems
+    }
 
     private val settingsStore = SettingsStore(application.applicationContext)
     private val apiClient = ApiClient()
@@ -2605,18 +2616,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         return try {
             val detail = repository.getSmartPlaylist(current.baseUrl, current.apiToken, playlistId)
+            val fetchedItems = repository.getSmartPlaylistItems(current.baseUrl, current.apiToken, playlistId)
+            val pinnedItemIds = smartPlaylistPinnedItemIds(fetchedItems, detail.pinCount)
             val items = applyFavoriteOverrides(
                 applyPendingBinProjectionToNonBinItems(
-                    repository.getSmartPlaylistItems(current.baseUrl, current.apiToken, playlistId),
+                    fetchedItems,
                 ),
             )
+            val pinnedItems = items.filter { it.itemId in pinnedItemIds }
+            val liveItems = items.filterNot { it.itemId in pinnedItemIds }
             _smartPlaylists.update { rows ->
                 listOf(detail) + rows.filterNot { it.id == detail.id }
             }
             _currentSmartPlaylistItems.value = items
             _queueOffline.value = false
             updateSyncBadgeState()
-            Result.success(SmartPlaylistContent(detail = detail, items = items))
+            Result.success(
+                SmartPlaylistContent(
+                    detail = detail,
+                    pinnedItems = pinnedItems,
+                    liveItems = liveItems,
+                ),
+            )
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -2626,6 +2647,74 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (isNetworkError(error)) {
                 _queueOffline.value = true
                 updateSyncBadgeState()
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun pinSmartPlaylistItem(playlistId: Int, itemId: Int): Result<SmartPlaylistContent> {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        return try {
+            repository.pinSmartPlaylistItem(current.baseUrl, current.apiToken, playlistId, itemId)
+            val content = loadSmartPlaylistContent(playlistId).getOrThrow()
+            showSnackbar("Pinned item.")
+            Result.success(content)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun unpinSmartPlaylistItem(playlistId: Int, itemId: Int): Result<SmartPlaylistContent> {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        return try {
+            repository.unpinSmartPlaylistItem(current.baseUrl, current.apiToken, playlistId, itemId)
+            val content = loadSmartPlaylistContent(playlistId).getOrThrow()
+            showSnackbar("Unpinned item.")
+            Result.success(content)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
+            }
+            Result.failure(error)
+        }
+    }
+
+    suspend fun reorderSmartPlaylistPins(
+        playlistId: Int,
+        orderedPinnedItemIds: List<Int>,
+    ): Result<SmartPlaylistContent> {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        return try {
+            repository.reorderSmartPlaylistPins(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                playlistId = playlistId,
+                itemIds = orderedPinnedItemIds,
+            )
+            val content = loadSmartPlaylistContent(playlistId).getOrThrow()
+            showSnackbar("Pinned order updated.")
+            Result.success(content)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (handleAuthFailureIfNeeded(error)) {
+                return Result.failure(error)
             }
             Result.failure(error)
         }
