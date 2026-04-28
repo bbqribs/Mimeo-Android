@@ -91,6 +91,16 @@ Use this for PRs that touch queue rendering, playlists, or share-save verificati
 - Verify a newly shared item appears without using the web app.
 - Search by title/domain and, when relevant, by a URL-derived token to confirm normalized fallback still works.
 
+## Smart playlist CRUD manual verification
+
+Use this checklist for docs-only signoff of shipped smart playlist CRUD behavior:
+
+- Create a smart playlist from drawer/library flow and confirm it appears under Smart playlists (not Manual playlists).
+- Open smart playlist edit, change name/filter/sort, save, and confirm detail + list refresh.
+- Trigger delete from smart playlist detail and confirm the playlist is removed after confirmation.
+- Confirm smart detail still preserves shipped baseline actions: pin/unpin/reorder in Pinned section, row Play Now/Next/Last, batch Add Selected to Up Next, Use as Up Next snapshot confirmation, and Freeze as manual snapshot.
+- Confirm manual playlist guards remain intact (selected/default manual playlist IDs are unchanged by smart playlist CRUD operations).
+
 ## Persistent player cross-tab invariants
 
 Use this for PRs that touch `MainActivity`, `PlayerScreen`, or settings toggles:
