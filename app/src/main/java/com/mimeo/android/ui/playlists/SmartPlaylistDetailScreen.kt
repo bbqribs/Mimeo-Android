@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -25,8 +26,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,6 +67,7 @@ fun SmartPlaylistDetailScreen(
     onOpenPlayer: (Int) -> Unit,
 ) {
     val actionScope = rememberCoroutineScope()
+    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     var detail by remember { mutableStateOf<SmartPlaylistDetail?>(null) }
     var items by remember { mutableStateOf<List<PlaybackQueueItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -71,6 +75,8 @@ fun SmartPlaylistDetailScreen(
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
     var selectionActive by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf(emptySet<Int>()) }
+    var showSeedConfirmation by remember { mutableStateOf(false) }
+    var seedInProgress by remember { mutableStateOf(false) }
 
     fun clearSelection() {
         selectionActive = false
@@ -130,6 +136,31 @@ fun SmartPlaylistDetailScreen(
         }
     }
 
+    suspend fun seedUpNextFromSnapshot() {
+        val currentDetail = detail ?: return
+        if (seedInProgress) return
+        seedInProgress = true
+        try {
+            vm.seedNowPlayingSessionFromSmartPlaylist(
+                playlistId = currentDetail.id,
+                playlistName = currentDetail.name,
+                items = items,
+            )
+                .onSuccess { result ->
+                    if (result.rebuiltItemCount > 0) {
+                        vm.showSnackbar("Seeded Up Next from ${result.sourceLabel}.")
+                    } else {
+                        vm.showSnackbar("Cleared Up Next because ${result.sourceLabel} is empty.")
+                    }
+                }
+                .onFailure { error ->
+                    vm.showSnackbar(error.message ?: "Couldn't seed Up Next from smart playlist.")
+                }
+        } finally {
+            seedInProgress = false
+        }
+    }
+
     LaunchedEffect(playlistId) {
         vm.refreshSmartPlaylists()
         loadContent(showSpinner = true)
@@ -146,6 +177,14 @@ fun SmartPlaylistDetailScreen(
                 loading = loading,
                 refreshActionState = refreshActionState,
                 onRefresh = { actionScope.launch { refreshContent() } },
+                seedEnabled = detail != null && !loading && !seedInProgress,
+                onSeedUpNext = {
+                    if (nowPlayingSession?.items?.isNotEmpty() == true) {
+                        showSeedConfirmation = true
+                    } else {
+                        actionScope.launch { seedUpNextFromSnapshot() }
+                    }
+                },
             )
         },
         selectionBar = if (selectionActive) {
@@ -213,6 +252,34 @@ fun SmartPlaylistDetailScreen(
             }
         }
     }
+
+    if (showSeedConfirmation) {
+        val playlistName = detail?.name ?: "this smart playlist"
+        AlertDialog(
+            onDismissRequest = { showSeedConfirmation = false },
+            title = { Text("Replace Up Next?") },
+            text = {
+                Text(
+                    "This replaces the current local Up Next session with a snapshot of \"$playlistName\" as it appears now. It will not stay synced if the smart playlist changes.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSeedConfirmation = false
+                        actionScope.launch { seedUpNextFromSnapshot() }
+                    },
+                ) {
+                    Text("Use snapshot")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSeedConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -222,6 +289,8 @@ private fun SmartPlaylistHeader(
     loading: Boolean,
     refreshActionState: RefreshActionVisualState,
     onRefresh: () -> Unit,
+    seedEnabled: Boolean,
+    onSeedUpNext: () -> Unit,
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -255,6 +324,12 @@ private fun SmartPlaylistHeader(
                 }
                 if (loading) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                }
+                TextButton(
+                    enabled = seedEnabled,
+                    onClick = onSeedUpNext,
+                ) {
+                    Text("Use as Up Next")
                 }
                 RefreshActionButton(
                     state = refreshActionState,

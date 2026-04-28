@@ -92,7 +92,9 @@ import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
 import com.mimeo.android.isTerminalPendingProcessingStatus
+import com.mimeo.android.resolveSmartPlaylistIdFromSessionSourceId
 import com.mimeo.android.resolveSessionSourcePlaylistId
+import com.mimeo.android.smartPlaylistSessionSourceLabel
 import com.mimeo.android.model.AutoDownloadDiagnostics
 import com.mimeo.android.model.AutoDownloadWorkerState
 import com.mimeo.android.model.PendingManualSaveItem
@@ -100,6 +102,7 @@ import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaylistSummary
+import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.NowPlayingSessionItem
 import com.mimeo.android.share.ShareSaveResult
@@ -155,15 +158,17 @@ internal fun resolveSessionSeedSourcePresentation(
     sessionSourcePlaylistId: Int?,
     selectedPlaylistId: Int?,
     playlists: List<PlaylistSummary>,
+    smartPlaylists: List<SmartPlaylistSummary> = emptyList(),
 ): SessionSeedSourcePresentation {
     val seededFrom = if (sessionSourcePlaylistId == null) {
         "Unknown source"
     } else {
-        resolveQueueSourceLabel(sessionSourcePlaylistId, playlists)
+        resolveQueueSourceLabel(sessionSourcePlaylistId, playlists, smartPlaylists)
     }
     val currentSource = resolveQueueSourceLabel(
         selectedPlaylistId = resolveSessionSourcePlaylistId(selectedPlaylistId),
         playlists = playlists,
+        smartPlaylists = smartPlaylists,
     )
     return SessionSeedSourcePresentation(
         seededFromLabel = seededFrom,
@@ -186,7 +191,16 @@ internal fun shouldConfirmReseedFromCurrentSource(
 private fun resolveQueueSourceLabel(
     selectedPlaylistId: Int,
     playlists: List<PlaylistSummary>,
+    smartPlaylists: List<SmartPlaylistSummary> = emptyList(),
 ): String {
+    resolveSmartPlaylistIdFromSessionSourceId(selectedPlaylistId)?.let { smartPlaylistId ->
+        val smartName = smartPlaylists.firstOrNull { it.id == smartPlaylistId }?.name
+        return if (smartName.isNullOrBlank()) {
+            "Smart view ($smartPlaylistId)"
+        } else {
+            smartPlaylistSessionSourceLabel(smartName)
+        }
+    }
     if (selectedPlaylistId < 0) return "Smart queue"
     return playlists.firstOrNull { it.id == selectedPlaylistId }?.name
         ?: "Playlist ($selectedPlaylistId)"
@@ -271,6 +285,7 @@ fun QueueScreen(
     val context = LocalContext.current
     val items by vm.queueItems.collectAsState()
     val playlists by vm.playlists.collectAsState()
+    val smartPlaylists by vm.smartPlaylists.collectAsState()
     val settings by vm.settings.collectAsState()
     val loading by vm.queueLoading.collectAsState()
     val offline by vm.queueOffline.collectAsState()
@@ -324,6 +339,7 @@ fun QueueScreen(
             sessionSourcePlaylistId = session.sourcePlaylistId,
             selectedPlaylistId = settings.selectedPlaylistId,
             playlists = playlists,
+            smartPlaylists = smartPlaylists,
         )
     }
 
