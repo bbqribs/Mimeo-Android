@@ -1,7 +1,7 @@
 # Smart Playlists Android Compatibility Probe
 
-**Date:** 2026-04-27
-**Status:** Investigation complete. Planning only — no production behavior changed.
+**Date:** 2026-04-28
+**Status:** Historical compatibility probe complete. Superseded by shipped Android smart-playlist read/display behavior documented in `ROADMAP.md`.
 **Scope:** Can the current Android app tolerate the proposed smart playlist backend
 contract without crashes or wrong behavior?
 **Source contract:** `C:\Users\brend\Documents\Coding\Mimeo\docs\planning\SMART_PLAYLISTS_V1_CONTRACT_PLAN.md`
@@ -147,3 +147,23 @@ The backend contract plan (§4.1, blocking questions B2/B3) can now be resolved:
 4. Guard `selectedPlaylistId` / `defaultSavePlaylistId` against smart playlist IDs.
 
 These are the scope inputs for the Android implementation ticket (contract plan §6 stage 6-C).
+
+---
+
+## 8. Status note (2026-04-28)
+
+This probe captured pre-implementation compatibility risk. Current shipped state in Android is now:
+- Smart playlist read/display support is shipped.
+- Android uses dedicated `/smart-playlists` endpoints.
+- Smart playlists are visually separate from manual playlists.
+- Smart detail is live/dynamic/read-only.
+- Smart rows support row tap to Locus and queue actions.
+- Batch Add Selected to Up Next is supported.
+- Manual playlist ID guards remain for `selectedPlaylistId` and `defaultSavePlaylistId`.
+
+Deferred items remain:
+- Android smart playlist create/edit/delete UI.
+- Android pin/unpin/reorder UI.
+- Android freeze-as-manual action.
+- Up Next seed from smart playlist.
+- Mixed manual+smart response from `GET /playlists`.

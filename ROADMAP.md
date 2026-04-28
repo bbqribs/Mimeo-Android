@@ -100,7 +100,7 @@ Non-goals still in force:
 History of shipped work, kept for reference. Newest at the top of each
 block. Not a forward-looking list.
 
-### Redesign v2 + recent polish (2026 Q1 – Q2)
+- [x] **Smart playlists Android read/display shipped**: Android now uses dedicated `/smart-playlists` endpoints, displays smart playlists separately from manual playlists, treats smart detail as live/dynamic/read-only, supports row tap-to-Locus and queue actions on smart rows, and supports batch Add Selected to Up Next. Manual playlist ID guards remain for `selectedPlaylistId` and `defaultSavePlaylistId`.
 
 - Up Next layout slices 1–3 (2026-04-27): active/upcoming region
   scaffolding; active anchor (not draggable); history hidden (deferred);
@@ -248,3 +248,4 @@ block. Not a forward-looking list.
   v1, MVP playback end-to-end polish, chunking improvements,
   start-listening-here + highlight + auto-scroll, Now Playing UX
   refinements, named playlists v1, playlist item membership UX.
+
