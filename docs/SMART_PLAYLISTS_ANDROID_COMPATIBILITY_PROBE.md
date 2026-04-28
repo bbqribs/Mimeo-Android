@@ -166,5 +166,4 @@ This probe captured pre-implementation compatibility risk. Current shipped state
 
 Deferred items remain:
 - Android smart playlist create/edit/delete UI.
-- Android freeze-as-manual action.
 - Mixed manual+smart response from `GET /playlists`.
