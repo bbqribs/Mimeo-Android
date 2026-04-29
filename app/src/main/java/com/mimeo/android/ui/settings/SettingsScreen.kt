@@ -72,6 +72,7 @@ import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.ReaderFontOption
+import com.mimeo.android.model.BlueskySourceDiagnostic
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.queue.autoDownloadStatusLines
 import com.mimeo.android.ui.theme.toFontFamily
@@ -747,9 +748,30 @@ fun SettingsScreen(
                     SettingsKeyValueLine("State", scheduler.state ?: "Unknown")
                     SettingsKeyValueLine("Enabled source count", scheduler.enabledSourceCount?.toString() ?: "0")
                     SettingsKeyValueLine("Due source count", scheduler.dueSourceCount?.toString() ?: "0")
-                    SettingsKeyValueLine("Next due", scheduler.nextDueTime ?: "Not scheduled")
+                    SettingsKeyValueLine("Next due", scheduler.resolvedNextDue ?: "Not scheduled")
                     SettingsKeyValueLine("Last run status", scheduler.lastRunStatus ?: "Unknown")
-                    SettingsKeyValueLine("Last error", scheduler.lastError?.takeIf { it.isNotBlank() } ?: "None")
+                    SettingsKeyValueLine("Last error", scheduler.resolvedLastErrorMessage?.takeIf { it.isNotBlank() } ?: "None")
+                    HorizontalDivider(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        thickness = 1.dp,
+                    )
+                    Text(
+                        text = "Bluesky sources",
+                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                    )
+                    val visibleSources = scheduler.sources.filterNot { it.hidden == true || it.archived == true }
+                    if (visibleSources.isEmpty()) {
+                        Text(
+                            text = "No visible Bluesky sources.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        visibleSources.forEach { source ->
+                            BlueskySourceRow(source = source)
+                        }
+                    }
                 }
                 if (!blueskyStatusLoading && blueskyStatusError.isNullOrBlank() && account == null && scheduler == null) {
                     Text(
@@ -1667,6 +1689,47 @@ private fun SettingsKeyValueLine(label: String, value: String) {
             text = value,
             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
         )
+    }
+}
+
+@Composable
+private fun BlueskySourceRow(source: BlueskySourceDiagnostic) {
+    val enabled = source.enabled != false
+    val stateLabel = if (enabled) "Enabled" else "Paused"
+    val stateColor = if (enabled) {
+        androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+    } else {
+        androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = source.resolvedName,
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+            )
+            Text(
+                text = stateLabel,
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = stateColor,
+            )
+        }
+        SettingsKeyValueLine("Poll interval", source.pollIntervalMinutes?.let { "$it min" } ?: "Default")
+        SettingsKeyValueLine(
+            "Next due",
+            if (enabled) source.resolvedNextDue ?: "Not scheduled" else "Paused",
+        )
+        SettingsKeyValueLine("Last status", source.lastStatus ?: "Unknown")
+        SettingsKeyValueLine("Last attempted", source.lastAttemptedAt ?: "Never")
+        SettingsKeyValueLine("Last error", source.resolvedLastErrorMessage?.takeIf { it.isNotBlank() } ?: "None")
     }
 }
 
