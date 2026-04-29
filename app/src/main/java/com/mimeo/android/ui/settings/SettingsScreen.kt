@@ -73,6 +73,7 @@ import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.BlueskySourceDiagnostic
+import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.queue.autoDownloadStatusLines
 import com.mimeo.android.ui.theme.toFontFamily
@@ -80,6 +81,10 @@ import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 private const val PREVIEW_PARAGRAPH_1 = "Mimeo now remembers your reading layout so Locus feels like a calm, bookish surface instead of a raw text dump."
 private const val PREVIEW_PARAGRAPH_2 = "Use this preview to check rhythm, paragraph spacing, and readability before returning to long-form listening sessions."
@@ -89,6 +94,8 @@ private const val TTS_PREVIEW_PHRASE = "The quick brown fox jumps over the lazy 
 fun SettingsScreen(
     vm: AppViewModel,
     onOpenDiagnostics: () -> Unit,
+    onCreateBlueskySmartPlaylist: () -> Unit,
+    onOpenSmartPlaylist: (Int) -> Unit,
     onChangePassword: (String, String, String) -> Unit,
     onClearPasswordChangeState: () -> Unit,
     onSignOut: () -> Unit,
@@ -108,6 +115,7 @@ fun SettingsScreen(
     val autoDownloadDiagnostics by vm.autoDownloadDiagnostics.collectAsState()
     val passwordChangeState by vm.passwordChangeState.collectAsState()
     val playlists by vm.playlists.collectAsState()
+    val smartPlaylists by vm.smartPlaylists.collectAsState()
     val scrollState = rememberScrollState()
     var restoredScrollOffset by remember { mutableStateOf(false) }
     var connectionMode by remember(settings.connectionMode) { mutableStateOf(settings.connectionMode) }
@@ -218,6 +226,7 @@ fun SettingsScreen(
     var confirmNewPassword by remember { mutableStateOf("") }
     var lastConnectionTestResult by remember { mutableStateOf<String?>(null) }
     var lastConnectionTestedAtMs by remember { mutableStateOf<Long?>(null) }
+    val blueskySmartPlaylist = remember(smartPlaylists) { smartPlaylists.firstOrNull { it.isBlueskyHarvestPlaylist() } }
 
     fun selectedModeBaseUrl(): String {
         return when (connectionMode) {
@@ -782,8 +791,22 @@ fun SettingsScreen(
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 ) {
+                    if (blueskySmartPlaylist != null) {
+                        TextButton(
+                            enabled = !blueskyStatusLoading,
+                            onClick = { onOpenSmartPlaylist(blueskySmartPlaylist.id) },
+                        ) {
+                            Text("Open Bluesky smart playlist")
+                        }
+                    }
+                    TextButton(
+                        enabled = !blueskyStatusLoading,
+                        onClick = onCreateBlueskySmartPlaylist,
+                    ) {
+                        Text("Create Bluesky smart playlist")
+                    }
                     TextButton(
                         enabled = !blueskyStatusLoading,
                         onClick = { vm.refreshBlueskyStatus() },
@@ -1969,6 +1992,16 @@ private fun formatBlueskyBool(value: Boolean?): String {
         false -> "No"
         null -> "Unknown"
     }
+}
+
+private fun SmartPlaylistSummary.isBlueskyHarvestPlaylist(): Boolean {
+    val captureKinds = filterDefinition.stringList("capture_kinds")
+    return captureKinds.any { it.equals("bluesky_harvest", ignoreCase = true) }
+}
+
+private fun JsonObject.stringList(key: String): List<String> {
+    val values = this[key] as? JsonArray ?: return emptyList()
+    return values.mapNotNull { it.jsonPrimitive.contentOrNull?.trim() }.filter { it.isNotEmpty() }
 }
 
 internal fun normalizeConnectionBaseUrl(url: String): String {

@@ -70,6 +70,7 @@ import com.mimeo.android.ui.player.PlayerScreen
 import com.mimeo.android.ui.playlists.PlaylistDetailScreen
 import com.mimeo.android.ui.playlists.SmartPlaylistDetailScreen
 import com.mimeo.android.ui.playlists.SmartPlaylistFormDialog
+import com.mimeo.android.ui.playlists.SmartPlaylistFormState
 import com.mimeo.android.ui.queue.JumpToNowPlayingPill
 import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
@@ -144,6 +145,7 @@ internal fun MainActivityShell(
     var showNewPlaylistDialog by remember { mutableStateOf(false) }
     var newPlaylistDialogName by remember { mutableStateOf("") }
     var showNewSmartPlaylistDialog by remember { mutableStateOf(false) }
+    var newSmartPlaylistInitialState by remember { mutableStateOf(SmartPlaylistFormState()) }
     var locusTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var upNextTabTapSignal by rememberSaveable { mutableIntStateOf(0) }
     var playerOpenRequestSignal by rememberSaveable { mutableIntStateOf(0) }
@@ -296,6 +298,7 @@ internal fun MainActivityShell(
                         },
                         onNewSmartPlaylistClick = {
                             coroutineScope.launch { drawerState.close() }
+                            newSmartPlaylistInitialState = SmartPlaylistFormState()
                             showNewSmartPlaylistDialog = true
                         },
                         onSettingsClick = {
@@ -348,6 +351,7 @@ internal fun MainActivityShell(
         if (showNewSmartPlaylistDialog) {
             SmartPlaylistFormDialog(
                 title = "New smart playlist",
+                initialState = newSmartPlaylistInitialState,
                 confirmLabel = "Create",
                 onDismiss = { showNewSmartPlaylistDialog = false },
                 onSubmit = vm::createSmartPlaylist,
@@ -645,6 +649,17 @@ internal fun MainActivityShell(
                                 SettingsScreen(
                                     vm = vm,
                                     onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
+                                    onCreateBlueskySmartPlaylist = {
+                                        newSmartPlaylistInitialState = SmartPlaylistFormState(
+                                            name = "Bluesky harvests",
+                                            captureKinds = "bluesky_harvest",
+                                            sort = "saved_desc",
+                                        )
+                                        showNewSmartPlaylistDialog = true
+                                    },
+                                    onOpenSmartPlaylist = { playlistId ->
+                                        nav.navigate("smartPlaylist/$playlistId") { launchSingleTop = true }
+                                    },
                                     onChangePassword = vm::changePassword,
                                     onClearPasswordChangeState = vm::clearPasswordChangeState,
                                     onSignOut = vm::signOut,
