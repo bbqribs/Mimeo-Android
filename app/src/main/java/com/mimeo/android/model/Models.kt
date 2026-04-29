@@ -2,7 +2,10 @@
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 enum class ParagraphSpacingOption {
     SMALL,
@@ -59,11 +62,48 @@ data class BlueskyAccountConnectionResponse(
     @SerialName("credential_stored") val credentialStored: Boolean? = null,
     @SerialName("read_only") val readOnly: Boolean? = null,
     val mode: String? = null,
+    @SerialName("last_validation_status") val lastValidationStatus: String? = null,
     @SerialName("last_validation_state") val lastValidationState: String? = null,
     @SerialName("validation_state") val validationState: String? = null,
 ) {
     val resolvedValidationState: String?
-        get() = lastValidationState ?: validationState
+        get() = lastValidationStatus ?: lastValidationState ?: validationState
+}
+
+@Serializable
+data class BlueskySourceDiagnostic(
+    val label: String? = null,
+    val handle: String? = null,
+    val actor: String? = null,
+    val identifier: String? = null,
+    val enabled: Boolean? = null,
+    @SerialName("poll_interval_minutes") val pollIntervalMinutes: Int? = null,
+    @SerialName("next_harvest_at") val nextHarvestAt: String? = null,
+    @SerialName("next_due_at") val nextDueAt: String? = null,
+    @SerialName("last_attempted_at") val lastAttemptedAt: String? = null,
+    @SerialName("last_status") val lastStatus: String? = null,
+    @SerialName("last_error") val lastErrorRaw: JsonElement? = null,
+    val due: Boolean? = null,
+    val hidden: Boolean? = null,
+    val archived: Boolean? = null,
+) {
+    val resolvedName: String
+        get() = label
+            ?: handle
+            ?: actor
+            ?: identifier
+            ?: "Unknown source"
+
+    val resolvedNextDue: String?
+        get() = nextHarvestAt ?: nextDueAt
+
+    val resolvedLastErrorMessage: String?
+        get() {
+            val raw = lastErrorRaw ?: return null
+            return runCatching { raw.jsonPrimitive.content }.getOrNull()
+                ?: runCatching { raw.jsonObject["message"]?.jsonPrimitive?.content }.getOrNull()
+                ?: runCatching { raw.toString() }.getOrNull()
+        }
 }
 
 @Serializable
@@ -73,12 +113,25 @@ data class BlueskyOperatorStatusResponse(
     val state: String? = null,
     @SerialName("enabled_source_count") val enabledSourceCount: Int? = null,
     @SerialName("due_source_count") val dueSourceCount: Int? = null,
+    @SerialName("next_due_at") val nextDueAt: String? = null,
     @SerialName("next_due_time") val nextDueTime: String? = null,
     @SerialName("last_run_status") val lastRunStatus: String? = null,
-    @SerialName("last_error") val lastError: String? = null,
+    @SerialName("last_error") val lastErrorRaw: JsonElement? = null,
+    val sources: List<BlueskySourceDiagnostic> = emptyList(),
 ) {
     val resolvedSchedulerEnabled: Boolean?
         get() = schedulerEnabled ?: enabled
+
+    val resolvedNextDue: String?
+        get() = nextDueAt ?: nextDueTime
+
+    val resolvedLastErrorMessage: String?
+        get() {
+            val raw = lastErrorRaw ?: return null
+            return runCatching { raw.jsonPrimitive.content }.getOrNull()
+                ?: runCatching { raw.jsonObject["message"]?.jsonPrimitive?.content }.getOrNull()
+                ?: runCatching { raw.toString() }.getOrNull()
+        }
 }
 
 @Serializable
