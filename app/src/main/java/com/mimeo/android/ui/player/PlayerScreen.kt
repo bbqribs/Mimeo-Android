@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -966,7 +967,7 @@ fun PlayerScreen(
         }
     }
     val storedLastNonNubMode = lastNonNubMode.takeIf { it != PlayerControlsMode.NUB } ?: PlayerControlsMode.FULL
-    val chevronDescription = "Open navigation drawer. Long press cycles player controls."
+    val chevronDescription = "Open Up Next. Long press cycles player controls."
     val readerChromeHidden = !compactControlsOnly && immersiveReaderMode
     LaunchedEffect(textToolbar) {
         snapshotFlow { textToolbar.status }.collect { status ->
@@ -2764,6 +2765,7 @@ private fun SpeedControlButton(
     showIcon: Boolean = true,
     compact: Boolean = false,
     contentDescription: String = "Playback speed",
+    modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var draftSpeed by remember { mutableFloatStateOf(normalizePlaybackSpeed(speed)) }
@@ -2789,7 +2791,7 @@ private fun SpeedControlButton(
     )
     val triggerDisplaySpeed = if (expanded) draftSpeed else speed
 
-    Box {
+    Box(modifier = modifier) {
         Box(
             modifier = Modifier
                 .shadow(
@@ -3639,10 +3641,13 @@ private fun PlayerChromeChevron(
                     },
                 )
             }
-            .combinedClickable(
-                onClick = onTap,
-                onLongClick = onLongPress,
-            )
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { onTap() },
+                    onLongPress = { onLongPress() },
+                )
+            }
+            .semantics { this.contentDescription = contentDescription }
             .background(highlightColor.copy(alpha = 0.12f), shape)
             .border(1.dp, highlightColor.copy(alpha = 0.38f), shape),
         contentAlignment = Alignment.Center,
@@ -3778,101 +3783,122 @@ private fun PlayerControlBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(
-                    start = if (!minimal && showSpeedPill) 4.dp else CHEVRON_RESERVED_SPACE,
-                    end = CHEVRON_RESERVED_SPACE,
-                )
-                .height(PLAYER_TRANSPORT_ROW_HEIGHT)
-                .padding(vertical = 0.dp),
+                .height(PLAYER_TRANSPORT_ROW_HEIGHT),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
         ) {
-            if (!minimal && showSpeedPill) {
-                SpeedControlButton(
-                    speed = playbackSpeed,
-                    onSpeedChange = onSpeedChange,
-                    showIcon = false,
-                    compact = true,
-                    contentDescription = "Playback speed: ${formatPlaybackSpeed(playbackSpeed)}. Tap to change.",
-                )
+            Box(
+                modifier = Modifier
+                    .width(CHEVRON_RESERVED_SPACE)
+                    .fillMaxHeight(),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (!minimal && showSpeedPill) {
+                    SpeedControlButton(
+                        speed = playbackSpeed,
+                        onSpeedChange = onSpeedChange,
+                        showIcon = false,
+                        compact = true,
+                        contentDescription = "Playback speed: ${formatPlaybackSpeed(playbackSpeed)}. Tap to change.",
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .offset(x = TRANSPORT_CLUSTER_CENTER_OFFSET_X),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                if (!minimal) {
+                    IconButton(onClick = onPreviousItem, modifier = Modifier.size(controlSlotSize)) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.msr_skip_previous_24),
+                            contentDescription = "Previous item",
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                } else if (!showSpeedPill) {
+                    Spacer(modifier = Modifier.size(controlSlotSize))
+                }
                 Spacer(modifier = Modifier.width(controlGap))
-            }
-            if (!minimal) {
-                IconButton(onClick = onPreviousItem, modifier = Modifier.size(controlSlotSize)) {
+                Box(
+                    modifier = Modifier
+                        .size(controlSlotSize)
+                        .combinedClickable(
+                            enabled = canMoveBackward,
+                            onClick = onPreviousSegment,
+                            onLongClick = onPreviousSegmentLongPress,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Icon(
-                        painter = painterResource(id = R.drawable.msr_skip_previous_24),
-                        contentDescription = "Previous item",
-                        modifier = Modifier.size(24.dp),
+                        painter = painterResource(id = R.drawable.msr_fast_rewind_24),
+                        contentDescription = "Previous sentence (long press: previous paragraph)",
+                        modifier = Modifier
+                            .size(24.dp)
+                            .offset(x = REWIND_GLYPH_OPTICAL_OFFSET_X),
                     )
                 }
-            } else if (!showSpeedPill) {
-                Spacer(modifier = Modifier.size(controlSlotSize))
-            }
-            Spacer(modifier = Modifier.width(controlGap))
-            Box(
-                modifier = Modifier
-                    .size(controlSlotSize)
-                    .combinedClickable(
-                        enabled = canMoveBackward,
-                        onClick = onPreviousSegment,
-                        onLongClick = onPreviousSegmentLongPress,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.msr_fast_rewind_24),
-                    contentDescription = "Previous sentence (long press: previous paragraph)",
-                    modifier = Modifier.size(24.dp),
-                )
-            }
-            Spacer(modifier = Modifier.width(controlGap))
-            Box(
-                modifier = Modifier
-                    .size(controlSlotSize)
-                    .combinedClickable(
-                        enabled = canPlay,
-                        onClick = onPlayPause,
-                        onLongClick = onPlayButtonLongPress,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    painter = painterResource(
-                        id = if (isPlaying) R.drawable.msr_pause_24 else R.drawable.msr_play_arrow_24,
-                    ),
-                    contentDescription = if (isPlaying) "Pause playback" else "Play",
-                    modifier = Modifier.size(if (!minimal && showSpeedPill) 30.dp else 32.dp),
-                )
-            }
-            Spacer(modifier = Modifier.width(controlGap))
-            Box(
-                modifier = Modifier
-                    .size(controlSlotSize)
-                    .combinedClickable(
-                        enabled = canMoveForward,
-                        onClick = onNextSegment,
-                        onLongClick = onNextSegmentLongPress,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.msr_fast_forward_24),
-                    contentDescription = "Next sentence (long press: next paragraph)",
-                    modifier = Modifier.size(24.dp),
-                )
-            }
-            Spacer(modifier = Modifier.width(controlGap))
-            if (!minimal) {
-                IconButton(onClick = onNextItem, modifier = Modifier.size(controlSlotSize)) {
+                Spacer(modifier = Modifier.width(controlGap))
+                Box(
+                    modifier = Modifier
+                        .size(controlSlotSize)
+                        .combinedClickable(
+                            enabled = canPlay,
+                            onClick = onPlayPause,
+                            onLongClick = onPlayButtonLongPress,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Icon(
-                        painter = painterResource(id = R.drawable.msr_skip_next_24),
-                        contentDescription = "Next item",
-                        modifier = Modifier.size(24.dp),
+                        painter = painterResource(
+                            id = if (isPlaying) R.drawable.msr_pause_24 else R.drawable.msr_play_arrow_24,
+                        ),
+                        contentDescription = if (isPlaying) "Pause playback" else "Play",
+                        modifier = Modifier
+                            .size(if (!minimal && showSpeedPill) 30.dp else 32.dp)
+                            .then(
+                                if (isPlaying) {
+                                    Modifier
+                                } else {
+                                    Modifier.offset(x = PLAY_GLYPH_OPTICAL_OFFSET_X)
+                                },
+                            ),
                     )
                 }
-            } else if (!showSpeedPill) {
-                Spacer(modifier = Modifier.size(controlSlotSize))
+                Spacer(modifier = Modifier.width(controlGap))
+                Box(
+                    modifier = Modifier
+                        .size(controlSlotSize)
+                        .combinedClickable(
+                            enabled = canMoveForward,
+                            onClick = onNextSegment,
+                            onLongClick = onNextSegmentLongPress,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.msr_fast_forward_24),
+                        contentDescription = "Next sentence (long press: next paragraph)",
+                        modifier = Modifier
+                            .size(24.dp)
+                            .offset(x = FORWARD_GLYPH_OPTICAL_OFFSET_X),
+                    )
+                }
+                Spacer(modifier = Modifier.width(controlGap))
+                if (!minimal) {
+                    IconButton(onClick = onNextItem, modifier = Modifier.size(controlSlotSize)) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.msr_skip_next_24),
+                            contentDescription = "Next item",
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                } else if (!showSpeedPill) {
+                    Spacer(modifier = Modifier.size(controlSlotSize))
+                }
             }
+            Spacer(modifier = Modifier.width(CHEVRON_RESERVED_SPACE))
         }
     }
 }
@@ -3966,3 +3992,7 @@ private fun isLikelyPhysicalDevice(): Boolean {
         model.contains("emulator") ||
         brand.startsWith("generic"))
 }
+private val PLAY_GLYPH_OPTICAL_OFFSET_X = (-1.5).dp
+private val REWIND_GLYPH_OPTICAL_OFFSET_X = 0.5.dp
+private val FORWARD_GLYPH_OPTICAL_OFFSET_X = (-0.75).dp
+private val TRANSPORT_CLUSTER_CENTER_OFFSET_X = (-3).dp

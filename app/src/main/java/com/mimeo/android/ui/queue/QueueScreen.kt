@@ -110,6 +110,7 @@ import com.mimeo.android.share.extractFirstHttpUrl
 import com.mimeo.android.share.isRetryablePendingSaveResult
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
+import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -1903,6 +1904,10 @@ private fun NowPlayingSessionPanel(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .passiveVerticalScrollIndicator(
+                        scrollState = listScrollState,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f),
+                    )
                     .verticalScroll(listScrollState),
             ) {
                 activeItem?.let { item ->
