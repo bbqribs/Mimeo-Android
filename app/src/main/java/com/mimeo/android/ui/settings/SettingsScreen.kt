@@ -100,6 +100,10 @@ fun SettingsScreen(
     val statusMessage by vm.statusMessage.collectAsState()
     val testingConnection by vm.testingConnection.collectAsState()
     val connectionTestSuccessByMode by vm.connectionTestSuccessByMode.collectAsState()
+    val blueskyStatusLoading by vm.blueskyStatusLoading.collectAsState()
+    val blueskyStatusError by vm.blueskyStatusError.collectAsState()
+    val blueskyAccountConnection by vm.blueskyAccountConnection.collectAsState()
+    val blueskyOperatorStatus by vm.blueskyOperatorStatus.collectAsState()
     val autoDownloadDiagnostics by vm.autoDownloadDiagnostics.collectAsState()
     val passwordChangeState by vm.passwordChangeState.collectAsState()
     val playlists by vm.playlists.collectAsState()
@@ -348,6 +352,7 @@ fun SettingsScreen(
 
     LaunchedEffect(Unit) {
         vm.refreshPlaylists()
+        vm.refreshBlueskyStatus()
     }
 
     LaunchedEffect(settingsScrollOffset) {
@@ -676,6 +681,92 @@ fun SettingsScreen(
                             text = "Sign out",
                             color = androidx.compose.material3.MaterialTheme.colorScheme.error,
                         )
+                    }
+                }
+            }
+        }
+        SettingsSectionSeparator()
+
+        SettingsSectionHeader(
+            title = "Bluesky",
+            subtitle = "Read-only backend status for account connection mode and scheduler health.",
+        )
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text("Bluesky status")
+                if (blueskyStatusLoading) {
+                    Text(
+                        text = "Loading Bluesky status...",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (!blueskyStatusError.isNullOrBlank()) {
+                    Text(
+                        text = blueskyStatusError.orEmpty(),
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.error,
+                    )
+                }
+                val account = blueskyAccountConnection
+                val scheduler = blueskyOperatorStatus
+                if (account != null) {
+                    Text(
+                        text = "No Bluesky account is connected",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "Mimeo is currently using public author-feed harvesting",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "Credentials are not stored on this device",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    SettingsKeyValueLine("Mode", formatBlueskyModeLabel(account.mode))
+                    SettingsKeyValueLine("Connected", formatBlueskyBool(account.connected))
+                    SettingsKeyValueLine("Credential stored", formatBlueskyBool(account.credentialStored))
+                    SettingsKeyValueLine("Read-only", formatBlueskyBool(account.readOnly))
+                    SettingsKeyValueLine("Last validation", account.resolvedValidationState ?: "Unavailable")
+                }
+                if (scheduler != null) {
+                    HorizontalDivider(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        thickness = 1.dp,
+                    )
+                    SettingsKeyValueLine("Scheduler enabled", formatBlueskyBool(scheduler.resolvedSchedulerEnabled))
+                    SettingsKeyValueLine("State", scheduler.state ?: "Unknown")
+                    SettingsKeyValueLine("Enabled source count", scheduler.enabledSourceCount?.toString() ?: "0")
+                    SettingsKeyValueLine("Due source count", scheduler.dueSourceCount?.toString() ?: "0")
+                    SettingsKeyValueLine("Next due", scheduler.nextDueTime ?: "Not scheduled")
+                    SettingsKeyValueLine("Last run status", scheduler.lastRunStatus ?: "Unknown")
+                    SettingsKeyValueLine("Last error", scheduler.lastError?.takeIf { it.isNotBlank() } ?: "None")
+                }
+                if (!blueskyStatusLoading && blueskyStatusError.isNullOrBlank() && account == null && scheduler == null) {
+                    Text(
+                        text = "No Bluesky status data available.",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(
+                        enabled = !blueskyStatusLoading,
+                        onClick = { vm.refreshBlueskyStatus() },
+                    ) {
+                        Text(if (blueskyStatusLoading) "Refreshing..." else "Refresh")
                     }
                 }
             }
@@ -1561,6 +1652,25 @@ fun SettingsScreen(
 }
 
 @Composable
+private fun SettingsKeyValueLine(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+@Composable
 private fun SettingsSectionHeader(
     title: String,
     subtitle: String? = null,
@@ -1779,6 +1889,23 @@ private fun isPendingSaveProcessingMessage(message: String): Boolean {
     return normalized.contains("processing") ||
         normalized.contains("saving") ||
         normalized.contains("queued")
+}
+
+private fun formatBlueskyModeLabel(mode: String?): String {
+    val normalized = mode?.trim().orEmpty()
+    if (normalized.isBlank()) return "Unknown"
+    return when (normalized.lowercase(Locale.ROOT)) {
+        "public_author_feed" -> "Public author feed"
+        else -> normalized.replace('_', ' ')
+    }
+}
+
+private fun formatBlueskyBool(value: Boolean?): String {
+    return when (value) {
+        true -> "Yes"
+        false -> "No"
+        null -> "Unknown"
+    }
 }
 
 internal fun normalizeConnectionBaseUrl(url: String): String {
