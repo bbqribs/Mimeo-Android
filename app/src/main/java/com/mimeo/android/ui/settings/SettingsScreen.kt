@@ -72,6 +72,7 @@ import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.ReaderFontOption
+import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.queue.autoDownloadStatusLines
 import com.mimeo.android.ui.theme.toFontFamily
 import java.net.URI
@@ -406,6 +407,10 @@ fun SettingsScreen(
 
     Column(
         modifier = Modifier
+            .passiveVerticalScrollIndicator(
+                scrollState = scrollState,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
+            )
             .verticalScroll(scrollState)
             .padding(bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),

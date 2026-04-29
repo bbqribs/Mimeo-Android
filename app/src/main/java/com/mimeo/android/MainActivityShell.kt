@@ -226,9 +226,13 @@ internal fun MainActivityShell(
         nav = nav,
         currentRoute = currentRoute,
         onChevronTap = {
-            if (drawerAvailable) {
-                coroutineScope.launch { drawerState.open() }
+            if (isOnUpNextRoute) {
+                upNextTabTapSignal += 1
+                if (drawerState.isOpen) coroutineScope.launch { drawerState.close() }
+                return@buildPlayerRouteHandlers
             }
+            nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
+            if (drawerState.isOpen) coroutineScope.launch { drawerState.close() }
         },
     )
 
