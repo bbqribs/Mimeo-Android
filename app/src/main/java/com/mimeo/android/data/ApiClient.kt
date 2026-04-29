@@ -8,6 +8,8 @@ import com.mimeo.android.model.DebugPythonResponse
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.ItemTextContentBlock
 import com.mimeo.android.model.ArticleSummary
+import com.mimeo.android.model.BlueskyAccountConnectionResponse
+import com.mimeo.android.model.BlueskyOperatorStatusResponse
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaybackQueueResponse
@@ -195,6 +197,30 @@ class ApiClient(
             .get()
             .build()
         executeJson(request) { payload -> json.decodeFromString<DebugVersionResponse>(payload) }
+    }
+
+    suspend fun getBlueskyAccountConnection(
+        baseUrl: String,
+        token: String,
+    ): BlueskyAccountConnectionResponse = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/bluesky/account/connection"))
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<BlueskyAccountConnectionResponse>(payload) }
+    }
+
+    suspend fun getBlueskyOperatorStatus(
+        baseUrl: String,
+        token: String,
+    ): BlueskyOperatorStatusResponse = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/bluesky/operator/status"))
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<BlueskyOperatorStatusResponse>(payload) }
     }
 
     suspend fun postAuthToken(

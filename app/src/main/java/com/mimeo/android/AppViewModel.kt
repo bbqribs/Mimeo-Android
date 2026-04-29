@@ -100,6 +100,8 @@ import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.AutoDownloadDiagnostics
 import com.mimeo.android.model.ArticleSummary
+import com.mimeo.android.model.BlueskyAccountConnectionResponse
+import com.mimeo.android.model.BlueskyOperatorStatusResponse
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
 import com.mimeo.android.model.ConnectionMode
@@ -335,6 +337,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val snackbarMessages: Flow<UiSnackbarMessage> = _snackbarMessages.receiveAsFlow()
     private val _testingConnection = MutableStateFlow(false)
     val testingConnection: StateFlow<Boolean> = _testingConnection.asStateFlow()
+    private val _blueskyStatusLoading = MutableStateFlow(false)
+    val blueskyStatusLoading: StateFlow<Boolean> = _blueskyStatusLoading.asStateFlow()
+    private val _blueskyStatusError = MutableStateFlow<String?>(null)
+    val blueskyStatusError: StateFlow<String?> = _blueskyStatusError.asStateFlow()
+    private val _blueskyAccountConnection = MutableStateFlow<BlueskyAccountConnectionResponse?>(null)
+    val blueskyAccountConnection: StateFlow<BlueskyAccountConnectionResponse?> = _blueskyAccountConnection.asStateFlow()
+    private val _blueskyOperatorStatus = MutableStateFlow<BlueskyOperatorStatusResponse?>(null)
+    val blueskyOperatorStatus: StateFlow<BlueskyOperatorStatusResponse?> = _blueskyOperatorStatus.asStateFlow()
     private val suppressPendingFailureSnackbarsUntilMs = MutableStateFlow(0L)
     private val _signInState = MutableStateFlow<SignInState>(SignInState.Idle)
     val signInState: StateFlow<SignInState> = _signInState.asStateFlow()
@@ -533,11 +543,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     _playlists.value = emptyList()
                     _smartPlaylists.value = emptyList()
                     _currentSmartPlaylistItems.value = emptyList()
+                    _blueskyAccountConnection.value = null
+                    _blueskyOperatorStatus.value = null
+                    _blueskyStatusError.value = null
                 }
                 if (previous.apiToken.isBlank() && next.apiToken.isNotBlank()) {
                     authFailureHandledThisSession = false
                     pendingInitialPostSignInHydration = true
                     loadQueue()
+                    refreshBlueskyStatus()
                 } else if (previous.apiToken.isNotBlank() && next.apiToken.isBlank()) {
                     pendingInitialPostSignInHydration = false
                     settingsStore.clearQueueSnapshots()
@@ -1633,6 +1647,44 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             } finally {
                 _testingConnection.value = false
+            }
+        }
+    }
+
+    fun refreshBlueskyStatus() {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            _blueskyAccountConnection.value = null
+            _blueskyOperatorStatus.value = null
+            _blueskyStatusError.value = "Token required to load Bluesky status."
+            return
+        }
+        viewModelScope.launch {
+            _blueskyStatusLoading.value = true
+            _blueskyStatusError.value = null
+            try {
+                val accountDeferred = async {
+                    apiClient.getBlueskyAccountConnection(current.baseUrl, current.apiToken)
+                }
+                val operatorDeferred = async {
+                    apiClient.getBlueskyOperatorStatus(current.baseUrl, current.apiToken)
+                }
+                _blueskyAccountConnection.value = accountDeferred.await()
+                _blueskyOperatorStatus.value = operatorDeferred.await()
+            } catch (error: Throwable) {
+                _blueskyStatusError.value = when (error) {
+                    is ApiException -> when (error.statusCode) {
+                        401 -> "Unauthorized. Check token and try again."
+                        403 -> "Forbidden for this account."
+                        404 -> "Bluesky status endpoints unavailable on this backend."
+                        in 500..599 -> "Backend error while loading Bluesky status."
+                        else -> userFacingRequestErrorMessage(error, "Couldn't load Bluesky status.")
+                    }
+                    is IOException -> "Couldn't reach server."
+                    else -> userFacingRequestErrorMessage(error, "Couldn't load Bluesky status.")
+                }
+            } finally {
+                _blueskyStatusLoading.value = false
             }
         }
     }

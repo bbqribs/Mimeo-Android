@@ -54,6 +54,34 @@ data class DebugVersionResponse(
 )
 
 @Serializable
+data class BlueskyAccountConnectionResponse(
+    val connected: Boolean? = null,
+    @SerialName("credential_stored") val credentialStored: Boolean? = null,
+    @SerialName("read_only") val readOnly: Boolean? = null,
+    val mode: String? = null,
+    @SerialName("last_validation_state") val lastValidationState: String? = null,
+    @SerialName("validation_state") val validationState: String? = null,
+) {
+    val resolvedValidationState: String?
+        get() = lastValidationState ?: validationState
+}
+
+@Serializable
+data class BlueskyOperatorStatusResponse(
+    @SerialName("scheduler_enabled") val schedulerEnabled: Boolean? = null,
+    val enabled: Boolean? = null,
+    val state: String? = null,
+    @SerialName("enabled_source_count") val enabledSourceCount: Int? = null,
+    @SerialName("due_source_count") val dueSourceCount: Int? = null,
+    @SerialName("next_due_time") val nextDueTime: String? = null,
+    @SerialName("last_run_status") val lastRunStatus: String? = null,
+    @SerialName("last_error") val lastError: String? = null,
+) {
+    val resolvedSchedulerEnabled: Boolean?
+        get() = schedulerEnabled ?: enabled
+}
+
+@Serializable
 data class AuthTokenResponse(
     val token: String,
     val id: Int,
