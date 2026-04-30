@@ -519,6 +519,11 @@ fun SettingsScreen(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
+                    text = deviceTokenScopeHint(),
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
                     text = formatAuthSessionStatusSummary(
                         savedToken = settings.apiToken,
                         editedToken = token,
@@ -1968,6 +1973,9 @@ private fun connectionModeTokenAuthHelp(mode: ConnectionMode): String = when (mo
 }
 
 internal fun connectionModeTokenGuidance(mode: ConnectionMode): String = connectionModeTokenAuthHelp(mode)
+
+internal fun deviceTokenScopeHint(): String =
+    "Read-only tokens can view status and content. Read-write tokens are required for saves, playlist changes, and Bluesky connection."
 
 internal fun formatConnectionTestSuccessSummary(snapshot: ConnectionTestSuccessSnapshot): String {
     val timestamp = formatConnectionSnapshotTimestamp(snapshot.succeededAtMs)
