@@ -1745,14 +1745,36 @@ private fun BlueskySourceRow(source: BlueskySourceDiagnostic) {
                 color = stateColor,
             )
         }
+        source.typeLabel?.let { SettingsKeyValueLine("Type", it) }
         SettingsKeyValueLine("Poll interval", source.pollIntervalMinutes?.let { "$it min" } ?: "Default")
         SettingsKeyValueLine(
             "Next due",
             if (enabled) source.resolvedNextDue ?: "Not scheduled" else "Paused",
         )
+        SettingsKeyValueLine("Last harvested", source.lastHarvestedAt ?: "Never")
         SettingsKeyValueLine("Last status", source.lastStatus ?: "Unknown")
+        val savedCount = source.lastRunSaved
+        val dupCount = source.lastRunDuplicate
+        val failedCount = source.lastRunFailed
+        if (savedCount != null || dupCount != null || failedCount != null) {
+            SettingsKeyValueLine(
+                "Last run",
+                buildString {
+                    append("${savedCount ?: 0} saved")
+                    append(", ${dupCount ?: 0} duplicate")
+                    append(", ${failedCount ?: 0} failed")
+                },
+            )
+        }
         SettingsKeyValueLine("Last attempted", source.lastAttemptedAt ?: "Never")
         SettingsKeyValueLine("Last error", source.resolvedLastErrorMessage?.takeIf { it.isNotBlank() } ?: "None")
+        if (source.reconnectRequired == true) {
+            Text(
+                text = "Reconnect required",
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.error,
+            )
+        }
     }
 }
 
