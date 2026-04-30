@@ -203,6 +203,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
@@ -1663,14 +1664,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _blueskyStatusLoading.value = true
             _blueskyStatusError.value = null
             try {
-                val accountDeferred = async {
-                    apiClient.getBlueskyAccountConnection(current.baseUrl, current.apiToken)
+                supervisorScope {
+                    val accountDeferred = async {
+                        apiClient.getBlueskyAccountConnection(current.baseUrl, current.apiToken)
+                    }
+                    val operatorDeferred = async {
+                        apiClient.getBlueskyOperatorStatus(current.baseUrl, current.apiToken)
+                    }
+                    _blueskyAccountConnection.value = accountDeferred.await()
+                    _blueskyOperatorStatus.value = operatorDeferred.await()
                 }
-                val operatorDeferred = async {
-                    apiClient.getBlueskyOperatorStatus(current.baseUrl, current.apiToken)
-                }
-                _blueskyAccountConnection.value = accountDeferred.await()
-                _blueskyOperatorStatus.value = operatorDeferred.await()
             } catch (error: Throwable) {
                 _blueskyStatusError.value = when (error) {
                     is ApiException -> when (error.statusCode) {
