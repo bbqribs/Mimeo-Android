@@ -346,6 +346,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val blueskyAccountConnection: StateFlow<BlueskyAccountConnectionResponse?> = _blueskyAccountConnection.asStateFlow()
     private val _blueskyOperatorStatus = MutableStateFlow<BlueskyOperatorStatusResponse?>(null)
     val blueskyOperatorStatus: StateFlow<BlueskyOperatorStatusResponse?> = _blueskyOperatorStatus.asStateFlow()
+    private val _blueskyConnecting = MutableStateFlow(false)
+    val blueskyConnecting: StateFlow<Boolean> = _blueskyConnecting.asStateFlow()
+    private val _blueskyConnectError = MutableStateFlow<String?>(null)
+    val blueskyConnectError: StateFlow<String?> = _blueskyConnectError.asStateFlow()
+    private val _blueskyDisconnecting = MutableStateFlow(false)
+    val blueskyDisconnecting: StateFlow<Boolean> = _blueskyDisconnecting.asStateFlow()
     private val suppressPendingFailureSnackbarsUntilMs = MutableStateFlow(0L)
     private val _signInState = MutableStateFlow<SignInState>(SignInState.Idle)
     val signInState: StateFlow<SignInState> = _signInState.asStateFlow()
@@ -1688,6 +1694,63 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } finally {
                 _blueskyStatusLoading.value = false
+            }
+        }
+    }
+
+    fun connectBluesky(handle: String, appPassword: String) {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            _blueskyConnectError.value = "Sign in first to connect a Bluesky account."
+            return
+        }
+        viewModelScope.launch {
+            _blueskyConnecting.value = true
+            _blueskyConnectError.value = null
+            try {
+                val result = apiClient.postBlueskyConnect(current.baseUrl, current.apiToken, handle, appPassword)
+                _blueskyAccountConnection.value = result
+            } catch (error: Throwable) {
+                _blueskyConnectError.value = when (error) {
+                    is ApiException -> when (error.statusCode) {
+                        400, 502 -> apiExceptionDetail(error)
+                            ?: "Invalid handle or app password."
+                        401 -> "Unauthorized. Check your Mimeo token and try again."
+                        403 -> "Connection requires a read-write Mimeo token."
+                        500 -> apiExceptionDetail(error)
+                            ?: "Backend error — BLUESKY_SECRET_ENCRYPTION_KEY may not be configured."
+                        else -> userFacingRequestErrorMessage(error, "Couldn't connect Bluesky account.")
+                    }
+                    is IOException -> "Couldn't reach server."
+                    else -> userFacingRequestErrorMessage(error, "Couldn't connect Bluesky account.")
+                }
+            } finally {
+                _blueskyConnecting.value = false
+            }
+        }
+    }
+
+    fun disconnectBluesky() {
+        val current = settings.value
+        if (current.apiToken.isBlank()) return
+        viewModelScope.launch {
+            _blueskyDisconnecting.value = true
+            try {
+                val result = apiClient.postBlueskyDisconnect(current.baseUrl, current.apiToken)
+                _blueskyAccountConnection.value = result
+            } catch (error: Throwable) {
+                _snackbarMessages.trySend(
+                    UiSnackbarMessage(
+                        message = when (error) {
+                            is ApiException -> userFacingRequestErrorMessage(error, "Couldn't disconnect Bluesky account.")
+                            is IOException -> "Couldn't reach server."
+                            else -> userFacingRequestErrorMessage(error, "Couldn't disconnect Bluesky account.")
+                        },
+                        actionLabel = null,
+                    )
+                )
+            } finally {
+                _blueskyDisconnecting.value = false
             }
         }
     }
@@ -5291,6 +5354,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             cursor = cursor.cause
         }
         return false
+    }
+
+    private fun apiExceptionDetail(error: ApiException): String? {
+        val body = error.message?.replaceFirst(Regex("^HTTP \\d+:\\s*"), "") ?: return null
+        return runCatching {
+            Json.parseToJsonElement(body).jsonObject["detail"]?.jsonPrimitive?.contentOrNull
+        }.getOrNull()?.takeIf { it.isNotBlank() }
     }
 
     private fun userFacingRequestErrorMessage(error: Throwable, fallback: String): String {

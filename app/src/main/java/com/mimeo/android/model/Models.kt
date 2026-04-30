@@ -59,16 +59,26 @@ data class DebugVersionResponse(
 @Serializable
 data class BlueskyAccountConnectionResponse(
     val connected: Boolean? = null,
+    val handle: String? = null,
+    val did: String? = null,
     @SerialName("credential_stored") val credentialStored: Boolean? = null,
     @SerialName("read_only") val readOnly: Boolean? = null,
     val mode: String? = null,
     @SerialName("last_validation_status") val lastValidationStatus: String? = null,
     @SerialName("last_validation_state") val lastValidationState: String? = null,
     @SerialName("validation_state") val validationState: String? = null,
+    @SerialName("disconnect_available") val disconnectAvailable: Boolean? = null,
+    val message: String? = null,
 ) {
     val resolvedValidationState: String?
         get() = lastValidationStatus ?: lastValidationState ?: validationState
 }
+
+@Serializable
+data class BlueskyConnectRequest(
+    val handle: String,
+    @SerialName("app_password") val appPassword: String,
+)
 
 @Serializable
 data class BlueskySourceDiagnostic(

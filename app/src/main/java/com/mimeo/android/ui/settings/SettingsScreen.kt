@@ -112,6 +112,9 @@ fun SettingsScreen(
     val blueskyStatusError by vm.blueskyStatusError.collectAsState()
     val blueskyAccountConnection by vm.blueskyAccountConnection.collectAsState()
     val blueskyOperatorStatus by vm.blueskyOperatorStatus.collectAsState()
+    val blueskyConnecting by vm.blueskyConnecting.collectAsState()
+    val blueskyConnectError by vm.blueskyConnectError.collectAsState()
+    val blueskyDisconnecting by vm.blueskyDisconnecting.collectAsState()
     val autoDownloadDiagnostics by vm.autoDownloadDiagnostics.collectAsState()
     val passwordChangeState by vm.passwordChangeState.collectAsState()
     val playlists by vm.playlists.collectAsState()
@@ -227,6 +230,8 @@ fun SettingsScreen(
     var lastConnectionTestResult by remember { mutableStateOf<String?>(null) }
     var lastConnectionTestedAtMs by remember { mutableStateOf<Long?>(null) }
     val blueskySmartPlaylist = remember(smartPlaylists) { smartPlaylists.firstOrNull { it.isBlueskyHarvestPlaylist() } }
+    var blueskyHandle by remember { mutableStateOf("") }
+    var blueskyAppPassword by remember { mutableStateOf("") }
 
     fun selectedModeBaseUrl(): String {
         return when (connectionMode) {
@@ -363,6 +368,12 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         vm.refreshPlaylists()
         vm.refreshBlueskyStatus()
+    }
+
+    LaunchedEffect(blueskyAccountConnection?.connected) {
+        if (blueskyAccountConnection?.connected == true) {
+            blueskyAppPassword = ""
+        }
     }
 
     LaunchedEffect(settingsScrollOffset) {
@@ -699,7 +710,7 @@ fun SettingsScreen(
 
         SettingsSectionHeader(
             title = "Bluesky",
-            subtitle = "Read-only backend status for account connection mode and scheduler health.",
+            subtitle = "Connect a Bluesky account for authenticated harvesting, or view scheduler status.",
         )
 
         var blueskyExplainerExpanded by remember { mutableStateOf(false) }
@@ -742,11 +753,6 @@ fun SettingsScreen(
                             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                             color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Text(
-                            text = "Account connection is currently managed from the Mimeo web or operator page. The Android app is read-only.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
                 }
             }
@@ -777,26 +783,92 @@ fun SettingsScreen(
                 val account = blueskyAccountConnection
                 val scheduler = blueskyOperatorStatus
                 if (account != null) {
-                    Text(
-                        text = "No Bluesky account is connected",
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = "Mimeo is currently using public author-feed harvesting",
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = "Credentials are not stored on this device",
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    SettingsKeyValueLine("Mode", formatBlueskyModeLabel(account.mode))
-                    SettingsKeyValueLine("Connected", formatBlueskyBool(account.connected))
-                    SettingsKeyValueLine("Credential stored", formatBlueskyBool(account.credentialStored))
-                    SettingsKeyValueLine("Read-only", formatBlueskyBool(account.readOnly))
-                    SettingsKeyValueLine("Last validation", account.resolvedValidationState ?: "Unavailable")
+                    if (account.connected == true) {
+                        SettingsKeyValueLine("Handle", account.handle ?: "Unknown")
+                        if (!account.did.isNullOrBlank()) {
+                            SettingsKeyValueLine("DID", account.did.orEmpty())
+                        }
+                        SettingsKeyValueLine("Mode", formatBlueskyModeLabel(account.mode))
+                        SettingsKeyValueLine("Last validation", account.resolvedValidationState ?: "Unavailable")
+                        if (!account.message.isNullOrBlank()) {
+                            Text(
+                                text = account.message.orEmpty(),
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (account.disconnectAvailable == true) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                            ) {
+                                Button(
+                                    enabled = !blueskyDisconnecting && !blueskyStatusLoading,
+                                    onClick = { vm.disconnectBluesky() },
+                                ) {
+                                    Text(if (blueskyDisconnecting) "Disconnecting..." else "Disconnect Bluesky account")
+                                }
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "No Bluesky account is connected.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = "Mimeo is currently using public author-feed harvesting. Connect an account for authenticated home-timeline and list-feed access.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                            thickness = 1.dp,
+                        )
+                        Text(
+                            text = "Connect Bluesky account",
+                            style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                        )
+                        OutlinedTextField(
+                            value = blueskyHandle,
+                            onValueChange = { blueskyHandle = it },
+                            label = { Text("Bluesky handle") },
+                            placeholder = { Text("alice.bsky.social") },
+                            singleLine = true,
+                            enabled = !blueskyConnecting,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = blueskyAppPassword,
+                            onValueChange = { blueskyAppPassword = it },
+                            label = { Text("Bluesky app password") },
+                            placeholder = { Text("App password — not your main Bluesky password") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            singleLine = true,
+                            enabled = !blueskyConnecting,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        if (!blueskyConnectError.isNullOrBlank()) {
+                            Text(
+                                text = blueskyConnectError!!,
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.error,
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            Button(
+                                enabled = blueskyHandle.isNotBlank() && blueskyAppPassword.isNotBlank() && !blueskyConnecting,
+                                onClick = { vm.connectBluesky(blueskyHandle.trim(), blueskyAppPassword) },
+                            ) {
+                                Text(if (blueskyConnecting) "Connecting..." else "Connect")
+                            }
+                        }
+                    }
                 }
                 if (scheduler != null) {
                     HorizontalDivider(
