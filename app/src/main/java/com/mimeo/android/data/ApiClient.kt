@@ -9,6 +9,7 @@ import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.ItemTextContentBlock
 import com.mimeo.android.model.ArticleSummary
 import com.mimeo.android.model.BlueskyAccountConnectionResponse
+import com.mimeo.android.model.BlueskyConnectRequest
 import com.mimeo.android.model.BlueskyOperatorStatusResponse
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackQueueItem
@@ -207,6 +208,36 @@ class ApiClient(
             .url(resolveUrl(baseUrl, "/bluesky/account/connection"))
             .header("Authorization", "Bearer $token")
             .get()
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<BlueskyAccountConnectionResponse>(payload) }
+    }
+
+    suspend fun postBlueskyConnect(
+        baseUrl: String,
+        token: String,
+        handle: String,
+        appPassword: String,
+    ): BlueskyAccountConnectionResponse = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(
+            BlueskyConnectRequest(handle = handle, appPassword = appPassword)
+        ).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/bluesky/account/connection/connect"))
+            .header("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<BlueskyAccountConnectionResponse>(payload) }
+    }
+
+    suspend fun postBlueskyDisconnect(
+        baseUrl: String,
+        token: String,
+    ): BlueskyAccountConnectionResponse = withContext(Dispatchers.IO) {
+        val body = "{}".toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/bluesky/account/connection/disconnect"))
+            .header("Authorization", "Bearer $token")
+            .post(body)
             .build()
         executeJson(request) { payload -> json.decodeFromString<BlueskyAccountConnectionResponse>(payload) }
     }
