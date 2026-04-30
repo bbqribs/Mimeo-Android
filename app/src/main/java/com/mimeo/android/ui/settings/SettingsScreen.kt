@@ -701,6 +701,57 @@ fun SettingsScreen(
             title = "Bluesky",
             subtitle = "Read-only backend status for account connection mode and scheduler health.",
         )
+
+        var blueskyExplainerExpanded by remember { mutableStateOf(false) }
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "About Bluesky app passwords",
+                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { blueskyExplainerExpanded = !blueskyExplainerExpanded }) {
+                        Text(if (blueskyExplainerExpanded) "Hide" else "Show")
+                    }
+                }
+                AnimatedVisibility(visible = blueskyExplainerExpanded) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "Mimeo uses a Bluesky app password for authenticated read access — not your main Bluesky password.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = "App passwords grant limited access and can be created or revoked at any time in your Bluesky account settings (Settings → App Passwords).",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = "Account connection is currently managed from the Mimeo web or operator page. The Android app is read-only.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier
