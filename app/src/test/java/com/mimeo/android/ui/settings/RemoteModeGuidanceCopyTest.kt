@@ -34,4 +34,14 @@ class RemoteModeGuidanceCopyTest {
                 message.contains("token", ignoreCase = true),
         )
     }
+
+    @Test
+    fun `device token scope hint distinguishes read-only from read-write`() {
+        val hint = deviceTokenScopeHint()
+
+        assertTrue(hint.contains("read-only", ignoreCase = true))
+        assertTrue(hint.contains("read-write", ignoreCase = true))
+        assertTrue(hint.contains("Bluesky", ignoreCase = true))
+        assertTrue(hint.contains("saves", ignoreCase = true))
+    }
 }
