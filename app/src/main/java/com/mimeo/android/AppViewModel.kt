@@ -1716,7 +1716,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         400, 502 -> apiExceptionDetail(error)
                             ?: "Invalid handle or app password."
                         401 -> "Unauthorized. Check your Mimeo token and try again."
-                        403 -> "Connection requires a read-write Mimeo token."
+                        403 -> "Your Mimeo token has read-only scope and can't perform writes. Sign out and sign back in to get a read-write token, or create a read-write device token in the Mimeo operator panel."
                         500 -> apiExceptionDetail(error)
                             ?: "Backend error — BLUESKY_SECRET_ENCRYPTION_KEY may not be configured."
                         else -> userFacingRequestErrorMessage(error, "Couldn't connect Bluesky account.")
