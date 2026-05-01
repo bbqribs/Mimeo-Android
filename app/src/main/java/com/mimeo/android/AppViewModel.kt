@@ -352,6 +352,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val blueskyConnectError: StateFlow<String?> = _blueskyConnectError.asStateFlow()
     private val _blueskyDisconnecting = MutableStateFlow(false)
     val blueskyDisconnecting: StateFlow<Boolean> = _blueskyDisconnecting.asStateFlow()
+    private val _blueskyConnectIsReadOnlyScope = MutableStateFlow(false)
+    val blueskyConnectIsReadOnlyScope: StateFlow<Boolean> = _blueskyConnectIsReadOnlyScope.asStateFlow()
     private val suppressPendingFailureSnackbarsUntilMs = MutableStateFlow(0L)
     private val _signInState = MutableStateFlow<SignInState>(SignInState.Idle)
     val signInState: StateFlow<SignInState> = _signInState.asStateFlow()
@@ -553,6 +555,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     _blueskyAccountConnection.value = null
                     _blueskyOperatorStatus.value = null
                     _blueskyStatusError.value = null
+                    _blueskyConnectError.value = null
+                    _blueskyConnectIsReadOnlyScope.value = false
                 }
                 if (previous.apiToken.isBlank() && next.apiToken.isNotBlank()) {
                     authFailureHandledThisSession = false
@@ -1707,11 +1711,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _blueskyConnecting.value = true
             _blueskyConnectError.value = null
+            _blueskyConnectIsReadOnlyScope.value = false
             try {
                 val result = apiClient.postBlueskyConnect(current.baseUrl, current.apiToken, handle, appPassword)
                 _blueskyAccountConnection.value = result
+                refreshBlueskyStatus()
+                _snackbarMessages.trySend(UiSnackbarMessage(message = "Bluesky account connected.", actionLabel = null))
             } catch (error: Throwable) {
-                _blueskyConnectError.value = when (error) {
+                val errorMsg = when (error) {
                     is ApiException -> when (error.statusCode) {
                         400, 502 -> apiExceptionDetail(error)
                             ?: "Invalid handle or app password."
@@ -1723,6 +1730,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     is IOException -> "Couldn't reach server."
                     else -> userFacingRequestErrorMessage(error, "Couldn't connect Bluesky account.")
+                }
+                _blueskyConnectError.value = errorMsg
+                if (error is ApiException && error.statusCode == 403) {
+                    _blueskyConnectIsReadOnlyScope.value = true
                 }
             } finally {
                 _blueskyConnecting.value = false
@@ -1738,6 +1749,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val result = apiClient.postBlueskyDisconnect(current.baseUrl, current.apiToken)
                 _blueskyAccountConnection.value = result
+                refreshBlueskyStatus()
+                _snackbarMessages.trySend(UiSnackbarMessage(message = "Bluesky account disconnected.", actionLabel = null))
             } catch (error: Throwable) {
                 _snackbarMessages.trySend(
                     UiSnackbarMessage(

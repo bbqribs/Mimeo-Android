@@ -114,6 +114,7 @@ fun SettingsScreen(
     val blueskyOperatorStatus by vm.blueskyOperatorStatus.collectAsState()
     val blueskyConnecting by vm.blueskyConnecting.collectAsState()
     val blueskyConnectError by vm.blueskyConnectError.collectAsState()
+    val blueskyConnectIsReadOnlyScope by vm.blueskyConnectIsReadOnlyScope.collectAsState()
     val blueskyDisconnecting by vm.blueskyDisconnecting.collectAsState()
     val autoDownloadDiagnostics by vm.autoDownloadDiagnostics.collectAsState()
     val passwordChangeState by vm.passwordChangeState.collectAsState()
@@ -372,6 +373,7 @@ fun SettingsScreen(
 
     LaunchedEffect(blueskyAccountConnection?.connected) {
         if (blueskyAccountConnection?.connected == true) {
+            blueskyHandle = ""
             blueskyAppPassword = ""
         }
     }
@@ -861,6 +863,11 @@ fun SettingsScreen(
                                 style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                                 color = androidx.compose.material3.MaterialTheme.colorScheme.error,
                             )
+                            if (blueskyConnectIsReadOnlyScope) {
+                                TextButton(onClick = onSignOut) {
+                                    Text("Sign out")
+                                }
+                            }
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
