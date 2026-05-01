@@ -718,7 +718,7 @@ fun SettingsScreen(
 
         SettingsSectionHeader(
             title = "Bluesky",
-            subtitle = "Connect a Bluesky account for authenticated harvesting, or view scheduler status.",
+            subtitle = "Connect a Bluesky account for authenticated harvesting, or view scheduler and source diagnostics.",
         )
 
         var blueskyExplainerExpanded by remember { mutableStateOf(false) }
@@ -962,7 +962,7 @@ fun SettingsScreen(
                         enabled = !blueskyStatusLoading,
                         onClick = { vm.refreshBlueskyStatus() },
                     ) {
-                        Text(if (blueskyStatusLoading) "Refreshing..." else "Refresh")
+                        Text(if (blueskyStatusLoading) "Refreshing..." else "Refresh status")
                     }
                 }
             }
