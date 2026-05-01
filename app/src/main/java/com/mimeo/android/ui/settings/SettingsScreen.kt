@@ -1936,7 +1936,9 @@ private fun BlueskySourceRow(
             )
         }
         if (isAuthenticatedSource) {
-            source.actor?.let { SettingsKeyValueLine("Actor", it) }
+            source.actor
+                ?.takeIf { it != "home_timeline" && it != "list_feed" && it != "author_feed" }
+                ?.let { SettingsKeyValueLine("Actor", it) }
             if (onCreateSmartPlaylist != null) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(
