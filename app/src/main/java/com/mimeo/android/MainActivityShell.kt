@@ -657,6 +657,14 @@ internal fun MainActivityShell(
                                         )
                                         showNewSmartPlaylistDialog = true
                                     },
+                                    onCreateSourceSmartPlaylist = { name, captureKinds, sort ->
+                                        newSmartPlaylistInitialState = SmartPlaylistFormState(
+                                            name = name,
+                                            captureKinds = captureKinds,
+                                            sort = sort,
+                                        )
+                                        showNewSmartPlaylistDialog = true
+                                    },
                                     onOpenSmartPlaylist = { playlistId ->
                                         nav.navigate("smartPlaylist/$playlistId") { launchSingleTop = true }
                                     },

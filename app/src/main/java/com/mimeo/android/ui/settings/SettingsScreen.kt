@@ -95,6 +95,7 @@ fun SettingsScreen(
     vm: AppViewModel,
     onOpenDiagnostics: () -> Unit,
     onCreateBlueskySmartPlaylist: () -> Unit,
+    onCreateSourceSmartPlaylist: (name: String, captureKinds: String, sort: String) -> Unit,
     onOpenSmartPlaylist: (Int) -> Unit,
     onChangePassword: (String, String, String) -> Unit,
     onClearPasswordChangeState: () -> Unit,
@@ -923,7 +924,12 @@ fun SettingsScreen(
                         )
                     } else {
                         visibleSources.forEach { source ->
-                            BlueskySourceRow(source = source)
+                            BlueskySourceRow(
+                                source = source,
+                                onCreateSmartPlaylist = { name, captureKinds, sort ->
+                                    onCreateSourceSmartPlaylist(name, captureKinds, sort)
+                                },
+                            )
                         }
                     }
                 }
@@ -1861,7 +1867,10 @@ private fun SettingsKeyValueLine(label: String, value: String) {
 }
 
 @Composable
-private fun BlueskySourceRow(source: BlueskySourceDiagnostic) {
+private fun BlueskySourceRow(
+    source: BlueskySourceDiagnostic,
+    onCreateSmartPlaylist: ((name: String, captureKinds: String, sort: String) -> Unit)? = null,
+) {
     val enabled = source.enabled != false
     val stateLabel = if (enabled) "Enabled" else "Paused"
     val stateColor = if (enabled) {
@@ -1869,6 +1878,9 @@ private fun BlueskySourceRow(source: BlueskySourceDiagnostic) {
     } else {
         androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
     }
+    val isAuthenticatedSource = source.typeLabel?.let {
+        it.equals("Home timeline", ignoreCase = true) || it.equals("List feed", ignoreCase = true)
+    } ?: false
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1891,9 +1903,7 @@ private fun BlueskySourceRow(source: BlueskySourceDiagnostic) {
             )
         }
         source.typeLabel?.let {
-            val isAuthenticated = it.equals("Home timeline", ignoreCase = true) ||
-                it.equals("List feed", ignoreCase = true)
-            val displayLabel = if (isAuthenticated) "$it (authenticated)" else it
+            val displayLabel = if (isAuthenticatedSource) "$it (authenticated)" else it
             SettingsKeyValueLine("Type", displayLabel)
         }
         SettingsKeyValueLine("Poll interval", source.pollIntervalMinutes?.let { "$it min" } ?: "Default")
@@ -1924,6 +1934,25 @@ private fun BlueskySourceRow(source: BlueskySourceDiagnostic) {
                 style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                 color = androidx.compose.material3.MaterialTheme.colorScheme.error,
             )
+        }
+        if (isAuthenticatedSource) {
+            source.actor?.let { SettingsKeyValueLine("Actor", it) }
+            if (onCreateSmartPlaylist != null) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(
+                        onClick = {
+                            val name = if (source.typeLabel?.equals("Home timeline", ignoreCase = true) == true) {
+                                "Bluesky Home Timeline"
+                            } else {
+                                "Bluesky List"
+                            }
+                            onCreateSmartPlaylist(name, "bluesky_harvest", "saved_desc")
+                        },
+                    ) {
+                        Text("Create smart playlist")
+                    }
+                }
+            }
         }
     }
 }
