@@ -804,6 +804,16 @@ fun SettingsScreen(
                                 color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                        Text(
+                            text = "Connected for authenticated Bluesky harvesting. Home timeline and list-feed sources are managed from the Mimeo web or operator panel — not from this app.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = "Harvested posts are not added to Up Next automatically. Use smart playlists or tap “Use as Up Next” on a playlist to listen.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         if (account.disconnectAvailable == true) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -1880,7 +1890,12 @@ private fun BlueskySourceRow(source: BlueskySourceDiagnostic) {
                 color = stateColor,
             )
         }
-        source.typeLabel?.let { SettingsKeyValueLine("Type", it) }
+        source.typeLabel?.let {
+            val isAuthenticated = it.equals("Home timeline", ignoreCase = true) ||
+                it.equals("List feed", ignoreCase = true)
+            val displayLabel = if (isAuthenticated) "$it (authenticated)" else it
+            SettingsKeyValueLine("Type", displayLabel)
+        }
         SettingsKeyValueLine("Poll interval", source.pollIntervalMinutes?.let { "$it min" } ?: "Default")
         SettingsKeyValueLine(
             "Next due",
