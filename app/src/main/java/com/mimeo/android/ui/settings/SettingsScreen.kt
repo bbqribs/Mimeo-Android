@@ -94,6 +94,7 @@ private const val TTS_PREVIEW_PHRASE = "The quick brown fox jumps over the lazy 
 fun SettingsScreen(
     vm: AppViewModel,
     onOpenDiagnostics: () -> Unit,
+    onOpenBlueskyBrowse: () -> Unit,
     onCreateBlueskySmartPlaylist: () -> Unit,
     onCreateSourceSmartPlaylist: (name: String, captureKinds: String, sort: String) -> Unit,
     onOpenSmartPlaylist: (Int) -> Unit,
@@ -944,6 +945,11 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 ) {
+                    TextButton(
+                        onClick = onOpenBlueskyBrowse,
+                    ) {
+                        Text("Browse harvests")
+                    }
                     if (blueskySmartPlaylist != null) {
                         TextButton(
                             enabled = !blueskyStatusLoading,

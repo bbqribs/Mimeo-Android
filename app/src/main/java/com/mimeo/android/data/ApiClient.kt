@@ -9,8 +9,13 @@ import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.ItemTextContentBlock
 import com.mimeo.android.model.ArticleSummary
 import com.mimeo.android.model.BlueskyAccountConnectionResponse
+import com.mimeo.android.model.BlueskyBrowseItem
+import com.mimeo.android.model.BlueskyBrowsePinCreateRequest
+import com.mimeo.android.model.BlueskyBrowsePinResponse
+import com.mimeo.android.model.BlueskyBrowseResponse
 import com.mimeo.android.model.BlueskyConnectRequest
 import com.mimeo.android.model.BlueskyOperatorStatusResponse
+import com.mimeo.android.model.BlueskySourceInfo
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaybackQueueResponse
@@ -990,6 +995,84 @@ class ApiClient(
             .post(body)
             .build()
         executeJson(request) { payload -> json.decodeFromString<ItemBatchResponse>(payload) }
+    }
+
+    suspend fun getBlueskyBrowse(
+        baseUrl: String,
+        token: String,
+        sourceId: Int? = null,
+        q: String? = null,
+        cursor: String? = null,
+        limit: Int = 50,
+    ): BlueskyBrowseResponse = withContext(Dispatchers.IO) {
+        val httpUrl = resolveUrl(baseUrl, "/bluesky/browse").toHttpUrl().newBuilder()
+            .addQueryParameter("limit", limit.coerceIn(1, 100).toString())
+            .apply {
+                if (sourceId != null) addQueryParameter("source_id", sourceId.toString())
+                if (!q.isNullOrBlank()) addQueryParameter("q", q)
+                if (cursor != null) addQueryParameter("cursor", cursor)
+            }
+            .build()
+        val request = Request.Builder()
+            .url(httpUrl)
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .get()
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<BlueskyBrowseResponse>(payload) }
+    }
+
+    suspend fun getBlueskySources(baseUrl: String, token: String): List<BlueskySourceInfo> = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/bluesky/sources"))
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .get()
+            .build()
+        executeJson(request) { payload ->
+            json.decodeFromString(ListSerializer(BlueskySourceInfo.serializer()), payload)
+        }
+    }
+
+    suspend fun getBlueskyBrowsePins(baseUrl: String, token: String): List<BlueskyBrowsePinResponse> = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/bluesky/browse/pins"))
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .get()
+            .build()
+        executeJson(request) { payload ->
+            json.decodeFromString(ListSerializer(BlueskyBrowsePinResponse.serializer()), payload)
+        }
+    }
+
+    suspend fun addBlueskyBrowsePin(
+        baseUrl: String,
+        token: String,
+        sourceId: Int,
+    ): BlueskyBrowsePinResponse = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(BlueskyBrowsePinCreateRequest(sourceId = sourceId))
+            .toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/bluesky/browse/pins"))
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .post(body)
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<BlueskyBrowsePinResponse>(payload) }
+    }
+
+    suspend fun removeBlueskyBrowsePinBySource(
+        baseUrl: String,
+        token: String,
+        sourceId: Int,
+    ) = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/bluesky/browse/pins/by-source/$sourceId"))
+            .header("Authorization", "Bearer $token")
+            .delete()
+            .build()
+        executeNoBody(request)
     }
 
     suspend fun postProblemReport(
