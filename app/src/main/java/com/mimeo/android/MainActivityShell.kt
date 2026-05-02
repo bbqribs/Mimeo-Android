@@ -73,6 +73,7 @@ import com.mimeo.android.ui.playlists.SmartPlaylistFormDialog
 import com.mimeo.android.ui.playlists.SmartPlaylistFormState
 import com.mimeo.android.ui.queue.JumpToNowPlayingPill
 import com.mimeo.android.ui.queue.QueueScreen
+import com.mimeo.android.ui.bluesky.BlueskyBrowseScreen
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
 import com.mimeo.android.ui.settings.SettingsScreen
 import com.mimeo.android.ui.signin.SignInScreen
@@ -645,10 +646,18 @@ internal fun MainActivityShell(
                                     },
                                 )
                             }
+                            composable(ROUTE_BLUESKY_BROWSE) {
+                                BlueskyBrowseScreen(
+                                    vm = vm,
+                                    onNavigateBack = { nav.popBackStack() },
+                                    onOpenItem = shellState.openItemInLocus,
+                                )
+                            }
                             composable(ROUTE_SETTINGS) {
                                 SettingsScreen(
                                     vm = vm,
                                     onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
+                                    onOpenBlueskyBrowse = { nav.navigate(ROUTE_BLUESKY_BROWSE) { launchSingleTop = true } },
                                     onCreateBlueskySmartPlaylist = {
                                         newSmartPlaylistInitialState = SmartPlaylistFormState(
                                             name = "Bluesky harvests",

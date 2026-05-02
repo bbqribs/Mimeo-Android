@@ -519,6 +519,67 @@ data class PendingItemAction(
 )
 
 @Serializable
+data class BlueskySourceInfo(
+    val id: Int,
+    @SerialName("source_type") val sourceType: String,
+    val actor: String,
+    @SerialName("display_name") val displayName: String? = null,
+    val enabled: Boolean = false,
+    @SerialName("poll_interval_minutes") val pollIntervalMinutes: Int = 60,
+    @SerialName("next_harvest_at") val nextHarvestAt: String? = null,
+    @SerialName("last_harvested_at") val lastHarvestedAt: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+) {
+    val resolvedName: String
+        get() = displayName?.takeIf { it.isNotBlank() } ?: actor
+}
+
+@Serializable
+data class BlueskyBrowsePinResponse(
+    val id: Int,
+    @SerialName("source_id") val sourceId: Int,
+    val position: Int,
+    @SerialName("created_at") val createdAt: String? = null,
+    val source: BlueskySourceInfo? = null,
+)
+
+@Serializable
+data class BlueskyBrowsePinCreateRequest(
+    @SerialName("source_id") val sourceId: Int,
+    val position: Int? = null,
+)
+
+@Serializable
+data class BlueskyProvenance(
+    @SerialName("source_id") val sourceId: Int,
+    @SerialName("source_label") val sourceLabel: String,
+    @SerialName("source_type") val sourceType: String,
+    @SerialName("post_url") val postUrl: String? = null,
+    @SerialName("author_handle") val authorHandle: String? = null,
+    @SerialName("post_indexed_at") val postIndexedAt: String? = null,
+)
+
+@Serializable
+data class BlueskyBrowseItem(
+    val id: Int,
+    val url: String,
+    val title: String? = null,
+    @SerialName("source_type") val sourceType: String? = null,
+    @SerialName("source_label") val sourceLabel: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    val status: String? = null,
+    @SerialName("word_count") val wordCount: Int? = null,
+    val bluesky: BlueskyProvenance,
+)
+
+@Serializable
+data class BlueskyBrowseResponse(
+    val items: List<BlueskyBrowseItem>,
+    @SerialName("next_cursor") val nextCursor: String? = null,
+    @SerialName("total_known") val totalKnown: Int? = null,
+)
+
+@Serializable
 data class PendingManualSaveItem(
     val id: Long,
     val source: PendingSaveSource = PendingSaveSource.MANUAL,

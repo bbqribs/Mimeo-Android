@@ -101,7 +101,11 @@ import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.AutoDownloadDiagnostics
 import com.mimeo.android.model.ArticleSummary
 import com.mimeo.android.model.BlueskyAccountConnectionResponse
+import com.mimeo.android.model.BlueskyBrowseItem
+import com.mimeo.android.model.BlueskyBrowsePinResponse
+import com.mimeo.android.model.BlueskyBrowseResponse
 import com.mimeo.android.model.BlueskyOperatorStatusResponse
+import com.mimeo.android.model.BlueskySourceInfo
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
 import com.mimeo.android.model.ConnectionMode
@@ -354,6 +358,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val blueskyDisconnecting: StateFlow<Boolean> = _blueskyDisconnecting.asStateFlow()
     private val _blueskyConnectIsReadOnlyScope = MutableStateFlow(false)
     val blueskyConnectIsReadOnlyScope: StateFlow<Boolean> = _blueskyConnectIsReadOnlyScope.asStateFlow()
+
+    private val _blueskyBrowseItems = MutableStateFlow<List<BlueskyBrowseItem>>(emptyList())
+    val blueskyBrowseItems: StateFlow<List<BlueskyBrowseItem>> = _blueskyBrowseItems.asStateFlow()
+    private val _blueskyBrowseSources = MutableStateFlow<List<BlueskySourceInfo>>(emptyList())
+    val blueskyBrowseSources: StateFlow<List<BlueskySourceInfo>> = _blueskyBrowseSources.asStateFlow()
+    private val _blueskyBrowsePins = MutableStateFlow<List<BlueskyBrowsePinResponse>>(emptyList())
+    val blueskyBrowsePins: StateFlow<List<BlueskyBrowsePinResponse>> = _blueskyBrowsePins.asStateFlow()
+    private val _blueskyBrowseLoading = MutableStateFlow(false)
+    val blueskyBrowseLoading: StateFlow<Boolean> = _blueskyBrowseLoading.asStateFlow()
+    private val _blueskyBrowseLoadingMore = MutableStateFlow(false)
+    val blueskyBrowseLoadingMore: StateFlow<Boolean> = _blueskyBrowseLoadingMore.asStateFlow()
+    private val _blueskyBrowseError = MutableStateFlow<String?>(null)
+    val blueskyBrowseError: StateFlow<String?> = _blueskyBrowseError.asStateFlow()
+    private val _blueskyBrowseSourceFilter = MutableStateFlow<Int?>(null)
+    val blueskyBrowseSourceFilter: StateFlow<Int?> = _blueskyBrowseSourceFilter.asStateFlow()
+    private val _blueskyBrowseQuery = MutableStateFlow("")
+    val blueskyBrowseQuery: StateFlow<String> = _blueskyBrowseQuery.asStateFlow()
+    private val _blueskyBrowseNextCursor = MutableStateFlow<String?>(null)
+    val blueskyBrowseNextCursor: StateFlow<String?> = _blueskyBrowseNextCursor.asStateFlow()
+    private val _blueskyBrowsePinsAvailable = MutableStateFlow(true)
+    val blueskyBrowsePinsAvailable: StateFlow<Boolean> = _blueskyBrowsePinsAvailable.asStateFlow()
+
     private val suppressPendingFailureSnackbarsUntilMs = MutableStateFlow(0L)
     private val _signInState = MutableStateFlow<SignInState>(SignInState.Idle)
     val signInState: StateFlow<SignInState> = _signInState.asStateFlow()
@@ -1764,6 +1790,125 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             } finally {
                 _blueskyDisconnecting.value = false
+            }
+        }
+    }
+
+    fun loadBlueskyBrowse(refresh: Boolean = true) {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            _blueskyBrowseError.value = "Token required."
+            return
+        }
+        if (refresh) {
+            _blueskyBrowseNextCursor.value = null
+            _blueskyBrowseItems.value = emptyList()
+        }
+        viewModelScope.launch {
+            _blueskyBrowseLoading.value = true
+            _blueskyBrowseError.value = null
+            try {
+                supervisorScope {
+                    val sourcesDeferred = async { apiClient.getBlueskySources(current.baseUrl, current.apiToken) }
+                    val pinsDeferred = async {
+                        if (!_blueskyBrowsePinsAvailable.value) return@async emptyList<BlueskyBrowsePinResponse>()
+                        try {
+                            apiClient.getBlueskyBrowsePins(current.baseUrl, current.apiToken)
+                        } catch (e: ApiException) {
+                            if (e.statusCode == 404) _blueskyBrowsePinsAvailable.value = false
+                            emptyList<BlueskyBrowsePinResponse>()
+                        }
+                    }
+                    val browseDeferred = async {
+                        apiClient.getBlueskyBrowse(
+                            current.baseUrl,
+                            current.apiToken,
+                            sourceId = _blueskyBrowseSourceFilter.value,
+                            q = _blueskyBrowseQuery.value.trim().takeIf { it.isNotEmpty() },
+                        )
+                    }
+                    _blueskyBrowseSources.value = sourcesDeferred.await()
+                    _blueskyBrowsePins.value = pinsDeferred.await()
+                    val browse = browseDeferred.await()
+                    _blueskyBrowseItems.value = browse.items
+                    _blueskyBrowseNextCursor.value = browse.nextCursor
+                }
+            } catch (error: Throwable) {
+                _blueskyBrowseError.value = when (error) {
+                    is ApiException -> when (error.statusCode) {
+                        401 -> "Unauthorized."
+                        404 -> "Browse endpoint not available on this backend."
+                        in 500..599 -> "Backend error while loading Bluesky browse."
+                        else -> userFacingRequestErrorMessage(error, "Couldn't load Bluesky browse.")
+                    }
+                    is IOException -> "Couldn't reach server."
+                    else -> userFacingRequestErrorMessage(error, "Couldn't load Bluesky browse.")
+                }
+            } finally {
+                _blueskyBrowseLoading.value = false
+            }
+        }
+    }
+
+    fun loadMoreBlueskyBrowse() {
+        val cursor = _blueskyBrowseNextCursor.value ?: return
+        val current = settings.value
+        if (current.apiToken.isBlank() || _blueskyBrowseLoadingMore.value) return
+        viewModelScope.launch {
+            _blueskyBrowseLoadingMore.value = true
+            try {
+                val browse = apiClient.getBlueskyBrowse(
+                    current.baseUrl,
+                    current.apiToken,
+                    sourceId = _blueskyBrowseSourceFilter.value,
+                    q = _blueskyBrowseQuery.value.trim().takeIf { it.isNotEmpty() },
+                    cursor = cursor,
+                )
+                _blueskyBrowseItems.value = _blueskyBrowseItems.value + browse.items
+                _blueskyBrowseNextCursor.value = browse.nextCursor
+            } catch (error: Throwable) {
+                _snackbarMessages.trySend(UiSnackbarMessage(message = "Couldn't load more items.", actionLabel = null))
+            } finally {
+                _blueskyBrowseLoadingMore.value = false
+            }
+        }
+    }
+
+    fun setBlueskyBrowseSourceFilter(sourceId: Int?) {
+        _blueskyBrowseSourceFilter.value = sourceId
+    }
+
+    fun setBlueskyBrowseQuery(q: String) {
+        _blueskyBrowseQuery.value = q
+    }
+
+    fun addBlueskyBrowsePin(sourceId: Int) {
+        val current = settings.value
+        if (current.apiToken.isBlank()) return
+        viewModelScope.launch {
+            try {
+                val pin = apiClient.addBlueskyBrowsePin(current.baseUrl, current.apiToken, sourceId)
+                _blueskyBrowsePins.value = (_blueskyBrowsePins.value + pin).sortedBy { it.position }
+            } catch (error: Throwable) {
+                val msg = if (error is ApiException && error.statusCode == 409) {
+                    "Source is already pinned."
+                } else {
+                    "Couldn't pin source."
+                }
+                _snackbarMessages.trySend(UiSnackbarMessage(message = msg, actionLabel = null))
+            }
+        }
+    }
+
+    fun removeBlueskyBrowsePin(sourceId: Int) {
+        val current = settings.value
+        if (current.apiToken.isBlank()) return
+        viewModelScope.launch {
+            try {
+                apiClient.removeBlueskyBrowsePinBySource(current.baseUrl, current.apiToken, sourceId)
+                _blueskyBrowsePins.value = _blueskyBrowsePins.value.filter { it.sourceId != sourceId }
+            } catch (error: Throwable) {
+                _snackbarMessages.trySend(UiSnackbarMessage(message = "Couldn't unpin source.", actionLabel = null))
             }
         }
     }
