@@ -104,7 +104,12 @@ import com.mimeo.android.model.BlueskyAccountConnectionResponse
 import com.mimeo.android.model.BlueskyBrowseItem
 import com.mimeo.android.model.BlueskyBrowsePinResponse
 import com.mimeo.android.model.BlueskyBrowseResponse
+import com.mimeo.android.model.BlueskyCandidate
+import com.mimeo.android.model.BlueskyCandidateSaveRequest
+import com.mimeo.android.model.BlueskyCandidateScanResponse
+import com.mimeo.android.model.BlueskyCandidateSourceSelection
 import com.mimeo.android.model.BlueskyOperatorStatusResponse
+import com.mimeo.android.model.BlueskyPickerResponse
 import com.mimeo.android.model.BlueskySourceInfo
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
@@ -379,6 +384,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val blueskyBrowseNextCursor: StateFlow<String?> = _blueskyBrowseNextCursor.asStateFlow()
     private val _blueskyBrowsePinsAvailable = MutableStateFlow(true)
     val blueskyBrowsePinsAvailable: StateFlow<Boolean> = _blueskyBrowsePinsAvailable.asStateFlow()
+
+    private val _blueskyCandidatePicker = MutableStateFlow<BlueskyPickerResponse?>(null)
+    val blueskyCandidatePicker: StateFlow<BlueskyPickerResponse?> = _blueskyCandidatePicker.asStateFlow()
+    private val _blueskyCandidatePickerLoading = MutableStateFlow(false)
+    val blueskyCandidatePickerLoading: StateFlow<Boolean> = _blueskyCandidatePickerLoading.asStateFlow()
+    private val _blueskyCandidatePickerError = MutableStateFlow<String?>(null)
+    val blueskyCandidatePickerError: StateFlow<String?> = _blueskyCandidatePickerError.asStateFlow()
+    private val _blueskyCandidateSelection = MutableStateFlow<BlueskyCandidateSourceSelection?>(null)
+    val blueskyCandidateSelection: StateFlow<BlueskyCandidateSourceSelection?> = _blueskyCandidateSelection.asStateFlow()
+    private val _blueskyCandidateScan = MutableStateFlow<BlueskyCandidateScanResponse?>(null)
+    val blueskyCandidateScan: StateFlow<BlueskyCandidateScanResponse?> = _blueskyCandidateScan.asStateFlow()
+    private val _blueskyCandidateLoading = MutableStateFlow(false)
+    val blueskyCandidateLoading: StateFlow<Boolean> = _blueskyCandidateLoading.asStateFlow()
+    private val _blueskyCandidateError = MutableStateFlow<String?>(null)
+    val blueskyCandidateError: StateFlow<String?> = _blueskyCandidateError.asStateFlow()
+    private val _blueskyCandidateSavingUrls = MutableStateFlow<Set<String>>(emptySet())
+    val blueskyCandidateSavingUrls: StateFlow<Set<String>> = _blueskyCandidateSavingUrls.asStateFlow()
+    private val _blueskyCandidateSaveErrors = MutableStateFlow<Map<String, String>>(emptyMap())
+    val blueskyCandidateSaveErrors: StateFlow<Map<String, String>> = _blueskyCandidateSaveErrors.asStateFlow()
+    private val _blueskyCandidatePinning = MutableStateFlow(false)
+    val blueskyCandidatePinning: StateFlow<Boolean> = _blueskyCandidatePinning.asStateFlow()
 
     private val suppressPendingFailureSnackbarsUntilMs = MutableStateFlow(0L)
     private val _signInState = MutableStateFlow<SignInState>(SignInState.Idle)
@@ -1910,6 +1936,191 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (error: Throwable) {
                 _snackbarMessages.trySend(UiSnackbarMessage(message = "Couldn't unpin source.", actionLabel = null))
             }
+        }
+    }
+
+    fun loadBlueskyCandidatePicker() {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            _blueskyCandidatePickerError.value = "Token required to load Bluesky sources."
+            return
+        }
+        viewModelScope.launch {
+            _blueskyCandidatePickerLoading.value = true
+            _blueskyCandidatePickerError.value = null
+            try {
+                _blueskyCandidatePicker.value = apiClient.getBlueskyPicker(current.baseUrl, current.apiToken)
+            } catch (error: Throwable) {
+                _blueskyCandidatePickerError.value = when (error) {
+                    is ApiException -> when (error.statusCode) {
+                        401 -> "Unauthorized. Sign in again."
+                        404 -> "Bluesky picker endpoint not available on this backend."
+                        in 500..599 -> "Backend error while loading Bluesky sources."
+                        else -> blueskyCandidateRequestErrorMessage(error, "Couldn't load Bluesky sources.")
+                    }
+                    is IOException -> "Couldn't reach server."
+                    else -> userFacingRequestErrorMessage(error, "Couldn't load Bluesky sources.")
+                }
+            } finally {
+                _blueskyCandidatePickerLoading.value = false
+            }
+        }
+    }
+
+    fun scanBlueskyCandidateSource(selection: BlueskyCandidateSourceSelection) {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            _blueskyCandidateError.value = "Token required to scan Bluesky candidates."
+            return
+        }
+        _blueskyCandidateSelection.value = selection
+        viewModelScope.launch {
+            _blueskyCandidateLoading.value = true
+            _blueskyCandidateError.value = null
+            _blueskyCandidateSaveErrors.value = emptyMap()
+            try {
+                _blueskyCandidateScan.value = apiClient.getBlueskyCandidates(
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
+                    sourceKind = selection.sourceKind,
+                    sourceId = selection.sourceId,
+                    actor = selection.actor,
+                    uri = selection.uri,
+                )
+            } catch (error: Throwable) {
+                _blueskyCandidateScan.value = null
+                _blueskyCandidateError.value = when (error) {
+                    is ApiException -> when (error.statusCode) {
+                        401 -> "Unauthorized. Sign in again."
+                        404 -> "Bluesky candidate endpoint not available on this backend."
+                        409 -> blueskyCandidateRequestErrorMessage(error, "Connect or reconnect Bluesky before scanning this source.")
+                        429 -> "Bluesky rate limited the candidate scan. Try again later."
+                        502 -> blueskyCandidateRequestErrorMessage(error, "Live Bluesky candidate scan failed.")
+                        in 500..599 -> "Backend error while scanning Bluesky candidates."
+                        else -> blueskyCandidateRequestErrorMessage(error, "Couldn't scan Bluesky candidates.")
+                    }
+                    is IOException -> "Couldn't reach server."
+                    else -> userFacingRequestErrorMessage(error, "Couldn't scan Bluesky candidates.")
+                }
+            } finally {
+                _blueskyCandidateLoading.value = false
+            }
+        }
+    }
+
+    fun saveBlueskyCandidate(candidate: BlueskyCandidate) {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            _blueskyCandidateSaveErrors.update { it + (candidate.articleUrl to "Token required.") }
+            return
+        }
+        if (candidate.saved && candidate.itemId != null) return
+        viewModelScope.launch {
+            _blueskyCandidateSavingUrls.update { it + candidate.articleUrl }
+            _blueskyCandidateSaveErrors.update { it - candidate.articleUrl }
+            try {
+                val article = apiClient.saveBlueskyCandidate(
+                    current.baseUrl,
+                    current.apiToken,
+                    BlueskyCandidateSaveRequest(
+                        articleUrl = candidate.articleUrl,
+                        title = candidate.title,
+                        sourceType = candidate.sourceType,
+                        sourceLabel = candidate.sourceLabel,
+                        postUrl = candidate.bluesky.postUrl,
+                    ),
+                )
+                updateSavedBlueskyCandidate(candidate.articleUrl, article)
+                _snackbarMessages.trySend(UiSnackbarMessage(message = "Saved from Bluesky.", actionLabel = null))
+                loadQueue(autoRetryPendingSaves = false)
+            } catch (error: Throwable) {
+                val message = when (error) {
+                    is ApiException -> blueskyCandidateRequestErrorMessage(error, "Couldn't save candidate.")
+                    is IOException -> "Couldn't reach server."
+                    else -> userFacingRequestErrorMessage(error, "Couldn't save candidate.")
+                }
+                _blueskyCandidateSaveErrors.update { it + (candidate.articleUrl to message) }
+            } finally {
+                _blueskyCandidateSavingUrls.update { it - candidate.articleUrl }
+            }
+        }
+    }
+
+    fun pinCurrentBlueskyCandidateSource() {
+        val current = settings.value
+        val selection = _blueskyCandidateSelection.value
+        val scanSource = _blueskyCandidateScan.value?.source
+        if (current.apiToken.isBlank() || selection == null) return
+        val sourceType = scanSource?.sourceType ?: selection.sourceKind
+        val actor = when (sourceType) {
+            "author_feed", "account" -> scanSource?.identifier ?: selection.actor
+            else -> null
+        }
+        val uri = if (sourceType == "list_feed") scanSource?.identifier ?: selection.uri else null
+        if (actor.isNullOrBlank() && uri.isNullOrBlank()) return
+        viewModelScope.launch {
+            _blueskyCandidatePinning.value = true
+            try {
+                val pin = apiClient.pinBlueskyCandidateSource(
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
+                    actor = actor,
+                    uri = uri,
+                )
+                _blueskyCandidateScan.update { response ->
+                    response?.copy(source = response.source.copy(sourceId = pin.sourceId))
+                }
+                loadBlueskyCandidatePicker()
+                _snackbarMessages.trySend(UiSnackbarMessage(message = "Bluesky source pinned.", actionLabel = null))
+            } catch (error: Throwable) {
+                val message = when (error) {
+                    is ApiException -> blueskyCandidateRequestErrorMessage(error, "Couldn't pin Bluesky source.")
+                    is IOException -> "Couldn't reach server."
+                    else -> userFacingRequestErrorMessage(error, "Couldn't pin Bluesky source.")
+                }
+                _snackbarMessages.trySend(UiSnackbarMessage(message = message, actionLabel = null))
+            } finally {
+                _blueskyCandidatePinning.value = false
+            }
+        }
+    }
+
+    fun unpinBlueskyCandidateSource(sourceId: Int) {
+        val current = settings.value
+        if (current.apiToken.isBlank()) return
+        viewModelScope.launch {
+            _blueskyCandidatePinning.value = true
+            try {
+                apiClient.removeBlueskyBrowsePinBySource(current.baseUrl, current.apiToken, sourceId)
+                _blueskyCandidatePicker.update { picker ->
+                    picker?.copy(pins = picker.pins.filter { it.sourceId != sourceId })
+                }
+                _snackbarMessages.trySend(UiSnackbarMessage(message = "Bluesky source unpinned.", actionLabel = null))
+            } catch (error: Throwable) {
+                _snackbarMessages.trySend(UiSnackbarMessage(message = "Couldn't unpin Bluesky source.", actionLabel = null))
+            } finally {
+                _blueskyCandidatePinning.value = false
+            }
+        }
+    }
+
+    private fun updateSavedBlueskyCandidate(articleUrl: String, article: ArticleSummary) {
+        _blueskyCandidateScan.update { response ->
+            response?.copy(
+                candidates = response.candidates.map { candidate ->
+                    if (candidate.articleUrl != articleUrl) {
+                        candidate
+                    } else {
+                        candidate.copy(
+                            saved = true,
+                            savedState = if (article.status == "failed" || article.status == "blocked") "failed_saved" else "saved",
+                            itemId = article.id,
+                            readLink = "/items/${article.id}/read",
+                            title = article.title ?: candidate.title,
+                        )
+                    }
+                },
+            )
         }
     }
 
@@ -5519,6 +5730,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return runCatching {
             Json.parseToJsonElement(body).jsonObject["detail"]?.jsonPrimitive?.contentOrNull
         }.getOrNull()?.takeIf { it.isNotBlank() }
+    }
+
+    private fun blueskyCandidateRequestErrorMessage(error: ApiException, fallback: String): String {
+        val body = error.message?.replaceFirst(Regex("^HTTP \\d+:\\s*"), "") ?: return fallback
+        val detailMessage = runCatching {
+            val detail = Json.parseToJsonElement(body).jsonObject["detail"]
+            detail?.jsonObject?.get("message")?.jsonPrimitive?.contentOrNull
+                ?: detail?.jsonPrimitive?.contentOrNull
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+        return detailMessage ?: userFacingRequestErrorMessage(error, fallback)
     }
 
     private fun userFacingRequestErrorMessage(error: Throwable, fallback: String): String {

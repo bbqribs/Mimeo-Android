@@ -13,8 +13,13 @@ import com.mimeo.android.model.BlueskyBrowseItem
 import com.mimeo.android.model.BlueskyBrowsePinCreateRequest
 import com.mimeo.android.model.BlueskyBrowsePinResponse
 import com.mimeo.android.model.BlueskyBrowseResponse
+import com.mimeo.android.model.BlueskyCandidatePinRequest
+import com.mimeo.android.model.BlueskyCandidatePinResponse
+import com.mimeo.android.model.BlueskyCandidateSaveRequest
+import com.mimeo.android.model.BlueskyCandidateScanResponse
 import com.mimeo.android.model.BlueskyConnectRequest
 import com.mimeo.android.model.BlueskyOperatorStatusResponse
+import com.mimeo.android.model.BlueskyPickerResponse
 import com.mimeo.android.model.BlueskySourceInfo
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackQueueItem
@@ -1020,6 +1025,79 @@ class ApiClient(
             .get()
             .build()
         executeJson(request) { payload -> json.decodeFromString<BlueskyBrowseResponse>(payload) }
+    }
+
+    suspend fun getBlueskyPicker(baseUrl: String, token: String): BlueskyPickerResponse = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/bluesky/picker"))
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .get()
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<BlueskyPickerResponse>(payload) }
+    }
+
+    suspend fun getBlueskyCandidates(
+        baseUrl: String,
+        token: String,
+        sourceKind: String,
+        sourceId: Int? = null,
+        actor: String? = null,
+        uri: String? = null,
+        maxAgeHours: Int? = null,
+        maxPosts: Int? = null,
+        maxLinks: Int? = null,
+    ): BlueskyCandidateScanResponse = withContext(Dispatchers.IO) {
+        val httpUrl = resolveUrl(baseUrl, "/bluesky/candidates").toHttpUrl().newBuilder()
+            .addQueryParameter("source_kind", sourceKind)
+            .apply {
+                if (sourceId != null) addQueryParameter("source_id", sourceId.toString())
+                if (!actor.isNullOrBlank()) addQueryParameter("actor", actor)
+                if (!uri.isNullOrBlank()) addQueryParameter("uri", uri)
+                if (maxAgeHours != null) addQueryParameter("max_age_hours", maxAgeHours.toString())
+                if (maxPosts != null) addQueryParameter("max_posts", maxPosts.toString())
+                if (maxLinks != null) addQueryParameter("max_links", maxLinks.toString())
+            }
+            .build()
+        val request = Request.Builder()
+            .url(httpUrl)
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .get()
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<BlueskyCandidateScanResponse>(payload) }
+    }
+
+    suspend fun saveBlueskyCandidate(
+        baseUrl: String,
+        token: String,
+        payload: BlueskyCandidateSaveRequest,
+    ): ArticleSummary = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(payload).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/bluesky/candidates/save"))
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .post(body)
+            .build()
+        executeJson(request) { responsePayload -> json.decodeFromString<ArticleSummary>(responsePayload) }
+    }
+
+    suspend fun pinBlueskyCandidateSource(
+        baseUrl: String,
+        token: String,
+        actor: String? = null,
+        uri: String? = null,
+    ): BlueskyCandidatePinResponse = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(BlueskyCandidatePinRequest(actor = actor, uri = uri))
+            .toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/bluesky/candidates/pin"))
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .post(body)
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<BlueskyCandidatePinResponse>(payload) }
     }
 
     suspend fun getBlueskySources(baseUrl: String, token: String): List<BlueskySourceInfo> = withContext(Dispatchers.IO) {
