@@ -4,8 +4,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,7 +16,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -47,11 +46,9 @@ import com.mimeo.android.model.BlueskyCandidateSourceSelection
 import com.mimeo.android.model.BlueskyPickerPinItem
 import com.mimeo.android.model.BlueskyPickerResponse
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BlueskyBrowseScreen(
     vm: AppViewModel,
-    onNavigateBack: () -> Unit,
     onOpenItem: (Int) -> Unit,
 ) {
     val picker by vm.blueskyCandidatePicker.collectAsState()
@@ -74,7 +71,7 @@ fun BlueskyBrowseScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
-            Header(onNavigateBack = onNavigateBack)
+            Header()
         }
         item {
             ScanDefaults(picker = picker)
@@ -133,23 +130,17 @@ fun BlueskyBrowseScreen(
 }
 
 @Composable
-private fun Header(onNavigateBack: () -> Unit) {
-    Row(
+private fun Header() {
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        TextButton(onClick = onNavigateBack) {
-            Text("Back")
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text("Bluesky", style = MaterialTheme.typography.titleLarge)
-            Text(
-                text = "Live candidate links. Saving creates normal Mimeo items.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        Text("Bluesky", style = MaterialTheme.typography.titleLarge)
+        Text(
+            text = "Live candidate links. Saving creates normal Mimeo items.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -171,7 +162,6 @@ private fun ScanDefaults(picker: BlueskyPickerResponse?) {
 }
 
 @Composable
-@OptIn(ExperimentalLayoutApi::class)
 private fun SourcePicker(
     picker: BlueskyPickerResponse?,
     loading: Boolean,
@@ -183,6 +173,8 @@ private fun SourcePicker(
     var handleDraft by remember { mutableStateOf("") }
     var listDraft by remember { mutableStateOf("") }
     var inputError by remember { mutableStateOf<String?>(null) }
+    var dropdownExpanded by remember { mutableStateOf(false) }
+    val sourceOptions = picker.sourceDropdownOptions()
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -213,47 +205,40 @@ private fun SourcePicker(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (picker?.timeline?.available == true) {
-                    SourceChip(
-                        label = "Home Timeline",
-                        selected = selected?.sourceKind == "home_timeline",
-                        onClick = {
-                            onScan(BlueskyCandidateSourceSelection("home_timeline", "Bluesky Home Timeline"))
-                        },
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = { dropdownExpanded = true },
+                    enabled = sourceOptions.isNotEmpty() && !loading,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = selected?.let { cleanSourceLabel(it.displayLabel, it.sourceKind) }
+                            ?: "Choose Home Timeline, pinned source, or list",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
-                picker?.pins.orEmpty().forEach { pin ->
-                    SourceChip(
-                        label = "Pinned: ${pin.resolvedLabel}",
-                        selected = selected?.sourceId == pin.sourceId,
-                        onClick = {
-                            onScan(
-                                BlueskyCandidateSourceSelection(
-                                    sourceKind = pin.kind,
-                                    displayLabel = pin.resolvedLabel,
-                                    actor = pin.handle,
-                                    uri = pin.uri,
-                                    sourceId = pin.sourceId,
-                                ),
-                            )
-                        },
-                    )
-                }
-                picker?.lists.orEmpty().forEach { list ->
-                    SourceChip(
-                        label = list.name,
-                        selected = selected?.uri == list.uri,
-                        onClick = {
-                            onScan(
-                                BlueskyCandidateSourceSelection(
-                                    sourceKind = "list_feed",
-                                    displayLabel = "Bluesky List: ${list.name}",
-                                    uri = list.uri,
-                                ),
-                            )
-                        },
-                    )
+                DropdownMenu(
+                    expanded = dropdownExpanded,
+                    onDismissRequest = { dropdownExpanded = false },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    sourceOptions.forEach { option ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = option.label,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            },
+                            onClick = {
+                                dropdownExpanded = false
+                                inputError = null
+                                onScan(option.selection)
+                            },
+                        )
+                    }
                 }
             }
 
@@ -339,15 +324,6 @@ private fun SourcePicker(
 }
 
 @Composable
-private fun SourceChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-    )
-}
-
-@Composable
 private fun ScanStatus(
     scan: BlueskyCandidateScanResponse?,
     selected: BlueskyCandidateSourceSelection?,
@@ -372,7 +348,10 @@ private fun ScanStatus(
         tonalElevation = 1.dp,
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            val label = scan?.source?.displayLabel ?: selected?.displayLabel ?: "Selected source"
+            val label = cleanSourceLabel(
+                label = scan?.source?.displayLabel ?: selected?.displayLabel ?: "Selected source",
+                sourceType = scan?.source?.sourceType ?: selected?.sourceKind,
+            )
             Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             if (scan != null) {
                 Text(
@@ -437,10 +416,10 @@ private fun CandidateRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = listOfNotNull(candidate.domain, candidate.articleUrl).joinToString("  "),
+                        text = candidate.domain?.takeIf { it.isNotBlank() } ?: "External link",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
@@ -469,7 +448,7 @@ private fun CandidateRow(
                 )
             }
             Text(
-                text = "${candidate.sourceLabel} · ${candidate.sourceType}",
+                text = "${cleanSourceLabel(candidate.sourceLabel, candidate.sourceType)} · ${formatSourceType(candidate.sourceType)}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -510,6 +489,73 @@ private fun SavedBadge(candidate: BlueskyCandidate) {
         style = MaterialTheme.typography.labelMedium,
         modifier = Modifier.padding(top = 2.dp),
     )
+}
+
+private data class SourceDropdownOption(
+    val label: String,
+    val selection: BlueskyCandidateSourceSelection,
+)
+
+private fun BlueskyPickerResponse?.sourceDropdownOptions(): List<SourceDropdownOption> {
+    if (this == null) return emptyList()
+    return buildList {
+        if (timeline.available) {
+            add(
+                SourceDropdownOption(
+                    label = "Home Timeline",
+                    selection = BlueskyCandidateSourceSelection(
+                        sourceKind = "home_timeline",
+                        displayLabel = "Bluesky Home Timeline",
+                    ),
+                ),
+            )
+        }
+        pins.forEach { pin ->
+            val label = "Pinned: ${cleanSourceLabel(pin.resolvedLabel, pin.kind)}"
+            add(
+                SourceDropdownOption(
+                    label = label,
+                    selection = BlueskyCandidateSourceSelection(
+                        sourceKind = pin.kind,
+                        displayLabel = label,
+                        actor = pin.handle,
+                        uri = pin.uri,
+                        sourceId = pin.sourceId,
+                    ),
+                ),
+            )
+        }
+        lists.forEach { list ->
+            add(
+                SourceDropdownOption(
+                    label = list.name,
+                    selection = BlueskyCandidateSourceSelection(
+                        sourceKind = "list_feed",
+                        displayLabel = "Bluesky List: ${list.name}",
+                        uri = list.uri,
+                    ),
+                ),
+            )
+        }
+    }
+}
+
+private fun cleanSourceLabel(label: String, sourceType: String?): String {
+    val cleaned = label.trim()
+    if (sourceType == "list_feed") {
+        val withoutPrefix = cleaned.removePrefix("Pinned:").trim()
+        val hasRawAddress = withoutPrefix.contains("at://", ignoreCase = true) ||
+            withoutPrefix.contains("://", ignoreCase = true)
+        if (hasRawAddress) return "Bluesky List"
+    }
+    return cleaned.takeIf { it.isNotBlank() } ?: formatSourceType(sourceType)
+}
+
+private fun formatSourceType(sourceType: String?): String = when (sourceType) {
+    "home_timeline" -> "Home Timeline"
+    "list_feed" -> "List"
+    "author_feed", "account" -> "Account"
+    else -> "Bluesky"
 }
 
 private fun findPinnedSourceId(

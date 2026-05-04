@@ -650,7 +650,6 @@ internal fun MainActivityShell(
                             composable(ROUTE_BLUESKY_BROWSE) {
                                 BlueskyBrowseScreen(
                                     vm = vm,
-                                    onNavigateBack = { nav.popBackStack() },
                                     onOpenItem = shellState.openItemInLocus,
                                 )
                             }
