@@ -1034,7 +1034,11 @@ class ApiClient(
             .header("Accept", "application/json")
             .get()
             .build()
-        executeJson(request) { payload -> json.decodeFromString<BlueskyPickerResponse>(payload) }
+        val client = okHttpClient.newBuilder()
+            .readTimeout(30, TimeUnit.SECONDS)
+            .callTimeout(30, TimeUnit.SECONDS)
+            .build()
+        executeJson(request, client) { payload -> json.decodeFromString<BlueskyPickerResponse>(payload) }
     }
 
     suspend fun getBlueskyCandidates(

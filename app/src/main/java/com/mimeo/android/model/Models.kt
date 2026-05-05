@@ -618,11 +618,20 @@ data class BlueskyPickerPinItem(
 }
 
 @Serializable
+data class BlueskyPickerFeedItem(
+    val uri: String,
+    @SerialName("display_name") val displayName: String,
+    val description: String? = null,
+    @SerialName("like_count") val likeCount: Int? = null,
+    val pinned: Boolean = false,
+)
+
+@Serializable
 data class BlueskyPickerResponse(
     val connection: BlueskyAccountConnectionResponse,
     val timeline: BlueskyPickerTimeline = BlueskyPickerTimeline(),
     val lists: List<BlueskyPickerListItem> = emptyList(),
-    val feeds: List<JsonElement> = emptyList(),
+    val feeds: List<BlueskyPickerFeedItem> = emptyList(),
     val accounts: List<JsonElement> = emptyList(),
     val caps: BlueskyPickerCaps = BlueskyPickerCaps(),
     val pins: List<BlueskyPickerPinItem> = emptyList(),

@@ -1,11 +1,16 @@
 package com.mimeo.android.ui.bluesky
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +29,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -72,6 +78,17 @@ fun BlueskyBrowseScreen(
 
     LaunchedEffect(Unit) {
         vm.loadBlueskyCandidatePicker()
+    }
+
+    LaunchedEffect(picker?.timeline?.available, selection, scan, scanning) {
+        if (picker?.timeline?.available == true && selection == null && scan == null && !scanning) {
+            vm.scanBlueskyCandidateSource(
+                BlueskyCandidateSourceSelection(
+                    sourceKind = "home_timeline",
+                    displayLabel = "Bluesky Home Timeline",
+                ),
+            )
+        }
     }
 
     LazyColumn(
@@ -178,12 +195,19 @@ private fun SourcePicker(
     onReload: () -> Unit,
     onScan: (BlueskyCandidateSourceSelection) -> Unit,
 ) {
+    var expanded by remember { mutableStateOf(false) }
     var handleDraft by remember { mutableStateOf("") }
     var listDraft by remember { mutableStateOf("") }
     var inputError by remember { mutableStateOf<String?>(null) }
     var dropdownExpanded by remember { mutableStateOf(false) }
-    val sourceOptions = picker.sourceDropdownOptions()
-    val chevronRotation by animateFloatAsState(
+    val pinnedOptions = picker.pinnedSourceOptions()
+    val browseOptions = picker.browseSourceOptions()
+    val sectionChevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(durationMillis = 200),
+        label = "sourcePickerChevron",
+    )
+    val dropdownChevronRotation by animateFloatAsState(
         targetValue = if (dropdownExpanded) 180f else 0f,
         animationSpec = tween(durationMillis = 140),
         label = "sourceDropdownChevron",
@@ -194,159 +218,203 @@ private fun SourcePicker(
         shape = MaterialTheme.shapes.large,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Source picker", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    "Source picker",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
                 if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp))
                 TextButton(onClick = onReload, enabled = !loading) { Text("Refresh") }
-            }
-            if (!error.isNullOrBlank()) {
-                Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
-            val connected = picker?.connection?.connected == true
-            val connectedHandle = picker?.connection?.handle ?: "Bluesky"
-            Text(
-                text = if (connected) {
-                    "Connected as @$connectedHandle"
-                } else {
-                    "No connected Bluesky account. Account scans can still use public author feeds; timeline and lists require a connection."
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Box(modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(
-                    onClick = { dropdownExpanded = true },
-                    enabled = sourceOptions.isNotEmpty() && !loading,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = selected?.let { cleanSourceLabel(it.displayLabel, it.sourceKind) }
-                                ?: "Choose Home Timeline, pinned source, or list",
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Icon(
-                            imageVector = Icons.Filled.KeyboardArrowDown,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(20.dp)
-                                .rotate(chevronRotation),
-                        )
-                    }
-                }
-                DropdownMenu(
-                    expanded = dropdownExpanded,
-                    onDismissRequest = { dropdownExpanded = false },
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
                     modifier = Modifier
-                        .widthIn(min = 280.dp, max = 420.dp)
-                        .heightIn(max = 320.dp),
-                ) {
-                    sourceOptions.forEach { option ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = option.label,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            },
-                            onClick = {
-                                dropdownExpanded = false
-                                inputError = null
-                                onScan(option.selection)
-                            },
-                        )
-                    }
-                }
-            }
-
-            OutlinedTextField(
-                value = handleDraft,
-                onValueChange = { handleDraft = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Account by handle") },
-                placeholder = { Text("alice.bsky.social") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = {
-                    val handle = normalizeBlueskyHandleInput(handleDraft)
-                    if (handle != null) {
-                        inputError = null
-                        onScan(BlueskyCandidateSourceSelection("account", "@$handle", actor = handle))
-                    } else {
-                        inputError = "Handle is required."
-                    }
-                }),
-            )
-            Button(
-                onClick = {
-                    val handle = normalizeBlueskyHandleInput(handleDraft)
-                    if (handle != null) {
-                        inputError = null
-                        onScan(BlueskyCandidateSourceSelection("account", "@$handle", actor = handle))
-                    } else {
-                        inputError = "Handle is required."
-                    }
-                },
-                enabled = !loading,
-            ) {
-                Text("Scan account")
-            }
-
-            OutlinedTextField(
-                value = listDraft,
-                onValueChange = { listDraft = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("List URL or AT-URI") },
-                placeholder = { Text("https://bsky.app/profile/.../lists/... or at://...") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = {
-                    val parsed = parseBlueskyListIdentifierInput(listDraft)
-                    if (parsed.ok) {
-                        inputError = null
-                        listDraft = parsed.uri.orEmpty()
-                        onScan(BlueskyCandidateSourceSelection("list_feed", "Bluesky List", uri = parsed.uri))
-                    } else {
-                        inputError = parsed.error
-                    }
-                }),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Button(
-                    onClick = {
-                        val parsed = parseBlueskyListIdentifierInput(listDraft)
-                        if (parsed.ok) {
-                            inputError = null
-                            listDraft = parsed.uri.orEmpty()
-                            onScan(BlueskyCandidateSourceSelection("list_feed", "Bluesky List", uri = parsed.uri))
-                        } else {
-                            inputError = parsed.error
-                        }
-                    },
-                    enabled = !loading,
-                ) {
-                    Text("Scan list")
-                }
-                Text(
-                    text = "Feed generators are not supported yet.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        .size(20.dp)
+                        .rotate(sectionChevronRotation),
                 )
             }
-            if (!inputError.isNullOrBlank()) {
-                Text(inputError.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(),
+                exit = shrinkVertically(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    if (!error.isNullOrBlank()) {
+                        Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                    val connected = picker?.connection?.connected == true
+                    val connectedHandle = picker?.connection?.handle ?: "Bluesky"
+                    Text(
+                        text = sourcePickerConnectionCopy(
+                            picker = picker,
+                            pickerError = error,
+                            connected = connected,
+                            connectedHandle = connectedHandle,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    if (pinnedOptions.isNotEmpty()) {
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            pinnedOptions.forEach { option ->
+                                val isSelected = selected != null &&
+                                    selected.sourceKind == option.selection.sourceKind &&
+                                    (selected.actor ?: "") == (option.selection.actor ?: "") &&
+                                    (selected.uri ?: "") == (option.selection.uri ?: "")
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { onScan(option.selection) },
+                                    label = {
+                                        Text(option.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    },
+                                    enabled = !loading,
+                                )
+                            }
+                        }
+                    }
+
+                    if (browseOptions.isNotEmpty()) {
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { dropdownExpanded = true },
+                                enabled = !loading,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = "Browse lists & feeds",
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Filled.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .rotate(dropdownChevronRotation),
+                                    )
+                                }
+                            }
+                            DropdownMenu(
+                                expanded = dropdownExpanded,
+                                onDismissRequest = { dropdownExpanded = false },
+                                modifier = Modifier
+                                    .widthIn(min = 280.dp, max = 420.dp)
+                                    .heightIn(max = 320.dp),
+                            ) {
+                                browseOptions.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = option.label,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        },
+                                        onClick = {
+                                            dropdownExpanded = false
+                                            inputError = null
+                                            onScan(option.selection)
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = handleDraft,
+                        onValueChange = { handleDraft = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Account by handle") },
+                        placeholder = { Text("alice.bsky.social") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = {
+                            val handle = normalizeBlueskyHandleInput(handleDraft)
+                            if (handle != null) {
+                                inputError = null
+                                onScan(BlueskyCandidateSourceSelection("account", "@$handle", actor = handle))
+                            } else {
+                                inputError = "Handle is required."
+                            }
+                        }),
+                    )
+                    Button(
+                        onClick = {
+                            val handle = normalizeBlueskyHandleInput(handleDraft)
+                            if (handle != null) {
+                                inputError = null
+                                onScan(BlueskyCandidateSourceSelection("account", "@$handle", actor = handle))
+                            } else {
+                                inputError = "Handle is required."
+                            }
+                        },
+                        enabled = !loading,
+                    ) {
+                        Text("Scan account")
+                    }
+
+                    OutlinedTextField(
+                        value = listDraft,
+                        onValueChange = { listDraft = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("List URL or AT-URI") },
+                        placeholder = { Text("https://bsky.app/profile/.../lists/... or at://...") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = {
+                            val parsed = parseBlueskyListIdentifierInput(listDraft)
+                            if (parsed.ok) {
+                                inputError = null
+                                listDraft = parsed.uri.orEmpty()
+                                onScan(BlueskyCandidateSourceSelection("list_feed", "Bluesky List", uri = parsed.uri))
+                            } else {
+                                inputError = parsed.error
+                            }
+                        }),
+                    )
+                    Button(
+                        onClick = {
+                            val parsed = parseBlueskyListIdentifierInput(listDraft)
+                            if (parsed.ok) {
+                                inputError = null
+                                listDraft = parsed.uri.orEmpty()
+                                onScan(BlueskyCandidateSourceSelection("list_feed", "Bluesky List", uri = parsed.uri))
+                            } else {
+                                inputError = parsed.error
+                            }
+                        },
+                        enabled = !loading,
+                    ) {
+                        Text("Scan list")
+                    }
+                    if (!inputError.isNullOrBlank()) {
+                        Text(inputError.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
         }
     }
@@ -525,7 +593,21 @@ private data class SourceDropdownOption(
     val selection: BlueskyCandidateSourceSelection,
 )
 
-private fun BlueskyPickerResponse?.sourceDropdownOptions(): List<SourceDropdownOption> {
+private fun sourcePickerConnectionCopy(
+    picker: BlueskyPickerResponse?,
+    pickerError: String?,
+    connected: Boolean,
+    connectedHandle: String,
+): String = when {
+    picker == null && !pickerError.isNullOrBlank() ->
+        "Could not load Bluesky sources. Account scans may still work if you enter a handle."
+    connected ->
+        "Connected as @$connectedHandle"
+    else ->
+        "No connected Bluesky account. Account scans can still use public author feeds; timeline and lists require a connection."
+}
+
+private fun BlueskyPickerResponse?.pinnedSourceOptions(): List<SourceDropdownOption> {
     if (this == null) return emptyList()
     return buildList {
         if (timeline.available) {
@@ -540,7 +622,7 @@ private fun BlueskyPickerResponse?.sourceDropdownOptions(): List<SourceDropdownO
             )
         }
         pins.forEach { pin ->
-            val label = "Pinned: ${cleanSourceLabel(pin.resolvedLabel, pin.kind)}"
+            val label = cleanSourceLabel(pin.resolvedLabel, pin.kind)
             add(
                 SourceDropdownOption(
                     label = label,
@@ -554,14 +636,32 @@ private fun BlueskyPickerResponse?.sourceDropdownOptions(): List<SourceDropdownO
                 ),
             )
         }
+    }
+}
+
+private fun BlueskyPickerResponse?.browseSourceOptions(): List<SourceDropdownOption> {
+    if (this == null) return emptyList()
+    return buildList {
         lists.forEach { list ->
             add(
                 SourceDropdownOption(
                     label = list.name,
                     selection = BlueskyCandidateSourceSelection(
                         sourceKind = "list_feed",
-                        displayLabel = "Bluesky List: ${list.name}",
+                        displayLabel = list.name,
                         uri = list.uri,
+                    ),
+                ),
+            )
+        }
+        feeds.forEach { feed ->
+            add(
+                SourceDropdownOption(
+                    label = feed.displayName,
+                    selection = BlueskyCandidateSourceSelection(
+                        sourceKind = "feed_generator",
+                        displayLabel = feed.displayName,
+                        uri = feed.uri,
                     ),
                 ),
             )
