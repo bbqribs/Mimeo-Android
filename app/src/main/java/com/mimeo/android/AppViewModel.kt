@@ -1951,6 +1951,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 _blueskyCandidatePicker.value = apiClient.getBlueskyPicker(current.baseUrl, current.apiToken)
             } catch (error: Throwable) {
+                Log.e("AppViewModel", "loadBlueskyCandidatePicker: ${error.javaClass.name}: ${error.message}")
                 _blueskyCandidatePickerError.value = when (error) {
                     is ApiException -> when (error.statusCode) {
                         401 -> "Unauthorized. Sign in again."
