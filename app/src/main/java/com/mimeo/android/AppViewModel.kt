@@ -2074,7 +2074,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _snackbarMessages.trySend(UiSnackbarMessage(message = "Bluesky source pinned.", actionLabel = null))
             } catch (error: Throwable) {
                 val message = when (error) {
-                    is ApiException -> blueskyCandidateRequestErrorMessage(error, "Couldn't pin Bluesky source.")
+                    is ApiException -> {
+                        if (error.statusCode == 403 && error.message.orEmpty().contains("user-linked token", ignoreCase = true)) {
+                            "Pinning requires a user-linked token. Sign in with a per-device account token; legacy/operator tokens can scan but cannot store Bluesky pins."
+                        } else {
+                            blueskyCandidateRequestErrorMessage(error, "Couldn't pin Bluesky source.")
+                        }
+                    }
                     is IOException -> "Couldn't reach server."
                     else -> userFacingRequestErrorMessage(error, "Couldn't pin Bluesky source.")
                 }

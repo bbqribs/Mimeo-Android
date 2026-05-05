@@ -1,5 +1,7 @@
 package com.mimeo.android.ui.bluesky
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,17 +10,22 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -35,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -175,6 +183,11 @@ private fun SourcePicker(
     var inputError by remember { mutableStateOf<String?>(null) }
     var dropdownExpanded by remember { mutableStateOf(false) }
     val sourceOptions = picker.sourceDropdownOptions()
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (dropdownExpanded) 180f else 0f,
+        animationSpec = tween(durationMillis = 140),
+        label = "sourceDropdownChevron",
+    )
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -211,17 +224,33 @@ private fun SourcePicker(
                     enabled = sourceOptions.isNotEmpty() && !loading,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(
-                        text = selected?.let { cleanSourceLabel(it.displayLabel, it.sourceKind) }
-                            ?: "Choose Home Timeline, pinned source, or list",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = selected?.let { cleanSourceLabel(it.displayLabel, it.sourceKind) }
+                                ?: "Choose Home Timeline, pinned source, or list",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowDown,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(20.dp)
+                                .rotate(chevronRotation),
+                        )
+                    }
                 }
                 DropdownMenu(
                     expanded = dropdownExpanded,
                     onDismissRequest = { dropdownExpanded = false },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .widthIn(min = 280.dp, max = 420.dp)
+                        .heightIn(max = 320.dp),
                 ) {
                     sourceOptions.forEach { option ->
                         DropdownMenuItem(
