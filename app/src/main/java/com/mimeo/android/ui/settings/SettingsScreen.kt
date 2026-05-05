@@ -948,7 +948,7 @@ fun SettingsScreen(
                     TextButton(
                         onClick = onOpenBlueskyBrowse,
                     ) {
-                        Text("Browse harvests")
+                        Text("Open candidate browser")
                     }
                     if (blueskySmartPlaylist != null) {
                         TextButton(

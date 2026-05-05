@@ -124,6 +124,7 @@ internal fun MainActivityShell(
             DrawerDestination(ROUTE_ARCHIVE, "Archive"),
             DrawerDestination(ROUTE_BIN, "Bin"),
             DrawerDestination(ROUTE_UP_NEXT, "Up Next"),
+            DrawerDestination(ROUTE_BLUESKY_BROWSE, "Bluesky"),
         )
     }
     val playlists by vm.playlists.collectAsState()
@@ -649,7 +650,6 @@ internal fun MainActivityShell(
                             composable(ROUTE_BLUESKY_BROWSE) {
                                 BlueskyBrowseScreen(
                                     vm = vm,
-                                    onNavigateBack = { nav.popBackStack() },
                                     onOpenItem = shellState.openItemInLocus,
                                 )
                             }
@@ -914,6 +914,7 @@ private fun resolveSelectedDrawerRoute(currentRoute: String): String = when {
     currentRoute.startsWith("smartPlaylist/") -> currentRoute
     currentRoute.startsWith("playlist/") -> currentRoute
     currentRoute.startsWith(ROUTE_UP_NEXT) -> ROUTE_UP_NEXT
+    currentRoute.startsWith(ROUTE_BLUESKY_BROWSE) -> ROUTE_BLUESKY_BROWSE
     currentRoute.startsWith(ROUTE_ARCHIVE) -> ROUTE_ARCHIVE
     currentRoute.startsWith(ROUTE_BIN) -> ROUTE_BIN
     currentRoute.startsWith(ROUTE_FAVORITES) -> ROUTE_FAVORITES
@@ -931,6 +932,7 @@ private fun drawerRouteLabel(
     route == ROUTE_ARCHIVE -> "Archive"
     route == ROUTE_BIN -> "Bin"
     route == ROUTE_UP_NEXT -> "Up Next"
+    route == ROUTE_BLUESKY_BROWSE -> "Bluesky"
     route == ROUTE_SETTINGS -> "Settings"
     route.startsWith("playlist/") -> {
         val id = route.removePrefix("playlist/").toIntOrNull()

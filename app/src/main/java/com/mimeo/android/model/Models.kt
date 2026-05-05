@@ -580,6 +580,136 @@ data class BlueskyBrowseResponse(
 )
 
 @Serializable
+data class BlueskyPickerListItem(
+    val uri: String,
+    val name: String,
+    val description: String? = null,
+    @SerialName("item_count") val itemCount: Int? = null,
+)
+
+@Serializable
+data class BlueskyPickerTimeline(
+    val available: Boolean = false,
+)
+
+@Serializable
+data class BlueskyPickerCaps(
+    @SerialName("max_age_hours") val maxAgeHours: Int = 24,
+    @SerialName("max_posts") val maxPosts: Int = 30,
+    @SerialName("max_links") val maxLinks: Int = 15,
+    @SerialName("max_age_hours_ceiling") val maxAgeHoursCeiling: Int = 24,
+    @SerialName("max_posts_ceiling") val maxPostsCeiling: Int = 30,
+    @SerialName("max_links_ceiling") val maxLinksCeiling: Int = 15,
+)
+
+@Serializable
+data class BlueskyPickerPinItem(
+    @SerialName("source_id") val sourceId: Int,
+    val kind: String,
+    val handle: String? = null,
+    val uri: String? = null,
+    @SerialName("display_name") val displayName: String? = null,
+) {
+    val resolvedLabel: String
+        get() = displayName?.takeIf { it.isNotBlank() }
+            ?: handle?.takeIf { it.isNotBlank() }?.let { "@${it.trimStart('@')}" }
+            ?: uri?.takeIf { it.isNotBlank() }
+            ?: "Pinned source"
+}
+
+@Serializable
+data class BlueskyPickerResponse(
+    val connection: BlueskyAccountConnectionResponse,
+    val timeline: BlueskyPickerTimeline = BlueskyPickerTimeline(),
+    val lists: List<BlueskyPickerListItem> = emptyList(),
+    val feeds: List<JsonElement> = emptyList(),
+    val accounts: List<JsonElement> = emptyList(),
+    val caps: BlueskyPickerCaps = BlueskyPickerCaps(),
+    val pins: List<BlueskyPickerPinItem> = emptyList(),
+)
+
+data class BlueskyCandidateSourceSelection(
+    val sourceKind: String,
+    val displayLabel: String,
+    val actor: String? = null,
+    val uri: String? = null,
+    val sourceId: Int? = null,
+)
+
+@Serializable
+data class BlueskyCandidateSource(
+    @SerialName("source_type") val sourceType: String,
+    val identifier: String? = null,
+    @SerialName("display_label") val displayLabel: String,
+    @SerialName("source_id") val sourceId: Int? = null,
+)
+
+@Serializable
+data class BlueskyCandidateScan(
+    @SerialName("max_age_hours") val maxAgeHours: Int,
+    @SerialName("max_posts") val maxPosts: Int,
+    @SerialName("max_links") val maxLinks: Int,
+    @SerialName("posts_scanned") val postsScanned: Int,
+    @SerialName("posts_skipped_old") val postsSkippedOld: Int,
+    @SerialName("stopped_reason") val stoppedReason: String,
+)
+
+@Serializable
+data class BlueskyCandidatePostContext(
+    @SerialName("post_uri") val postUri: String,
+    @SerialName("post_url") val postUrl: String? = null,
+    @SerialName("author_handle") val authorHandle: String? = null,
+    @SerialName("author_display_name") val authorDisplayName: String? = null,
+    @SerialName("text_snippet") val textSnippet: String? = null,
+    @SerialName("indexed_at") val indexedAt: String? = null,
+)
+
+@Serializable
+data class BlueskyCandidate(
+    @SerialName("article_url") val articleUrl: String,
+    @SerialName("normalized_url") val normalizedUrl: String,
+    val title: String? = null,
+    val domain: String? = null,
+    val bluesky: BlueskyCandidatePostContext,
+    @SerialName("source_label") val sourceLabel: String,
+    @SerialName("source_type") val sourceType: String,
+    val saved: Boolean = false,
+    @SerialName("saved_state") val savedState: String = "unsaved",
+    @SerialName("item_id") val itemId: Int? = null,
+    @SerialName("read_link") val readLink: String? = null,
+)
+
+@Serializable
+data class BlueskyCandidateScanResponse(
+    val source: BlueskyCandidateSource,
+    val scan: BlueskyCandidateScan,
+    val candidates: List<BlueskyCandidate>,
+    @SerialName("fetched_at") val fetchedAt: String? = null,
+    val live: Boolean = true,
+)
+
+@Serializable
+data class BlueskyCandidateSaveRequest(
+    @SerialName("article_url") val articleUrl: String,
+    val title: String? = null,
+    @SerialName("source_type") val sourceType: String,
+    @SerialName("source_label") val sourceLabel: String? = null,
+    @SerialName("post_url") val postUrl: String? = null,
+)
+
+@Serializable
+data class BlueskyCandidatePinRequest(
+    val actor: String? = null,
+    val uri: String? = null,
+)
+
+@Serializable
+data class BlueskyCandidatePinResponse(
+    @SerialName("source_id") val sourceId: Int,
+    @SerialName("pin_id") val pinId: Int,
+)
+
+@Serializable
 data class PendingManualSaveItem(
     val id: Long,
     val source: PendingSaveSource = PendingSaveSource.MANUAL,
