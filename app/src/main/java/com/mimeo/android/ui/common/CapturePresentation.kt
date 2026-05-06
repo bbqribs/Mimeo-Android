@@ -153,8 +153,9 @@ private fun String.normalizedSourceLabel(sourceType: String?): String? {
             .trim('(', ')', '-', '·', '|')
             .trim()
         return nameCandidate.takeIf { it.isNotBlank() && !it.startsWithRawAddress() }
-            ?: withoutPrefix.takeIf { it.isNotBlank() }
+            ?: genericBlueskySourceLabel(normalizedType)
     }
+    if (cleaned.startsWithRawAddress()) return null
     return cleaned
 }
 
@@ -167,6 +168,12 @@ private fun String.startsWithRawAddress(): Boolean =
     startsWith("at://", ignoreCase = true) ||
         startsWith("http://", ignoreCase = true) ||
         startsWith("https://", ignoreCase = true)
+
+private fun genericBlueskySourceLabel(sourceType: String?): String = when (sourceType) {
+    "feed_generator" -> "Bluesky Feed"
+    "list_feed" -> "Bluesky List"
+    else -> "Bluesky"
+}
 
 private fun extractHost(url: String): String? {
     return runCatching { URI(url).host }.getOrNull()

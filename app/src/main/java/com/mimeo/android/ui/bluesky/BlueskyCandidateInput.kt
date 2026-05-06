@@ -15,7 +15,7 @@ fun normalizeBlueskyHandleInput(value: String): String? {
 fun parseBlueskyListIdentifierInput(value: String): BlueskyListInputResult {
     val cleaned = value.trim()
     if (cleaned.isBlank()) {
-        return BlueskyListInputResult(error = "List URL or AT-URI is required.")
+        return BlueskyListInputResult(error = "List URL is required.")
     }
     if (Regex("^https?://bsky[.]app/profile/[^/?#]+/feed/[^/?#]+/?$", RegexOption.IGNORE_CASE).matches(cleaned) ||
         cleaned.contains("/app.bsky.feed.generator/", ignoreCase = true)
@@ -31,5 +31,5 @@ fun parseBlueskyListIdentifierInput(value: String): BlueskyListInputResult {
         val (profile, listId) = listUrlMatch.destructured
         return BlueskyListInputResult(uri = "at://$profile/app.bsky.graph.list/$listId")
     }
-    return BlueskyListInputResult(error = "Use a bsky.app list URL or an at:// list URI.")
+    return BlueskyListInputResult(error = "Use a bsky.app list URL.")
 }

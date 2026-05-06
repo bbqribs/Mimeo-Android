@@ -1899,7 +1899,7 @@ private fun BlueskySourceRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = source.resolvedName,
+                text = source.displayName,
                 style = androidx.compose.material3.MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
             )
             Text(
@@ -1964,6 +1964,19 @@ private fun BlueskySourceRow(
         }
     }
 }
+
+private val BlueskySourceDiagnostic.displayName: String
+    get() {
+        val candidate = resolvedName.trim()
+        if (candidate.startsWith("at://", ignoreCase = true)) {
+            return when {
+                typeLabel?.contains("feed", ignoreCase = true) == true -> "Bluesky Feed"
+                typeLabel?.contains("list", ignoreCase = true) == true -> "Bluesky List"
+                else -> "Bluesky Source"
+            }
+        }
+        return candidate
+    }
 
 @Composable
 private fun SettingsSectionHeader(

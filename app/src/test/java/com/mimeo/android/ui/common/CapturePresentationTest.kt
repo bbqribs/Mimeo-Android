@@ -63,7 +63,7 @@ class CapturePresentationTest {
     }
 
     @Test
-    fun `bluesky list label keeps raw at uri when no resolved name is available`() {
+    fun `bluesky list label hides raw at uri when no resolved name is available`() {
         val uri = "at://did:plc:abc/app.bsky.graph.list/xyz"
         val item = PlaybackQueueItem(
             itemId = 7,
@@ -76,7 +76,7 @@ class CapturePresentationTest {
 
         val presentation = queueCapturePresentation(item)
 
-        assertEquals(uri, presentation.sourceLabel)
+        assertEquals("Bluesky List", presentation.sourceLabel)
     }
 
     @Test

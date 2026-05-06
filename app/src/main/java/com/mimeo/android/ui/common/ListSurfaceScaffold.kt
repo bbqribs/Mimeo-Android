@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun ListSurfaceScaffold(
@@ -97,7 +98,7 @@ fun LibraryItemRow(
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
                 color = titleColor,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -105,7 +106,7 @@ fun LibraryItemRow(
             if (!metadata.isNullOrBlank()) {
                 Text(
                     text = metadata,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
