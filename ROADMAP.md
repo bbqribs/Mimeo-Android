@@ -7,6 +7,7 @@ Redesign completion plan (post-shipped-redesign forward sequence): `docs/REDESIG
 Mini-player control spec (v1 shipped; time-based skip deferred): `docs/ANDROID_MINIPLAYER_CONTROL_SPEC.md`.
 Up Next layout spec for history / active / upcoming / snap-to-active: `docs/ANDROID_UP_NEXT_LAYOUT_SPEC.md`.
 Playback Actions v2 (row [Play] [⋮], tap-row-play, Play All, Play from Here, overflow ordering; Smart Queue as a playlist-like source): `docs/ANDROID_PLAYBACK_ACTIONS_V2_SPEC.md`.
+Up Next History / Earlier in queue spec: `docs/ANDROID_UP_NEXT_HISTORY_EARLIER_QUEUE_SPEC.md`.
 Post-redesign product model planning (canonical in Mimeo): `C:\Users\brend\Documents\Coding\Mimeo\docs\planning\PRODUCT_MODEL_POST_REDESIGN.md` (Android pointer: `docs/planning/PRODUCT_MODEL_POST_REDESIGN.md`).
 Workflow + transition guidance: `docs/planning/AGENT_WORKFLOW.md` and `docs/planning/PROJECT_HANDOFF.md`.
 Planning-doc ownership decision: `docs/planning/DOCS_OWNERSHIP_DECISION.md`.
@@ -65,6 +66,9 @@ Planning-doc ownership decision: `docs/planning/DOCS_OWNERSHIP_DECISION.md`.
 13. [ ] **Compose BOM migration to 1.10.x.** Bump from `2024.06.00`, fix
     any Material3/API deprecations. Standalone session. Unblocks
     `onSelectAllRequested` in the reader selection toolbar.
+14. [ ] **Expanded Save queue as playlist options.** Future Up Next save
+    flow may offer explicit inclusion of Earlier in queue and/or History;
+    the current default remains Active + Up Next only.
 
 ### Testing debt
 
