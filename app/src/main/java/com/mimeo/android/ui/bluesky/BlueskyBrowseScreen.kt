@@ -381,15 +381,14 @@ private fun SourcePicker(
                         value = listDraft,
                         onValueChange = { listDraft = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("List URL or AT-URI") },
-                        placeholder = { Text("https://bsky.app/profile/.../lists/... or at://...") },
+                        label = { Text("List URL") },
+                        placeholder = { Text("https://bsky.app/profile/.../lists/...") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = {
                             val parsed = parseBlueskyListIdentifierInput(listDraft)
                             if (parsed.ok) {
                                 inputError = null
-                                listDraft = parsed.uri.orEmpty()
                                 onScan(BlueskyCandidateSourceSelection("list_feed", "Bluesky List", uri = parsed.uri))
                             } else {
                                 inputError = parsed.error
@@ -401,7 +400,6 @@ private fun SourcePicker(
                             val parsed = parseBlueskyListIdentifierInput(listDraft)
                             if (parsed.ok) {
                                 inputError = null
-                                listDraft = parsed.uri.orEmpty()
                                 onScan(BlueskyCandidateSourceSelection("list_feed", "Bluesky List", uri = parsed.uri))
                             } else {
                                 inputError = parsed.error
@@ -676,6 +674,12 @@ private fun cleanSourceLabel(label: String, sourceType: String?): String {
         val hasRawAddress = withoutPrefix.contains("at://", ignoreCase = true) ||
             withoutPrefix.contains("://", ignoreCase = true)
         if (hasRawAddress) return "Bluesky List"
+    } else if (sourceType == "feed_generator") {
+        val hasRawAddress = cleaned.contains("at://", ignoreCase = true) ||
+            cleaned.contains("://", ignoreCase = true)
+        if (hasRawAddress) return "Bluesky Feed"
+    } else if (cleaned.startsWith("at://", ignoreCase = true)) {
+        return formatSourceType(sourceType)
     }
     return cleaned.takeIf { it.isNotBlank() } ?: formatSourceType(sourceType)
 }

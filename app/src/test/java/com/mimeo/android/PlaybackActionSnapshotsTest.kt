@@ -1,6 +1,7 @@
 package com.mimeo.android
 
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.repository.computePlayNowSessionItemOrder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -34,6 +35,28 @@ class PlaybackActionSnapshotsTest {
         )
 
         assertTrue(snapshot.isEmpty())
+    }
+
+    @Test
+    fun rowPlayMakesSelectedItemActiveAndReinsertsPriorActiveAtUpcomingZero() {
+        val planned = computePlayNowSessionItemOrder(
+            itemIds = listOf(10, 20, 30),
+            currentIndex = 0,
+            selectedItemId = 30,
+        )
+
+        assertEquals(listOf(30, 10, 20), planned)
+    }
+
+    @Test
+    fun rowPlayMovesExistingSessionItemWithoutDuplicatingIt() {
+        val planned = computePlayNowSessionItemOrder(
+            itemIds = listOf(10, 20, 30, 40),
+            currentIndex = 1,
+            selectedItemId = 40,
+        )
+
+        assertEquals(listOf(10, 40, 20, 30), planned)
     }
 
     private fun item(itemId: Int): PlaybackQueueItem =

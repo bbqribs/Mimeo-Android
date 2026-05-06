@@ -135,6 +135,26 @@ internal fun computeClearUpcomingKeepCount(
     return currentIndex.coerceIn(0, itemCount - 1) + 1
 }
 
+internal fun computePlayNowSessionItemOrder(
+    itemIds: List<Int>,
+    currentIndex: Int,
+    selectedItemId: Int,
+): List<Int> {
+    if (itemIds.isEmpty()) return listOf(selectedItemId)
+    val safeCurrentIndex = currentIndex.coerceIn(0, itemIds.lastIndex)
+    val existingIndex = itemIds.indexOf(selectedItemId)
+    if (existingIndex == safeCurrentIndex) return itemIds
+    val adjustedCurrentIndex = if (existingIndex in 0 until safeCurrentIndex) {
+        safeCurrentIndex - 1
+    } else {
+        safeCurrentIndex
+    }
+    return itemIds
+        .filterNot { it == selectedItemId }
+        .toMutableList()
+        .also { ids -> ids.add(adjustedCurrentIndex.coerceIn(0, ids.size), selectedItemId) }
+}
+
 @Serializable
 private data class StoredNowPlayingItem(
     val itemId: Int,
@@ -950,36 +970,29 @@ class PlaybackRepository(
             // Item is already the active item — no-op.
             return row.toSession(stored)
         }
-        if (existingIdx >= 0) {
-            stored.removeAt(existingIdx)
-            if (existingIdx < currentIndex) currentIndex--
-        }
-        val newItem = StoredNowPlayingItem(
-            itemId = item.itemId,
-            title = item.title,
-            url = item.url,
-            host = item.host,
-            sourceType = item.sourceType,
-            sourceLabel = item.sourceLabel,
-            sourceUrl = item.sourceUrl,
-            captureKind = item.captureKind,
-            sourceAppPackage = item.sourceAppPackage,
-            status = item.status,
-            activeContentVersionId = item.activeContentVersionId,
-            lastReadPercent = item.lastReadPercent,
-            chunkIndex = 0,
-            offsetInChunkChars = 0,
-            readerScrollOffset = 0,
+        val storedExisting = if (existingIdx >= 0) stored[existingIdx] else null
+        val newItem = storedExisting ?: item.toStoredNowPlayingItem()
+        val storedByItemId = stored.associateBy { it.itemId }
+        val plannedIds = computePlayNowSessionItemOrder(
+            itemIds = stored.map { it.itemId },
+            currentIndex = currentIndex,
+            selectedItemId = item.itemId,
         )
-        // Insert at currentIndex: new item becomes active, old active shifts to upcoming.
-        stored.add(currentIndex, newItem)
+        val plannedItems = plannedIds.map { itemId ->
+            if (itemId == item.itemId) {
+                newItem
+            } else {
+                storedByItemId.getValue(itemId)
+            }
+        }
+        currentIndex = plannedIds.indexOf(item.itemId).takeIf { it >= 0 } ?: currentIndex
         val updatedRow = row.copy(
             currentIndex = currentIndex,
-            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), plannedItems),
             updatedAt = System.currentTimeMillis(),
         )
         dao.upsert(updatedRow)
-        return updatedRow.toSession(stored)
+        return updatedRow.toSession(plannedItems)
     }
 
     suspend fun appendItemToSession(item: PlaybackQueueItem): NowPlayingSession? {

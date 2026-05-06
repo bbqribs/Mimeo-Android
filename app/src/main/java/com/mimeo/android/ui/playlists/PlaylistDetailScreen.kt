@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -31,6 +32,7 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
@@ -40,6 +42,7 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -425,7 +428,7 @@ fun PlaylistDetailScreen(
                                 imageVector = Icons.Default.PlayArrow,
                                 contentDescription = null,
                             )
-                            Text("Play All")
+                            Text("All")
                         }
                     }
                     RefreshActionButton(
@@ -621,6 +624,7 @@ fun PlaylistDetailScreen(
                             onTap = { onOpenPlayer(entry.articleId) },
                             onToggleSelect = { toggleSelection(entry.id) },
                             onEnterSelection = { enterSelectionMode(entry.id) },
+                            onPlayNow = { vm.playNow(entry.articleId) },
                             onPlayNext = { vm.playNext(entry.articleId) },
                             onPlayLast = { vm.playLast(entry.articleId) },
                             onPlayFromHere = if (queueItem != null) {
@@ -820,6 +824,7 @@ private fun PlaylistDetailRow(
     onTap: () -> Unit,
     onToggleSelect: () -> Unit,
     onEnterSelection: () -> Unit,
+    onPlayNow: () -> Unit,
     onPlayNext: () -> Unit,
     onPlayLast: () -> Unit,
     onPlayFromHere: (() -> Unit)?,
@@ -855,6 +860,7 @@ private fun PlaylistDetailRow(
                     contentDescription = "Drag to reorder",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
+                        .offset(x = (-4).dp)
                         .size(24.dp)
                         .pointerInput(index) {
                             detectDragGestures(
@@ -879,34 +885,83 @@ private fun PlaylistDetailRow(
         } else {
             null
         },
-        trailingContent = {
+        trailingContent = if (!isSelectionActive && queueItem != null) {
+            {
+                PlaylistRowActions(
+                    title = title,
+                    menuExpanded = rowMenuExpanded,
+                    onMenuExpandedChange = { rowMenuExpanded = it },
+                    onPlayNow = onPlayNow,
+                    onPlayNext = onPlayNext,
+                    onPlayLast = onPlayLast,
+                    onPlayFromHere = onPlayFromHere,
+                    onMoveToTop = onMoveToTop,
+                    onMoveToBottom = onMoveToBottom,
+                    onRemoveFromPlaylist = onRemoveFromPlaylist,
+                )
+            }
+        } else {
+            null
+        },
+    )
+}
+
+@Composable
+private fun PlaylistRowActions(
+    title: String,
+    menuExpanded: Boolean,
+    onMenuExpandedChange: (Boolean) -> Unit,
+    onPlayNow: () -> Unit,
+    onPlayNext: () -> Unit,
+    onPlayLast: () -> Unit,
+    onPlayFromHere: (() -> Unit)?,
+    onMoveToTop: () -> Unit,
+    onMoveToBottom: () -> Unit,
+    onRemoveFromPlaylist: () -> Unit,
+) {
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 40.dp) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            IconButton(
+                onClick = onPlayNow,
+                modifier = Modifier.size(40.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = "Play $title",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
             Box {
                 IconButton(
-                    onClick = { rowMenuExpanded = true },
-                    modifier = Modifier.size(32.dp),
+                    onClick = { onMenuExpandedChange(true) },
+                    modifier = Modifier.size(40.dp),
                 ) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
-                        contentDescription = "More options",
+                        contentDescription = "More actions for $title",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(20.dp),
                     )
                 }
                 DropdownMenu(
-                    expanded = rowMenuExpanded,
-                    onDismissRequest = { rowMenuExpanded = false },
+                    expanded = menuExpanded,
+                    onDismissRequest = { onMenuExpandedChange(false) },
                 ) {
                     DropdownMenuItem(
                         text = { Text("Play Next") },
                         onClick = {
-                            rowMenuExpanded = false
+                            onMenuExpandedChange(false)
                             onPlayNext()
                         },
                     )
                     DropdownMenuItem(
                         text = { Text("Play Last") },
                         onClick = {
-                            rowMenuExpanded = false
+                            onMenuExpandedChange(false)
                             onPlayLast()
                         },
                     )
@@ -914,34 +969,35 @@ private fun PlaylistDetailRow(
                         DropdownMenuItem(
                             text = { Text("Play from Here") },
                             onClick = {
-                                rowMenuExpanded = false
+                                onMenuExpandedChange(false)
                                 onPlayFromHere()
                             },
                         )
                     }
+                    androidx.compose.material3.HorizontalDivider()
                     DropdownMenuItem(
-                        text = { Text("Move to top") },
+                        text = { Text("Move to Top of Playlist") },
                         onClick = {
-                            rowMenuExpanded = false
+                            onMenuExpandedChange(false)
                             onMoveToTop()
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Move to bottom") },
+                        text = { Text("Move to Bottom") },
                         onClick = {
-                            rowMenuExpanded = false
+                            onMenuExpandedChange(false)
                             onMoveToBottom()
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Remove from playlist") },
+                        text = { Text("Remove") },
                         onClick = {
-                            rowMenuExpanded = false
+                            onMenuExpandedChange(false)
                             onRemoveFromPlaylist()
                         },
                     )
                 }
             }
-        },
-    )
+        }
+    }
 }

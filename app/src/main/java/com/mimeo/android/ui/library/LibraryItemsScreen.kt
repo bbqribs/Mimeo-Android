@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -38,6 +39,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
@@ -47,6 +49,7 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -408,7 +411,7 @@ fun LibraryItemsScreen(
                                 imageVector = Icons.Default.PlayArrow,
                                 contentDescription = null,
                             )
-                            Text("Play All")
+                            Text("All")
                         }
                     }
                 }
@@ -460,6 +463,20 @@ fun LibraryItemsScreen(
                             onPlayNext = onPlayNext?.let { cb -> { cb(item.itemId) } },
                             onPlayLast = onPlayLast?.let { cb -> { cb(item.itemId) } },
                             onPlayFromHere = onPlayFromHere?.let { { pendingPlayFromHereItemId = item.itemId } },
+                            onAddToPlaylist = if (!isBin) onBatchAddToPlaylist?.let {
+                                {
+                                    batchPlaylistPickerIds = setOf(item.itemId)
+                                    showBatchPlaylistPicker = true
+                                }
+                            } else null,
+                            onFavoriteToggle = if (!isBin) ({
+                                onBatchAction(if (item.isFavorited) "unfavorite" else "favorite", setOf(item.itemId))
+                            }) else null,
+                            onArchiveToggle = if (!isBin) ({
+                                onBatchAction(if (title == "Archive") "unarchive" else "archive", setOf(item.itemId))
+                            }) else null,
+                            archiveToggleLabel = if (title == "Archive") "Unarchive" else "Archive",
+                            onBin = if (!isBin) ({ onBatchAction("bin", setOf(item.itemId)) }) else null,
                         )
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 12.dp),
@@ -499,6 +516,20 @@ fun LibraryItemsScreen(
                             onPlayNext = onPlayNext?.let { cb -> { cb(entry.item.itemId) } },
                             onPlayLast = onPlayLast?.let { cb -> { cb(entry.item.itemId) } },
                             onPlayFromHere = onPlayFromHere?.let { { pendingPlayFromHereItemId = entry.item.itemId } },
+                            onAddToPlaylist = if (!isBin) onBatchAddToPlaylist?.let {
+                                {
+                                    batchPlaylistPickerIds = setOf(entry.item.itemId)
+                                    showBatchPlaylistPicker = true
+                                }
+                            } else null,
+                            onFavoriteToggle = if (!isBin) ({
+                                onBatchAction(if (entry.item.isFavorited) "unfavorite" else "favorite", setOf(entry.item.itemId))
+                            }) else null,
+                            onArchiveToggle = if (!isBin) ({
+                                onBatchAction(if (title == "Archive") "unarchive" else "archive", setOf(entry.item.itemId))
+                            }) else null,
+                            archiveToggleLabel = if (title == "Archive") "Unarchive" else "Archive",
+                            onBin = if (!isBin) ({ onBatchAction("bin", setOf(entry.item.itemId)) }) else null,
                         )
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 12.dp),
@@ -659,6 +690,11 @@ private fun LibraryQueueItemRow(
     onPlayNext: (() -> Unit)? = null,
     onPlayLast: (() -> Unit)? = null,
     onPlayFromHere: (() -> Unit)? = null,
+    onAddToPlaylist: (() -> Unit)? = null,
+    onFavoriteToggle: (() -> Unit)? = null,
+    onArchiveToggle: (() -> Unit)? = null,
+    archiveToggleLabel: String = "Archive",
+    onBin: (() -> Unit)? = null,
 ) {
     val presentation = remember(item) { queueCapturePresentation(item) }
     val title = presentation.title
@@ -689,30 +725,53 @@ private fun LibraryQueueItemRow(
         } else {
             null
         },
-        trailingContent = if (!isSelectionActive && (onPlayNow != null || onPlayNext != null || onPlayLast != null || onPlayFromHere != null)) {
+        trailingContent = if (!isSelectionActive && (
+                onPlayNow != null ||
+                    onPlayNext != null ||
+                    onPlayLast != null ||
+                    onPlayFromHere != null ||
+                    onAddToPlaylist != null ||
+                    onFavoriteToggle != null ||
+                    onArchiveToggle != null ||
+                    onBin != null
+                )
+        ) {
             {
                 var menuExpanded by remember { mutableStateOf(false) }
-                Box {
-                    IconButton(onClick = { menuExpanded = true }) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "More actions for $title",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false },
+                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 40.dp) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         if (onPlayNow != null) {
-                            DropdownMenuItem(
-                                text = { Text("Play Now") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onPlayNow()
-                                },
-                            )
+                            IconButton(
+                                onClick = onPlayNow,
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Play $title",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
                         }
+                        Box {
+                            IconButton(
+                                onClick = { menuExpanded = true },
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = "More actions for $title",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                        ) {
                         if (onPlayNext != null) {
                             DropdownMenuItem(
                                 text = { Text("Play Next") },
@@ -740,7 +799,53 @@ private fun LibraryQueueItemRow(
                                 },
                             )
                         }
+                        val hasQueueActions = onPlayNext != null || onPlayLast != null || onPlayFromHere != null
+                        val hasItemActions = onAddToPlaylist != null ||
+                            onFavoriteToggle != null ||
+                            onArchiveToggle != null ||
+                            onBin != null
+                        if (hasQueueActions && hasItemActions) {
+                            HorizontalDivider()
+                        }
+                        if (onAddToPlaylist != null) {
+                            DropdownMenuItem(
+                                text = { Text("Add to Playlist") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onAddToPlaylist()
+                                },
+                            )
+                        }
+                        if (onFavoriteToggle != null) {
+                            DropdownMenuItem(
+                                text = { Text(if (item.isFavorited) "Unfavorite" else "Favorite") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onFavoriteToggle()
+                                },
+                            )
+                        }
+                        if (onArchiveToggle != null) {
+                            DropdownMenuItem(
+                                text = { Text(archiveToggleLabel) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onArchiveToggle()
+                                },
+                            )
+                        }
+                        if (onBin != null) {
+                            DropdownMenuItem(
+                                text = { Text("Bin") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onBin()
+                                },
+                            )
+                        }
+                        }
                     }
+                }
                 }
             }
         } else {
