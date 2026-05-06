@@ -70,6 +70,7 @@ fun LibraryItemRow(
     progressStateLine: (@Composable () -> Unit)? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
 ) {
+    val readerClickLabel = "Opens $title in reader"
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -82,6 +83,7 @@ fun LibraryItemRow(
             )
             .combinedClickable(
                 onClick = onClick,
+                onClickLabel = readerClickLabel,
                 onLongClick = onLongClick,
             )
             .padding(horizontal = 12.dp, vertical = 10.dp),

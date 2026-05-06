@@ -621,6 +621,7 @@ fun PlaylistDetailScreen(
                             onTap = { onOpenPlayer(entry.articleId) },
                             onToggleSelect = { toggleSelection(entry.id) },
                             onEnterSelection = { enterSelectionMode(entry.id) },
+                            onPlayNow = { vm.playNow(entry.articleId) },
                             onPlayNext = { vm.playNext(entry.articleId) },
                             onPlayLast = { vm.playLast(entry.articleId) },
                             onPlayFromHere = if (queueItem != null) {
@@ -820,6 +821,7 @@ private fun PlaylistDetailRow(
     onTap: () -> Unit,
     onToggleSelect: () -> Unit,
     onEnterSelection: () -> Unit,
+    onPlayNow: () -> Unit,
     onPlayNext: () -> Unit,
     onPlayLast: () -> Unit,
     onPlayFromHere: (() -> Unit)?,
@@ -879,17 +881,31 @@ private fun PlaylistDetailRow(
         } else {
             null
         },
-        trailingContent = {
-            Box {
+        trailingContent = if (!isSelectionActive && queueItem != null) {
+            {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                IconButton(
+                    onClick = onPlayNow,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "Play $title",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Box {
                 IconButton(
                     onClick = { rowMenuExpanded = true },
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(48.dp),
                 ) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
-                        contentDescription = "More options",
+                        contentDescription = "More actions for $title",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp),
                     )
                 }
                 DropdownMenu(
@@ -919,29 +935,34 @@ private fun PlaylistDetailRow(
                             },
                         )
                     }
+                    androidx.compose.material3.HorizontalDivider()
                     DropdownMenuItem(
-                        text = { Text("Move to top") },
+                        text = { Text("Move to Top of Playlist") },
                         onClick = {
                             rowMenuExpanded = false
                             onMoveToTop()
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Move to bottom") },
+                        text = { Text("Move to Bottom") },
                         onClick = {
                             rowMenuExpanded = false
                             onMoveToBottom()
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Remove from playlist") },
+                        text = { Text("Remove") },
                         onClick = {
                             rowMenuExpanded = false
                             onRemoveFromPlaylist()
                         },
                     )
                 }
+                }
             }
+            }
+        } else {
+            null
         },
     )
 }
