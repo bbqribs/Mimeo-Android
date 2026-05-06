@@ -186,7 +186,7 @@ internal fun resolveMediaButtonDispatchAction(
 ): MediaButtonDispatchAction {
     return when (keyCode) {
         android.view.KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-            MediaButtonDispatchAction.Pause
+            if (isCurrentlyPlaying) MediaButtonDispatchAction.Pause else MediaButtonDispatchAction.Play
         }
         android.view.KeyEvent.KEYCODE_MEDIA_PLAY -> {
             MediaButtonDispatchAction.Play

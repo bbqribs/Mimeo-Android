@@ -10,13 +10,23 @@ import android.view.KeyEvent
 
 class PlaybackServiceObservabilityTest {
     @Test
-    fun `media pause key always resolves to pause`() {
+    fun `media pause key resolves to pause while playing`() {
+        val action = resolveMediaButtonDispatchAction(
+            keyCode = KeyEvent.KEYCODE_MEDIA_PAUSE,
+            isCurrentlyPlaying = true,
+        )
+
+        assertEquals(MediaButtonDispatchAction.Pause, action)
+    }
+
+    @Test
+    fun `media pause key resolves to play when stale headset state says paused`() {
         val action = resolveMediaButtonDispatchAction(
             keyCode = KeyEvent.KEYCODE_MEDIA_PAUSE,
             isCurrentlyPlaying = false,
         )
 
-        assertEquals(MediaButtonDispatchAction.Pause, action)
+        assertEquals(MediaButtonDispatchAction.Play, action)
     }
 
     @Test
