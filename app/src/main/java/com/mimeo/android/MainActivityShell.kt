@@ -143,6 +143,7 @@ internal fun MainActivityShell(
     val archiveSearchQuery by vm.archiveSearchQuery.collectAsState()
     val binSearchQuery by vm.binSearchQuery.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
+    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     var showNewPlaylistDialog by remember { mutableStateOf(false) }
     var newPlaylistDialogName by remember { mutableStateOf("") }
@@ -474,9 +475,23 @@ internal fun MainActivityShell(
                                             loading = false
                                         }
                                     },
+                                    nowPlayingHasItems = nowPlayingSession?.items?.isNotEmpty() == true,
+                                    onPlayAll = { items ->
+                                        vm.playAllFromSnapshot(
+                                            sourceItems = items,
+                                            sourceLabel = "Inbox",
+                                        )
+                                    },
                                     onPlayNow = { vm.playNow(it) },
                                     onPlayNext = { vm.playNext(it) },
                                     onPlayLast = { vm.playLast(it) },
+                                    onPlayFromHere = { items, selectedItemId ->
+                                        vm.playFromHereSnapshot(
+                                            sourceItems = items,
+                                            selectedItemId = selectedItemId,
+                                            sourceLabel = "Inbox",
+                                        )
+                                    },
                                 )
                             }
                             composable(ROUTE_FAVORITES) {
@@ -524,9 +539,23 @@ internal fun MainActivityShell(
                                             loading = false
                                         }
                                     },
+                                    nowPlayingHasItems = nowPlayingSession?.items?.isNotEmpty() == true,
+                                    onPlayAll = { items ->
+                                        vm.playAllFromSnapshot(
+                                            sourceItems = items,
+                                            sourceLabel = "Favorites",
+                                        )
+                                    },
                                     onPlayNow = { vm.playNow(it) },
                                     onPlayNext = { vm.playNext(it) },
                                     onPlayLast = { vm.playLast(it) },
+                                    onPlayFromHere = { items, selectedItemId ->
+                                        vm.playFromHereSnapshot(
+                                            sourceItems = items,
+                                            selectedItemId = selectedItemId,
+                                            sourceLabel = "Favorites",
+                                        )
+                                    },
                                 )
                             }
                             composable(ROUTE_ARCHIVE) {
@@ -573,9 +602,23 @@ internal fun MainActivityShell(
                                             loading = false
                                         }
                                     },
+                                    nowPlayingHasItems = nowPlayingSession?.items?.isNotEmpty() == true,
+                                    onPlayAll = { items ->
+                                        vm.playAllFromSnapshot(
+                                            sourceItems = items,
+                                            sourceLabel = "Archive",
+                                        )
+                                    },
                                     onPlayNow = { vm.playNow(it) },
                                     onPlayNext = { vm.playNext(it) },
                                     onPlayLast = { vm.playLast(it) },
+                                    onPlayFromHere = { items, selectedItemId ->
+                                        vm.playFromHereSnapshot(
+                                            sourceItems = items,
+                                            selectedItemId = selectedItemId,
+                                            sourceLabel = "Archive",
+                                        )
+                                    },
                                 )
                             }
                             composable(ROUTE_BIN) {

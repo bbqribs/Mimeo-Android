@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
@@ -102,6 +103,7 @@ fun PlaylistDetailScreen(
     val favoriteItems by vm.favoriteItems.collectAsState()
     val binItems by vm.binItems.collectAsState()
     val loading by vm.queueLoading.collectAsState()
+    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val actionScope = rememberCoroutineScope()
 
     LaunchedEffect(playlistId) {
@@ -160,6 +162,8 @@ fun PlaylistDetailScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameText by remember { mutableStateOf("") }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var pendingPlayAllSnapshot by remember { mutableStateOf<List<PlaybackQueueItem>?>(null) }
+    var pendingPlayFromHereEntryId by remember { mutableStateOf<Int?>(null) }
 
     fun enterSelectionMode(entryId: Int) {
         selectionActive = true
@@ -179,6 +183,9 @@ fun PlaylistDetailScreen(
 
     fun selectedArticleIdsInOrder(): List<Int> =
         localEntries.filter { it.id in selectedEntryIds }.map { it.articleId }
+
+    fun visiblePlaylistItems(): List<PlaybackQueueItem> =
+        localEntries.mapNotNull { entry -> allItemsMap[entry.articleId] }
 
     BackHandler(enabled = selectionActive) { clearSelection() }
 
@@ -397,6 +404,30 @@ fun PlaylistDetailScreen(
                     if (isSaving || (loading && localEntries.isEmpty())) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     }
+                    if (playlist != null) {
+                        TextButton(
+                            enabled = visiblePlaylistItems().isNotEmpty(),
+                            onClick = {
+                                val snapshot = visiblePlaylistItems()
+                                if (snapshot.isEmpty()) return@TextButton
+                                if (nowPlayingSession?.items?.isNotEmpty() == true) {
+                                    pendingPlayAllSnapshot = snapshot
+                                } else {
+                                    vm.playAllFromSnapshot(
+                                        sourceItems = snapshot,
+                                        sourcePlaylistId = playlistId,
+                                        sourceLabel = playlist.name,
+                                    )
+                                }
+                            },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                            )
+                            Text("Play All")
+                        }
+                    }
                     RefreshActionButton(
                         state = refreshActionState,
                         showConnectivityIssue = false,
@@ -592,6 +623,11 @@ fun PlaylistDetailScreen(
                             onEnterSelection = { enterSelectionMode(entry.id) },
                             onPlayNext = { vm.playNext(entry.articleId) },
                             onPlayLast = { vm.playLast(entry.articleId) },
+                            onPlayFromHere = if (queueItem != null) {
+                                { pendingPlayFromHereEntryId = entry.id }
+                            } else {
+                                null
+                            },
                             onMoveToTop = { moveEntry(index, 0) },
                             onMoveToBottom = { moveEntry(index, localEntries.lastIndex) },
                             onRemoveFromPlaylist = { removeArticleFromPlaylist(entry.articleId) },
@@ -610,6 +646,84 @@ fun PlaylistDetailScreen(
                 }
             }
         }
+    }
+
+    pendingPlayAllSnapshot?.let { snapshot ->
+        AlertDialog(
+            onDismissRequest = { pendingPlayAllSnapshot = null },
+            title = { Text("Replace Up Next?") },
+            text = {
+                Text(
+                    "From: ${playlist?.name ?: "Playlist"}\n\nThis replaces the current Up Next with a snapshot of this playlist's current order.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingPlayAllSnapshot = null
+                        vm.playAllFromSnapshot(
+                            sourceItems = snapshot,
+                            sourcePlaylistId = playlistId,
+                            sourceLabel = playlist?.name ?: "Playlist",
+                        )
+                    },
+                ) {
+                    Text("Replace")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingPlayAllSnapshot = null }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    pendingPlayFromHereEntryId?.let { selectedEntryId ->
+        AlertDialog(
+            onDismissRequest = { pendingPlayFromHereEntryId = null },
+            title = { Text("Replace Up Next with items from here down?") },
+            text = {
+                Text(
+                    buildString {
+                        append("This replaces Up Next with a snapshot from the selected playlist item through the end of the current order.")
+                        if (nowPlayingSession?.items?.isNotEmpty() == true) {
+                            append("\n\nCurrently playing item will exit Up Next; its progress is kept.")
+                        }
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val selectedArticleId = localEntries
+                            .firstOrNull { it.id == selectedEntryId }
+                            ?.articleId
+                        val snapshot = if (selectedArticleId == null) {
+                            emptyList()
+                        } else {
+                            visiblePlaylistItems().dropWhile { it.itemId != selectedArticleId }
+                        }
+                        pendingPlayFromHereEntryId = null
+                        if (snapshot.isNotEmpty() && selectedArticleId != null) {
+                            vm.playFromHereSnapshot(
+                                sourceItems = snapshot,
+                                selectedItemId = selectedArticleId,
+                                sourcePlaylistId = playlistId,
+                                sourceLabel = playlist?.name ?: "Playlist",
+                            )
+                        }
+                    },
+                ) {
+                    Text("Replace")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingPlayFromHereEntryId = null }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 
     if (showRenameDialog && playlist != null) {
@@ -708,6 +822,7 @@ private fun PlaylistDetailRow(
     onEnterSelection: () -> Unit,
     onPlayNext: () -> Unit,
     onPlayLast: () -> Unit,
+    onPlayFromHere: (() -> Unit)?,
     onMoveToTop: () -> Unit,
     onMoveToBottom: () -> Unit,
     onRemoveFromPlaylist: () -> Unit,
@@ -795,6 +910,15 @@ private fun PlaylistDetailRow(
                             onPlayLast()
                         },
                     )
+                    if (onPlayFromHere != null) {
+                        DropdownMenuItem(
+                            text = { Text("Play from Here") },
+                            onClick = {
+                                rowMenuExpanded = false
+                                onPlayFromHere()
+                            },
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text("Move to top") },
                         onClick = {
