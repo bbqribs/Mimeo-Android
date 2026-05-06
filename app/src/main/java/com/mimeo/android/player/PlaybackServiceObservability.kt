@@ -121,6 +121,15 @@ internal enum class SnapshotOwnershipStep {
     ReleaseAudioFocus,
 }
 
+internal const val MEDIA_BUTTON_ANCHOR_VOLUME = 0.01f
+
+internal fun buildMediaButtonAnchorPcm(byteCount: Int): ByteArray {
+    val safeCount = byteCount.coerceAtLeast(2)
+    return ByteArray(safeCount) { index ->
+        if (index % 4 == 0) 1 else 0
+    }
+}
+
 internal fun snapshotOwnershipUpdatePlan(
     snapshot: PlaybackServiceSnapshot,
     hasAudioFocus: Boolean,

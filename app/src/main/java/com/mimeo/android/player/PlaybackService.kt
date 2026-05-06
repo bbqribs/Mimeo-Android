@@ -392,7 +392,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     private fun createMediaButtonAnchorTrack(): AudioTrack? {
         return try {
             val sampleRate = 8_000
-            val pcm = ByteArray(sampleRate * 2) // 1 second, 16-bit mono silence
+            val pcm = buildMediaButtonAnchorPcm(sampleRate * 2)
             val frameCount = pcm.size / 2
             val track = AudioTrack(
                 AudioAttributes.Builder()
@@ -415,7 +415,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                     track.setLoopPoints(0, writtenFrames, -1)
                 }
             }
-            track.setVolume(0f)
+            track.setVolume(MEDIA_BUTTON_ANCHOR_VOLUME)
             track
         } catch (_: Throwable) {
             null

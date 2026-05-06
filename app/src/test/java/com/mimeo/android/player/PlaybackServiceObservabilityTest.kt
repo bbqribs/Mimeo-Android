@@ -136,6 +136,15 @@ class PlaybackServiceObservabilityTest {
     }
 
     @Test
+    fun `media button anchor uses nonzero inaudible stream so platform marks Mimeo as audio owner`() {
+        val pcm = buildMediaButtonAnchorPcm(16)
+
+        assertTrue(MEDIA_BUTTON_ANCHOR_VOLUME > 0f)
+        assertTrue(MEDIA_BUTTON_ANCHOR_VOLUME <= 0.01f)
+        assertTrue(pcm.any { it != 0.toByte() })
+    }
+
+    @Test
     fun `drift clues include focus without item`() {
         val clues = detectPlaybackDriftClues(
             PlaybackAuditState(
