@@ -80,6 +80,7 @@ Rule: unplug/disconnect is treated as explicit safety pause.
 - Service is started when snapshot transitions to an active item (`itemId != null`), and stopped when no active item remains.
 - While an item is loaded and playback is active, the service keeps media-button ownership stable with the internal anchor track.
 - On transient loss the anchor is stopped; on regain it is restarted.
+- When Mimeo starts playback after another media app was paused, publish the Mimeo `MediaSession` PLAYING state and foreground notification before requesting audio focus. This prevents the prior app's paused session from remaining the headset/media-button target.
 
 Rule: media-button ownership should remain with Mimeo during active playback sessions.
 

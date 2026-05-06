@@ -113,6 +113,40 @@ internal enum class MediaButtonDispatchAction {
     None,
 }
 
+internal enum class SnapshotOwnershipStep {
+    PublishMediaSessionState,
+    PublishForegroundNotification,
+    RequestAudioFocus,
+    KeepMediaButtonAnchor,
+    ReleaseAudioFocus,
+}
+
+internal fun snapshotOwnershipUpdatePlan(
+    snapshot: PlaybackServiceSnapshot,
+    hasAudioFocus: Boolean,
+): List<SnapshotOwnershipStep> {
+    return when {
+        snapshot.itemId != null && snapshot.isPlaying -> listOf(
+            SnapshotOwnershipStep.PublishMediaSessionState,
+            SnapshotOwnershipStep.PublishForegroundNotification,
+            SnapshotOwnershipStep.RequestAudioFocus,
+        )
+        snapshot.itemId != null && hasAudioFocus -> listOf(
+            SnapshotOwnershipStep.PublishMediaSessionState,
+            SnapshotOwnershipStep.PublishForegroundNotification,
+            SnapshotOwnershipStep.KeepMediaButtonAnchor,
+        )
+        snapshot.itemId == null -> listOf(
+            SnapshotOwnershipStep.PublishMediaSessionState,
+            SnapshotOwnershipStep.ReleaseAudioFocus,
+        )
+        else -> listOf(
+            SnapshotOwnershipStep.PublishMediaSessionState,
+            SnapshotOwnershipStep.PublishForegroundNotification,
+        )
+    }
+}
+
 internal fun optimisticSnapshotAfterDispatch(
     snapshot: PlaybackServiceSnapshot,
     action: MediaButtonDispatchAction,

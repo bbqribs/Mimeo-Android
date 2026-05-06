@@ -119,6 +119,23 @@ class PlaybackServiceObservabilityTest {
     }
 
     @Test
+    fun `active playback publishes media session ownership before requesting focus`() {
+        val plan = snapshotOwnershipUpdatePlan(
+            snapshot = PlaybackServiceSnapshot(itemId = 42, title = "Mimeo", isPlaying = true),
+            hasAudioFocus = false,
+        )
+
+        assertEquals(
+            listOf(
+                SnapshotOwnershipStep.PublishMediaSessionState,
+                SnapshotOwnershipStep.PublishForegroundNotification,
+                SnapshotOwnershipStep.RequestAudioFocus,
+            ),
+            plan,
+        )
+    }
+
+    @Test
     fun `drift clues include focus without item`() {
         val clues = detectPlaybackDriftClues(
             PlaybackAuditState(

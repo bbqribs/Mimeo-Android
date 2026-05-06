@@ -1770,7 +1770,8 @@ private fun SessionStaticItemRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-            )
+                )
+            }
         }
         IconButton(
             onClick = { onJumpToItem(item.itemId) },
@@ -1784,7 +1785,6 @@ private fun SessionStaticItemRow(
             )
         }
     }
-}
 }
 
 @Composable

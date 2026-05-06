@@ -217,18 +217,6 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     private fun updateSnapshot(next: PlaybackServiceSnapshot) {
         snapshot = next
         mediaSession.isActive = next.itemId != null
-        if (next.itemId != null && next.isPlaying) {
-            requestAudioFocus()
-        } else if (next.itemId != null && hasAudioFocus) {
-            // Paused but still holding audio focus: keep anchor running so the OS continues
-            // routing media button events (earphone controls) to this session. The anchor is
-            // a no-op if already playing; explicit restart here guards against anchor stopping
-            // due to an exception while paused (which would otherwise go undetected until play).
-            startMediaButtonAnchor()
-        } else if (next.itemId == null) {
-            interruptionPolicy.clearResumeExpectation()
-            abandonAudioFocusNow()
-        }
         val state = if (next.isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
         mediaSession.setPlaybackState(
             PlaybackStateCompat.Builder()
@@ -246,7 +234,6 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, next.title.ifBlank { "Mimeo playback" })
                 .build(),
         )
-
         val notification = buildNotification(next)
         if (next.itemId != null) {
             if (!isForeground) {
@@ -262,6 +249,18 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             emitAudit("foregroundStop")
             abandonAudioFocusNow()
             stopSelf()
+        }
+        if (next.itemId != null && next.isPlaying) {
+            requestAudioFocus()
+        } else if (next.itemId != null && hasAudioFocus) {
+            // Paused but still holding audio focus: keep anchor running so the OS continues
+            // routing media button events (earphone controls) to this session. The anchor is
+            // a no-op if already playing; explicit restart here guards against anchor stopping
+            // due to an exception while paused (which would otherwise go undetected until play).
+            startMediaButtonAnchor()
+        } else if (next.itemId == null) {
+            interruptionPolicy.clearResumeExpectation()
+            abandonAudioFocusNow()
         }
         emitAudit("snapshot")
     }
