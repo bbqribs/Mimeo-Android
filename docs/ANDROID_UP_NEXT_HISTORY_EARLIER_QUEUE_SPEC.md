@@ -124,15 +124,14 @@ Up Next: D E F G
 When moving from D back to C, D becomes the first item in Up Next. The
 same rule repeats while Earlier in queue has rows.
 
-Recommended v1 behavior after Earlier in queue is exhausted: **stop at
-the first item in the current queue snapshot; do not continue into
-History.** Rationale: Earlier in queue is reversible queue navigation,
-while History is a record of items that exited the active queue path.
-Continuing into History would blur the mutual exclusivity model and
-restart items that the user has already left.
+After Earlier in queue is exhausted, Previous continues into History,
+most recent first. History traversal preserves progress and does not
+archive, bin, remove from playlist, or delete any item.
 
-Future History row actions may add an explicit restart/replay affordance,
-but Previous should not implicitly enter History in v1.
+If History is collapsed visually, Previous can still traverse it. The UI
+must make this discoverable, for example by announcing that collapsed
+History remains reachable through Previous and by updating the collapsed
+History count/state when playback enters that section.
 
 ---
 
@@ -205,7 +204,7 @@ option, not a silent change to the current default.
 | Earlier in queue | Must be expanded and visible by default when it contains rows. It may have a manual collapse affordance only if the default remains expanded. |
 | Mutual exclusivity | Screen reader traversal must not expose the same row under both History and Earlier in queue. |
 | Up Next row Play | Visible Play icon is a distinct focusable control with a label such as "Jump to [item title]". |
-| Previous behavior | TalkBack-visible player controls should not imply that Previous enters History in v1. |
+| Previous behavior | TalkBack-visible player controls should make clear that Previous walks Earlier in queue first, then History most-recent-first. |
 
 Collapsing History is acceptable because History is a record. Collapsing
 Earlier in queue by default is not acceptable because it hides the items
@@ -255,8 +254,8 @@ Confirm in plain English:
 - Earlier in queue is visible by default; History may be collapsed.
 - Up Next upcoming row Play is a no-confirm jump within the existing
   queue.
-- Previous walks backward through Earlier in queue and stops before
-  History in v1.
+- Previous walks backward through Earlier in queue, then continues into
+  History most-recent-first.
 - Play from Here replaces Up Next after confirmation, while Up Next row
   Play jumps without confirmation.
 - Save queue as playlist still defaults to Active + Up Next only.
