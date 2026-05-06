@@ -24,11 +24,13 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -40,6 +42,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
@@ -140,13 +143,18 @@ fun LibraryItemsScreen(
     onRefresh: suspend () -> Result<Unit>,
     onOpenItem: (Int) -> Unit,
     onBatchAction: (action: String, itemIds: Set<Int>) -> Unit = { _, _ -> },
+    nowPlayingHasItems: Boolean = false,
+    onPlayAll: ((items: List<PlaybackQueueItem>) -> Unit)? = null,
     onPlayNow: ((itemId: Int) -> Unit)? = null,
     onPlayNext: ((itemId: Int) -> Unit)? = null,
     onPlayLast: ((itemId: Int) -> Unit)? = null,
+    onPlayFromHere: ((itemsFromHere: List<PlaybackQueueItem>, selectedItemId: Int) -> Unit)? = null,
 ) {
     var pendingExpanded by rememberSaveable { mutableStateOf(false) }
     val actionScope = rememberCoroutineScope()
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
+    var pendingPlayAllSnapshot by remember { mutableStateOf<List<PlaybackQueueItem>?>(null) }
+    var pendingPlayFromHereItemId by remember { mutableStateOf<Int?>(null) }
 
     // Batch add-to-playlist dialog state. Captures selected IDs before selection is cleared.
     var batchPlaylistPickerIds by remember { mutableStateOf(emptySet<Int>()) }
@@ -215,6 +223,16 @@ fun LibraryItemsScreen(
 
     val pendingItems = if (isInbox) sortedItems.filter { it.status in PENDING_STATUSES } else emptyList()
     val readyItems = if (isInbox) sortedItems.filter { it.status !in PENDING_STATUSES } else sortedItems
+    val visiblePlaybackItems = remember(isInbox, pendingExpanded, pendingItems, readyItems, sortedItems) {
+        if (isInbox) {
+            buildList {
+                if (pendingExpanded) addAll(pendingItems)
+                addAll(readyItems)
+            }
+        } else {
+            sortedItems
+        }
+    }
 
     val sectionedReadyItems: List<LibraryListEntry> = remember(readyItems, sortOption, searchQuery, isBin) {
         if (isBin || sortOption != LibrarySortOption.NEWEST || searchQuery.isNotBlank()) {
@@ -373,6 +391,26 @@ fun LibraryItemsScreen(
                         contentDescription = "Refresh $title",
                         pullProgress = 0f,
                     )
+                    if (!isBin && onPlayAll != null) {
+                        TextButton(
+                            enabled = visiblePlaybackItems.isNotEmpty(),
+                            onClick = {
+                                val snapshot = visiblePlaybackItems
+                                if (snapshot.isEmpty()) return@TextButton
+                                if (nowPlayingHasItems) {
+                                    pendingPlayAllSnapshot = snapshot
+                                } else {
+                                    onPlayAll(snapshot)
+                                }
+                            },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                            )
+                            Text("Play All")
+                        }
+                    }
                 }
 
                 // Sort chips row
@@ -421,6 +459,7 @@ fun LibraryItemsScreen(
                             onPlayNow = onPlayNow?.let { cb -> { cb(item.itemId) } },
                             onPlayNext = onPlayNext?.let { cb -> { cb(item.itemId) } },
                             onPlayLast = onPlayLast?.let { cb -> { cb(item.itemId) } },
+                            onPlayFromHere = onPlayFromHere?.let { { pendingPlayFromHereItemId = item.itemId } },
                         )
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 12.dp),
@@ -459,6 +498,7 @@ fun LibraryItemsScreen(
                             onPlayNow = onPlayNow?.let { cb -> { cb(entry.item.itemId) } },
                             onPlayNext = onPlayNext?.let { cb -> { cb(entry.item.itemId) } },
                             onPlayLast = onPlayLast?.let { cb -> { cb(entry.item.itemId) } },
+                            onPlayFromHere = onPlayFromHere?.let { { pendingPlayFromHereItemId = entry.item.itemId } },
                         )
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 12.dp),
@@ -482,6 +522,68 @@ fun LibraryItemsScreen(
                 onBatchAddToPlaylist(playlist.id, playlist.name, batchPlaylistPickerIds)
                 showBatchPlaylistPicker = false
                 batchPlaylistPickerIds = emptySet()
+            },
+        )
+    }
+
+    pendingPlayAllSnapshot?.let { snapshot ->
+        AlertDialog(
+            onDismissRequest = { pendingPlayAllSnapshot = null },
+            title = { Text("Replace Up Next?") },
+            text = {
+                Text(
+                    "From: $title\n\nThis replaces the current Up Next with a snapshot of the visible items in this view.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingPlayAllSnapshot = null
+                        onPlayAll?.invoke(snapshot)
+                    },
+                ) {
+                    Text("Replace")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingPlayAllSnapshot = null }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    pendingPlayFromHereItemId?.let { selectedItemId ->
+        AlertDialog(
+            onDismissRequest = { pendingPlayFromHereItemId = null },
+            title = { Text("Replace Up Next with items from here down?") },
+            text = {
+                Text(
+                    buildString {
+                        append("This replaces Up Next with a snapshot from the selected item through the end of the visible list.")
+                        if (nowPlayingHasItems) {
+                            append("\n\nCurrently playing item will exit Up Next; its progress is kept.")
+                        }
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val snapshot = visiblePlaybackItems.dropWhile { it.itemId != selectedItemId }
+                        pendingPlayFromHereItemId = null
+                        if (snapshot.isNotEmpty()) {
+                            onPlayFromHere?.invoke(snapshot, selectedItemId)
+                        }
+                    },
+                ) {
+                    Text("Replace")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingPlayFromHereItemId = null }) {
+                    Text("Cancel")
+                }
             },
         )
     }
@@ -556,6 +658,7 @@ private fun LibraryQueueItemRow(
     onPlayNow: (() -> Unit)? = null,
     onPlayNext: (() -> Unit)? = null,
     onPlayLast: (() -> Unit)? = null,
+    onPlayFromHere: (() -> Unit)? = null,
 ) {
     val presentation = remember(item) { queueCapturePresentation(item) }
     val title = presentation.title
@@ -586,7 +689,7 @@ private fun LibraryQueueItemRow(
         } else {
             null
         },
-        trailingContent = if (!isSelectionActive && (onPlayNow != null || onPlayNext != null || onPlayLast != null)) {
+        trailingContent = if (!isSelectionActive && (onPlayNow != null || onPlayNext != null || onPlayLast != null || onPlayFromHere != null)) {
             {
                 var menuExpanded by remember { mutableStateOf(false) }
                 Box {
@@ -625,6 +728,15 @@ private fun LibraryQueueItemRow(
                                 onClick = {
                                     menuExpanded = false
                                     onPlayLast()
+                                },
+                            )
+                        }
+                        if (onPlayFromHere != null) {
+                            DropdownMenuItem(
+                                text = { Text("Play from Here") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onPlayFromHere()
                                 },
                             )
                         }

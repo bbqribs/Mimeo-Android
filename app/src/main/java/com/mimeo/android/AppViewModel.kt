@@ -5092,6 +5092,57 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun replaceNowPlayingSessionFromSnapshot(
+        sourceItems: List<PlaybackQueueItem>,
+        startItemId: Int,
+        sourcePlaylistId: Int? = null,
+        statusLabel: String? = null,
+    ) {
+        val snapshot = playbackActionSnapshot(sourceItems)
+        if (snapshot.isEmpty()) return
+        viewModelScope.launch {
+            val session = repository.startSession(
+                queueItems = snapshot,
+                startItemId = startItemId,
+                sourcePlaylistId = sourcePlaylistId,
+            )
+            applySessionSnapshot(session, preserveExistingPositions = true)
+            statusLabel?.let { label ->
+                showSnackbar("Replaced Up Next from $label.")
+            }
+        }
+    }
+
+    fun playAllFromSnapshot(
+        sourceItems: List<PlaybackQueueItem>,
+        sourcePlaylistId: Int? = null,
+        sourceLabel: String? = null,
+    ) {
+        val firstItemId = sourceItems.firstOrNull()?.itemId ?: return
+        replaceNowPlayingSessionFromSnapshot(
+            sourceItems = sourceItems,
+            startItemId = firstItemId,
+            sourcePlaylistId = sourcePlaylistId,
+            statusLabel = sourceLabel,
+        )
+    }
+
+    fun playFromHereSnapshot(
+        sourceItems: List<PlaybackQueueItem>,
+        selectedItemId: Int,
+        sourcePlaylistId: Int? = null,
+        sourceLabel: String? = null,
+    ) {
+        val snapshot = playbackActionSnapshotFromHere(sourceItems, selectedItemId)
+        if (snapshot.isEmpty()) return
+        replaceNowPlayingSessionFromSnapshot(
+            sourceItems = snapshot,
+            startItemId = selectedItemId,
+            sourcePlaylistId = sourcePlaylistId,
+            statusLabel = sourceLabel,
+        )
+    }
+
     fun playNow(itemId: Int) {
         val allItems = allQueueActionItems()
         val item = allItems.firstOrNull { it.itemId == itemId } ?: return
@@ -5491,13 +5542,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun applySessionSnapshot(session: NowPlayingSession) {
+    private fun applySessionSnapshot(
+        session: NowPlayingSession,
+        preserveExistingPositions: Boolean = false,
+    ) {
         _nowPlayingSession.value = session
-        _playbackPositionByItem.value = session.items.associate { item ->
+        val sessionPositions = session.items.associate { item ->
             item.itemId to PlaybackPosition(
                 chunkIndex = item.chunkIndex.coerceAtLeast(0),
                 offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
             )
+        }
+        _playbackPositionByItem.value = if (preserveExistingPositions) {
+            _playbackPositionByItem.value + sessionPositions
+        } else {
+            sessionPositions
         }
         _sessionIssueMessage.value = null
     }
