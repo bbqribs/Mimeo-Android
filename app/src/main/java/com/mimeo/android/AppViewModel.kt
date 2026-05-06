@@ -18,6 +18,7 @@ import android.net.NetworkRequest
 import android.os.Bundle
 import android.os.Build
 import android.os.PowerManager
+import android.os.SystemClock
 import android.view.WindowManager
 import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
@@ -475,6 +476,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var lastPushedPlaybackServiceSnapshot: PlaybackServiceSnapshot? = null
     private val autoContinueLoadMutex = Mutex()
     private var lastAutoContinueLoadKey: Pair<Int, Int>? = null
+    private val activePlaybackMillisByItemId = mutableMapOf<Int, Long>()
+    private var activePlaybackClockItemId: Int? = null
+    private var activePlaybackClockStartedAtMs: Long = 0L
     private val playbackServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: android.os.IBinder?) {
             playbackServiceBinder = service as? PlaybackService.LocalBinder
@@ -544,6 +548,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             playbackEngineState.collect {
+                updateActivePlaybackClock(it)
                 pushPlaybackServiceSnapshot()
             }
         }
@@ -743,13 +748,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     null
                 }
                 if (session != null) {
-                    _playbackPositionByItem.value = session.items.associate { item ->
+                    _playbackPositionByItem.value = (session.items + session.historyItems).associate { item ->
                         item.itemId to PlaybackPosition(
                             chunkIndex = item.chunkIndex.coerceAtLeast(0),
                             offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
                         )
                     }
-                    _cachedItemIds.value = resolveOfflineReadyIdsForSession(session.items)
+                    _cachedItemIds.value = resolveOfflineReadyIdsForSession(session.items + session.historyItems)
                 }
             } finally {
                 initialSessionStateLoaded = true
@@ -5052,6 +5057,42 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return engine.hasStartedPlaybackForCurrentItem || engine.isSpeaking || engine.isAutoPlaying
     }
 
+    private fun updateActivePlaybackClock(state: PlaybackEngineState) {
+        val activeItemId = state.currentItemId.takeIf { it > 0 && (state.isSpeaking || state.isAutoPlaying) }
+        val now = SystemClock.elapsedRealtime()
+        val previousItemId = activePlaybackClockItemId
+        if (previousItemId != null && activeItemId != previousItemId && activePlaybackClockStartedAtMs > 0L) {
+            val elapsed = (now - activePlaybackClockStartedAtMs).coerceAtLeast(0L)
+            activePlaybackMillisByItemId[previousItemId] =
+                (activePlaybackMillisByItemId[previousItemId] ?: 0L) + elapsed
+        }
+        if (activeItemId != previousItemId) {
+            activePlaybackClockItemId = activeItemId
+            activePlaybackClockStartedAtMs = if (activeItemId == null) 0L else now
+        }
+    }
+
+    private fun playbackMillisForItem(itemId: Int): Long {
+        val now = SystemClock.elapsedRealtime()
+        val activeElapsed = if (activePlaybackClockItemId == itemId && activePlaybackClockStartedAtMs > 0L) {
+            (now - activePlaybackClockStartedAtMs).coerceAtLeast(0L)
+        } else {
+            0L
+        }
+        return (activePlaybackMillisByItemId[itemId] ?: 0L) + activeElapsed
+    }
+
+    private fun shouldPlacePriorActiveInHistory(itemId: Int): Boolean {
+        val sessionProgress = nowPlayingSession.value
+            ?.items
+            ?.firstOrNull { it.itemId == itemId }
+            ?.lastReadPercent
+            ?: 0
+        val progress = maxOf(knownProgressForItem(itemId), sessionProgress)
+        val playedMs = playbackMillisForItem(itemId)
+        return !(progress < 5 && playedMs < 30_000L)
+    }
+
     private fun isItemActivelyPlaying(itemId: Int): Boolean {
         val engine = playbackEngineState.value
         if (engine.currentItemId != itemId || itemId <= 0) return false
@@ -5155,6 +5196,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val session = repository.playNowInSession(item)
             applySessionSnapshot(session)
+            playbackOpenItem(
+                itemId = itemId,
+                intent = playbackOpenIntentForManualStart(itemId),
+                autoPlayAfterLoad = true,
+            )
+        }
+    }
+
+    fun jumpToUpcomingSessionItem(itemId: Int) {
+        val session = nowPlayingSession.value ?: return
+        val current = session.currentItem ?: return
+        val targetIndex = session.items.indexOfFirst { it.itemId == itemId }
+        if (targetIndex <= session.currentIndex) return
+        viewModelScope.launch {
+            val updated = repository.moveCurrentItemToItem(
+                itemId = itemId,
+                priorActiveToHistory = shouldPlacePriorActiveInHistory(current.itemId),
+            ) ?: return@launch
+            applySessionSnapshot(updated, preserveExistingPositions = true)
             playbackOpenItem(
                 itemId = itemId,
                 intent = playbackOpenIntentForManualStart(itemId),
@@ -5398,8 +5458,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val idx = session.items.indexOfFirst { it.itemId == currentId }.let { if (it >= 0) it else session.currentIndex }
         if (idx >= session.items.lastIndex) return null
         val nextIndex = idx + 1
-        val updated = repository.setCurrentIndex(nextIndex) ?: session.copy(currentIndex = nextIndex)
-        _nowPlayingSession.value = updated
+        val updated = repository.moveCurrentIndex(
+            targetIndex = nextIndex,
+            priorActiveToHistory = shouldPlacePriorActiveInHistory(currentId),
+        ) ?: session.copy(currentIndex = nextIndex)
+        applySessionSnapshot(updated, preserveExistingPositions = true)
         return updated.currentItem?.itemId
     }
 
@@ -5422,8 +5485,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
             return null
         }
-        val updated = repository.setCurrentIndex(nextIndex) ?: session.copy(currentIndex = nextIndex)
-        _nowPlayingSession.value = updated
+        val updated = repository.moveCurrentIndex(
+            targetIndex = nextIndex,
+            priorActiveToHistory = shouldPlacePriorActiveInHistory(currentId),
+        ) ?: session.copy(currentIndex = nextIndex)
+        applySessionSnapshot(updated, preserveExistingPositions = true)
         Log.d(
             LOCUS_CONTINUATION_DEBUG_TAG,
             "vm.nextPlaylistScopedSessionItemId currentId=$currentId nextIndex=$nextIndex nextId=${updated.currentItem?.itemId} sourcePlaylistId=${updated.sourcePlaylistId}",
@@ -5434,10 +5500,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun prevSessionItemId(currentId: Int): Int? {
         val session = getOrCreateNowPlayingSession(currentId) ?: return null
         val idx = session.items.indexOfFirst { it.itemId == currentId }.let { if (it >= 0) it else session.currentIndex }
-        if (idx <= 0) return null
-        val prevIndex = idx - 1
-        val updated = repository.setCurrentIndex(prevIndex) ?: session.copy(currentIndex = prevIndex)
-        _nowPlayingSession.value = updated
+        if (idx <= 0 && session.historyItems.isEmpty()) return null
+        val updated = repository.moveToPreviousItem() ?: run {
+            if (idx <= 0) return null
+            session.copy(currentIndex = idx - 1)
+        }
+        applySessionSnapshot(updated, preserveExistingPositions = true)
         return updated.currentItem?.itemId
     }
 
@@ -5560,7 +5628,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         preserveExistingPositions: Boolean = false,
     ) {
         _nowPlayingSession.value = session
-        val sessionPositions = session.items.associate { item ->
+        val sessionPositions = (session.items + session.historyItems).associate { item ->
             item.itemId to PlaybackPosition(
                 chunkIndex = item.chunkIndex.coerceAtLeast(0),
                 offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),

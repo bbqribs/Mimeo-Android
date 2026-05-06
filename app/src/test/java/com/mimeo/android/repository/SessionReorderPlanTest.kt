@@ -89,4 +89,77 @@ class SessionReorderPlanTest {
 
         assertEquals(4, keepCount)
     }
+
+    @Test
+    fun sessionSectionsKeepHistoryAndEarlierMutuallyExclusive() {
+        val sections = computeNowPlayingSessionSections(
+            items = listOf(1, 2, 3),
+            currentIndex = 1,
+            historyItems = listOf(9, 1),
+            itemId = { it },
+        )
+
+        assertEquals(listOf(9), sections.history)
+        assertEquals(listOf(1), sections.earlierInQueue)
+        assertEquals(2, sections.active)
+        assertEquals(listOf(3), sections.upNext)
+    }
+
+    @Test
+    fun jumpToUpcomingMovesMeaningfulPriorActiveToHistory() {
+        val plan = computeSessionIndexMovePlan(
+            itemIds = listOf(10, 20, 30, 40, 50),
+            currentIndex = 0,
+            targetIndex = 3,
+            historyItemIds = emptyList(),
+            priorActiveToHistory = true,
+        )
+
+        val actual = plan!!
+        assertEquals(listOf(20, 30, 40, 50), actual.itemIds)
+        assertEquals(2, actual.currentIndex)
+        assertEquals(listOf(10), actual.historyItemIds)
+        assertEquals(listOf(40, 50), actual.itemIds.drop(actual.currentIndex))
+    }
+
+    @Test
+    fun jumpToUpcomingKeepsBriefPriorActiveInEarlierQueue() {
+        val plan = computeSessionIndexMovePlan(
+            itemIds = listOf(10, 20, 30, 40, 50),
+            currentIndex = 0,
+            targetIndex = 3,
+            historyItemIds = emptyList(),
+            priorActiveToHistory = false,
+        )
+
+        assertEquals(listOf(10, 20, 30, 40, 50), plan?.itemIds)
+        assertEquals(3, plan?.currentIndex)
+        assertEquals(emptyList<Int>(), plan?.historyItemIds)
+    }
+
+    @Test
+    fun previousWalksEarlierQueueBeforeHistory() {
+        val plan = computePreviousSessionPlan(
+            itemIds = listOf(20, 30, 40, 50),
+            currentIndex = 2,
+            historyItemIds = listOf(10),
+        )
+
+        assertEquals(listOf(20, 30, 40, 50), plan?.itemIds)
+        assertEquals(1, plan?.currentIndex)
+        assertEquals(listOf(10), plan?.historyItemIds)
+    }
+
+    @Test
+    fun previousContinuesIntoHistoryMostRecentFirst() {
+        val plan = computePreviousSessionPlan(
+            itemIds = listOf(20, 30, 40),
+            currentIndex = 0,
+            historyItemIds = listOf(10, 5),
+        )
+
+        assertEquals(listOf(10, 20, 30, 40), plan?.itemIds)
+        assertEquals(0, plan?.currentIndex)
+        assertEquals(listOf(5), plan?.historyItemIds)
+    }
 }
