@@ -269,6 +269,36 @@ internal fun pendingOutcomeSimulationPresentation(outcome: PendingOutcomeSimulat
     }
 }
 
+internal const val NOW_PLAYING_SECTION_TITLE = "Now Playing"
+
+internal enum class SessionRowAction {
+    JumpPlay,
+    Remove,
+}
+
+internal fun shouldShowJumpToNowPlayingPill(
+    scrollOffsetPx: Int,
+    activeTopOffsetPx: Float?,
+    anchorTolerancePx: Float = 24f,
+): Boolean {
+    val activeTop = activeTopOffsetPx ?: return false
+    return kotlin.math.abs(scrollOffsetPx.toFloat() - activeTop) > anchorTolerancePx
+}
+
+internal fun nowPlayingScrollTargetPx(activeTopOffsetPx: Float?): Int? {
+    return activeTopOffsetPx?.toInt()
+}
+
+internal fun sessionRowTrailingActionOrder(
+    showJumpPlay: Boolean,
+    showRemove: Boolean,
+): List<SessionRowAction> {
+    return buildList {
+        if (showJumpPlay) add(SessionRowAction.JumpPlay)
+        if (showRemove) add(SessionRowAction.Remove)
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun QueueScreen(
@@ -718,6 +748,8 @@ fun QueueScreen(
                 seededFromLabel = sessionSeedPresentation?.seededFromLabel ?: "Unknown source",
                 currentSourceLabel = sessionSeedPresentation?.currentSourceLabel ?: selectedPlaylistName,
                 onOpenItem = { itemId -> onOpenPlayer(itemId) },
+                onJumpToQueueItem = { itemId -> vm.jumpToUpcomingSessionItem(itemId) },
+                onJumpToHistoryItem = { itemId -> vm.jumpToHistorySessionItem(itemId) },
                 onReorderItem = { from, to ->
                     vm.reorderNowPlayingSessionItem(fromIndex = from, toIndex = to)
                 },
@@ -1677,11 +1709,92 @@ private fun ActionHintTooltip(
 }
 
 @Composable
+private fun SessionSectionHeader(
+    title: String,
+    count: Int,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "$title · $count",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+@Composable
+private fun SessionStaticItemRow(
+    item: NowPlayingSessionItem,
+    onOpenItem: (Int) -> Unit,
+    onJumpToItem: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val sourceLabel = item.host
+        ?: item.sourceLabel?.takeIf { it.isNotBlank() }
+        ?: item.sourceType?.takeIf { it.isNotBlank() }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { onOpenItem(item.itemId) }
+            .background(
+                color = Color.Black,
+                shape = RoundedCornerShape(6.dp),
+            )
+            .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Spacer(Modifier.size(24.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = item.title?.ifBlank { null } ?: item.url,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (sourceLabel != null) {
+                Text(
+                    text = sourceLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        IconButton(
+            onClick = { onJumpToItem(item.itemId) },
+            modifier = Modifier.size(32.dp),
+        ) {
+            Icon(
+                painter = painterResource(id = R.drawable.msr_play_arrow_24),
+                contentDescription = "Jump/Play ${item.title?.ifBlank { null } ?: item.url}",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+@Composable
 private fun NowPlayingSessionPanel(
     session: NowPlayingSession,
     seededFromLabel: String,
     currentSourceLabel: String,
     onOpenItem: (Int) -> Unit,
+    onJumpToQueueItem: (Int) -> Unit,
+    onJumpToHistoryItem: (Int) -> Unit,
     onReorderItem: (fromIndex: Int, toIndex: Int) -> Unit,
     onRemoveItem: (Int) -> Unit,
     onClearUpcoming: () -> Unit,
@@ -1838,6 +1951,8 @@ private fun NowPlayingSessionPanel(
         .takeIf { it >= 0 }
         ?: session.currentIndex.coerceIn(0, (localItems.size - 1).coerceAtLeast(0))
     val activeItem = localItems.getOrNull(currentIndex)
+    val historyItems = session.historyItems
+    val earlierItems = localItems.take(currentIndex)
     val upcomingStartIndex = (currentIndex + 1).coerceIn(0, localItems.size)
     val upcomingItems = localItems.drop(upcomingStartIndex)
     val density = LocalDensity.current
@@ -1886,13 +2001,20 @@ private fun NowPlayingSessionPanel(
             }
         }
         LaunchedEffect(currentItemId) {
+            if (currentItemId != null) {
+                listScrollState.scrollTo(0)
+            }
+        }
+        LaunchedEffect(currentItemId, activeTopOffset) {
             if (currentItemId == null) return@LaunchedEffect
-            val offset = activeTopOffset ?: 0f
-            listScrollState.animateScrollTo(offset.toInt())
+            val target = nowPlayingScrollTargetPx(activeTopOffset) ?: return@LaunchedEffect
+            listScrollState.animateScrollTo(target)
         }
         LaunchedEffect(snapToActiveSignal) {
             if (snapToActiveSignal > 0) {
-                listScrollState.animateScrollTo(0)
+                nowPlayingScrollTargetPx(activeTopOffset)?.let { target ->
+                    listScrollState.animateScrollTo(target)
+                }
             }
         }
         Box(
@@ -1910,6 +2032,44 @@ private fun NowPlayingSessionPanel(
                     )
                     .verticalScroll(listScrollState),
             ) {
+                if (historyItems.isNotEmpty()) {
+                    SessionSectionHeader(
+                        title = "History",
+                        count = historyItems.size,
+                    )
+                    historyItems.forEachIndexed { index, item ->
+                        SessionStaticItemRow(
+                            item = item,
+                            onOpenItem = onOpenItem,
+                            onJumpToItem = onJumpToHistoryItem,
+                        )
+                        if (index < historyItems.lastIndex) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 12.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                            )
+                        }
+                    }
+                }
+                if (earlierItems.isNotEmpty()) {
+                    SessionSectionHeader(
+                        title = "Earlier in queue",
+                        count = earlierItems.size,
+                    )
+                    earlierItems.forEachIndexed { index, item ->
+                        SessionStaticItemRow(
+                            item = item,
+                            onOpenItem = onOpenItem,
+                            onJumpToItem = onJumpToQueueItem,
+                        )
+                        if (index < earlierItems.lastIndex) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 12.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                            )
+                        }
+                    }
+                }
                 activeItem?.let { item ->
                     val sourceLabel = item.host
                         ?: item.sourceLabel?.takeIf { it.isNotBlank() }
@@ -1929,7 +2089,7 @@ private fun NowPlayingSessionPanel(
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Text(
-                            text = "Now Playing",
+                            text = NOW_PLAYING_SECTION_TITLE,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -1984,7 +2144,7 @@ private fun NowPlayingSessionPanel(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "Upcoming · ${upcomingItems.size}",
+                        text = "Up Next · ${upcomingItems.size}",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -2098,6 +2258,17 @@ private fun NowPlayingSessionPanel(
                                     }
                                 }
                                 IconButton(
+                                    onClick = { onJumpToQueueItem(item.itemId) },
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.msr_play_arrow_24),
+                                        contentDescription = "Jump/Play ${item.title?.ifBlank { null } ?: item.url}",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                                IconButton(
                                     onClick = { onRemoveItem(item.itemId) },
                                     modifier = Modifier.size(32.dp),
                                 ) {
@@ -2119,12 +2290,14 @@ private fun NowPlayingSessionPanel(
                     }
                 }
             }
-            val activeHeight = activeMeasuredHeight
-            val activeVisibleHeight = (activeHeight - listScrollState.value.toFloat()).coerceAtLeast(0f)
             val showSnapToActive = activeItem != null &&
                 listViewportHeight > 0 &&
-                activeHeight > 0f &&
-                activeVisibleHeight < minVisibleActiveHeightPx
+                activeMeasuredHeight > 0f &&
+                shouldShowJumpToNowPlayingPill(
+                    scrollOffsetPx = listScrollState.value,
+                    activeTopOffsetPx = activeTopOffset,
+                    anchorTolerancePx = minVisibleActiveHeightPx,
+                )
             LaunchedEffect(showSnapToActive) {
                 onSnapPillVisibilityChange(showSnapToActive)
             }
@@ -2134,7 +2307,11 @@ private fun NowPlayingSessionPanel(
                         .align(Alignment.BottomCenter)
                         .padding(bottom = snapBottomClearance),
                     onClick = {
-                        snapScope.launch { listScrollState.animateScrollTo(0) }
+                        snapScope.launch {
+                            nowPlayingScrollTargetPx(activeTopOffset)?.let { target ->
+                                listScrollState.animateScrollTo(target)
+                            }
+                        }
                     },
                 )
             }

@@ -1898,7 +1898,6 @@ fun PlayerScreen(
                         uiMessage = "No previous item"
                     } else {
                         stopSpeaking(forceSync = true)
-                        vm.setPlaybackPosition(prevId, 0, 0)
                         vm.playbackOpenItem(
                             itemId = prevId,
                             intent = PlaybackOpenIntent.AutoContinue,

@@ -16,8 +16,8 @@ class PlaybackMediaButtonReceiver : BroadcastReceiver() {
         if (keyEvent.action != KeyEvent.ACTION_DOWN) return
         Log.d(tag, "receiver key=${keyEvent.keyCode} action=${keyEvent.action}")
         val action = when (keyEvent.keyCode) {
-            KeyEvent.KEYCODE_MEDIA_PLAY -> PlaybackService.ACTION_PLAY
-            KeyEvent.KEYCODE_MEDIA_PAUSE -> PlaybackService.ACTION_PAUSE
+            KeyEvent.KEYCODE_MEDIA_PLAY -> PlaybackService.ACTION_TOGGLE_PLAY_PAUSE
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> PlaybackService.ACTION_TOGGLE_PLAY_PAUSE
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
             KeyEvent.KEYCODE_HEADSETHOOK,
             -> PlaybackService.ACTION_TOGGLE_PLAY_PAUSE

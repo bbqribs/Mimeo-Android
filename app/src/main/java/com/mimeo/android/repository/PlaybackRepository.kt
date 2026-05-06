@@ -74,6 +74,7 @@ data class NowPlayingSession(
     val currentIndex: Int,
     val updatedAt: Long,
     val sourcePlaylistId: Int?,
+    val historyItems: List<NowPlayingSessionItem> = emptyList(),
 ) {
     val currentItem: NowPlayingSessionItem?
         get() = items.getOrNull(currentIndex)
@@ -101,6 +102,122 @@ internal data class SessionReorderPlan(
     val toIndex: Int,
     val currentIndex: Int,
 )
+
+internal data class NowPlayingSessionSections<T>(
+    val history: List<T>,
+    val earlierInQueue: List<T>,
+    val active: T?,
+    val upNext: List<T>,
+)
+
+internal fun <T> computeNowPlayingSessionSections(
+    items: List<T>,
+    currentIndex: Int,
+    historyItems: List<T> = emptyList(),
+    itemId: (T) -> Int,
+): NowPlayingSessionSections<T> {
+    if (items.isEmpty()) {
+        return NowPlayingSessionSections(
+            history = historyItems,
+            earlierInQueue = emptyList(),
+            active = null,
+            upNext = emptyList(),
+        )
+    }
+    val sessionItemIds = items.mapTo(hashSetOf(), itemId)
+    val safeCurrent = currentIndex.coerceIn(0, items.lastIndex)
+    return NowPlayingSessionSections(
+        history = historyItems.filterNot { itemId(it) in sessionItemIds },
+        earlierInQueue = items.take(safeCurrent),
+        active = items.getOrNull(safeCurrent),
+        upNext = items.drop(safeCurrent + 1),
+    )
+}
+
+internal data class SessionIndexMovePlan(
+    val itemIds: List<Int>,
+    val currentIndex: Int,
+    val historyItemIds: List<Int>,
+)
+
+internal fun computeSessionIndexMovePlan(
+    itemIds: List<Int>,
+    currentIndex: Int,
+    targetIndex: Int,
+    historyItemIds: List<Int>,
+    priorActiveToHistory: Boolean,
+): SessionIndexMovePlan? {
+    if (itemIds.isEmpty()) return null
+    val safeCurrent = currentIndex.coerceIn(0, itemIds.lastIndex)
+    val safeTarget = targetIndex.coerceIn(0, itemIds.lastIndex)
+    if (safeTarget == safeCurrent) {
+        return SessionIndexMovePlan(
+            itemIds = itemIds,
+            currentIndex = safeCurrent,
+            historyItemIds = historyItemIds.filterNot { it in itemIds },
+        )
+    }
+    if (!priorActiveToHistory) {
+        return SessionIndexMovePlan(
+            itemIds = itemIds,
+            currentIndex = safeTarget,
+            historyItemIds = historyItemIds.filterNot { it in itemIds },
+        )
+    }
+    val activeItemId = itemIds[safeCurrent]
+    val movedItemIds = itemIds.filterIndexed { index, _ -> index != safeCurrent }
+    if (movedItemIds.isEmpty()) return null
+    val adjustedTarget = if (safeTarget > safeCurrent) safeTarget - 1 else safeTarget
+    return SessionIndexMovePlan(
+        itemIds = movedItemIds,
+        currentIndex = adjustedTarget.coerceIn(0, movedItemIds.lastIndex),
+        historyItemIds = listOf(activeItemId) + historyItemIds.filter { it != activeItemId && it !in movedItemIds },
+    )
+}
+
+internal fun computeSessionHistoryJumpPlan(
+    itemIds: List<Int>,
+    currentIndex: Int,
+    historyItemIds: List<Int>,
+    selectedHistoryItemId: Int,
+): SessionIndexMovePlan? {
+    if (itemIds.isEmpty()) return null
+    if (selectedHistoryItemId !in historyItemIds) return null
+    val safeCurrent = currentIndex.coerceIn(0, itemIds.lastIndex)
+    val priorActiveItemId = itemIds[safeCurrent]
+    val earlier = itemIds.take(safeCurrent)
+    val upcoming = itemIds.drop(safeCurrent + 1)
+    val plannedItems = (earlier + selectedHistoryItemId + priorActiveItemId + upcoming)
+        .distinct()
+    return SessionIndexMovePlan(
+        itemIds = plannedItems,
+        currentIndex = earlier.size,
+        historyItemIds = historyItemIds.filter { it != selectedHistoryItemId && it !in plannedItems },
+    )
+}
+
+internal fun computePreviousSessionPlan(
+    itemIds: List<Int>,
+    currentIndex: Int,
+    historyItemIds: List<Int>,
+): SessionIndexMovePlan? {
+    if (itemIds.isEmpty()) return null
+    val safeCurrent = currentIndex.coerceIn(0, itemIds.lastIndex)
+    if (safeCurrent > 0) {
+        return SessionIndexMovePlan(
+            itemIds = itemIds,
+            currentIndex = safeCurrent - 1,
+            historyItemIds = historyItemIds.filterNot { it in itemIds },
+        )
+    }
+    val restoredItemId = historyItemIds.firstOrNull() ?: return null
+    val updatedItems = listOf(restoredItemId) + itemIds.filterNot { it == restoredItemId }
+    return SessionIndexMovePlan(
+        itemIds = updatedItems,
+        currentIndex = 0,
+        historyItemIds = historyItemIds.drop(1).filterNot { it in updatedItems },
+    )
+}
 
 internal fun computeSessionReorderPlan(
     itemCount: Int,
@@ -172,6 +289,12 @@ private data class StoredNowPlayingItem(
     val chunkIndex: Int = 0,
     val offsetInChunkChars: Int = 0,
     val readerScrollOffset: Int = 0,
+)
+
+@Serializable
+private data class StoredNowPlayingSessionEnvelope(
+    val items: List<StoredNowPlayingItem> = emptyList(),
+    val historyItems: List<StoredNowPlayingItem> = emptyList(),
 )
 
 class PlaybackRepository(
@@ -658,7 +781,7 @@ class PlaybackRepository(
         val updatedAt = System.currentTimeMillis()
         val row = NowPlayingEntity(
             id = 1,
-            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            queueJson = encodeStoredNowPlaying(stored),
             currentIndex = currentIndex,
             updatedAt = updatedAt,
             sourcePlaylistId = sourcePlaylistId,
@@ -720,7 +843,7 @@ class PlaybackRepository(
         }
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
-            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), restarted),
+            queueJson = encodeStoredNowPlaying(restarted, parseStoredNowPlayingHistory(row.queueJson)),
             currentIndex = 0,
             updatedAt = updatedAt,
         )
@@ -742,6 +865,113 @@ class PlaybackRepository(
         return row.copy(currentIndex = normalized, updatedAt = updatedAt).toSession(stored)
     }
 
+    suspend fun moveCurrentIndex(
+        targetIndex: Int,
+        priorActiveToHistory: Boolean,
+    ): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson)
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        val history = parseStoredNowPlayingHistory(row.queueJson)
+        val plan = computeSessionIndexMovePlan(
+            itemIds = stored.map { it.itemId },
+            currentIndex = row.currentIndex,
+            targetIndex = targetIndex,
+            historyItemIds = history.map { it.itemId },
+            priorActiveToHistory = priorActiveToHistory,
+        ) ?: return null
+        val storedById = (stored + history).associateBy { it.itemId }
+        val plannedItems = plan.itemIds.mapNotNull { storedById[it] }
+        if (plannedItems.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        val plannedHistory = plan.historyItemIds.mapNotNull { storedById[it] }
+        val updatedAt = System.currentTimeMillis()
+        val updatedRow = row.copy(
+            queueJson = encodeStoredNowPlaying(plannedItems, plannedHistory),
+            currentIndex = plan.currentIndex.coerceIn(0, plannedItems.lastIndex),
+            updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(plannedItems)
+    }
+
+    suspend fun moveCurrentItemToItem(
+        itemId: Int,
+        priorActiveToHistory: Boolean,
+    ): NowPlayingSession? {
+        val row = database.nowPlayingDao().getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson)
+        val targetIndex = stored.indexOfFirst { it.itemId == itemId }
+        if (targetIndex < 0) return row.toSession(stored)
+        return moveCurrentIndex(
+            targetIndex = targetIndex,
+            priorActiveToHistory = priorActiveToHistory,
+        )
+    }
+
+    suspend fun moveHistoryItemToCurrent(itemId: Int): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson)
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        val history = parseStoredNowPlayingHistory(row.queueJson)
+        val plan = computeSessionHistoryJumpPlan(
+            itemIds = stored.map { it.itemId },
+            currentIndex = row.currentIndex,
+            historyItemIds = history.map { it.itemId },
+            selectedHistoryItemId = itemId,
+        ) ?: return row.toSession(stored)
+        val storedById = (stored + history).associateBy { it.itemId }
+        val plannedItems = plan.itemIds.mapNotNull { storedById[it] }
+        if (plannedItems.isEmpty()) return null
+        val plannedHistory = plan.historyItemIds.mapNotNull { storedById[it] }
+        val updatedAt = System.currentTimeMillis()
+        val updatedRow = row.copy(
+            queueJson = encodeStoredNowPlaying(plannedItems, plannedHistory),
+            currentIndex = plan.currentIndex.coerceIn(0, plannedItems.lastIndex),
+            updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(plannedItems)
+    }
+
+    suspend fun moveToPreviousItem(): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson)
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        val history = parseStoredNowPlayingHistory(row.queueJson)
+        val plan = computePreviousSessionPlan(
+            itemIds = stored.map { it.itemId },
+            currentIndex = row.currentIndex,
+            historyItemIds = history.map { it.itemId },
+        ) ?: return null
+        val storedById = (stored + history).associateBy { it.itemId }
+        val plannedItems = plan.itemIds.mapNotNull { storedById[it] }
+        if (plannedItems.isEmpty()) return null
+        val plannedHistory = plan.historyItemIds.mapNotNull { storedById[it] }
+        val updatedAt = System.currentTimeMillis()
+        val updatedRow = row.copy(
+            queueJson = encodeStoredNowPlaying(plannedItems, plannedHistory),
+            currentIndex = plan.currentIndex.coerceIn(0, plannedItems.lastIndex),
+            updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(plannedItems)
+    }
+
     suspend fun setCurrentPlaybackPosition(itemId: Int, chunkIndex: Int, offsetInChunkChars: Int): NowPlayingSession? {
         val dao = database.nowPlayingDao()
         val row = dao.getSession() ?: return null
@@ -761,7 +991,7 @@ class PlaybackRepository(
         )
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
-            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            queueJson = encodeStoredNowPlaying(stored, parseStoredNowPlayingHistory(row.queueJson)),
             updatedAt = updatedAt,
         )
         dao.upsert(updatedRow)
@@ -787,7 +1017,7 @@ class PlaybackRepository(
         stored[idx] = stored[idx].copy(readerScrollOffset = safeOffset)
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
-            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            queueJson = encodeStoredNowPlaying(stored, parseStoredNowPlayingHistory(row.queueJson)),
             updatedAt = updatedAt,
         )
         dao.upsert(updatedRow)
@@ -812,7 +1042,7 @@ class PlaybackRepository(
         stored[idx] = stored[idx].copy(lastReadPercent = merged)
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
-            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            queueJson = encodeStoredNowPlaying(stored, parseStoredNowPlayingHistory(row.queueJson)),
             updatedAt = updatedAt,
         )
         dao.upsert(updatedRow)
@@ -836,7 +1066,7 @@ class PlaybackRepository(
         stored[idx] = stored[idx].copy(lastReadPercent = clamped)
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
-            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            queueJson = encodeStoredNowPlaying(stored, parseStoredNowPlayingHistory(row.queueJson)),
             updatedAt = updatedAt,
         )
         dao.upsert(updatedRow)
@@ -871,7 +1101,7 @@ class PlaybackRepository(
         }
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
-            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), reconciled),
+            queueJson = encodeStoredNowPlaying(reconciled, parseStoredNowPlayingHistory(row.queueJson)),
             updatedAt = updatedAt,
         )
         dao.upsert(updatedRow)
@@ -915,7 +1145,7 @@ class PlaybackRepository(
         stored.add(insertIndex, newItem)
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
-            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            queueJson = encodeStoredNowPlaying(stored, parseStoredNowPlayingHistory(row.queueJson)),
             updatedAt = updatedAt,
         )
         dao.upsert(updatedRow)
@@ -945,7 +1175,7 @@ class PlaybackRepository(
             .forEachIndexed { i, item -> stored.add(insertAt + i, item.toStoredNowPlayingItem()) }
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
-            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            queueJson = encodeStoredNowPlaying(stored, parseStoredNowPlayingHistory(row.queueJson)),
             currentIndex = newCurrentIndex,
             updatedAt = updatedAt,
         )
@@ -988,7 +1218,7 @@ class PlaybackRepository(
         currentIndex = plannedIds.indexOf(item.itemId).takeIf { it >= 0 } ?: currentIndex
         val updatedRow = row.copy(
             currentIndex = currentIndex,
-            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), plannedItems),
+            queueJson = encodeStoredNowPlaying(plannedItems, parseStoredNowPlayingHistory(row.queueJson)),
             updatedAt = System.currentTimeMillis(),
         )
         dao.upsert(updatedRow)
@@ -1031,7 +1261,7 @@ class PlaybackRepository(
         stored.add(newItem)
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
-            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            queueJson = encodeStoredNowPlaying(stored, parseStoredNowPlayingHistory(row.queueJson)),
             updatedAt = updatedAt,
         )
         dao.upsert(updatedRow)
@@ -1067,7 +1297,7 @@ class PlaybackRepository(
 
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
-            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            queueJson = encodeStoredNowPlaying(stored, parseStoredNowPlayingHistory(row.queueJson)),
             currentIndex = updatedCurrentIndex,
             updatedAt = updatedAt,
         )
@@ -1097,7 +1327,7 @@ class PlaybackRepository(
         }
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
-            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            queueJson = encodeStoredNowPlaying(stored, parseStoredNowPlayingHistory(row.queueJson)),
             currentIndex = newCurrentIndex,
             updatedAt = updatedAt,
         )
@@ -1123,7 +1353,7 @@ class PlaybackRepository(
         stored.add(reorder.toIndex, moved)
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
-            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), stored),
+            queueJson = encodeStoredNowPlaying(stored, parseStoredNowPlayingHistory(row.queueJson)),
             currentIndex = reorder.currentIndex,
             updatedAt = updatedAt,
         )
@@ -1149,7 +1379,7 @@ class PlaybackRepository(
         val retained = stored.take(keepCount)
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
-            queueJson = json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), retained),
+            queueJson = encodeStoredNowPlaying(retained, parseStoredNowPlayingHistory(row.queueJson)),
             currentIndex = row.currentIndex.coerceIn(0, retained.lastIndex),
             updatedAt = updatedAt,
         )
@@ -1267,13 +1497,42 @@ class PlaybackRepository(
     }
 
     private fun parseStoredNowPlaying(queueJson: String): List<StoredNowPlayingItem> {
+        val envelope = runCatching {
+            json.decodeFromString(StoredNowPlayingSessionEnvelope.serializer(), queueJson)
+        }.getOrNull()
+        if (envelope != null) return envelope.items
         return runCatching {
             json.decodeFromString(ListSerializer(StoredNowPlayingItem.serializer()), queueJson)
         }.getOrElse { emptyList() }
     }
 
+    private fun parseStoredNowPlayingHistory(queueJson: String): List<StoredNowPlayingItem> {
+        val envelope = runCatching {
+            json.decodeFromString(StoredNowPlayingSessionEnvelope.serializer(), queueJson)
+        }.getOrNull() ?: return emptyList()
+        val activeItemIds = envelope.items.mapTo(hashSetOf()) { it.itemId }
+        return envelope.historyItems.distinctBy { it.itemId }.filterNot { it.itemId in activeItemIds }
+    }
+
+    private fun encodeStoredNowPlaying(
+        items: List<StoredNowPlayingItem>,
+        historyItems: List<StoredNowPlayingItem> = emptyList(),
+    ): String {
+        val activeItemIds = items.mapTo(hashSetOf()) { it.itemId }
+        val dedupedHistory = historyItems.distinctBy { it.itemId }.filterNot { it.itemId in activeItemIds }
+        return json.encodeToString(
+            StoredNowPlayingSessionEnvelope.serializer(),
+            StoredNowPlayingSessionEnvelope(
+                items = items,
+                historyItems = dedupedHistory,
+            ),
+        )
+    }
+
     private fun NowPlayingEntity.toSession(stored: List<StoredNowPlayingItem>): NowPlayingSession {
         val safeIndex = if (stored.isEmpty()) 0 else currentIndex.coerceIn(0, stored.lastIndex)
+        val activeItemIds = stored.mapTo(hashSetOf()) { it.itemId }
+        val history = parseStoredNowPlayingHistory(queueJson).filterNot { it.itemId in activeItemIds }
         return NowPlayingSession(
             items = stored.map { item ->
                 NowPlayingSessionItem(
@@ -1297,6 +1556,25 @@ class PlaybackRepository(
             currentIndex = safeIndex,
             updatedAt = updatedAt,
             sourcePlaylistId = sourcePlaylistId,
+            historyItems = history.map { item ->
+                NowPlayingSessionItem(
+                    itemId = item.itemId,
+                    title = item.title,
+                    url = item.url,
+                    host = item.host,
+                    sourceType = item.sourceType,
+                    sourceLabel = item.sourceLabel,
+                    sourceUrl = item.sourceUrl,
+                    captureKind = item.captureKind,
+                    sourceAppPackage = item.sourceAppPackage,
+                    status = item.status,
+                    activeContentVersionId = item.activeContentVersionId,
+                    lastReadPercent = item.lastReadPercent,
+                    chunkIndex = item.chunkIndex,
+                    offsetInChunkChars = item.offsetInChunkChars,
+                    readerScrollOffset = item.readerScrollOffset,
+                )
+            },
         )
     }
 

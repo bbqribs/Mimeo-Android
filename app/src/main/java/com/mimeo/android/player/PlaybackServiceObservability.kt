@@ -113,16 +113,83 @@ internal enum class MediaButtonDispatchAction {
     None,
 }
 
+internal enum class SnapshotOwnershipStep {
+    PublishMediaSessionState,
+    PublishForegroundNotification,
+    RequestAudioFocus,
+    KeepMediaButtonAnchor,
+    ReleaseAudioFocus,
+}
+
+internal const val MEDIA_BUTTON_ANCHOR_VOLUME = 0.01f
+
+internal fun buildMediaButtonAnchorPcm(byteCount: Int): ByteArray {
+    val safeCount = byteCount.coerceAtLeast(2)
+    return ByteArray(safeCount) { index ->
+        if (index % 4 == 0) 1 else 0
+    }
+}
+
+internal fun snapshotOwnershipUpdatePlan(
+    snapshot: PlaybackServiceSnapshot,
+    hasAudioFocus: Boolean,
+): List<SnapshotOwnershipStep> {
+    return when {
+        snapshot.itemId != null && snapshot.isPlaying -> listOf(
+            SnapshotOwnershipStep.PublishMediaSessionState,
+            SnapshotOwnershipStep.PublishForegroundNotification,
+            SnapshotOwnershipStep.RequestAudioFocus,
+        )
+        snapshot.itemId != null && hasAudioFocus -> listOf(
+            SnapshotOwnershipStep.PublishMediaSessionState,
+            SnapshotOwnershipStep.PublishForegroundNotification,
+            SnapshotOwnershipStep.KeepMediaButtonAnchor,
+        )
+        snapshot.itemId == null -> listOf(
+            SnapshotOwnershipStep.PublishMediaSessionState,
+            SnapshotOwnershipStep.ReleaseAudioFocus,
+        )
+        else -> listOf(
+            SnapshotOwnershipStep.PublishMediaSessionState,
+            SnapshotOwnershipStep.PublishForegroundNotification,
+        )
+    }
+}
+
+internal fun optimisticSnapshotAfterDispatch(
+    snapshot: PlaybackServiceSnapshot,
+    action: MediaButtonDispatchAction,
+): PlaybackServiceSnapshot {
+    return when (action) {
+        MediaButtonDispatchAction.Play -> snapshot.copy(isPlaying = true)
+        MediaButtonDispatchAction.Pause -> snapshot.copy(isPlaying = false)
+        MediaButtonDispatchAction.Toggle -> snapshot.copy(isPlaying = !snapshot.isPlaying)
+        MediaButtonDispatchAction.None -> snapshot
+    }
+}
+
+internal fun reconcileMediaButtonSnapshotRefresh(
+    current: PlaybackServiceSnapshot,
+    fresh: PlaybackServiceSnapshot,
+): PlaybackServiceSnapshot {
+    val sameItem = current.itemId != null && current.itemId == fresh.itemId
+    return if (sameItem && current.isPlaying && !fresh.isPlaying) {
+        current
+    } else {
+        fresh
+    }
+}
+
 internal fun resolveMediaButtonDispatchAction(
     keyCode: Int,
     isCurrentlyPlaying: Boolean,
 ): MediaButtonDispatchAction {
     return when (keyCode) {
         android.view.KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-            MediaButtonDispatchAction.Pause
+            if (isCurrentlyPlaying) MediaButtonDispatchAction.Pause else MediaButtonDispatchAction.Play
         }
         android.view.KeyEvent.KEYCODE_MEDIA_PLAY -> {
-            MediaButtonDispatchAction.Play
+            if (isCurrentlyPlaying) MediaButtonDispatchAction.Pause else MediaButtonDispatchAction.Play
         }
         android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
         android.view.KeyEvent.KEYCODE_HEADSETHOOK,

@@ -10,23 +10,43 @@ import android.view.KeyEvent
 
 class PlaybackServiceObservabilityTest {
     @Test
-    fun `media pause key always resolves to pause`() {
+    fun `media pause key resolves to pause while playing`() {
         val action = resolveMediaButtonDispatchAction(
             keyCode = KeyEvent.KEYCODE_MEDIA_PAUSE,
-            isCurrentlyPlaying = false,
+            isCurrentlyPlaying = true,
         )
 
         assertEquals(MediaButtonDispatchAction.Pause, action)
     }
 
     @Test
-    fun `media play key always resolves to play`() {
+    fun `media pause key resolves to play when stale headset state says paused`() {
+        val action = resolveMediaButtonDispatchAction(
+            keyCode = KeyEvent.KEYCODE_MEDIA_PAUSE,
+            isCurrentlyPlaying = false,
+        )
+
+        assertEquals(MediaButtonDispatchAction.Play, action)
+    }
+
+    @Test
+    fun `media play key resolves to play while paused`() {
+        val action = resolveMediaButtonDispatchAction(
+            keyCode = KeyEvent.KEYCODE_MEDIA_PLAY,
+            isCurrentlyPlaying = false,
+        )
+
+        assertEquals(MediaButtonDispatchAction.Play, action)
+    }
+
+    @Test
+    fun `media play key resolves to pause when stale headset state says playing`() {
         val action = resolveMediaButtonDispatchAction(
             keyCode = KeyEvent.KEYCODE_MEDIA_PLAY,
             isCurrentlyPlaying = true,
         )
 
-        assertEquals(MediaButtonDispatchAction.Play, action)
+        assertEquals(MediaButtonDispatchAction.Pause, action)
     }
 
     @Test
@@ -71,6 +91,77 @@ class PlaybackServiceObservabilityTest {
         assertEquals(MediaButtonDispatchAction.Toggle, pauseAction)
         // Toggle when paused → service should dispatchPlay (snapshot.isPlaying=false)
         assertEquals(MediaButtonDispatchAction.Toggle, playAction)
+    }
+
+    @Test
+    fun `media button pause applies optimistic paused snapshot`() {
+        val snapshot = PlaybackServiceSnapshot(itemId = 42, title = "Active", isPlaying = true)
+
+        val updated = optimisticSnapshotAfterDispatch(snapshot, MediaButtonDispatchAction.Pause)
+
+        assertEquals(42, updated.itemId)
+        assertFalse(updated.isPlaying)
+    }
+
+    @Test
+    fun `headset toggle from playing applies optimistic paused snapshot`() {
+        val snapshot = PlaybackServiceSnapshot(itemId = 42, title = "Active", isPlaying = true)
+        val action = resolveMediaButtonDispatchAction(
+            keyCode = KeyEvent.KEYCODE_HEADSETHOOK,
+            isCurrentlyPlaying = snapshot.isPlaying,
+        )
+
+        val updated = optimisticSnapshotAfterDispatch(snapshot, action)
+
+        assertEquals(MediaButtonDispatchAction.Toggle, action)
+        assertFalse(updated.isPlaying)
+    }
+
+    @Test
+    fun `media button refresh does not clobber active playing snapshot with stale paused provider state`() {
+        val current = PlaybackServiceSnapshot(itemId = 42, title = "Active", isPlaying = true)
+        val staleFresh = PlaybackServiceSnapshot(itemId = 42, title = "Active", isPlaying = false)
+
+        val reconciled = reconcileMediaButtonSnapshotRefresh(current, staleFresh)
+
+        assertTrue(reconciled.isPlaying)
+    }
+
+    @Test
+    fun `media button refresh accepts changed item snapshot`() {
+        val current = PlaybackServiceSnapshot(itemId = 42, title = "Old", isPlaying = true)
+        val fresh = PlaybackServiceSnapshot(itemId = 43, title = "New", isPlaying = false)
+
+        val reconciled = reconcileMediaButtonSnapshotRefresh(current, fresh)
+
+        assertEquals(43, reconciled.itemId)
+        assertFalse(reconciled.isPlaying)
+    }
+
+    @Test
+    fun `active playback publishes media session ownership before requesting focus`() {
+        val plan = snapshotOwnershipUpdatePlan(
+            snapshot = PlaybackServiceSnapshot(itemId = 42, title = "Mimeo", isPlaying = true),
+            hasAudioFocus = false,
+        )
+
+        assertEquals(
+            listOf(
+                SnapshotOwnershipStep.PublishMediaSessionState,
+                SnapshotOwnershipStep.PublishForegroundNotification,
+                SnapshotOwnershipStep.RequestAudioFocus,
+            ),
+            plan,
+        )
+    }
+
+    @Test
+    fun `media button anchor uses nonzero inaudible stream so platform marks Mimeo as audio owner`() {
+        val pcm = buildMediaButtonAnchorPcm(16)
+
+        assertTrue(MEDIA_BUTTON_ANCHOR_VOLUME > 0f)
+        assertTrue(MEDIA_BUTTON_ANCHOR_VOLUME <= 0.01f)
+        assertTrue(pcm.any { it != 0.toByte() })
     }
 
     @Test

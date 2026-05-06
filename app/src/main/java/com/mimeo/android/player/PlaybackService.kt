@@ -116,7 +116,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             ACTION_PLAY, ACTION_PAUSE, ACTION_TOGGLE_PLAY_PAUSE -> {
                 // Refresh snapshot before dispatching so we act on current playback state,
                 // not the last-pushed snapshot (which may be stale for between-chunk gaps).
-                PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
+                refreshSnapshotForMediaButtonDispatch()
                 when (intent.action) {
                     ACTION_PLAY -> dispatchPlay()
                     ACTION_PAUSE -> dispatchPause()
@@ -184,7 +184,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             return
         }
         PlaybackServiceBridge.onPlay?.invoke()
-        PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
+        updateSnapshot(optimisticSnapshotAfterDispatch(snapshot, MediaButtonDispatchAction.Play))
         emitAudit("dispatchPlay")
     }
 
@@ -197,7 +197,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             interruptionPolicy.clearResumeExpectation()
         }
         PlaybackServiceBridge.onPause?.invoke()
-        PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
+        updateSnapshot(optimisticSnapshotAfterDispatch(snapshot, MediaButtonDispatchAction.Pause))
         if (releaseAudioFocusImmediately) {
             abandonAudioFocusNow()
         }
@@ -217,18 +217,6 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     private fun updateSnapshot(next: PlaybackServiceSnapshot) {
         snapshot = next
         mediaSession.isActive = next.itemId != null
-        if (next.itemId != null && next.isPlaying) {
-            requestAudioFocus()
-        } else if (next.itemId != null && hasAudioFocus) {
-            // Paused but still holding audio focus: keep anchor running so the OS continues
-            // routing media button events (earphone controls) to this session. The anchor is
-            // a no-op if already playing; explicit restart here guards against anchor stopping
-            // due to an exception while paused (which would otherwise go undetected until play).
-            startMediaButtonAnchor()
-        } else if (next.itemId == null) {
-            interruptionPolicy.clearResumeExpectation()
-            abandonAudioFocusNow()
-        }
         val state = if (next.isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
         mediaSession.setPlaybackState(
             PlaybackStateCompat.Builder()
@@ -246,7 +234,6 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, next.title.ifBlank { "Mimeo playback" })
                 .build(),
         )
-
         val notification = buildNotification(next)
         if (next.itemId != null) {
             if (!isForeground) {
@@ -262,6 +249,18 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             emitAudit("foregroundStop")
             abandonAudioFocusNow()
             stopSelf()
+        }
+        if (next.itemId != null && next.isPlaying) {
+            requestAudioFocus()
+        } else if (next.itemId != null && hasAudioFocus) {
+            // Paused but still holding audio focus: keep anchor running so the OS continues
+            // routing media button events (earphone controls) to this session. The anchor is
+            // a no-op if already playing; explicit restart here guards against anchor stopping
+            // due to an exception while paused (which would otherwise go undetected until play).
+            startMediaButtonAnchor()
+        } else if (next.itemId == null) {
+            interruptionPolicy.clearResumeExpectation()
+            abandonAudioFocusNow()
         }
         emitAudit("snapshot")
     }
@@ -393,7 +392,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     private fun createMediaButtonAnchorTrack(): AudioTrack? {
         return try {
             val sampleRate = 8_000
-            val pcm = ByteArray(sampleRate * 2) // 1 second, 16-bit mono silence
+            val pcm = buildMediaButtonAnchorPcm(sampleRate * 2)
             val frameCount = pcm.size / 2
             val track = AudioTrack(
                 AudioAttributes.Builder()
@@ -416,7 +415,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                     track.setLoopPoints(0, writtenFrames, -1)
                 }
             }
-            track.setVolume(0f)
+            track.setVolume(MEDIA_BUTTON_ANCHOR_VOLUME)
             track
         } catch (_: Throwable) {
             null
@@ -447,12 +446,13 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         val keyEvent = intent?.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT) ?: return false
         if (keyEvent.action != KeyEvent.ACTION_DOWN) return true
         val staleBeforeRefresh = snapshot.isPlaying
-        PlaybackServiceBridge.snapshotProvider?.invoke()?.let(::updateSnapshot)
+        refreshSnapshotForMediaButtonDispatch()
         if (staleBeforeRefresh != snapshot.isPlaying) {
             emitAudit("mediaButtonRefresh:playing:$staleBeforeRefresh->${snapshot.isPlaying}")
         }
         Log.d(mediaButtonLogTag, "handleMediaButtonIntent key=${keyEvent.keyCode}")
-        when (resolveMediaButtonDispatchAction(keyCode = keyEvent.keyCode, isCurrentlyPlaying = snapshot.isPlaying)) {
+        val action = resolveMediaButtonDispatchAction(keyCode = keyEvent.keyCode, isCurrentlyPlaying = snapshot.isPlaying)
+        when (action) {
             MediaButtonDispatchAction.Play -> dispatchPlay()
             MediaButtonDispatchAction.Pause -> dispatchPause()
             MediaButtonDispatchAction.Toggle -> dispatchToggle()
@@ -461,6 +461,11 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
         Log.d(mediaButtonLogTag, "handleMediaButtonIntent dispatched")
         emitAudit("mediaButton:${keyEvent.keyCode}")
         return true
+    }
+
+    private fun refreshSnapshotForMediaButtonDispatch() {
+        val fresh = PlaybackServiceBridge.snapshotProvider?.invoke() ?: return
+        updateSnapshot(reconcileMediaButtonSnapshotRefresh(snapshot, fresh))
     }
 
     private fun emitAudit(event: String) {
