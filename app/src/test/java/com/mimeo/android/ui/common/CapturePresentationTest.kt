@@ -80,6 +80,22 @@ class CapturePresentationTest {
     }
 
     @Test
+    fun `bluesky composite label strips at uri even when source type is generic`() {
+        val item = PlaybackQueueItem(
+            itemId = 8,
+            title = "List item",
+            url = "https://example.com/story",
+            host = "example.com",
+            sourceType = "bluesky",
+            sourceLabel = "Bluesky List: at://did:plc:abc/app.bsky.graph.list/xyz",
+        )
+
+        val presentation = queueCapturePresentation(item)
+
+        assertEquals("Bluesky List", presentation.sourceLabel)
+    }
+
+    @Test
     fun `synthetic shared text url uses excerpt title and android selection fallback`() {
         val item = PlaybackQueueItem(
             itemId = 3,

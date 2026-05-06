@@ -143,19 +143,22 @@ private fun String.normalizedSourceLabel(sourceType: String?): String? {
     val cleaned = trim()
     if (cleaned.isEmpty()) return null
     val normalizedType = sourceType?.trim()?.lowercase()
-    if (normalizedType in setOf("list_feed", "feed_generator")) {
-        val withoutPrefix = cleaned.removePrefix("Pinned:").trim()
-        val nameCandidate = withoutPrefix
-            .removeRawAddressSuffix("at://")
-            .removeRawAddressSuffix("http://")
-            .removeRawAddressSuffix("https://")
-            .trim()
-            .trim('(', ')', '-', '·', '|')
-            .trim()
+    val withoutPrefix = cleaned.removePrefix("Pinned:").trim()
+    val nameCandidate = withoutPrefix
+        .removeRawAddressSuffix("at://")
+        .removeRawAddressSuffix("http://")
+        .removeRawAddressSuffix("https://")
+        .trim()
+        .trim('(', ')', '-', ':', '·', '|')
+        .trim()
+    if (nameCandidate != withoutPrefix) {
         return nameCandidate.takeIf { it.isNotBlank() && !it.startsWithRawAddress() }
-            ?: genericBlueskySourceLabel(normalizedType)
+            ?: genericBlueskySourceLabel(normalizedType, withoutPrefix)
     }
-    if (cleaned.startsWithRawAddress()) return null
+    if (cleaned.startsWithRawAddress()) return genericBlueskySourceLabel(normalizedType, cleaned)
+    if (normalizedType in setOf("list_feed", "feed_generator") && cleaned.containsRawAddress()) {
+        return genericBlueskySourceLabel(normalizedType, cleaned)
+    }
     return cleaned
 }
 
@@ -169,10 +172,16 @@ private fun String.startsWithRawAddress(): Boolean =
         startsWith("http://", ignoreCase = true) ||
         startsWith("https://", ignoreCase = true)
 
-private fun genericBlueskySourceLabel(sourceType: String?): String = when (sourceType) {
-    "feed_generator" -> "Bluesky Feed"
-    "list_feed" -> "Bluesky List"
-    else -> "Bluesky"
+private fun String.containsRawAddress(): Boolean =
+    contains("at://", ignoreCase = true) ||
+        contains("http://", ignoreCase = true) ||
+        contains("https://", ignoreCase = true)
+
+private fun genericBlueskySourceLabel(sourceType: String?, rawLabel: String): String = when {
+    sourceType == "feed_generator" || rawLabel.contains("feed", ignoreCase = true) -> "Bluesky Feed"
+    sourceType == "list_feed" || rawLabel.contains("list", ignoreCase = true) -> "Bluesky List"
+    rawLabel.contains("post", ignoreCase = true) -> "Bluesky Post"
+    else -> "Bluesky Source"
 }
 
 private fun extractHost(url: String): String? {
