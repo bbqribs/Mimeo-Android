@@ -113,6 +113,30 @@ internal enum class MediaButtonDispatchAction {
     None,
 }
 
+internal fun optimisticSnapshotAfterDispatch(
+    snapshot: PlaybackServiceSnapshot,
+    action: MediaButtonDispatchAction,
+): PlaybackServiceSnapshot {
+    return when (action) {
+        MediaButtonDispatchAction.Play -> snapshot.copy(isPlaying = true)
+        MediaButtonDispatchAction.Pause -> snapshot.copy(isPlaying = false)
+        MediaButtonDispatchAction.Toggle -> snapshot.copy(isPlaying = !snapshot.isPlaying)
+        MediaButtonDispatchAction.None -> snapshot
+    }
+}
+
+internal fun reconcileMediaButtonSnapshotRefresh(
+    current: PlaybackServiceSnapshot,
+    fresh: PlaybackServiceSnapshot,
+): PlaybackServiceSnapshot {
+    val sameItem = current.itemId != null && current.itemId == fresh.itemId
+    return if (sameItem && current.isPlaying && !fresh.isPlaying) {
+        current
+    } else {
+        fresh
+    }
+}
+
 internal fun resolveMediaButtonDispatchAction(
     keyCode: Int,
     isCurrentlyPlaying: Boolean,

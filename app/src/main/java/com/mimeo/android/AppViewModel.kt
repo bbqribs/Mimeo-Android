@@ -5208,12 +5208,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val session = nowPlayingSession.value ?: return
         val current = session.currentItem ?: return
         val targetIndex = session.items.indexOfFirst { it.itemId == itemId }
-        if (targetIndex <= session.currentIndex) return
+        if (targetIndex < 0) return
         viewModelScope.launch {
             val updated = repository.moveCurrentItemToItem(
                 itemId = itemId,
                 priorActiveToHistory = shouldPlacePriorActiveInHistory(current.itemId),
             ) ?: return@launch
+            applySessionSnapshot(updated, preserveExistingPositions = true)
+            playbackOpenItem(
+                itemId = itemId,
+                intent = playbackOpenIntentForManualStart(itemId),
+                autoPlayAfterLoad = true,
+            )
+        }
+    }
+
+    fun jumpToHistorySessionItem(itemId: Int) {
+        val session = nowPlayingSession.value ?: return
+        if (session.historyItems.none { it.itemId == itemId }) return
+        viewModelScope.launch {
+            val updated = repository.moveHistoryItemToCurrent(itemId) ?: return@launch
             applySessionSnapshot(updated, preserveExistingPositions = true)
             playbackOpenItem(
                 itemId = itemId,

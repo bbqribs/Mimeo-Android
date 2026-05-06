@@ -74,6 +74,51 @@ class PlaybackServiceObservabilityTest {
     }
 
     @Test
+    fun `media button pause applies optimistic paused snapshot`() {
+        val snapshot = PlaybackServiceSnapshot(itemId = 42, title = "Active", isPlaying = true)
+
+        val updated = optimisticSnapshotAfterDispatch(snapshot, MediaButtonDispatchAction.Pause)
+
+        assertEquals(42, updated.itemId)
+        assertFalse(updated.isPlaying)
+    }
+
+    @Test
+    fun `headset toggle from playing applies optimistic paused snapshot`() {
+        val snapshot = PlaybackServiceSnapshot(itemId = 42, title = "Active", isPlaying = true)
+        val action = resolveMediaButtonDispatchAction(
+            keyCode = KeyEvent.KEYCODE_HEADSETHOOK,
+            isCurrentlyPlaying = snapshot.isPlaying,
+        )
+
+        val updated = optimisticSnapshotAfterDispatch(snapshot, action)
+
+        assertEquals(MediaButtonDispatchAction.Toggle, action)
+        assertFalse(updated.isPlaying)
+    }
+
+    @Test
+    fun `media button refresh does not clobber active playing snapshot with stale paused provider state`() {
+        val current = PlaybackServiceSnapshot(itemId = 42, title = "Active", isPlaying = true)
+        val staleFresh = PlaybackServiceSnapshot(itemId = 42, title = "Active", isPlaying = false)
+
+        val reconciled = reconcileMediaButtonSnapshotRefresh(current, staleFresh)
+
+        assertTrue(reconciled.isPlaying)
+    }
+
+    @Test
+    fun `media button refresh accepts changed item snapshot`() {
+        val current = PlaybackServiceSnapshot(itemId = 42, title = "Old", isPlaying = true)
+        val fresh = PlaybackServiceSnapshot(itemId = 43, title = "New", isPlaying = false)
+
+        val reconciled = reconcileMediaButtonSnapshotRefresh(current, fresh)
+
+        assertEquals(43, reconciled.itemId)
+        assertFalse(reconciled.isPlaying)
+    }
+
+    @Test
     fun `drift clues include focus without item`() {
         val clues = detectPlaybackDriftClues(
             PlaybackAuditState(

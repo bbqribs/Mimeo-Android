@@ -138,6 +138,56 @@ class SessionReorderPlanTest {
     }
 
     @Test
+    fun jumpToEarlierMovesMeaningfulPriorActiveToHistoryAndKeepsTailNext() {
+        val plan = computeSessionIndexMovePlan(
+            itemIds = listOf(20, 30, 40, 50, 60, 70),
+            currentIndex = 2,
+            targetIndex = 0,
+            historyItemIds = listOf(10, 9, 8),
+            priorActiveToHistory = true,
+        )
+
+        val actual = plan!!
+        assertEquals(listOf(20, 30, 50, 60, 70), actual.itemIds)
+        assertEquals(0, actual.currentIndex)
+        assertEquals(listOf(40, 10, 9, 8), actual.historyItemIds)
+        assertEquals(listOf(30, 50, 60, 70), actual.itemIds.drop(actual.currentIndex + 1))
+    }
+
+    @Test
+    fun jumpToEarlierKeepsBriefPriorActiveAfterEarlierTail() {
+        val plan = computeSessionIndexMovePlan(
+            itemIds = listOf(20, 30, 40, 50, 60, 70),
+            currentIndex = 2,
+            targetIndex = 0,
+            historyItemIds = listOf(10, 9, 8),
+            priorActiveToHistory = false,
+        )
+
+        val actual = plan!!
+        assertEquals(listOf(20, 30, 40, 50, 60, 70), actual.itemIds)
+        assertEquals(0, actual.currentIndex)
+        assertEquals(listOf(10, 9, 8), actual.historyItemIds)
+        assertEquals(listOf(30, 40, 50, 60, 70), actual.itemIds.drop(actual.currentIndex + 1))
+    }
+
+    @Test
+    fun historyJumpRemovesSelectedHistoryItemAndPutsPriorActiveAtTopOfUpNext() {
+        val plan = computeSessionHistoryJumpPlan(
+            itemIds = listOf(20, 30, 40, 50, 60, 70),
+            currentIndex = 2,
+            historyItemIds = listOf(10, 9, 8),
+            selectedHistoryItemId = 9,
+        )
+
+        val actual = plan!!
+        assertEquals(listOf(20, 30, 9, 40, 50, 60, 70), actual.itemIds)
+        assertEquals(2, actual.currentIndex)
+        assertEquals(listOf(10, 8), actual.historyItemIds)
+        assertEquals(listOf(40, 50, 60, 70), actual.itemIds.drop(actual.currentIndex + 1))
+    }
+
+    @Test
     fun previousWalksEarlierQueueBeforeHistory() {
         val plan = computePreviousSessionPlan(
             itemIds = listOf(20, 30, 40, 50),

@@ -157,7 +157,7 @@ internal fun computeSessionIndexMovePlan(
             historyItemIds = historyItemIds.filterNot { it in itemIds },
         )
     }
-    if (!priorActiveToHistory || safeTarget < safeCurrent) {
+    if (!priorActiveToHistory) {
         return SessionIndexMovePlan(
             itemIds = itemIds,
             currentIndex = safeTarget,
@@ -172,6 +172,27 @@ internal fun computeSessionIndexMovePlan(
         itemIds = movedItemIds,
         currentIndex = adjustedTarget.coerceIn(0, movedItemIds.lastIndex),
         historyItemIds = listOf(activeItemId) + historyItemIds.filter { it != activeItemId && it !in movedItemIds },
+    )
+}
+
+internal fun computeSessionHistoryJumpPlan(
+    itemIds: List<Int>,
+    currentIndex: Int,
+    historyItemIds: List<Int>,
+    selectedHistoryItemId: Int,
+): SessionIndexMovePlan? {
+    if (itemIds.isEmpty()) return null
+    if (selectedHistoryItemId !in historyItemIds) return null
+    val safeCurrent = currentIndex.coerceIn(0, itemIds.lastIndex)
+    val priorActiveItemId = itemIds[safeCurrent]
+    val earlier = itemIds.take(safeCurrent)
+    val upcoming = itemIds.drop(safeCurrent + 1)
+    val plannedItems = (earlier + selectedHistoryItemId + priorActiveItemId + upcoming)
+        .distinct()
+    return SessionIndexMovePlan(
+        itemIds = plannedItems,
+        currentIndex = earlier.size,
+        historyItemIds = historyItemIds.filter { it != selectedHistoryItemId && it !in plannedItems },
     )
 }
 
@@ -892,6 +913,35 @@ class PlaybackRepository(
             targetIndex = targetIndex,
             priorActiveToHistory = priorActiveToHistory,
         )
+    }
+
+    suspend fun moveHistoryItemToCurrent(itemId: Int): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson)
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        val history = parseStoredNowPlayingHistory(row.queueJson)
+        val plan = computeSessionHistoryJumpPlan(
+            itemIds = stored.map { it.itemId },
+            currentIndex = row.currentIndex,
+            historyItemIds = history.map { it.itemId },
+            selectedHistoryItemId = itemId,
+        ) ?: return row.toSession(stored)
+        val storedById = (stored + history).associateBy { it.itemId }
+        val plannedItems = plan.itemIds.mapNotNull { storedById[it] }
+        if (plannedItems.isEmpty()) return null
+        val plannedHistory = plan.historyItemIds.mapNotNull { storedById[it] }
+        val updatedAt = System.currentTimeMillis()
+        val updatedRow = row.copy(
+            queueJson = encodeStoredNowPlaying(plannedItems, plannedHistory),
+            currentIndex = plan.currentIndex.coerceIn(0, plannedItems.lastIndex),
+            updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(plannedItems)
     }
 
     suspend fun moveToPreviousItem(): NowPlayingSession? {
