@@ -189,7 +189,7 @@ internal fun resolveMediaButtonDispatchAction(
             if (isCurrentlyPlaying) MediaButtonDispatchAction.Pause else MediaButtonDispatchAction.Play
         }
         android.view.KeyEvent.KEYCODE_MEDIA_PLAY -> {
-            MediaButtonDispatchAction.Play
+            if (isCurrentlyPlaying) MediaButtonDispatchAction.Pause else MediaButtonDispatchAction.Play
         }
         android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
         android.view.KeyEvent.KEYCODE_HEADSETHOOK,

@@ -30,13 +30,23 @@ class PlaybackServiceObservabilityTest {
     }
 
     @Test
-    fun `media play key always resolves to play`() {
+    fun `media play key resolves to play while paused`() {
+        val action = resolveMediaButtonDispatchAction(
+            keyCode = KeyEvent.KEYCODE_MEDIA_PLAY,
+            isCurrentlyPlaying = false,
+        )
+
+        assertEquals(MediaButtonDispatchAction.Play, action)
+    }
+
+    @Test
+    fun `media play key resolves to pause when stale headset state says playing`() {
         val action = resolveMediaButtonDispatchAction(
             keyCode = KeyEvent.KEYCODE_MEDIA_PLAY,
             isCurrentlyPlaying = true,
         )
 
-        assertEquals(MediaButtonDispatchAction.Play, action)
+        assertEquals(MediaButtonDispatchAction.Pause, action)
     }
 
     @Test
