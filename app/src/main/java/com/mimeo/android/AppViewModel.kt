@@ -5107,6 +5107,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 sourcePlaylistId = sourcePlaylistId,
             )
             applySessionSnapshot(session, preserveExistingPositions = true)
+            val activeItemId = session.currentItem?.itemId ?: startItemId
+            playbackOpenItem(
+                itemId = activeItemId,
+                intent = playbackOpenIntentForManualStart(activeItemId),
+                autoPlayAfterLoad = true,
+            )
             statusLabel?.let { label ->
                 showSnackbar("Replaced Up Next from $label.")
             }
@@ -5149,12 +5155,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val session = repository.playNowInSession(item)
             applySessionSnapshot(session)
-            val intent = if (isItemCompletedForPlaybackStart(itemId)) {
-                PlaybackOpenIntent.Replay
-            } else {
-                PlaybackOpenIntent.ManualOpen
-            }
-            playbackOpenItem(itemId, intent, autoPlayAfterLoad = true)
+            playbackOpenItem(
+                itemId = itemId,
+                intent = playbackOpenIntentForManualStart(itemId),
+                autoPlayAfterLoad = true,
+            )
         }
     }
 
@@ -5371,6 +5376,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun isItemCompletedForPlaybackStart(itemId: Int): Boolean {
         return shouldReplayCompletedItem(knownFurthestForItem(itemId))
+    }
+
+    private fun playbackOpenIntentForManualStart(itemId: Int): PlaybackOpenIntent {
+        return if (isItemCompletedForPlaybackStart(itemId)) {
+            PlaybackOpenIntent.Replay
+        } else {
+            PlaybackOpenIntent.ManualOpen
+        }
     }
 
     suspend fun setNowPlayingCurrentItem(itemId: Int) {
