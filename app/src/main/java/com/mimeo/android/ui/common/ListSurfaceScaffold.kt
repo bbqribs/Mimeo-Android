@@ -70,6 +70,7 @@ fun LibraryItemRow(
     progressStateLine: (@Composable () -> Unit)? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
 ) {
+    val readerClickLabel = "Opens $title in reader"
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -82,11 +83,12 @@ fun LibraryItemRow(
             )
             .combinedClickable(
                 onClick = onClick,
+                onClickLabel = readerClickLabel,
                 onLongClick = onLongClick,
             )
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(start = 8.dp, end = 2.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         leadingContent?.invoke(this)
         Column(
@@ -95,7 +97,7 @@ fun LibraryItemRow(
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 color = titleColor,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -103,7 +105,7 @@ fun LibraryItemRow(
             if (!metadata.isNullOrBlank()) {
                 Text(
                     text = metadata,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

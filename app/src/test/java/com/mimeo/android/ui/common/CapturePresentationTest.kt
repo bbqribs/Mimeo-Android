@@ -47,6 +47,39 @@ class CapturePresentationTest {
     }
 
     @Test
+    fun `bluesky list label prefers resolved name over raw at uri suffix`() {
+        val item = PlaybackQueueItem(
+            itemId = 6,
+            title = "List item",
+            url = "https://example.com/story",
+            host = "example.com",
+            sourceType = "list_feed",
+            sourceLabel = "Pinned: Reading List at://did:plc:abc/app.bsky.graph.list/xyz",
+        )
+
+        val presentation = queueCapturePresentation(item)
+
+        assertEquals("Reading List", presentation.sourceLabel)
+    }
+
+    @Test
+    fun `bluesky list label keeps raw at uri when no resolved name is available`() {
+        val uri = "at://did:plc:abc/app.bsky.graph.list/xyz"
+        val item = PlaybackQueueItem(
+            itemId = 7,
+            title = "List item",
+            url = "https://example.com/story",
+            host = "example.com",
+            sourceType = "list_feed",
+            sourceLabel = uri,
+        )
+
+        val presentation = queueCapturePresentation(item)
+
+        assertEquals(uri, presentation.sourceLabel)
+    }
+
+    @Test
     fun `synthetic shared text url uses excerpt title and android selection fallback`() {
         val item = PlaybackQueueItem(
             itemId = 3,

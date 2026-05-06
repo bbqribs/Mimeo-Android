@@ -86,11 +86,11 @@ private fun capturePresentation(
             ?.let(::extractHost)
             ?.removePrefix("www.")
             ?.takeIf { it.isNotBlank() }
-        val originLabel = sourceLabel?.trim()?.takeIf { it.isNotEmpty() }
+        val originLabel = sourceLabel?.normalizedSourceLabel(sourceType)
             ?: sourceAppPackage?.trim()?.takeIf { it.isNotEmpty() }
         provenanceLabel ?: originLabel ?: "Android selection"
     } else {
-        val label = sourceLabel?.trim()?.takeIf { it.isNotEmpty() }
+        val label = sourceLabel?.normalizedSourceLabel(sourceType)
             ?: rawHost?.trim()?.takeIf { it.isNotEmpty() }
             ?: sourceAppPackage?.trim()?.takeIf { it.isNotEmpty() }
         if (label != null) {
@@ -138,6 +138,35 @@ private fun formatExcerptTitle(rawTitle: String?, fallbackUrl: String): String {
 private fun String.startsWithHttp(): Boolean {
     return startsWith("http://", ignoreCase = true) || startsWith("https://", ignoreCase = true)
 }
+
+private fun String.normalizedSourceLabel(sourceType: String?): String? {
+    val cleaned = trim()
+    if (cleaned.isEmpty()) return null
+    val normalizedType = sourceType?.trim()?.lowercase()
+    if (normalizedType in setOf("list_feed", "feed_generator")) {
+        val withoutPrefix = cleaned.removePrefix("Pinned:").trim()
+        val nameCandidate = withoutPrefix
+            .removeRawAddressSuffix("at://")
+            .removeRawAddressSuffix("http://")
+            .removeRawAddressSuffix("https://")
+            .trim()
+            .trim('(', ')', '-', '·', '|')
+            .trim()
+        return nameCandidate.takeIf { it.isNotBlank() && !it.startsWithRawAddress() }
+            ?: withoutPrefix.takeIf { it.isNotBlank() }
+    }
+    return cleaned
+}
+
+private fun String.removeRawAddressSuffix(marker: String): String {
+    val index = indexOf(marker, ignoreCase = true)
+    return if (index > 0) substring(0, index) else this
+}
+
+private fun String.startsWithRawAddress(): Boolean =
+    startsWith("at://", ignoreCase = true) ||
+        startsWith("http://", ignoreCase = true) ||
+        startsWith("https://", ignoreCase = true)
 
 private fun extractHost(url: String): String? {
     return runCatching { URI(url).host }.getOrNull()
