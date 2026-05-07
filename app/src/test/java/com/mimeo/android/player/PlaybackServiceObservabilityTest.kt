@@ -1,12 +1,12 @@
 package com.mimeo.android.player
 
+import android.view.KeyEvent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import android.view.KeyEvent
 
 class PlaybackServiceObservabilityTest {
     @Test
@@ -94,6 +94,14 @@ class PlaybackServiceObservabilityTest {
     }
 
     @Test
+    fun `unknown key code returns None`() {
+        assertEquals(
+            MediaButtonDispatchAction.None,
+            resolveMediaButtonDispatchAction(KeyEvent.KEYCODE_VOLUME_UP, isCurrentlyPlaying = false),
+        )
+    }
+
+    @Test
     fun `media button pause applies optimistic paused snapshot`() {
         val snapshot = PlaybackServiceSnapshot(itemId = 42, title = "Active", isPlaying = true)
 
@@ -101,6 +109,12 @@ class PlaybackServiceObservabilityTest {
 
         assertEquals(42, updated.itemId)
         assertFalse(updated.isPlaying)
+    }
+
+    @Test
+    fun `dispatch None leaves snapshot unchanged`() {
+        val snapshot = PlaybackServiceSnapshot(itemId = 5, title = "Title", isPlaying = true)
+        assertEquals(snapshot, optimisticSnapshotAfterDispatch(snapshot, MediaButtonDispatchAction.None))
     }
 
     @Test
@@ -139,6 +153,14 @@ class PlaybackServiceObservabilityTest {
     }
 
     @Test
+    fun `media button refresh accepts fresh when current item is null`() {
+        val current = PlaybackServiceSnapshot(itemId = null, isPlaying = false)
+        val fresh = PlaybackServiceSnapshot(itemId = 1, isPlaying = true)
+
+        assertEquals(fresh, reconcileMediaButtonSnapshotRefresh(current, fresh))
+    }
+
+    @Test
     fun `active playback publishes media session ownership before requesting focus`() {
         val plan = snapshotOwnershipUpdatePlan(
             snapshot = PlaybackServiceSnapshot(itemId = 42, title = "Mimeo", isPlaying = true),
@@ -153,6 +175,35 @@ class PlaybackServiceObservabilityTest {
             ),
             plan,
         )
+    }
+
+    @Test
+    fun `paused item with existing focus keeps media button anchor`() {
+        val plan = snapshotOwnershipUpdatePlan(
+            PlaybackServiceSnapshot(itemId = 1, isPlaying = false),
+            hasAudioFocus = true,
+        )
+        assertTrue(plan.contains(SnapshotOwnershipStep.KeepMediaButtonAnchor))
+    }
+
+    @Test
+    fun `no item releases audio focus`() {
+        val plan = snapshotOwnershipUpdatePlan(
+            PlaybackServiceSnapshot(itemId = null),
+            hasAudioFocus = true,
+        )
+        assertTrue(plan.contains(SnapshotOwnershipStep.ReleaseAudioFocus))
+    }
+
+    @Test
+    fun `all ownership plans publish media session state`() {
+        listOf(
+            snapshotOwnershipUpdatePlan(PlaybackServiceSnapshot(itemId = 1, isPlaying = true), hasAudioFocus = false),
+            snapshotOwnershipUpdatePlan(PlaybackServiceSnapshot(itemId = 1, isPlaying = false), hasAudioFocus = true),
+            snapshotOwnershipUpdatePlan(PlaybackServiceSnapshot(itemId = null), hasAudioFocus = false),
+        ).forEach { plan ->
+            assertTrue(plan.contains(SnapshotOwnershipStep.PublishMediaSessionState))
+        }
     }
 
     @Test
@@ -201,6 +252,42 @@ class PlaybackServiceObservabilityTest {
         )
 
         assertTrue(clues.contains("playing-without-focus"))
+    }
+
+    @Test
+    fun `no drift clues for clean idle state`() {
+        val clues = detectPlaybackDriftClues(
+            PlaybackAuditState(
+                itemId = null, isPlaying = false, hasAudioFocus = false,
+                mediaSessionActive = false, isForeground = false, anchorPlaying = false,
+                isDeviceInteractive = true, isDeviceLocked = false, appInBackground = false,
+            ),
+        )
+        assertTrue(clues.isEmpty())
+    }
+
+    @Test
+    fun `no drift clues for healthy playing state`() {
+        val clues = detectPlaybackDriftClues(
+            PlaybackAuditState(
+                itemId = 1, isPlaying = true, hasAudioFocus = true,
+                mediaSessionActive = true, isForeground = true, anchorPlaying = true,
+                isDeviceInteractive = true, isDeviceLocked = false, appInBackground = false,
+            ),
+        )
+        assertTrue(clues.isEmpty())
+    }
+
+    @Test
+    fun `drift clues include playing without foreground service`() {
+        val clues = detectPlaybackDriftClues(
+            PlaybackAuditState(
+                itemId = 1, isPlaying = true, hasAudioFocus = true,
+                mediaSessionActive = true, isForeground = false, anchorPlaying = true,
+                isDeviceInteractive = true, isDeviceLocked = false, appInBackground = false,
+            ),
+        )
+        assertTrue(clues.contains("playing-without-foreground-service"))
     }
 
     @Test
@@ -327,4 +414,3 @@ class PlaybackServiceObservabilityTest {
         assertTrue(entry.reason.contains("background:false->true"))
     }
 }
-

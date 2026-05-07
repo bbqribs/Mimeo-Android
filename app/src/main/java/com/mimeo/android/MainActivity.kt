@@ -676,7 +676,7 @@ private fun MimeoApp(vm: AppViewModel) {
 }
 
 @Composable
-private fun StartupLoadingScreen() {
+internal fun StartupLoadingScreen() {
     Box(
         modifier = Modifier
             .fillMaxSize()
