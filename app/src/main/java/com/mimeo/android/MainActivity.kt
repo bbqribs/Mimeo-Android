@@ -47,6 +47,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -534,7 +535,12 @@ private fun MimeoApp(vm: AppViewModel) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val currentRoute = navBackStack?.destination?.route.orEmpty()
     val settings by vm.settings.collectAsState()
+    val startupRestoreComplete by vm.startupRestoreComplete.collectAsState()
     val pendingNavigationRoute by vm.pendingNavigationRoute.collectAsState()
+    if (!startupRestoreComplete) {
+        StartupLoadingScreen()
+        return
+    }
     val requiresSignIn = settings.apiToken.isBlank()
     val routeItemId = navBackStack?.arguments?.let { args ->
         if (args.containsKey("itemId")) args.getInt("itemId").takeIf { it > 0 } else null
@@ -666,6 +672,31 @@ private fun MimeoApp(vm: AppViewModel) {
         libraryShellVisible = libraryShellVisible,
         shellState = shellState,
     )
+}
+
+@Composable
+private fun StartupLoadingScreen() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "MIMEO",
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            CircularProgressIndicator()
+            Text(
+                text = "Loading your session...",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
 }
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {

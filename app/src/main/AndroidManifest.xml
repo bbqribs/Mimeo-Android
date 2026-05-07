@@ -11,7 +11,7 @@
         android:label="Mimeo Android"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
-        android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        android:theme="@style/Theme.Mimeo">
         <activity
             android:name=".MainActivity"
             android:exported="true"
