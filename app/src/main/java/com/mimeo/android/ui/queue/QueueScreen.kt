@@ -1957,6 +1957,9 @@ private fun NowPlayingSessionPanel(
     val upcomingItems = localItems.drop(upcomingStartIndex)
     val density = LocalDensity.current
     val minVisibleActiveHeightPx = with(density) { 24.dp.toPx() }
+    var initialActiveAnchorReady by remember(currentItemId, serverItemIds) {
+        mutableStateOf(currentItemId == null)
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -2000,18 +2003,18 @@ private fun NowPlayingSessionPanel(
                 )
             }
         }
-        LaunchedEffect(currentItemId) {
-            if (currentItemId != null) {
-                listScrollState.scrollTo(0)
+        LaunchedEffect(currentItemId, activeTopOffset, initialActiveAnchorReady) {
+            if (currentItemId == null) {
+                initialActiveAnchorReady = true
+                return@LaunchedEffect
             }
-        }
-        LaunchedEffect(currentItemId, activeTopOffset) {
-            if (currentItemId == null) return@LaunchedEffect
+            if (initialActiveAnchorReady) return@LaunchedEffect
             val target = nowPlayingScrollTargetPx(activeTopOffset) ?: return@LaunchedEffect
-            listScrollState.animateScrollTo(target)
+            listScrollState.scrollTo(target)
+            initialActiveAnchorReady = true
         }
         LaunchedEffect(snapToActiveSignal) {
-            if (snapToActiveSignal > 0) {
+            if (snapToActiveSignal > 0 && initialActiveAnchorReady) {
                 nowPlayingScrollTargetPx(activeTopOffset)?.let { target ->
                     listScrollState.animateScrollTo(target)
                 }
@@ -2026,6 +2029,7 @@ private fun NowPlayingSessionPanel(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .graphicsLayer { alpha = if (initialActiveAnchorReady) 1f else 0f }
                     .passiveVerticalScrollIndicator(
                         scrollState = listScrollState,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f),
@@ -2291,6 +2295,7 @@ private fun NowPlayingSessionPanel(
                 }
             }
             val showSnapToActive = activeItem != null &&
+                initialActiveAnchorReady &&
                 listViewportHeight > 0 &&
                 activeMeasuredHeight > 0f &&
                 shouldShowJumpToNowPlayingPill(

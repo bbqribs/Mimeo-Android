@@ -252,6 +252,12 @@ internal fun MainActivityShell(
         }
     }
 
+    LaunchedEffect(Unit) {
+        if (drawerState.isOpen) {
+            drawerState.close()
+        }
+    }
+
     LaunchedEffect(requiresSignIn) {
         if (!requiresSignIn) {
             vm.refreshSmartPlaylists()

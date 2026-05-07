@@ -262,6 +262,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _settings = MutableStateFlow(AppSettings())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
+    private val _startupRestoreComplete = MutableStateFlow(false)
+    val startupRestoreComplete: StateFlow<Boolean> = _startupRestoreComplete.asStateFlow()
 
     private val _queueItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
     val queueItems: StateFlow<List<PlaybackQueueItem>> = _queueItems.asStateFlow()
@@ -589,6 +591,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsStore.migrateLegacyTokenIfNeeded()
             var previous = _settings.value
+            var firstSettingsEmission = true
             settingsStore.settingsFlow.collect { next ->
                 _settings.value = next
                 refreshAutoDownloadDiagnostics()
@@ -627,6 +630,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     settingsStore.clearPlaybackSegmentIndexes()
                 }
                 previous = next
+                if (firstSettingsEmission) {
+                    firstSettingsEmission = false
+                    _startupRestoreComplete.value = true
+                }
             }
         }
         viewModelScope.launch {
