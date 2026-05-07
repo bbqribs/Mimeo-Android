@@ -117,6 +117,13 @@ private inline fun parseDateOrNull(parse: () -> LocalDate): LocalDate? =
         null
     }
 
+private fun PlaybackQueueItem.matchesLibrarySearch(query: String): Boolean {
+    val needle = query.trim()
+    if (needle.isEmpty()) return true
+    return listOfNotNull(title, sourceLabel, host, url)
+        .any { value -> value.contains(needle, ignoreCase = true) }
+}
+
 data class LibraryBatchAction(
     val label: String,
     val icon: ImageVector,
@@ -134,6 +141,7 @@ fun LibraryItemsScreen(
     sortOption: LibrarySortOption,
     availableSorts: List<LibrarySortOption> = LibrarySortOption.entries,
     searchQuery: String,
+    clientSideSearch: Boolean = false,
     isInbox: Boolean = false,
     isBin: Boolean = false,
     batchActions: List<LibraryBatchAction> = emptyList(),
@@ -211,16 +219,24 @@ fun LibraryItemsScreen(
         }
     }
 
-    val sortedItems = remember(items, sortOption) {
+    val searchedItems = remember(items, searchQuery, clientSideSearch) {
+        if (!clientSideSearch || searchQuery.isBlank()) {
+            items
+        } else {
+            items.filter { it.matchesLibrarySearch(searchQuery) }
+        }
+    }
+
+    val sortedItems = remember(searchedItems, sortOption) {
         when (sortOption) {
-            LibrarySortOption.NEWEST -> items.sortedByDescending { it.createdAt }
-            LibrarySortOption.OLDEST -> items.sortedBy { it.createdAt }
-            LibrarySortOption.OPENED -> items.sortedWith(
+            LibrarySortOption.NEWEST -> searchedItems.sortedByDescending { it.createdAt }
+            LibrarySortOption.OLDEST -> searchedItems.sortedBy { it.createdAt }
+            LibrarySortOption.OPENED -> searchedItems.sortedWith(
                 compareByDescending<PlaybackQueueItem> { it.lastOpenedAt != null }
                     .thenByDescending { it.lastOpenedAt }
             )
-            LibrarySortOption.PROGRESS -> items.sortedByDescending { it.progressPercent }
-            else -> items // ARCHIVED_AT, TRASHED_AT — server-side only
+            LibrarySortOption.PROGRESS -> searchedItems.sortedByDescending { it.progressPercent }
+            else -> searchedItems // ARCHIVED_AT, TRASHED_AT - server-side only
         }
     }
 
@@ -437,7 +453,7 @@ fun LibraryItemsScreen(
             null
         },
         loading = loading,
-        empty = items.isEmpty(),
+        empty = if (clientSideSearch) searchedItems.isEmpty() else items.isEmpty(),
         emptyContent = { DefaultListSurfaceMessage(emptyMessage) },
     ) {
         LazyColumn(modifier = Modifier.fillMaxWidth()) {
