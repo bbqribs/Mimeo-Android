@@ -481,6 +481,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val activePlaybackMillisByItemId = mutableMapOf<Int, Long>()
     private var activePlaybackClockItemId: Int? = null
     private var activePlaybackClockStartedAtMs: Long = 0L
+    private val progressAtActivationByItemId = mutableMapOf<Int, Int>()
     private val playbackServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: android.os.IBinder?) {
             playbackServiceBinder = service as? PlaybackService.LocalBinder
@@ -5090,14 +5091,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun shouldPlacePriorActiveInHistory(itemId: Int): Boolean {
+        val progressAtStart = progressAtActivationByItemId[itemId] ?: 0
         val sessionProgress = nowPlayingSession.value
             ?.items
             ?.firstOrNull { it.itemId == itemId }
             ?.lastReadPercent
             ?: 0
-        val progress = maxOf(knownProgressForItem(itemId), sessionProgress)
+        val currentProgress = maxOf(knownProgressForItem(itemId), sessionProgress)
+        val progressDelta = (currentProgress - progressAtStart).coerceAtLeast(0)
         val playedMs = playbackMillisForItem(itemId)
-        return !(progress < 5 && playedMs < 30_000L)
+        return priorActiveShouldGoToHistory(progressDelta, playedMs)
     }
 
     private fun isItemActivelyPlaying(itemId: Int): Boolean {
@@ -5648,6 +5651,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         session: NowPlayingSession,
         preserveExistingPositions: Boolean = false,
     ) {
+        val newCurrentItemId = session.currentItem?.itemId
+        val prevCurrentItemId = _nowPlayingSession.value?.currentItem?.itemId
+        if (newCurrentItemId != null && newCurrentItemId != prevCurrentItemId) {
+            val sessionPct = session.items.firstOrNull { it.itemId == newCurrentItemId }?.lastReadPercent ?: 0
+            progressAtActivationByItemId[newCurrentItemId] =
+                maxOf(sessionPct, knownProgressForItem(newCurrentItemId))
+        }
         _nowPlayingSession.value = session
         val sessionPositions = (session.items + session.historyItems).associate { item ->
             item.itemId to PlaybackPosition(
@@ -6175,4 +6185,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return parts[0] == 100 && parts[1] in 64..127
     }
 }
+
+/**
+ * Returns true if the prior-active item should be placed in History rather than Earlier in queue.
+ * [progressDelta] is the percentage-point gain since the item was activated (0–100).
+ * [playedMs] is the wall-clock milliseconds of active playback since activation.
+ * Spec: less than 5 % delta AND less than 30 s → treat as skipped (Earlier in queue).
+ */
+internal fun priorActiveShouldGoToHistory(progressDelta: Int, playedMs: Long): Boolean =
+    !(progressDelta < 5 && playedMs < 30_000L)
 
