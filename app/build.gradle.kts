@@ -87,3 +87,8 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
+
+// Re-install the debug APK after instrumented tests so the app stays on device.
+tasks.matching { it.name == "connectedDebugAndroidTest" }.configureEach {
+    finalizedBy("installDebug")
+}
