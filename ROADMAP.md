@@ -34,41 +34,54 @@ Planning-doc ownership decision: `docs/planning/DOCS_OWNERSHIP_DECISION.md`.
 
 ### P0 — next Android implementation (post-redesign)
 
-4. [ ] **Hosting story v2 UX.** HTTPS-first guidance, per-device token
-   setup polish, safer LAN-mode flow.
+4. [ ] **Playback / queue UX cluster.** Smart Queue as playlist-like source,
+   Up Next History / Earlier in queue implementation, and expanded Save
+   queue-as-playlist options.
+5. [ ] **Startup polish cluster.** No sign-in flash for restored sessions,
+   neutral loading/splash state, and drawer closed on launch.
+6. [ ] **Instrumented tests cluster.** Startup/auth restoration coverage,
+   playback/media-session/headset controls, and Up Next section behavior.
+7. [ ] **Privacy-first telemetry cluster.** Default telemetry stays
+   anonymised/aggregate-only with no titles, URLs, article text, domains,
+   playlist contents, or reading-choice payloads; problem reports remain
+   explicit opt-in exception.
+8. [ ] **Progress / playback duration model.** Pointer/progress audit plus
+   listening-time estimates at 1.0x and current-speed-adjusted playback.
+9. [ ] **Android maintenance cluster.** Compose BOM/deprecation audit,
+   scrollbar coverage where appropriate, and limited refactor survey.
 
 ### P1 — follow-ups implied by shipped state
 
-5. [x] **Phase 0 follow-on decomposition of `MainActivity.kt`.** Shell and
+10. [x] **Phase 0 follow-on decomposition of `MainActivity.kt`.** Shell and
    player/nav wiring are extracted into dedicated holders/composables
    (`MainActivityShell`, `PlayerShellState`) and `MainActivity.kt` is now
    the lighter host/composition entry point.
-6. [ ] **Problem reports v2 attachment contract (CONTRACT CHANGE, backend).**
+11. [ ] **Problem reports v2 attachment contract (CONTRACT CHANGE, backend).**
    Android opt-in UI/payload path is implemented (default-OFF attachment
    checkboxes + privacy hint + bounded payload). Remaining work is backend
    persistence/export per `docs/PROBLEM_REPORT_ATTACHMENT_V2_CONTRACT_SPEC.md`.
    Tracked in the Mimeo (backend) repo; this line is a pointer only.
+12. [ ] **Roadmap hygiene pass** — identify duplicate/stale shipped entries;
+   correct cross-repo shipping-state discrepancies. Coordinated with Mimeo
+   repo.
 
 ### P2 — exploratory / deferred
 
-7. [ ] **Time-based FF/RW follow-up (optional).** Evaluate whether a
+13. [ ] **Time-based FF/RW follow-up (optional).** Evaluate whether a
    separate time-skip control model is still useful now that sentence /
    paragraph FF/RW is shipped.
-8. [x] **Persist last segment index per item in DataStore** for
+14. [x] **Persist last segment index per item in DataStore** for
    cross-process resume.
-9. [x] **Audio focus / media session polish** beyond the bounded drift
+15. [x] **Audio focus / media session polish** beyond the bounded drift
    fixes already shipped.
-10. [x] **Conflict handling for stale cached versions** during long
+16. [x] **Conflict handling for stale cached versions** during long
     offline sessions.
-11. [x] **Cleartext → HTTPS-friendly transport** for hosted/mobile use.
-12. [ ] **Scrollbars** for Up Next (draggable, long-queue ergonomics) and
+17. [x] **Cleartext → HTTPS-friendly transport** for hosted/mobile use.
+18. [ ] **Scrollbars** for Up Next (draggable, long-queue ergonomics) and
     Settings (non-draggable `drawWithContent` indicator).
-13. [ ] **Compose BOM migration to 1.10.x.** Bump from `2024.06.00`, fix
+19. [ ] **Compose BOM migration to 1.10.x.** Bump from `2024.06.00`, fix
     any Material3/API deprecations. Standalone session. Unblocks
     `onSelectAllRequested` in the reader selection toolbar.
-14. [ ] **Expanded Save queue as playlist options.** Future Up Next save
-    flow may offer explicit inclusion of Earlier in queue and/or History;
-    the current default remains Active + Up Next only.
 
 ### Testing debt
 
