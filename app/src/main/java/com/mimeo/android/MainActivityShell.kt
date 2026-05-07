@@ -73,6 +73,7 @@ import com.mimeo.android.ui.playlists.SmartPlaylistFormDialog
 import com.mimeo.android.ui.playlists.SmartPlaylistFormState
 import com.mimeo.android.ui.queue.JumpToNowPlayingPill
 import com.mimeo.android.ui.queue.QueueScreen
+import com.mimeo.android.ui.queue.SmartQueueScreen
 import com.mimeo.android.ui.bluesky.BlueskyBrowseScreen
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
 import com.mimeo.android.ui.settings.SettingsScreen
@@ -123,6 +124,7 @@ internal fun MainActivityShell(
             DrawerDestination(ROUTE_FAVORITES, "Favorites"),
             DrawerDestination(ROUTE_ARCHIVE, "Archive"),
             DrawerDestination(ROUTE_BIN, "Bin"),
+            DrawerDestination(ROUTE_SMART_QUEUE, "Smart Queue"),
             DrawerDestination(ROUTE_UP_NEXT, "Up Next"),
             DrawerDestination(ROUTE_BLUESKY_BROWSE, "Bluesky"),
         )
@@ -272,12 +274,10 @@ internal fun MainActivityShell(
                         playlists = playlists,
                         smartPlaylists = smartPlaylists,
                         selectedDrawerRoute = selectedDrawerRoute,
-                        selectedPlaylistId = settings.selectedPlaylistId,
                         onNavItemClick = { route ->
                             if (route == ROUTE_UP_NEXT && selectedDrawerRoute == ROUTE_UP_NEXT) {
                                 upNextTabTapSignal += 1
                             }
-                            if (route == ROUTE_UP_NEXT) vm.selectPlaylist(null)
                             nav.navigate(route) { launchSingleTop = true }
                             coroutineScope.launch { drawerState.close() }
                         },
@@ -288,11 +288,6 @@ internal fun MainActivityShell(
                         },
                         onSmartPlaylistClick = { playlistId ->
                             nav.navigate("smartPlaylist/$playlistId") { launchSingleTop = true }
-                            coroutineScope.launch { drawerState.close() }
-                        },
-                        onSmartQueueClick = {
-                            vm.selectPlaylist(null)
-                            nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
                             coroutineScope.launch { drawerState.close() }
                         },
                         onNewPlaylistClick = {
@@ -660,6 +655,12 @@ internal fun MainActivityShell(
                                     },
                                 )
                             }
+                            composable(ROUTE_SMART_QUEUE) {
+                                SmartQueueScreen(
+                                    vm = vm,
+                                    onOpenPlayer = shellState.openItemInLocus,
+                                )
+                            }
                             composable(
                                 ROUTE_PLAYLIST_DETAIL,
                                 arguments = listOf(navArgument("playlistId") { type = NavType.IntType }),
@@ -956,6 +957,7 @@ private fun resolveSelectedDrawerRoute(currentRoute: String): String = when {
     currentRoute.startsWith(ROUTE_SETTINGS) -> ROUTE_SETTINGS
     currentRoute.startsWith("smartPlaylist/") -> currentRoute
     currentRoute.startsWith("playlist/") -> currentRoute
+    currentRoute.startsWith(ROUTE_SMART_QUEUE) -> ROUTE_SMART_QUEUE
     currentRoute.startsWith(ROUTE_UP_NEXT) -> ROUTE_UP_NEXT
     currentRoute.startsWith(ROUTE_BLUESKY_BROWSE) -> ROUTE_BLUESKY_BROWSE
     currentRoute.startsWith(ROUTE_ARCHIVE) -> ROUTE_ARCHIVE
@@ -974,6 +976,7 @@ private fun drawerRouteLabel(
     route == ROUTE_FAVORITES -> "Favorites"
     route == ROUTE_ARCHIVE -> "Archive"
     route == ROUTE_BIN -> "Bin"
+    route == ROUTE_SMART_QUEUE -> "Smart Queue"
     route == ROUTE_UP_NEXT -> "Up Next"
     route == ROUTE_BLUESKY_BROWSE -> "Bluesky"
     route == ROUTE_SETTINGS -> "Settings"
