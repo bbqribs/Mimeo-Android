@@ -22,7 +22,7 @@ Mimeo Android is the mobile client for the Mimeo "read later" system.
 ## Conditional remote-backend verification
 - Android tickets remain Android-first by default.
 - Run remote backend checks only when the Android work touched backend behavior/contracts, or explicitly depends on backend changes.
-- In backend-dependent cases, verify against `http://100.84.13.10:8000` (not `127.0.0.1`).
+- In backend-dependent cases, verify against `https://beh-august2015.taildacac5.ts.net/` (not `127.0.0.1`). The raw Tailscale IP (`http://100.84.13.10:8000`) is legacy/fallback only.
 - If backend deployment verification is needed, run Mimeo repo scripts (not Android-local scripts):
   - quick sync: `powershell -ExecutionPolicy Bypass -File C:\Users\brend\Documents\Coding\Mimeo\scripts\stage2-runtime-sync.ps1 -Action Install`
   - full sync when quick sync is insufficient: `powershell -ExecutionPolicy Bypass -File C:\Users\brend\Documents\Coding\Mimeo\scripts\stage2-runtime-sync.ps1 -Action InstallFull`
@@ -90,9 +90,16 @@ Before awaiting merge approval, report:
 - manual verification steps
 - explicit statement: `not merged; awaiting operator approval`
 
+### Merge trigger
+
+When the operator says "merge this", "merged", "I merged it", "I've merged", or any equivalent, immediately run the post-merge closeout for that PR/ticket. Do not wait for a separate closeout ticket or prompt. Do not repeat manual verification steps unless explicitly requested. Report: final canonical branch SHA, PR merge state, clean tracked tree, untracked summary, and test/build results.
+
 ### Post-merge closeout
 
-1. Sync canonical branch (`main`).
+Canonical branch: `main`.
+
+1. Sync `main`.
 2. Confirm: final SHA, `git status -sb`, PR merge state via `gh pr view <PR>`, tracked tree clean, untracked files summarized.
-3. If runtime deploy/sync was in scope: runtime sync result, smoke result, remote git checkout state if relevant.
-4. Never say "merged" unless `gh pr view` confirms state is `MERGED`.
+3. For Android-only PRs: include Gradle gate summary. Run remote backend checks only if the PR touched backend contracts or runtime.
+4. If runtime deploy/sync was in scope: runtime sync result, smoke result, remote git checkout state if relevant.
+5. Never say "merged" unless `gh pr view` confirms state is `MERGED`.

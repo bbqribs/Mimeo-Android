@@ -10,7 +10,7 @@
 - **Contract-change flag**: Any PR changing backend/API semantics must be labeled "CONTRACT CHANGE"; dependent Android work must not assume the change until merged.
 - **Local safety**: If agents share a machine, do not share a working directory; avoid stash workflows; tracked local modifications => STOP.
 - **Precedence**: `CLAUDE.md` is authoritative for Claude-specific behavior in this repo; `CODEX_PROMPTS.md` is authoritative for Codex-specific behavior; `AGENTS.md` is authoritative for shared lifecycle hygiene and workflow rules for all agents.
-- **Shared lifecycle hygiene**: See `AGENTS.md §Ticket lifecycle hygiene` for preflight, implementation discipline, PR/open report, and post-merge closeout rules.
+- **Shared lifecycle hygiene**: See `AGENTS.md §Ticket lifecycle hygiene` for preflight, implementation discipline, PR/open report, post-merge closeout, and merge trigger rules.
 
 ## Project context
 Mimeo Android is the mobile client for the Mimeo "read later" system.
@@ -23,7 +23,7 @@ Mimeo Android is the mobile client for the Mimeo "read later" system.
 ## Conditional remote-backend verification
 - Android tickets remain Android-first by default.
 - Run remote backend checks only when the Android work touched backend behavior/contracts, or explicitly depends on backend changes.
-- In backend-dependent cases, verify against `http://100.84.13.10:8000` (not `127.0.0.1`).
+- In backend-dependent cases, verify against `https://beh-august2015.taildacac5.ts.net/` (not `127.0.0.1`). The raw Tailscale IP (`http://100.84.13.10:8000`) is legacy/fallback only.
 - If backend deployment verification is needed, run Mimeo repo scripts (not Android-local scripts):
   - quick sync: `powershell -ExecutionPolicy Bypass -File C:\Users\brend\Documents\Coding\Mimeo\scripts\stage2-runtime-sync.ps1 -Action Install`
   - full sync when quick sync is insufficient: `powershell -ExecutionPolicy Bypass -File C:\Users\brend\Documents\Coding\Mimeo\scripts\stage2-runtime-sync.ps1 -Action InstallFull`
