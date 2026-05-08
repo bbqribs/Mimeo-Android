@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.SmartPlaylistSummary
+import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 
 @Composable
 internal fun MimeoDrawerContent(
@@ -38,6 +39,7 @@ internal fun MimeoDrawerContent(
 ) {
     BoxWithConstraints {
         val drawerWidth = maxWidth * (2f / 3f)
+        val drawerScrollState = rememberScrollState()
         ModalDrawerSheet(
             modifier = Modifier.width(drawerWidth),
         ) {
@@ -45,7 +47,11 @@ internal fun MimeoDrawerContent(
                 Column(
                     modifier = Modifier
                         .weight(1f, fill = true)
-                        .verticalScroll(rememberScrollState()),
+                        .passiveVerticalScrollIndicator(
+                            scrollState = drawerScrollState,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
+                        )
+                        .verticalScroll(drawerScrollState),
                 ) {
                     Text(
                         text = "Mimeo",
