@@ -30,6 +30,7 @@ import com.mimeo.android.model.SmartPlaylistDetail
 import com.mimeo.android.model.SmartPlaylistFilterDefinition
 import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.model.SmartPlaylistWriteRequest
+import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -104,6 +105,7 @@ internal fun SmartPlaylistFormDialog(
     var form by remember(initialState) { mutableStateOf(initialState) }
     var saving by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
+    val scrollState = rememberScrollState()
 
     AlertDialog(
         onDismissRequest = {
@@ -111,137 +113,147 @@ internal fun SmartPlaylistFormDialog(
         },
         title = { Text(title) },
         text = {
-            Column(
+            Box(
                 modifier = Modifier
                     .heightIn(max = 520.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                    .passiveVerticalScrollIndicator(
+                        scrollState = scrollState,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
+                    ),
             ) {
-                OutlinedTextField(
-                    value = form.name,
-                    onValueChange = {
-                        form = form.copy(name = it)
-                        errorText = null
-                    },
-                    label = { Text("Name") },
-                    singleLine = true,
-                    isError = errorText != null && form.name.isBlank(),
-                    enabled = !saving,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = form.keyword,
-                    onValueChange = { form = form.copy(keyword = it) },
-                    label = { Text("Keyword") },
-                    singleLine = true,
-                    enabled = !saving,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = form.sourceLabels,
-                    onValueChange = { form = form.copy(sourceLabels = it) },
-                    label = { Text("Source labels") },
-                    placeholder = { Text("Comma-separated") },
-                    singleLine = true,
-                    enabled = !saving,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = form.domains,
-                    onValueChange = { form = form.copy(domains = it) },
-                    label = { Text("Domains") },
-                    placeholder = { Text("example.com, news.example") },
-                    singleLine = true,
-                    enabled = !saving,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = form.captureKinds,
-                    onValueChange = { form = form.copy(captureKinds = it) },
-                    label = { Text("Capture kinds") },
-                    placeholder = { Text("link, manual_text") },
-                    singleLine = true,
-                    enabled = !saving,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = form.savedAfter,
-                    onValueChange = { form = form.copy(savedAfter = it) },
-                    label = { Text("Saved after") },
-                    placeholder = { Text("YYYY-MM-DD or ISO time") },
-                    singleLine = true,
-                    enabled = !saving,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = form.savedBefore,
-                    onValueChange = { form = form.copy(savedBefore = it) },
-                    label = { Text("Saved before") },
-                    placeholder = { Text("YYYY-MM-DD or ISO time") },
-                    singleLine = true,
-                    enabled = !saving,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                ChoiceField(
-                    label = "Date window",
-                    value = form.dateWindow,
-                    choices = listOf(
-                        "" to "Any time",
-                        "last_24h" to "Last 24 hours",
-                        "last_7d" to "Last 7 days",
-                        "last_30d" to "Last 30 days",
-                        "last_90d" to "Last 90 days",
-                    ),
-                    enabled = !saving,
-                    onValueChange = { form = form.copy(dateWindow = it) },
-                )
-                ChoiceField(
-                    label = "Archived",
-                    value = form.includeArchived,
-                    choices = listOf(
-                        "false" to "Exclude archived",
-                        "true" to "Include archived",
-                        "only" to "Archived only",
-                    ),
-                    enabled = !saving,
-                    onValueChange = { form = form.copy(includeArchived = it) },
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = form.favoritesOnly,
-                        onCheckedChange = { form = form.copy(favoritesOnly = it) },
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(scrollState)
+                        .padding(end = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    OutlinedTextField(
+                        value = form.name,
+                        onValueChange = {
+                            form = form.copy(name = it)
+                            errorText = null
+                        },
+                        label = { Text("Name") },
+                        singleLine = true,
+                        isError = errorText != null && form.name.isBlank(),
                         enabled = !saving,
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                    Text("Favorites only", style = MaterialTheme.typography.bodyMedium)
-                }
-                ChoiceField(
-                    label = "Read status",
-                    value = form.readStatus,
-                    choices = listOf(
-                        "any" to "Any",
-                        "unread" to "Unread",
-                        "in_progress" to "In progress",
-                        "done" to "Done",
-                    ),
-                    enabled = !saving,
-                    onValueChange = { form = form.copy(readStatus = it) },
-                )
-                ChoiceField(
-                    label = "Sort",
-                    value = form.sort,
-                    choices = listOf(
-                        "saved_desc" to "Newest saved first",
-                        "saved_asc" to "Oldest saved first",
-                    ),
-                    enabled = !saving,
-                    onValueChange = { form = form.copy(sort = it) },
-                )
-                errorText?.let { message ->
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
+                    OutlinedTextField(
+                        value = form.keyword,
+                        onValueChange = { form = form.copy(keyword = it) },
+                        label = { Text("Keyword") },
+                        singleLine = true,
+                        enabled = !saving,
+                        modifier = Modifier.fillMaxWidth(),
                     )
+                    OutlinedTextField(
+                        value = form.sourceLabels,
+                        onValueChange = { form = form.copy(sourceLabels = it) },
+                        label = { Text("Source labels") },
+                        placeholder = { Text("Comma-separated") },
+                        singleLine = true,
+                        enabled = !saving,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = form.domains,
+                        onValueChange = { form = form.copy(domains = it) },
+                        label = { Text("Domains") },
+                        placeholder = { Text("example.com, news.example") },
+                        singleLine = true,
+                        enabled = !saving,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = form.captureKinds,
+                        onValueChange = { form = form.copy(captureKinds = it) },
+                        label = { Text("Capture kinds") },
+                        placeholder = { Text("link, manual_text") },
+                        singleLine = true,
+                        enabled = !saving,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = form.savedAfter,
+                        onValueChange = { form = form.copy(savedAfter = it) },
+                        label = { Text("Saved after") },
+                        placeholder = { Text("YYYY-MM-DD or ISO time") },
+                        singleLine = true,
+                        enabled = !saving,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = form.savedBefore,
+                        onValueChange = { form = form.copy(savedBefore = it) },
+                        label = { Text("Saved before") },
+                        placeholder = { Text("YYYY-MM-DD or ISO time") },
+                        singleLine = true,
+                        enabled = !saving,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    ChoiceField(
+                        label = "Date window",
+                        value = form.dateWindow,
+                        choices = listOf(
+                            "" to "Any time",
+                            "last_24h" to "Last 24 hours",
+                            "last_7d" to "Last 7 days",
+                            "last_30d" to "Last 30 days",
+                            "last_90d" to "Last 90 days",
+                        ),
+                        enabled = !saving,
+                        onValueChange = { form = form.copy(dateWindow = it) },
+                    )
+                    ChoiceField(
+                        label = "Archived",
+                        value = form.includeArchived,
+                        choices = listOf(
+                            "false" to "Exclude archived",
+                            "true" to "Include archived",
+                            "only" to "Archived only",
+                        ),
+                        enabled = !saving,
+                        onValueChange = { form = form.copy(includeArchived = it) },
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = form.favoritesOnly,
+                            onCheckedChange = { form = form.copy(favoritesOnly = it) },
+                            enabled = !saving,
+                        )
+                        Text("Favorites only", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    ChoiceField(
+                        label = "Read status",
+                        value = form.readStatus,
+                        choices = listOf(
+                            "any" to "Any",
+                            "unread" to "Unread",
+                            "in_progress" to "In progress",
+                            "done" to "Done",
+                        ),
+                        enabled = !saving,
+                        onValueChange = { form = form.copy(readStatus = it) },
+                    )
+                    ChoiceField(
+                        label = "Sort",
+                        value = form.sort,
+                        choices = listOf(
+                            "saved_desc" to "Newest saved first",
+                            "saved_asc" to "Oldest saved first",
+                        ),
+                        enabled = !saving,
+                        onValueChange = { form = form.copy(sort = it) },
+                    )
+                    errorText?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             }
         },
