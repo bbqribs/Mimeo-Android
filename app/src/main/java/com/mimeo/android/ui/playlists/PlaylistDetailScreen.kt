@@ -32,7 +32,6 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
@@ -42,7 +41,6 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -69,10 +67,11 @@ import com.mimeo.android.ACTION_KEY_UNDO_PLAYLIST_REMOVE
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.ui.common.ItemRowTrailingActions
 import com.mimeo.android.ui.common.LibraryItemRow
-import com.mimeo.android.ui.common.ListStatusPill
 import com.mimeo.android.ui.common.ListSurfaceScaffold
 import com.mimeo.android.ui.common.SelectionAffordance
+import com.mimeo.android.ui.common.itemStatusPillLine
 import com.mimeo.android.ui.common.queueCapturePresentation
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
@@ -832,13 +831,10 @@ private fun PlaylistDetailRow(
     onMoveToBottom: () -> Unit,
     onRemoveFromPlaylist: () -> Unit,
 ) {
-    var rowMenuExpanded by remember { mutableStateOf(false) }
     val presentation = remember(queueItem) { queueItem?.let(::queueCapturePresentation) }
     val title = presentation?.title ?: "Loading..."
     val status = queueItem?.status
     val metadata = presentation?.sourceLabel ?: queueItem?.host?.takeIf { queueItem.title != null } ?: queueItem?.url
-    val statusForLine = status?.takeIf { it != "ready" }
-
     LibraryItemRow(
         title = title,
         metadata = metadata,
@@ -873,32 +869,41 @@ private fun PlaylistDetailRow(
                 )
             }
         },
-        progressStateLine = if (statusForLine != null) {
-            {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    ListStatusPill(status = statusForLine)
-                }
-            }
-        } else {
-            null
-        },
+        progressStateLine = itemStatusPillLine(status),
         trailingContent = if (!isSelectionActive && queueItem != null) {
             {
-                PlaylistRowActions(
+                ItemRowTrailingActions(
                     title = title,
-                    menuExpanded = rowMenuExpanded,
-                    onMenuExpandedChange = { rowMenuExpanded = it },
                     onPlayNow = onPlayNow,
-                    onPlayNext = onPlayNext,
-                    onPlayLast = onPlayLast,
-                    onPlayFromHere = onPlayFromHere,
-                    onMoveToTop = onMoveToTop,
-                    onMoveToBottom = onMoveToBottom,
-                    onRemoveFromPlaylist = onRemoveFromPlaylist,
-                )
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Play Next") },
+                        onClick = { onPlayNext() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Play Last") },
+                        onClick = { onPlayLast() },
+                    )
+                    if (onPlayFromHere != null) {
+                        DropdownMenuItem(
+                            text = { Text("Play from Here") },
+                            onClick = { onPlayFromHere() },
+                        )
+                    }
+                    androidx.compose.material3.HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text("Move to Top of Playlist") },
+                        onClick = { onMoveToTop() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Move to Bottom") },
+                        onClick = { onMoveToBottom() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Remove") },
+                        onClick = { onRemoveFromPlaylist() },
+                    )
+                }
             }
         } else {
             null
@@ -906,98 +911,3 @@ private fun PlaylistDetailRow(
     )
 }
 
-@Composable
-private fun PlaylistRowActions(
-    title: String,
-    menuExpanded: Boolean,
-    onMenuExpandedChange: (Boolean) -> Unit,
-    onPlayNow: () -> Unit,
-    onPlayNext: () -> Unit,
-    onPlayLast: () -> Unit,
-    onPlayFromHere: (() -> Unit)?,
-    onMoveToTop: () -> Unit,
-    onMoveToBottom: () -> Unit,
-    onRemoveFromPlaylist: () -> Unit,
-) {
-    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 40.dp) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            IconButton(
-                onClick = onPlayNow,
-                modifier = Modifier.size(40.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "Play $title",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            Box {
-                IconButton(
-                    onClick = { onMenuExpandedChange(true) },
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "More actions for $title",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { onMenuExpandedChange(false) },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Play Next") },
-                        onClick = {
-                            onMenuExpandedChange(false)
-                            onPlayNext()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Play Last") },
-                        onClick = {
-                            onMenuExpandedChange(false)
-                            onPlayLast()
-                        },
-                    )
-                    if (onPlayFromHere != null) {
-                        DropdownMenuItem(
-                            text = { Text("Play from Here") },
-                            onClick = {
-                                onMenuExpandedChange(false)
-                                onPlayFromHere()
-                            },
-                        )
-                    }
-                    androidx.compose.material3.HorizontalDivider()
-                    DropdownMenuItem(
-                        text = { Text("Move to Top of Playlist") },
-                        onClick = {
-                            onMenuExpandedChange(false)
-                            onMoveToTop()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Move to Bottom") },
-                        onClick = {
-                            onMenuExpandedChange(false)
-                            onMoveToBottom()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Remove") },
-                        onClick = {
-                            onMenuExpandedChange(false)
-                            onRemoveFromPlaylist()
-                        },
-                    )
-                }
-            }
-        }
-    }
-}

@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Search
@@ -32,14 +31,12 @@ import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
@@ -49,7 +46,6 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,10 +60,11 @@ import androidx.compose.ui.unit.dp
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.ui.common.DefaultListSurfaceMessage
+import com.mimeo.android.ui.common.ItemRowTrailingActions
 import com.mimeo.android.ui.common.LibraryItemRow
-import com.mimeo.android.ui.common.ListStatusPill
 import com.mimeo.android.ui.common.ListSurfaceScaffold
 import com.mimeo.android.ui.common.SelectionAffordance
+import com.mimeo.android.ui.common.itemStatusPillLine
 import com.mimeo.android.ui.common.queueCapturePresentation
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
@@ -716,7 +713,17 @@ private fun LibraryQueueItemRow(
     val title = presentation.title
     val source = presentation.sourceLabel ?: item.url
     val status = item.status
-    val statusForLine = status?.takeIf { it != "ready" }
+
+    val hasTrailingActions = !isSelectionActive && (
+        onPlayNow != null ||
+            onPlayNext != null ||
+            onPlayLast != null ||
+            onPlayFromHere != null ||
+            onAddToPlaylist != null ||
+            onFavoriteToggle != null ||
+            onArchiveToggle != null ||
+            onBin != null
+        )
 
     LibraryItemRow(
         title = title,
@@ -729,139 +736,63 @@ private fun LibraryQueueItemRow(
         } else {
             null
         },
-        progressStateLine = if (statusForLine != null) {
+        progressStateLine = itemStatusPillLine(status),
+        trailingContent = if (hasTrailingActions) {
             {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ItemRowTrailingActions(
+                    title = title,
+                    onPlayNow = onPlayNow,
                 ) {
-                    ListStatusPill(status = statusForLine)
-                }
-            }
-        } else {
-            null
-        },
-        trailingContent = if (!isSelectionActive && (
-                onPlayNow != null ||
-                    onPlayNext != null ||
-                    onPlayLast != null ||
-                    onPlayFromHere != null ||
-                    onAddToPlaylist != null ||
-                    onFavoriteToggle != null ||
-                    onArchiveToggle != null ||
-                    onBin != null
-                )
-        ) {
-            {
-                var menuExpanded by remember { mutableStateOf(false) }
-                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 40.dp) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        if (onPlayNow != null) {
-                            IconButton(
-                                onClick = onPlayNow,
-                                modifier = Modifier.size(40.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = "Play $title",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
-                        }
-                        Box {
-                            IconButton(
-                                onClick = { menuExpanded = true },
-                                modifier = Modifier.size(40.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.MoreVert,
-                                    contentDescription = "More actions for $title",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false },
-                        ) {
-                        if (onPlayNext != null) {
-                            DropdownMenuItem(
-                                text = { Text("Play Next") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onPlayNext()
-                                },
-                            )
-                        }
-                        if (onPlayLast != null) {
-                            DropdownMenuItem(
-                                text = { Text("Play Last") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onPlayLast()
-                                },
-                            )
-                        }
-                        if (onPlayFromHere != null) {
-                            DropdownMenuItem(
-                                text = { Text("Play from Here") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onPlayFromHere()
-                                },
-                            )
-                        }
-                        val hasQueueActions = onPlayNext != null || onPlayLast != null || onPlayFromHere != null
-                        val hasItemActions = onAddToPlaylist != null ||
-                            onFavoriteToggle != null ||
-                            onArchiveToggle != null ||
-                            onBin != null
-                        if (hasQueueActions && hasItemActions) {
-                            HorizontalDivider()
-                        }
-                        if (onAddToPlaylist != null) {
-                            DropdownMenuItem(
-                                text = { Text("Add to Playlist") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onAddToPlaylist()
-                                },
-                            )
-                        }
-                        if (onFavoriteToggle != null) {
-                            DropdownMenuItem(
-                                text = { Text(if (item.isFavorited) "Unfavorite" else "Favorite") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onFavoriteToggle()
-                                },
-                            )
-                        }
-                        if (onArchiveToggle != null) {
-                            DropdownMenuItem(
-                                text = { Text(archiveToggleLabel) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onArchiveToggle()
-                                },
-                            )
-                        }
-                        if (onBin != null) {
-                            DropdownMenuItem(
-                                text = { Text("Bin") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onBin()
-                                },
-                            )
-                        }
-                        }
+                    if (onPlayNext != null) {
+                        DropdownMenuItem(
+                            text = { Text("Play Next") },
+                            onClick = { onPlayNext() },
+                        )
                     }
-                }
+                    if (onPlayLast != null) {
+                        DropdownMenuItem(
+                            text = { Text("Play Last") },
+                            onClick = { onPlayLast() },
+                        )
+                    }
+                    if (onPlayFromHere != null) {
+                        DropdownMenuItem(
+                            text = { Text("Play from Here") },
+                            onClick = { onPlayFromHere() },
+                        )
+                    }
+                    val hasQueueActions = onPlayNext != null || onPlayLast != null || onPlayFromHere != null
+                    val hasItemActions = onAddToPlaylist != null ||
+                        onFavoriteToggle != null ||
+                        onArchiveToggle != null ||
+                        onBin != null
+                    if (hasQueueActions && hasItemActions) {
+                        HorizontalDivider()
+                    }
+                    if (onAddToPlaylist != null) {
+                        DropdownMenuItem(
+                            text = { Text("Add to Playlist") },
+                            onClick = { onAddToPlaylist() },
+                        )
+                    }
+                    if (onFavoriteToggle != null) {
+                        DropdownMenuItem(
+                            text = { Text(if (item.isFavorited) "Unfavorite" else "Favorite") },
+                            onClick = { onFavoriteToggle() },
+                        )
+                    }
+                    if (onArchiveToggle != null) {
+                        DropdownMenuItem(
+                            text = { Text(archiveToggleLabel) },
+                            onClick = { onArchiveToggle() },
+                        )
+                    }
+                    if (onBin != null) {
+                        DropdownMenuItem(
+                            text = { Text("Bin") },
+                            onClick = { onBin() },
+                        )
+                    }
                 }
             }
         } else {
