@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -59,12 +61,14 @@ import com.mimeo.android.model.BlueskyCandidateScanResponse
 import com.mimeo.android.model.BlueskyCandidateSourceSelection
 import com.mimeo.android.model.BlueskyPickerPinItem
 import com.mimeo.android.model.BlueskyPickerResponse
+import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 
 @Composable
 fun BlueskyBrowseScreen(
     vm: AppViewModel,
     onOpenItem: (Int) -> Unit,
 ) {
+    val listState = rememberLazyListState()
     val picker by vm.blueskyCandidatePicker.collectAsState()
     val pickerLoading by vm.blueskyCandidatePickerLoading.collectAsState()
     val pickerError by vm.blueskyCandidatePickerError.collectAsState()
@@ -91,64 +95,75 @@ fun BlueskyBrowseScreen(
         }
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .passiveVerticalScrollIndicator(
+                listState = listState,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
+            ),
     ) {
-        item {
-            Header()
-        }
-        item {
-            ScanDefaults(picker = picker)
-        }
-        item {
-            SourcePicker(
-                picker = picker,
-                loading = pickerLoading,
-                error = pickerError,
-                selected = selection,
-                onReload = vm::loadBlueskyCandidatePicker,
-                onScan = vm::scanBlueskyCandidateSource,
-            )
-        }
-        item {
-            ScanStatus(
-                scan = scan,
-                selected = selection,
-                pins = picker?.pins.orEmpty(),
-                scanning = scanning,
-                error = scanError,
-                pinning = pinning,
-                onPin = vm::pinCurrentBlueskyCandidateSource,
-                onUnpin = vm::unpinBlueskyCandidateSource,
-            )
-        }
-        when {
-            scanning -> item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            state = listState,
+            contentPadding = PaddingValues(end = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            item {
+                Header()
+            }
+            item {
+                ScanDefaults(picker = picker)
+            }
+            item {
+                SourcePicker(
+                    picker = picker,
+                    loading = pickerLoading,
+                    error = pickerError,
+                    selected = selection,
+                    onReload = vm::loadBlueskyCandidatePicker,
+                    onScan = vm::scanBlueskyCandidateSource,
+                )
+            }
+            item {
+                ScanStatus(
+                    scan = scan,
+                    selected = selection,
+                    pins = picker?.pins.orEmpty(),
+                    scanning = scanning,
+                    error = scanError,
+                    pinning = pinning,
+                    onPin = vm::pinCurrentBlueskyCandidateSource,
+                    onUnpin = vm::unpinBlueskyCandidateSource,
+                )
+            }
+            when {
+                scanning -> item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                    }
                 }
-            }
-            scan != null && scan!!.candidates.isEmpty() -> item {
-                Text(
-                    text = "No candidate links found for this source in the current scan window.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
-                )
-            }
-            scan != null -> items(scan!!.candidates, key = { it.articleUrl }) { candidate ->
-                CandidateRow(
-                    candidate = candidate,
-                    saving = savingUrls.contains(candidate.articleUrl),
-                    saveError = saveErrors[candidate.articleUrl],
-                    onSave = { vm.saveBlueskyCandidate(candidate) },
-                    onOpenItem = onOpenItem,
-                )
+                scan != null && scan!!.candidates.isEmpty() -> item {
+                    Text(
+                        text = "No candidate links found for this source in the current scan window.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                    )
+                }
+                scan != null -> items(scan!!.candidates, key = { it.articleUrl }) { candidate ->
+                    CandidateRow(
+                        candidate = candidate,
+                        saving = savingUrls.contains(candidate.articleUrl),
+                        saveError = saveErrors[candidate.articleUrl],
+                        onSave = { vm.saveBlueskyCandidate(candidate) },
+                        onOpenItem = onOpenItem,
+                    )
+                }
             }
         }
     }

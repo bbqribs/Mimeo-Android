@@ -5,12 +5,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -65,6 +68,7 @@ import com.mimeo.android.ui.common.LibraryItemRow
 import com.mimeo.android.ui.common.ListSurfaceScaffold
 import com.mimeo.android.ui.common.SelectionAffordance
 import com.mimeo.android.ui.common.itemStatusPillLine
+import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.queueCapturePresentation
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
@@ -158,6 +162,7 @@ fun LibraryItemsScreen(
     onPlayLast: ((itemId: Int) -> Unit)? = null,
     onPlayFromHere: ((itemsFromHere: List<PlaybackQueueItem>, selectedItemId: Int) -> Unit)? = null,
 ) {
+    val listState = rememberLazyListState()
     var pendingExpanded by rememberSaveable { mutableStateOf(false) }
     val actionScope = rememberCoroutineScope()
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
@@ -272,7 +277,7 @@ fun LibraryItemsScreen(
     }
 
     ListSurfaceScaffold(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxSize(),
         selectionBar = if (selectionActive) {
             {
                 // Contextual action bar — replaces search/sort row while in selection mode.
@@ -453,7 +458,19 @@ fun LibraryItemsScreen(
         empty = if (clientSideSearch) searchedItems.isEmpty() else items.isEmpty(),
         emptyContent = { DefaultListSurfaceMessage(emptyMessage) },
     ) {
-        LazyColumn(modifier = Modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .passiveVerticalScrollIndicator(
+                    listState = listState,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
+                ),
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                contentPadding = PaddingValues(end = 8.dp),
+            ) {
             // Pending section (inbox only)
             if (pendingItems.isNotEmpty()) {
                 item(key = "pending_header") {
@@ -551,6 +568,7 @@ fun LibraryItemsScreen(
                     }
                 }
             }
+        }
         }
     }
 

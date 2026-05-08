@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Close
@@ -54,6 +56,7 @@ import com.mimeo.android.ui.common.LibraryItemRow
 import com.mimeo.android.ui.common.ListSurfaceScaffold
 import com.mimeo.android.ui.common.SelectionAffordance
 import com.mimeo.android.ui.common.itemStatusPillLine
+import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.queueCapturePresentation
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
@@ -73,6 +76,7 @@ fun SmartPlaylistDetailScreen(
     onOpenPlayer: (Int) -> Unit,
     onNavigateAfterDelete: () -> Unit,
 ) {
+    val listState = rememberLazyListState()
     val actionScope = rememberCoroutineScope()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     var detail by remember { mutableStateOf<SmartPlaylistDetail?>(null) }
@@ -308,7 +312,19 @@ fun SmartPlaylistDetailScreen(
             )
         },
     ) {
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .passiveVerticalScrollIndicator(
+                    listState = listState,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
+                ),
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                contentPadding = PaddingValues(end = 8.dp),
+            ) {
             if (pinnedItems.isNotEmpty()) {
                 item(key = "pinned-header") {
                     SmartPlaylistSectionHeader(
@@ -416,6 +432,7 @@ fun SmartPlaylistDetailScreen(
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
                 )
             }
+        }
         }
     }
 

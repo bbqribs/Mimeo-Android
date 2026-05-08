@@ -571,84 +571,89 @@ fun PlaylistDetailScreen(
             }
         },
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .onSizeChanged { listViewportHeight = it.height }
                 .passiveVerticalScrollIndicator(
                     scrollState = listScrollState,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
-                )
-                .verticalScroll(listScrollState),
+                ),
         ) {
-            localEntries.forEachIndexed { index, entry ->
-                key(entry.id) {
-                    val queueItem = allItemsMap[entry.articleId]
-                    val isDragging = draggingIndex == index
-                    val itemVisualOffsetY = when {
-                        isDragging -> dragOffsetY
-                        draggingIndex >= 0 -> visualOffsetForItem(
-                            index, draggingIndex, currentTargetIndex
-                        )
-                        else -> 0f
-                    }
-                    // Wrap row + divider together so the divider moves with its row.
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .zIndex(if (isDragging) 1f else 0f)
-                            .graphicsLayer { translationY = itemVisualOffsetY }
-                            .onGloballyPositioned { coords ->
-                                itemTopOffsets[entry.id] = coords.positionInParent().y
-                                itemHeights[entry.id] = coords.size.height.toFloat()
-                            },
-                    ) {
-                        PlaylistDetailRow(
-                            queueItem = queueItem,
-                            isDragging = isDragging,
-                            isSelectionActive = selectionActive,
-                            isSelected = entry.id in selectedEntryIds,
-                            onDragStart = { idx ->
-                                dragStartTopOffsets = itemTopOffsets.toMap()
-                                dragStartHeights = itemHeights.toMap()
-                                draggingIndex = idx
-                                dragOffsetY = 0f
-                                currentTargetIndex = idx
-                            },
-                            onDrag = { dy ->
-                                dragOffsetY += dy
-                                scrollDraggedItemNearEdge(draggingIndex)
-                                val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
-                                if (newTarget != currentTargetIndex) {
-                                    currentTargetIndex = newTarget
-                                }
-                            },
-                            onDragEnd = { onDragEnd() },
-                            index = index,
-                            onTap = { onOpenPlayer(entry.articleId) },
-                            onToggleSelect = { toggleSelection(entry.id) },
-                            onEnterSelection = { enterSelectionMode(entry.id) },
-                            onPlayNow = { vm.playNow(entry.articleId) },
-                            onPlayNext = { vm.playNext(entry.articleId) },
-                            onPlayLast = { vm.playLast(entry.articleId) },
-                            onPlayFromHere = if (queueItem != null) {
-                                { pendingPlayFromHereEntryId = entry.id }
-                            } else {
-                                null
-                            },
-                            onMoveToTop = { moveEntry(index, 0) },
-                            onMoveToBottom = { moveEntry(index, localEntries.lastIndex) },
-                            onRemoveFromPlaylist = { removeArticleFromPlaylist(entry.articleId) },
-                        )
-                        if (!isDragging) {
-                            Spacer(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(1.dp)
-                                    .background(
-                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                                    ),
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(listScrollState),
+            ) {
+                localEntries.forEachIndexed { index, entry ->
+                    key(entry.id) {
+                        val queueItem = allItemsMap[entry.articleId]
+                        val isDragging = draggingIndex == index
+                        val itemVisualOffsetY = when {
+                            isDragging -> dragOffsetY
+                            draggingIndex >= 0 -> visualOffsetForItem(
+                                index, draggingIndex, currentTargetIndex
                             )
+                            else -> 0f
+                        }
+                        // Wrap row + divider together so the divider moves with its row.
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .zIndex(if (isDragging) 1f else 0f)
+                                .graphicsLayer { translationY = itemVisualOffsetY }
+                                .onGloballyPositioned { coords ->
+                                    itemTopOffsets[entry.id] = coords.positionInParent().y
+                                    itemHeights[entry.id] = coords.size.height.toFloat()
+                                },
+                        ) {
+                            PlaylistDetailRow(
+                                queueItem = queueItem,
+                                isDragging = isDragging,
+                                isSelectionActive = selectionActive,
+                                isSelected = entry.id in selectedEntryIds,
+                                onDragStart = { idx ->
+                                    dragStartTopOffsets = itemTopOffsets.toMap()
+                                    dragStartHeights = itemHeights.toMap()
+                                    draggingIndex = idx
+                                    dragOffsetY = 0f
+                                    currentTargetIndex = idx
+                                },
+                                onDrag = { dy ->
+                                    dragOffsetY += dy
+                                    scrollDraggedItemNearEdge(draggingIndex)
+                                    val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
+                                    if (newTarget != currentTargetIndex) {
+                                        currentTargetIndex = newTarget
+                                    }
+                                },
+                                onDragEnd = { onDragEnd() },
+                                index = index,
+                                onTap = { onOpenPlayer(entry.articleId) },
+                                onToggleSelect = { toggleSelection(entry.id) },
+                                onEnterSelection = { enterSelectionMode(entry.id) },
+                                onPlayNow = { vm.playNow(entry.articleId) },
+                                onPlayNext = { vm.playNext(entry.articleId) },
+                                onPlayLast = { vm.playLast(entry.articleId) },
+                                onPlayFromHere = if (queueItem != null) {
+                                    { pendingPlayFromHereEntryId = entry.id }
+                                } else {
+                                    null
+                                },
+                                onMoveToTop = { moveEntry(index, 0) },
+                                onMoveToBottom = { moveEntry(index, localEntries.lastIndex) },
+                                onRemoveFromPlaylist = { removeArticleFromPlaylist(entry.articleId) },
+                            )
+                            if (!isDragging) {
+                                Spacer(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(1.dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                        ),
+                                )
+                            }
                         }
                     }
                 }
