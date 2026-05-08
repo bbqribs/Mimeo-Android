@@ -72,6 +72,7 @@ import com.mimeo.android.ui.common.LibraryItemRow
 import com.mimeo.android.ui.common.ListSurfaceScaffold
 import com.mimeo.android.ui.common.SelectionAffordance
 import com.mimeo.android.ui.common.itemStatusPillLine
+import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.queueCapturePresentation
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
@@ -574,6 +575,10 @@ fun PlaylistDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .onSizeChanged { listViewportHeight = it.height }
+                .passiveVerticalScrollIndicator(
+                    scrollState = listScrollState,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
+                )
                 .verticalScroll(listScrollState),
         ) {
             localEntries.forEachIndexed { index, entry ->
