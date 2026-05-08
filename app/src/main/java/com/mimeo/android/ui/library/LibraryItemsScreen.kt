@@ -5,7 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -275,7 +277,7 @@ fun LibraryItemsScreen(
     }
 
     ListSurfaceScaffold(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxSize(),
         selectionBar = if (selectionActive) {
             {
                 // Contextual action bar — replaces search/sort row while in selection mode.
@@ -456,15 +458,19 @@ fun LibraryItemsScreen(
         empty = if (clientSideSearch) searchedItems.isEmpty() else items.isEmpty(),
         emptyContent = { DefaultListSurfaceMessage(emptyMessage) },
     ) {
-        LazyColumn(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .passiveVerticalScrollIndicator(
                     listState = listState,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
                 ),
-            state = listState,
         ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                contentPadding = PaddingValues(end = 8.dp),
+            ) {
             // Pending section (inbox only)
             if (pendingItems.isNotEmpty()) {
                 item(key = "pending_header") {
@@ -562,6 +568,7 @@ fun LibraryItemsScreen(
                     }
                 }
             }
+        }
         }
     }
 

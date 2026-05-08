@@ -2127,16 +2127,16 @@ private fun NowPlayingSessionPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .onSizeChanged { listViewportHeight = it.height },
+                .onSizeChanged { listViewportHeight = it.height }
+                .passiveVerticalScrollIndicator(
+                    scrollState = listScrollState,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f),
+                ),
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .graphicsLayer { alpha = if (initialActiveAnchorReady) 1f else 0f }
-                    .passiveVerticalScrollIndicator(
-                        scrollState = listScrollState,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f),
-                    )
                     .verticalScroll(listScrollState),
             ) {
                 if (historyItems.isNotEmpty()) {

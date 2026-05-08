@@ -51,7 +51,13 @@ fun ListSurfaceScaffold(
         when {
             loading && empty && loadingContent != null -> loadingContent()
             empty -> emptyContent()
-            else -> body()
+            else -> Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = true),
+            ) {
+                body()
+            }
         }
     }
 }
