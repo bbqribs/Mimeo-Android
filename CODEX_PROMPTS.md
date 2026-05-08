@@ -9,7 +9,8 @@
 - **No history rewrites**: No rebases or force-pushes by agents. Additive commits only.
 - **Contract-change flag**: Any PR changing backend/API semantics must be labeled "CONTRACT CHANGE"; dependent Android work must not assume the change until merged.
 - **Local safety**: If agents share a machine, do not share a working directory; avoid stash workflows; tracked local modifications => STOP.
-- **Precedence**: `CODEX_PROMPTS.md` is authoritative for Codex behavior in this repo; `CLAUDE.md` is authoritative for Claude behavior in this repo.
+- **Precedence**: `CODEX_PROMPTS.md` is authoritative for Codex-specific behavior in this repo; `CLAUDE.md` is authoritative for Claude-specific behavior; `AGENTS.md` is authoritative for shared lifecycle hygiene and workflow rules for all agents.
+- **Shared lifecycle hygiene**: See `AGENTS.md §Ticket lifecycle hygiene` for preflight, implementation discipline, PR/open report, and post-merge closeout rules that apply to all agents including Codex.
 
 ## Project context (when assigned implementation)
 Mimeo Android is the mobile client for the Mimeo "read later" system.

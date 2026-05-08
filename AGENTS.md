@@ -1,4 +1,4 @@
-# Mimeo Android - Codex Instructions
+# Mimeo Android - Shared Agent Rules
 
 ## Multi-agent workflow (Codex + Claude + humans)
 - **Lane model**: Claude is the primary implementer for Mimeo-Android. Codex is secondary in this repo unless explicitly assigned an Android ticket.
@@ -9,7 +9,7 @@
 - **No history rewrites**: No rebases or force-pushes by agents. Additive commits only.
 - **Contract-change flag**: Any PR changing backend/API semantics must be labeled "CONTRACT CHANGE"; dependent Android work must not assume the change until merged.
 - **Local safety**: If agents share a machine, do not share a working directory; avoid stash workflows; tracked local modifications => STOP.
-- **Precedence**: `AGENTS.md` is authoritative for Codex behavior in this repo. `CODEX_PROMPTS.md` should remain in sync.
+- **Precedence**: `AGENTS.md` is authoritative for shared lifecycle hygiene and workflow rules for all agents in this repo. `CLAUDE.md` is authoritative for Claude-specific behavior. `CODEX_PROMPTS.md` is authoritative for Codex-specific behavior. Tool-specific docs may add stricter rules but must not weaken `AGENTS.md`.
 
 ## Project context (when assigned implementation)
 Mimeo Android is the mobile client for the Mimeo "read later" system.
@@ -50,3 +50,49 @@ See `ROADMAP.md` for active priorities.
 
 ## Related repo
 Backend + extension + scripts: `C:\Users\brend\Documents\Coding\Mimeo`
+
+## Ticket lifecycle hygiene
+
+### Preflight
+
+At session start, report:
+- current branch
+- current SHA (`git rev-parse HEAD`)
+- upstream tracking + ahead/behind count
+- `git status -sb`
+- tracked diff summary (files changed, nature)
+- untracked file summary
+
+Stop before work if any condition is true:
+- tracked modifications exist outside expected files for this ticket
+- current branch belongs to another agent or ticket
+- local branch is behind or ahead unexpectedly
+- checkout is not on the requested base branch
+- sensitive-looking untracked files would be touched by this work
+
+Never stash, reset, clean, delete, overwrite, or move files without explicit operator instruction.
+
+### Implementation discipline
+
+Before editing, declare expected files. Keep all changes inside declared scope.
+No broad formatting passes, no dependency upgrades unless explicitly requested.
+No tag-team commits on another agent's branch.
+Never print secrets, tokens, .env values, cookies, browser profiles, or backup contents.
+
+### PR / open report
+
+Before awaiting merge approval, report:
+- branch name and PR URL
+- commit SHA
+- changed files
+- tests run and results
+- tests skipped and reason
+- manual verification steps
+- explicit statement: `not merged; awaiting operator approval`
+
+### Post-merge closeout
+
+1. Sync canonical branch (`main`).
+2. Confirm: final SHA, `git status -sb`, PR merge state via `gh pr view <PR>`, tracked tree clean, untracked files summarized.
+3. If runtime deploy/sync was in scope: runtime sync result, smoke result, remote git checkout state if relevant.
+4. Never say "merged" unless `gh pr view` confirms state is `MERGED`.
