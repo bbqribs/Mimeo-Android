@@ -331,6 +331,50 @@ into the bounded refactors above.
 
 ---
 
+## R1.2 closeout — AppViewModel Bluesky boundary (2026-05-08)
+
+**Ticket:** R1.2 — Remove residual Bluesky ViewModel glue and document boundary
+**Baseline:** R1 (`BlueskyStateHolder`), R1.1 (`BlueskyServiceCoordinator`) both merged.
+**Finding:** No residual glue found. AppViewModel's Bluesky responsibility is already
+minimal after R1 + R1.1. No source changes were required.
+
+### What remains in AppViewModel — and why it is intentional
+
+| Element | Lines | Reason kept |
+| --- | ---: | --- |
+| 9 Bluesky model imports | 104–112 | Required by method signatures and explicit StateFlow return types |
+| `BlueskyStateHolder` / `BlueskyServiceCoordinator` imports | 155–156 | Required for instantiation |
+| `blueskyState` + `blueskyCoordinator` init | 353–361 | Owner; wires `onCandidateSaved → loadQueue` callback that needs ViewModel scope |
+| 28 `StateFlow` delegation properties | 362–389 | Stable public API surface consumed by Compose screens — cannot remove without touching all call sites |
+| 14 method delegation stubs | 1705–1718 | Same reason; UI calls `viewModel.loadBlueskyBrowse()` etc. |
+| `blueskyCoordinator.resetOnSignOut()` | 595 | Correctly placed in auth lifecycle managed by AppViewModel |
+| `blueskyCoordinator.refreshBlueskyStatus()` | 601 | Same |
+
+None of these are shims, dead code, or duplicated derivations. They are the thin
+adapter layer that keeps Compose call sites stable while all actual Bluesky logic
+lives in `BlueskyServiceCoordinator` + `BlueskyStateHolder`.
+
+### What is NOT in AppViewModel (moved by R1/R1.1)
+
+- All 28 `MutableStateFlow` declarations → `BlueskyStateHolder`
+- All Bluesky network calls (connect, disconnect, browse, candidate scan/save/pin) → `BlueskyServiceCoordinator`
+- Error-message helpers → file-private in `BlueskyServiceCoordinator.kt`
+
+### Next Bluesky refactor candidate
+
+The StateFlow delegation block (lines 362–389) is the only remaining verbosity.
+A future ticket could expose `blueskyState` directly as `internal val` and have
+Compose screens read `viewModel.blueskyState.blueskyBrowseItems` — but this would
+touch every Bluesky screen and is **not** worth doing until the Compose layer is
+being redesigned anyway (Redesign v2). Leave for that track.
+
+### AppViewModel current line count
+
+`AppViewModel.kt` is now **5 753 lines** (down from 6 197 at survey time),
+a reduction of ~444 lines from R1 + R1.1.
+
+---
+
 ## Gates verified for this survey
 
 - Docs-only deliverable: this file.
