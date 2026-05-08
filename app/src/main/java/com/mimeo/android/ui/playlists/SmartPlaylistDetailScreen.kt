@@ -25,14 +25,12 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -51,10 +49,11 @@ import com.mimeo.android.resolveSmartPlaylistSessionSourceId
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.SmartPlaylistDetail
 import com.mimeo.android.ui.common.DefaultListSurfaceMessage
+import com.mimeo.android.ui.common.ItemRowTrailingActions
 import com.mimeo.android.ui.common.LibraryItemRow
-import com.mimeo.android.ui.common.ListStatusPill
 import com.mimeo.android.ui.common.ListSurfaceScaffold
 import com.mimeo.android.ui.common.SelectionAffordance
+import com.mimeo.android.ui.common.itemStatusPillLine
 import com.mimeo.android.ui.common.queueCapturePresentation
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
@@ -767,7 +766,6 @@ private fun SmartPlaylistItemRow(
     onMoveDown: () -> Unit,
 ) {
     val presentation = remember(item) { queueCapturePresentation(item) }
-    val statusForLine = item.status?.takeIf { it != "ready" }
 
     LibraryItemRow(
         title = presentation.title,
@@ -780,90 +778,33 @@ private fun SmartPlaylistItemRow(
         } else {
             null
         },
-        progressStateLine = if (statusForLine != null) {
-            {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    ListStatusPill(status = statusForLine)
-                }
-            }
-        } else {
-            null
-        },
+        progressStateLine = itemStatusPillLine(item.status),
         trailingContent = if (!isSelectionActive) {
             {
-                var menuExpanded by remember { mutableStateOf(false) }
-                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 40.dp) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        IconButton(
-                            onClick = onPlayNow,
-                            modifier = Modifier.size(40.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Play ${presentation.title}",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                        Box {
-                            IconButton(
-                                onClick = { menuExpanded = true },
-                                modifier = Modifier.size(40.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.MoreVert,
-                                    contentDescription = "More actions for ${presentation.title}",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Play Next") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onPlayNext()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Play Last") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onPlayLast()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Play from Here") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onPlayFromHere()
-                                },
-                            )
-                            if (isPinned) {
-                                HorizontalDivider()
-                            }
-                            if (isPinned) {
-                                DropdownMenuItem(
-                                    enabled = pinActionEnabled,
-                                    text = { Text("Remove") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        onUnpin()
-                                    },
-                                )
-                            }
-                        }
+                ItemRowTrailingActions(
+                    title = presentation.title,
+                    onPlayNow = onPlayNow,
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Play Next") },
+                        onClick = { onPlayNext() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Play Last") },
+                        onClick = { onPlayLast() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Play from Here") },
+                        onClick = { onPlayFromHere() },
+                    )
+                    if (isPinned) {
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            enabled = pinActionEnabled,
+                            text = { Text("Remove") },
+                            onClick = { onUnpin() },
+                        )
                     }
-                }
                 }
             }
         } else {
