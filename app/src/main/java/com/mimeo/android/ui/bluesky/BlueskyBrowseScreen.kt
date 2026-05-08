@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -59,12 +60,14 @@ import com.mimeo.android.model.BlueskyCandidateScanResponse
 import com.mimeo.android.model.BlueskyCandidateSourceSelection
 import com.mimeo.android.model.BlueskyPickerPinItem
 import com.mimeo.android.model.BlueskyPickerResponse
+import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 
 @Composable
 fun BlueskyBrowseScreen(
     vm: AppViewModel,
     onOpenItem: (Int) -> Unit,
 ) {
+    val listState = rememberLazyListState()
     val picker by vm.blueskyCandidatePicker.collectAsState()
     val pickerLoading by vm.blueskyCandidatePickerLoading.collectAsState()
     val pickerError by vm.blueskyCandidatePickerError.collectAsState()
@@ -92,7 +95,13 @@ fun BlueskyBrowseScreen(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .passiveVerticalScrollIndicator(
+                listState = listState,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
+            ),
+        state = listState,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
