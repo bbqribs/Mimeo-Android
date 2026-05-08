@@ -74,6 +74,7 @@ import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.BlueskySourceDiagnostic
 import com.mimeo.android.model.SmartPlaylistSummary
+import com.mimeo.android.ui.bluesky.blueskySourceDisplayName
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.queue.autoDownloadStatusLines
 import com.mimeo.android.ui.theme.toFontFamily
@@ -1899,7 +1900,7 @@ private fun BlueskySourceRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = source.displayName,
+                text = blueskySourceDisplayName(source.resolvedName, source.typeLabel),
                 style = androidx.compose.material3.MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
             )
             Text(
@@ -1964,19 +1965,6 @@ private fun BlueskySourceRow(
         }
     }
 }
-
-private val BlueskySourceDiagnostic.displayName: String
-    get() {
-        val candidate = resolvedName.trim()
-        if (candidate.startsWith("at://", ignoreCase = true)) {
-            return when {
-                typeLabel?.contains("feed", ignoreCase = true) == true -> "Bluesky Feed"
-                typeLabel?.contains("list", ignoreCase = true) == true -> "Bluesky List"
-                else -> "Bluesky Source"
-            }
-        }
-        return candidate
-    }
 
 @Composable
 private fun SettingsSectionHeader(

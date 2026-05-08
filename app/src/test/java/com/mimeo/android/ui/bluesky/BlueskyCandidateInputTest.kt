@@ -37,4 +37,43 @@ class BlueskyCandidateInputTest {
         assertFalse(result.ok)
         assertEquals("Feed generators are not supported yet.", result.error)
     }
+
+    @Test
+    fun normalizeHandleStripsLeadingAt() {
+        assertEquals("bob.bsky.social", normalizeBlueskyHandleInput("@bob.bsky.social"))
+    }
+
+    @Test
+    fun normalizeHandleBlankReturnsNull() {
+        assertNull(normalizeBlueskyHandleInput("   "))
+    }
+
+    @Test
+    fun normalizeHandleEmptyReturnsNull() {
+        assertNull(normalizeBlueskyHandleInput(""))
+    }
+
+    @Test
+    fun parseListBlankInputReturnsError() {
+        val result = parseBlueskyListIdentifierInput("  ")
+
+        assertFalse(result.ok)
+        assertEquals("List URL is required.", result.error)
+    }
+
+    @Test
+    fun parseListInvalidUrlReturnsError() {
+        val result = parseBlueskyListIdentifierInput("https://example.com/notabskylist")
+
+        assertFalse(result.ok)
+        assertEquals("Use a bsky.app list URL.", result.error)
+    }
+
+    @Test
+    fun parseFeedGeneratorAtUriRejectsUnsupported() {
+        val result = parseBlueskyListIdentifierInput("at://did:plc:abc/app.bsky.feed.generator/xyz")
+
+        assertFalse(result.ok)
+        assertEquals("Feed generators are not supported yet.", result.error)
+    }
 }
