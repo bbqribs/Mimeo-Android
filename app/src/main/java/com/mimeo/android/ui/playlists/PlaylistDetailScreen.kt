@@ -386,7 +386,7 @@ fun PlaylistDetailScreen(
         header = {
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
             ) {
                 Row(
@@ -547,7 +547,7 @@ fun PlaylistDetailScreen(
             if (playlist == null) {
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
                 ) {
                     Text(
@@ -559,7 +559,7 @@ fun PlaylistDetailScreen(
             } else {
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
                 ) {
                     Text(
@@ -849,7 +849,7 @@ private fun PlaylistDetailRow(
         title = title,
         metadata = metadata,
         isSelected = isSelected,
-        containerColor = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else Color.Black,
+        containerColor = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
         titleColor = if (queueItem == null) {
             MaterialTheme.colorScheme.onSurfaceVariant
         } else {
