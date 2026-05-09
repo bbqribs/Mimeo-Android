@@ -113,7 +113,11 @@ import com.mimeo.android.share.isRetryablePendingSaveResult
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
+import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoDensityTokens
+import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
+import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
+import com.mimeo.android.ui.theme.LocalMimeoV1Active
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -1818,17 +1822,26 @@ private fun SessionSectionHeader(
     count: Int,
     modifier: Modifier = Modifier,
 ) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    val densityTokens = LocalMimeoDensityTokens.current
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp),
+            .padding(
+                start = 12.dp,
+                end = 12.dp,
+                top = if (isV1) densityTokens.sectionGap else 10.dp,
+                bottom = 4.dp,
+            ),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = "$title · $count",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
+            style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
+            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.primary,
         )
     }
 }
@@ -1840,6 +1853,10 @@ private fun SessionStaticItemRow(
     onJumpToItem: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    val mShapes = LocalMimeoShapeTokens.current
     val densityTokens = LocalMimeoDensityTokens.current
     val sourceLabel = item.host
         ?: item.sourceLabel?.takeIf { it.isNotBlank() }
@@ -1850,7 +1867,7 @@ private fun SessionStaticItemRow(
             .clickable { onOpenItem(item.itemId) }
             .background(
                 color = MaterialTheme.colorScheme.surface,
-                shape = RoundedCornerShape(6.dp),
+                shape = if (isV1) mShapes.item else RoundedCornerShape(6.dp),
             )
             .padding(start = 12.dp, end = 12.dp, top = densityTokens.rowPadV, bottom = densityTokens.rowPadV),
         verticalAlignment = Alignment.CenterVertically,
@@ -1862,7 +1879,7 @@ private fun SessionStaticItemRow(
         ) {
             Text(
                 text = item.title?.ifBlank { null } ?: item.url,
-                style = MaterialTheme.typography.bodyLarge,
+                style = if (isV1) mTypography.row else MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -1870,8 +1887,8 @@ private fun SessionStaticItemRow(
             if (sourceLabel != null) {
                 Text(
                     text = sourceLabel,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                    color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -1912,6 +1929,10 @@ private fun NowPlayingSessionPanel(
     trailingActions: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val densityTokens = LocalMimeoDensityTokens.current
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    val mShapes = LocalMimeoShapeTokens.current
     val showCurrentSource = seededFromLabel != currentSourceLabel
 
     // Local item list for optimistic drag reorder — only mutated on drop.
@@ -2077,21 +2098,21 @@ private fun NowPlayingSessionPanel(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Session queue · ${session.items.size}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
+                    color = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.primary,
                 )
                 Text(
                     text = "Seeded from: $seededFromLabel",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = if (isV1) mTypography.meta else MaterialTheme.typography.labelSmall,
+                    color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (showCurrentSource) {
                     Text(
                         text = "Current source: $currentSourceLabel",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        style = if (isV1) mTypography.meta else MaterialTheme.typography.labelSmall,
+                        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -2199,21 +2220,21 @@ private fun NowPlayingSessionPanel(
                     ) {
                         Text(
                             text = NOW_PLAYING_SECTION_TITLE,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
+                            style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
+                            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.primary,
                         )
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onOpenItem(item.itemId) }
                                 .background(
-                                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isV1) mColors.nowTint else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f),
+                                    shape = if (isV1) mShapes.card else RoundedCornerShape(8.dp),
                                 )
                                 .border(
                                     width = 1.dp,
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isV1) mColors.accent.copy(alpha = 0.6f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                                    shape = if (isV1) mShapes.card else RoundedCornerShape(8.dp),
                                 )
                                 .padding(start = 12.dp, end = 12.dp, top = densityTokens.rowPadV, bottom = densityTokens.rowPadV),
                             verticalAlignment = Alignment.CenterVertically,
@@ -2225,17 +2246,17 @@ private fun NowPlayingSessionPanel(
                             ) {
                                 Text(
                                     text = item.title?.ifBlank { null } ?: item.url,
-                                    style = MaterialTheme.typography.bodyLarge,
+                                    style = if (isV1) mTypography.row else MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = if (isV1) mColors.fg else MaterialTheme.colorScheme.primary,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 if (sourceLabel != null) {
                                     Text(
                                         text = sourceLabel,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                                        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
@@ -2253,8 +2274,8 @@ private fun NowPlayingSessionPanel(
                 ) {
                     Text(
                         text = "Up Next · ${upcomingItems.size}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
+                        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.primary,
                     )
                     TextButton(
                         enabled = upcomingItems.isNotEmpty(),
@@ -2302,7 +2323,7 @@ private fun NowPlayingSessionPanel(
                                     .clickable { onOpenItem(item.itemId) }
                                     .background(
                                         color = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
-                                        shape = RoundedCornerShape(6.dp),
+                                        shape = if (isV1) mShapes.item else RoundedCornerShape(6.dp),
                                     )
                                     .padding(start = 12.dp, end = 12.dp, top = densityTokens.rowPadV, bottom = densityTokens.rowPadV)
                                     .semantics {
@@ -2350,7 +2371,7 @@ private fun NowPlayingSessionPanel(
                                 ) {
                                     Text(
                                         text = item.title?.ifBlank { null } ?: item.url,
-                                        style = MaterialTheme.typography.bodyLarge,
+                                        style = if (isV1) mTypography.row else MaterialTheme.typography.bodyLarge,
                                         color = MaterialTheme.colorScheme.onSurface,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis,
@@ -2358,8 +2379,8 @@ private fun NowPlayingSessionPanel(
                                     if (sourceLabel != null) {
                                         Text(
                                             text = sourceLabel,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                                            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                         )
@@ -2434,19 +2455,24 @@ fun JumpToNowPlayingPill(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(18.dp)
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mShapes = LocalMimeoShapeTokens.current
+    val shape = if (isV1) mShapes.pill else RoundedCornerShape(18.dp)
+    val bgColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primaryContainer
+    val textColor = if (isV1) mColors.accentOn else MaterialTheme.colorScheme.onPrimaryContainer
     Box(
         modifier = modifier
             .height(34.dp)
             .clickable(onClick = onClick)
-            .background(MaterialTheme.colorScheme.primary, shape)
+            .background(bgColor, shape)
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = "Jump to Now Playing",
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onPrimary,
+            color = textColor,
             maxLines = 1,
         )
     }
