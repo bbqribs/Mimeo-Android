@@ -1856,7 +1856,6 @@ private fun SessionStaticItemRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Spacer(Modifier.size(24.dp))
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(densityTokens.rowGap),
@@ -2071,7 +2070,7 @@ private fun NowPlayingSessionPanel(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                .padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -2208,19 +2207,18 @@ private fun NowPlayingSessionPanel(
                                 .fillMaxWidth()
                                 .clickable { onOpenItem(item.itemId) }
                                 .background(
-                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f),
+                                    color = MaterialTheme.colorScheme.tertiaryContainer,
                                     shape = RoundedCornerShape(8.dp),
                                 )
                                 .border(
                                     width = 1.dp,
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
                                     shape = RoundedCornerShape(8.dp),
                                 )
-                                .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+                                .padding(start = 12.dp, end = 12.dp, top = densityTokens.rowPadV, bottom = densityTokens.rowPadV),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Spacer(Modifier.size(24.dp))
                             Column(
                                 modifier = Modifier.weight(1f),
                                 verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -2249,7 +2247,7 @@ private fun NowPlayingSessionPanel(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 4.dp),
+                        .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -2385,7 +2383,7 @@ private fun NowPlayingSessionPanel(
                                     Icon(
                                         imageVector = Icons.Default.Close,
                                         contentDescription = "Remove from session",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(16.dp),
                                     )
                                 }
@@ -2441,14 +2439,14 @@ fun JumpToNowPlayingPill(
         modifier = modifier
             .height(34.dp)
             .clickable(onClick = onClick)
-            .background(MaterialTheme.colorScheme.primaryContainer, shape)
+            .background(MaterialTheme.colorScheme.primary, shape)
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = "Jump to Now Playing",
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            color = MaterialTheme.colorScheme.onPrimary,
             maxLines = 1,
         )
     }
