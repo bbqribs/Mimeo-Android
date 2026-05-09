@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -972,9 +973,9 @@ fun SettingsScreen(
                         color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
                 ) {
                     TextButton(
                         onClick = onOpenBlueskyBrowse,
@@ -1068,7 +1069,23 @@ fun SettingsScreen(
                     val saveInputValid = saveAgeHours != null && saveAgeHours >= 1 &&
                         savePosts != null && savePosts >= 1 &&
                         saveLinks != null && saveLinks >= 1
-                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                    val localMatchesBackend = localMaxAgeHours.trim() == prefs.maxAgeHours.toString() &&
+                        localMaxPosts.trim() == prefs.maxPosts.toString() &&
+                        localMaxLinks.trim() == prefs.maxLinks.toString()
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        TextButton(
+                            enabled = !localMatchesBackend && !blueskyScannerPreferencesSaving,
+                            onClick = {
+                                localMaxAgeHours = prefs.maxAgeHours.toString()
+                                localMaxPosts = prefs.maxPosts.toString()
+                                localMaxLinks = prefs.maxLinks.toString()
+                            },
+                        ) {
+                            Text("Reset")
+                        }
                         Button(
                             enabled = saveInputValid && !blueskyScannerPreferencesSaving && !blueskyScannerPreferencesLoading,
                             onClick = {
