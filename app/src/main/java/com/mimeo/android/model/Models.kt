@@ -20,6 +20,17 @@ enum class ReaderFontOption {
     MONOSPACE,
 }
 
+enum class VisualThemePreference {
+    FOLLOW_SYSTEM,
+    LIGHT,
+    DARK,
+}
+
+enum class VisualDensityPreference {
+    DEFAULT,
+    COMPACT,
+}
+
 enum class ConnectivityDiagnosticOutcome {
     PASS,
     FAIL,
@@ -455,6 +466,8 @@ data class AppSettings(
     val readingLineHeightPercent: Int = 160,
     val readingMaxWidthDp: Int = 720,
     val readingParagraphSpacing: ParagraphSpacingOption = ParagraphSpacingOption.MEDIUM,
+    val visualThemePreference: VisualThemePreference = VisualThemePreference.FOLLOW_SYSTEM,
+    val visualDensityPreference: VisualDensityPreference = VisualDensityPreference.DEFAULT,
     val playerControlsMode: PlayerControlsMode = PlayerControlsMode.FULL,
     val playerLastNonNubMode: PlayerControlsMode = PlayerControlsMode.FULL,
     val playerChevronSnapEdge: PlayerChevronSnapEdge = PlayerChevronSnapEdge.HOME,
