@@ -108,6 +108,7 @@ private fun MimeoThemeV1(
         LocalMimeoSpacingTokens provides themeTokens.spacing,
         LocalMimeoDensityTokens provides themeTokens.density,
         LocalMimeoShapeTokens provides themeTokens.shapes,
+        LocalMimeoV1Active provides true,
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
