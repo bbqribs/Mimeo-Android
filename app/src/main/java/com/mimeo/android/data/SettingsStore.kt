@@ -28,6 +28,8 @@ import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.ReaderFontOption
+import com.mimeo.android.model.VisualDensityPreference
+import com.mimeo.android.model.VisualThemePreference
 import com.mimeo.android.model.decodeSelectedPlaylistId
 import com.mimeo.android.model.encodeSelectedPlaylistId
 import com.mimeo.android.model.inferConnectionModeForHost
@@ -105,6 +107,10 @@ class SettingsStore(private val context: Context) {
         intPreferencesKey("reading_max_width_dp")
     private val readingParagraphSpacingKey: Preferences.Key<String> =
         stringPreferencesKey("reading_paragraph_spacing")
+    private val visualThemePreferenceKey: Preferences.Key<String> =
+        stringPreferencesKey("visual_theme_preference")
+    private val visualDensityPreferenceKey: Preferences.Key<String> =
+        stringPreferencesKey("visual_density_preference")
     private val playerControlsModeKey: Preferences.Key<String> =
         stringPreferencesKey("player_controls_mode")
     private val playerLastNonNubModeKey: Preferences.Key<String> =
@@ -190,6 +196,8 @@ class SettingsStore(private val context: Context) {
             readingParagraphSpacing = prefs[readingParagraphSpacingKey]
                 ?.let { runCatching { ParagraphSpacingOption.valueOf(it) }.getOrNull() }
                 ?: ParagraphSpacingOption.MEDIUM,
+            visualThemePreference = parseVisualThemePreference(prefs[visualThemePreferenceKey]),
+            visualDensityPreference = parseVisualDensityPreference(prefs[visualDensityPreferenceKey]),
             playerControlsMode = prefs[playerControlsModeKey]
                 ?.let { runCatching { PlayerControlsMode.valueOf(it) }.getOrNull() }
                 ?: PlayerControlsMode.FULL,
@@ -350,6 +358,18 @@ class SettingsStore(private val context: Context) {
             prefs[readingLineHeightPercentKey] = readingLineHeightPercent
             prefs[readingMaxWidthDpKey] = readingMaxWidthDp
             prefs[readingParagraphSpacingKey] = readingParagraphSpacing.name
+        }
+    }
+
+    suspend fun saveVisualThemePreference(visualThemePreference: VisualThemePreference) {
+        context.dataStore.edit { prefs ->
+            prefs[visualThemePreferenceKey] = visualThemePreference.name
+        }
+    }
+
+    suspend fun saveVisualDensityPreference(visualDensityPreference: VisualDensityPreference) {
+        context.dataStore.edit { prefs ->
+            prefs[visualDensityPreferenceKey] = visualDensityPreference.name
         }
     }
 
@@ -925,9 +945,25 @@ class SettingsStore(private val context: Context) {
         else -> null
     }
 
+    internal fun parseVisualThemePreference(raw: String?): VisualThemePreference {
+        return raw
+            ?.let { runCatching { VisualThemePreference.valueOf(it) }.getOrNull() }
+            ?: VisualThemePreference.FOLLOW_SYSTEM
+    }
+
+    internal fun parseVisualDensityPreference(raw: String?): VisualDensityPreference {
+        return raw
+            ?.let { runCatching { VisualDensityPreference.valueOf(it) }.getOrNull() }
+            ?: VisualDensityPreference.DEFAULT
+    }
+
     companion object {
         private const val MAX_QUEUE_SNAPSHOT_RECORDS = 16
         private const val MAX_PLAYBACK_SEGMENT_INDEX_RECORDS = 256
+    }
+
+    internal suspend fun clearAllSettingsForTesting() {
+        context.dataStore.edit { prefs -> prefs.clear() }
     }
 }
 
