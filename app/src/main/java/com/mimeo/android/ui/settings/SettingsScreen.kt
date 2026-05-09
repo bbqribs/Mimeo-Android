@@ -7,6 +7,7 @@ import android.speech.tts.Voice
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
@@ -72,6 +74,8 @@ import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.ReaderFontOption
+import com.mimeo.android.model.VisualDensityPreference
+import com.mimeo.android.model.VisualThemePreference
 import com.mimeo.android.model.BlueskySourceDiagnostic
 import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.ui.bluesky.blueskySourceDisplayName
@@ -185,6 +189,17 @@ fun SettingsScreen(
     var showPendingOutcomeSimulator by remember(settings.showPendingOutcomeSimulator) {
         mutableStateOf(settings.showPendingOutcomeSimulator)
     }
+    var visualDesignV1Enabled by remember(settings.visualDesignV1Enabled) {
+        mutableStateOf(settings.visualDesignV1Enabled)
+    }
+    var visualThemePreference by remember(settings.visualThemePreference) {
+        mutableStateOf(settings.visualThemePreference)
+    }
+    var visualDensityPreference by remember(settings.visualDensityPreference) {
+        mutableStateOf(settings.visualDensityPreference)
+    }
+    var showVisualThemeMenu by remember { mutableStateOf(false) }
+    var showVisualDensityMenu by remember { mutableStateOf(false) }
     var ttsVoiceName by remember(settings.ttsVoiceName) {
         mutableStateOf(settings.ttsVoiceName)
     }
@@ -450,7 +465,7 @@ fun SettingsScreen(
             title = "Connection / Server",
             subtitle = "Choose Local, LAN, or Remote mode. Sign In is recommended; manual token entry replaces this device token.",
         )
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -724,7 +739,7 @@ fun SettingsScreen(
         )
 
         var blueskyExplainerExpanded by remember { mutableStateOf(false) }
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -768,7 +783,7 @@ fun SettingsScreen(
             }
         }
 
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -980,7 +995,7 @@ fun SettingsScreen(
             title = "Saving / Share-sheet",
             subtitle = "Control where shared links go and how share results are shown.",
         )
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1067,7 +1082,7 @@ fun SettingsScreen(
             title = "Playback",
             subtitle = "Session and listening behavior across tabs and reading mode.",
         )
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1432,7 +1447,7 @@ fun SettingsScreen(
             title = "Reader / Appearance",
             subtitle = "Tune typography and layout for reading comfort.",
         )
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1514,7 +1529,7 @@ fun SettingsScreen(
                         )
                     }
                 }
-                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1547,7 +1562,7 @@ fun SettingsScreen(
                 title = "Developer",
                 subtitle = "Debug-only diagnostics and playback instrumentation controls.",
             )
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1600,6 +1615,106 @@ fun SettingsScreen(
                             onCheckedChange = {
                                 showPendingOutcomeSimulator = it
                                 vm.saveShowPendingOutcomeSimulator(it)
+                            },
+                        )
+                    }
+                    if (visualDesignV1Enabled) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                Text("Visual theme mode")
+                                Text(
+                                    text = "Force theme mode for v1 wrapper preview.",
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Box {
+                                Button(onClick = { showVisualThemeMenu = true }) {
+                                    Text(visualThemePreference.displayName())
+                                }
+                                DropdownMenu(
+                                    expanded = showVisualThemeMenu,
+                                    onDismissRequest = { showVisualThemeMenu = false },
+                                ) {
+                                    VisualThemePreference.entries.forEach { preference ->
+                                        DropdownMenuItem(
+                                            text = { Text(preference.displayName()) },
+                                            onClick = {
+                                                showVisualThemeMenu = false
+                                                visualThemePreference = preference
+                                                vm.saveVisualThemePreference(preference)
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                Text("Visual density mode")
+                                Text(
+                                    text = "Force density tokens for v1 wrapper preview.",
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Box {
+                                Button(onClick = { showVisualDensityMenu = true }) {
+                                    Text(visualDensityPreference.displayName())
+                                }
+                                DropdownMenu(
+                                    expanded = showVisualDensityMenu,
+                                    onDismissRequest = { showVisualDensityMenu = false },
+                                ) {
+                                    VisualDensityPreference.entries.forEach { preference ->
+                                        DropdownMenuItem(
+                                            text = { Text(preference.displayName()) },
+                                            onClick = {
+                                                showVisualDensityMenu = false
+                                                visualDensityPreference = preference
+                                                vm.saveVisualDensityPreference(preference)
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text("Visual design v1 wrapper")
+                            Text(
+                                text = "Enable Paper & Ember token wrapper path for local visual review.",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = visualDesignV1Enabled,
+                            onCheckedChange = {
+                                visualDesignV1Enabled = it
+                                vm.saveVisualDesignV1Enabled(it)
                             },
                         )
                     }
@@ -1996,6 +2111,17 @@ private fun ReaderFontOption.displayName(): String = when (this) {
     ReaderFontOption.SERIF -> "Serif"
     ReaderFontOption.SANS_SERIF -> "Sans Serif"
     ReaderFontOption.MONOSPACE -> "Monospace"
+}
+
+private fun VisualThemePreference.displayName(): String = when (this) {
+    VisualThemePreference.FOLLOW_SYSTEM -> "Follow system"
+    VisualThemePreference.LIGHT -> "Light"
+    VisualThemePreference.DARK -> "Dark"
+}
+
+private fun VisualDensityPreference.displayName(): String = when (this) {
+    VisualDensityPreference.DEFAULT -> "Default"
+    VisualDensityPreference.COMPACT -> "Compact"
 }
 
 private fun LocusContentMode.displayName(): String = when (this) {

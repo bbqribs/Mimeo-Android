@@ -68,22 +68,50 @@ class MimeoThemeTokensTest {
     }
 
     @Test
-    fun visualThemePreference_resolvesWithoutGlobalApplication() {
+    fun followSystemThemePreference_resolvesLightWhenSystemIsLight() {
         assertEquals(
             MimeoThemeChoice.LIGHT,
             resolveThemeChoice(VisualThemePreference.FOLLOW_SYSTEM, systemIsDarkTheme = false),
         )
+    }
+
+    @Test
+    fun followSystemThemePreference_resolvesDarkWhenSystemIsDark() {
         assertEquals(
             MimeoThemeChoice.DARK,
             resolveThemeChoice(VisualThemePreference.FOLLOW_SYSTEM, systemIsDarkTheme = true),
         )
+    }
+
+    @Test
+    fun lightThemePreference_resolvesLight() {
         assertEquals(
             MimeoThemeChoice.LIGHT,
             resolveThemeChoice(VisualThemePreference.LIGHT, systemIsDarkTheme = true),
         )
+    }
+
+    @Test
+    fun darkThemePreference_resolvesDark() {
         assertEquals(
             MimeoThemeChoice.DARK,
             resolveThemeChoice(VisualThemePreference.DARK, systemIsDarkTheme = false),
+        )
+    }
+
+    @Test
+    fun visualV1ThemeFlagDisabled_keepsLegacyThemePath() {
+        assertEquals(
+            MimeoThemeRuntimePath.LEGACY,
+            resolveThemeRuntimePath(enableVisualDesignV1 = false),
+        )
+    }
+
+    @Test
+    fun visualV1ThemeFlagEnabled_usesVisualV1Path() {
+        assertEquals(
+            MimeoThemeRuntimePath.VISUAL_V1,
+            resolveThemeRuntimePath(enableVisualDesignV1 = true),
         )
     }
 }

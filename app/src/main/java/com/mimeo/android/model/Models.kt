@@ -468,6 +468,7 @@ data class AppSettings(
     val readingParagraphSpacing: ParagraphSpacingOption = ParagraphSpacingOption.MEDIUM,
     val visualThemePreference: VisualThemePreference = VisualThemePreference.FOLLOW_SYSTEM,
     val visualDensityPreference: VisualDensityPreference = VisualDensityPreference.DEFAULT,
+    val visualDesignV1Enabled: Boolean = false,
     val playerControlsMode: PlayerControlsMode = PlayerControlsMode.FULL,
     val playerLastNonNubMode: PlayerControlsMode = PlayerControlsMode.FULL,
     val playerChevronSnapEdge: PlayerChevronSnapEdge = PlayerChevronSnapEdge.HOME,

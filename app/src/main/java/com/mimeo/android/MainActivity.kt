@@ -59,7 +59,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -174,7 +173,7 @@ import com.mimeo.android.ui.signin.SignInState
 import com.mimeo.android.ui.signin.buildAuthDeviceName
 import com.mimeo.android.ui.signin.inferConnectionModeForBaseUrl
 import com.mimeo.android.ui.signin.resolveSignInErrorMessage
-import com.mimeo.android.ui.theme.MimeoTheme
+import com.mimeo.android.ui.theme.MimeoAppTheme
 import com.mimeo.android.work.WorkScheduler
 import java.io.IOException
 import java.text.SimpleDateFormat
@@ -483,7 +482,12 @@ class MainActivity : ComponentActivity() {
         consumeLaunchIntent(intent)
         requestNotificationPermissionIfNeeded()
         setContent {
-            MimeoTheme {
+            val settings by vm.settings.collectAsState()
+            MimeoAppTheme(
+                visualThemePreference = settings.visualThemePreference,
+                visualDensityPreference = settings.visualDensityPreference,
+                enableVisualDesignV1 = settings.visualDesignV1Enabled,
+            ) {
                 MimeoApp(vm)
             }
         }

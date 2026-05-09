@@ -140,6 +140,8 @@ import com.mimeo.android.model.toProblemReportAttachmentTitle
 import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.model.ReaderFontOption
+import com.mimeo.android.model.VisualDensityPreference
+import com.mimeo.android.model.VisualThemePreference
 import com.mimeo.android.repository.ItemTextResult
 import com.mimeo.android.repository.ItemTextPrefetchAttempt
 import com.mimeo.android.repository.NowPlayingSession
@@ -3017,6 +3019,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _settings.update { current -> current.copy(showPendingOutcomeSimulator = enabled) }
             settingsStore.saveShowPendingOutcomeSimulator(enabled)
+        }
+    }
+
+    fun saveVisualDesignV1Enabled(enabled: Boolean) {
+        viewModelScope.launch {
+            _settings.update { current -> current.copy(visualDesignV1Enabled = enabled) }
+            settingsStore.saveVisualDesignV1Enabled(enabled)
+        }
+    }
+
+    fun saveVisualThemePreference(preference: VisualThemePreference) {
+        viewModelScope.launch {
+            _settings.update { current -> current.copy(visualThemePreference = preference) }
+            settingsStore.saveVisualThemePreference(preference)
+        }
+    }
+
+    fun saveVisualDensityPreference(preference: VisualDensityPreference) {
+        viewModelScope.launch {
+            _settings.update { current -> current.copy(visualDensityPreference = preference) }
+            settingsStore.saveVisualDensityPreference(preference)
         }
     }
 
