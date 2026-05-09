@@ -1,33 +1,34 @@
-# Claude Design Refinement Prompt (Final Redline Pass)
+# Claude Design Prompt (Paste-Ready)
 
-You are doing a final **implementation redline** pass for Mimeo, not a new visual direction.
+You are doing a **v1 implementation-hardening redline pass**, not a redesign.
 
-## Objective
-- Critically review the existing "Paper & Ember" handoff and harden it for implementation.
-- Preserve the approved **Paper & Ember** direction unless a token/component is infeasible in Android Compose or simple server-rendered web.
-- Produce developer-facing redlines and decisions, not a product strategy or roadmap rewrite.
+## Scope and intent
+- Preserve the approved **Paper & Ember** direction.
+- Only propose changes where a token/component is infeasible in Android Compose or simple server-rendered web.
+- Output developer-facing redlines only (no new product plan, no new visual direction).
 
-## Non-negotiable constraints
-- Keep current product semantics unchanged (see semantics lock).
-- No new backend/API assumptions.
+## Non-negotiables
+- Keep product semantics unchanged:
+  - Up Next = playback target/session.
+  - Smart Queue = playlist-like source.
+  - Bluesky scan = live candidate browsing.
+  - Bluesky save = normal Mimeo item.
+  - Bluesky scan/save never auto-queue.
+- No backend/API changes.
 - No new queue semantics.
 - No new telemetry/privacy assumptions.
 - No third-party runtime font/CDN loading.
-- No broad web rewrite or framework migration.
 
-## Required output format
+## Redline task
 For each relevant handoff item, classify as:
 1. Keep for v1
 2. Change before implementation
 3. Defer
 4. Reject
 
-For every "Change", "Defer", or "Reject":
-- State exactly why.
-- Provide minimal replacement guidance (token/component copy, spacing, typography, interaction wording).
-- Keep guidance implementation-oriented and testable.
+For each Change/Defer/Reject: give one reason and one concrete replacement/constraint.
 
-## Focus surfaces only
+## Focus screens only
 - Inbox / Library
 - Up Next
 - Smart Queue
@@ -35,8 +36,17 @@ For every "Change", "Defer", or "Reject":
 - Bluesky candidate browser
 - Settings / Privacy & diagnostics
 
-## Deliverables
-- A concise redline matrix by screen and component.
-- A short token/component delta list (only what must change).
-- A QA-impact note that removes checks tied to non-implemented features.
-- A "do not implement in v1" list aligned with existing constraints.
+## Must-cover risk points
+- Custom fonts
+- Swipe gestures
+- Row density
+- Serif row titles in dense lists
+- Light theme default vs current implementation state
+- Dark theme as separate direction
+- "Re-seed Up Next" wording/discoverability
+- QA checks that reference non-implemented features
+
+## Output format
+- Concise redline matrix by screen/component with the 4-way classification.
+- Short v1 token/component delta list.
+- Explicit "Do not implement in v1" list.
