@@ -113,6 +113,7 @@ import com.mimeo.android.share.isRetryablePendingSaveResult
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
+import com.mimeo.android.ui.theme.LocalMimeoDensityTokens
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -1839,6 +1840,7 @@ private fun SessionStaticItemRow(
     onJumpToItem: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val densityTokens = LocalMimeoDensityTokens.current
     val sourceLabel = item.host
         ?: item.sourceLabel?.takeIf { it.isNotBlank() }
         ?: item.sourceType?.takeIf { it.isNotBlank() }
@@ -1847,17 +1849,17 @@ private fun SessionStaticItemRow(
             .fillMaxWidth()
             .clickable { onOpenItem(item.itemId) }
             .background(
-                color = Color.Black,
+                color = MaterialTheme.colorScheme.surface,
                 shape = RoundedCornerShape(6.dp),
             )
-            .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+            .padding(start = 12.dp, end = 12.dp, top = densityTokens.rowPadV, bottom = densityTokens.rowPadV),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Spacer(Modifier.size(24.dp))
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(densityTokens.rowGap),
         ) {
             Text(
                 text = item.title?.ifBlank { null } ?: item.url,
@@ -1910,6 +1912,7 @@ private fun NowPlayingSessionPanel(
     onSnapPillVisibilityChange: (Boolean) -> Unit = {},
     trailingActions: (@Composable RowScope.() -> Unit)? = null,
 ) {
+    val densityTokens = LocalMimeoDensityTokens.current
     val showCurrentSource = seededFromLabel != currentSourceLabel
 
     // Local item list for optimistic drag reorder — only mutated on drop.
@@ -2300,10 +2303,10 @@ private fun NowPlayingSessionPanel(
                                     .fillMaxWidth()
                                     .clickable { onOpenItem(item.itemId) }
                                     .background(
-                                        color = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else Color.Black,
+                                        color = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
                                         shape = RoundedCornerShape(6.dp),
                                     )
-                                    .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp)
+                                    .padding(start = 12.dp, end = 12.dp, top = densityTokens.rowPadV, bottom = densityTokens.rowPadV)
                                     .semantics {
                                         customActions = buildList {
                                             if (index > 0) add(CustomAccessibilityAction("Move up") {
@@ -2345,7 +2348,7 @@ private fun NowPlayingSessionPanel(
                                 )
                                 Column(
                                     modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                    verticalArrangement = Arrangement.spacedBy(densityTokens.rowGap),
                                 ) {
                                     Text(
                                         text = item.title?.ifBlank { null } ?: item.url,

@@ -834,7 +834,7 @@ internal fun MainActivityShell(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(shellBottomClearance)
-                                        .background(Color.Black),
+                                        .background(MaterialTheme.colorScheme.surface),
                                 )
                             }
                         }

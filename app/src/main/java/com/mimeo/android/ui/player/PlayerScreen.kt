@@ -1978,7 +1978,7 @@ fun PlayerScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black)
+                .background(MaterialTheme.colorScheme.surface)
                 .then(modifier),
             contentAlignment = Alignment.Center,
         ) {
@@ -2000,7 +2000,7 @@ fun PlayerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black)
+                .background(MaterialTheme.colorScheme.surface)
                 .then(modifier),
             verticalArrangement = Arrangement.Top,
         ) {
@@ -2521,7 +2521,7 @@ private fun ExpandedPlayerTopBar(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color.Black)
+                .background(MaterialTheme.colorScheme.surface)
                 .padding(horizontal = 2.dp, vertical = 2.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
@@ -2578,7 +2578,7 @@ private fun ExpandedPlayerTopBar(
             TopAppBar(
                 modifier = Modifier.height(48.dp),
                 windowInsets = WindowInsets(0, 0, 0, 0),
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                 title = {},
                 actions = {
                     ActionHintTooltip(label = if (isDone) "Mark as not done" else "Mark as done") {
@@ -3447,7 +3447,7 @@ private fun FullPlayerDock(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.Black)
+            .background(MaterialTheme.colorScheme.surface)
             .then(
                 if (backgroundTapEnabled) {
                     Modifier.clickable(
@@ -3499,7 +3499,7 @@ private fun MinimalPlayerDock(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.Black)
+            .background(MaterialTheme.colorScheme.surface)
             .then(
                 if (backgroundTapEnabled) {
                     Modifier.clickable(
