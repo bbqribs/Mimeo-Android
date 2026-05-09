@@ -73,6 +73,10 @@ import com.mimeo.android.ui.common.queueCapturePresentation
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.playlists.BatchPlaylistPickerDialog
+import com.mimeo.android.ui.theme.LocalMimeoColorTokens
+import com.mimeo.android.ui.theme.LocalMimeoDensityTokens
+import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
+import com.mimeo.android.ui.theme.LocalMimeoV1Active
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
@@ -162,6 +166,8 @@ fun LibraryItemsScreen(
     onPlayLast: ((itemId: Int) -> Unit)? = null,
     onPlayFromHere: ((itemsFromHere: List<PlaybackQueueItem>, selectedItemId: Int) -> Unit)? = null,
 ) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
     val listState = rememberLazyListState()
     var pendingExpanded by rememberSaveable { mutableStateOf(false) }
     val actionScope = rememberCoroutineScope()
@@ -510,7 +516,7 @@ fun LibraryItemsScreen(
                         )
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 12.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                            color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
                         )
                     }
                 }
@@ -563,7 +569,7 @@ fun LibraryItemsScreen(
                         )
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 12.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                            color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
                         )
                     }
                 }
@@ -676,6 +682,9 @@ private fun PendingSectionHeader(
     expanded: Boolean,
     onToggle: () -> Unit,
 ) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -686,26 +695,35 @@ private fun PendingSectionHeader(
     ) {
         Text(
             text = "Pending ($count)",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = if (isV1) mTypography.section else MaterialTheme.typography.labelLarge,
+            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Icon(
             imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
             contentDescription = if (expanded) "Collapse" else "Expand",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
 
 @Composable
 private fun DateSectionHeader(label: String) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    val densityTokens = LocalMimeoDensityTokens.current
     Text(
         text = label,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
+        style = if (isV1) mTypography.section else MaterialTheme.typography.labelLarge,
+        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.primary,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(
+                start = 16.dp,
+                end = 16.dp,
+                top = if (isV1) densityTokens.sectionGap else 8.dp,
+                bottom = 6.dp,
+            ),
     )
 }
 

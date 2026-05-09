@@ -22,6 +22,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.mimeo.android.ui.theme.LocalMimeoColorTokens
+import com.mimeo.android.ui.theme.LocalMimeoV1Active
 
 /**
  * Shared trailing-actions slot: visible Play button + MoreVert overflow button/menu.
@@ -35,6 +37,8 @@ fun ItemRowTrailingActions(
     onPlayNow: (() -> Unit)?,
     menuContent: @Composable ColumnScope.() -> Unit,
 ) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
     var menuExpanded by remember { mutableStateOf(false) }
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 40.dp) {
         Row(
@@ -49,7 +53,7 @@ fun ItemRowTrailingActions(
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = "Play $title",
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -62,7 +66,7 @@ fun ItemRowTrailingActions(
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = "More actions for $title",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp),
                     )
                 }
