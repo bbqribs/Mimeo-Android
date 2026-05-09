@@ -486,6 +486,7 @@ class MainActivity : ComponentActivity() {
             MimeoAppTheme(
                 visualThemePreference = settings.visualThemePreference,
                 visualDensityPreference = settings.visualDensityPreference,
+                enableVisualDesignV1 = settings.visualDesignV1Enabled,
             ) {
                 MimeoApp(vm)
             }

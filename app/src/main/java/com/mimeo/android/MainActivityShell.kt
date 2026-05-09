@@ -238,7 +238,11 @@ internal fun MainActivityShell(
                 if (drawerState.isOpen) coroutineScope.launch { drawerState.close() }
                 return@buildPlayerRouteHandlers
             }
-            nav.navigate(ROUTE_UP_NEXT) { launchSingleTop = true }
+            nav.navigate(ROUTE_UP_NEXT) {
+                popUpTo(ROUTE_UP_NEXT) { inclusive = false }
+                launchSingleTop = true
+                restoreState = true
+            }
             if (drawerState.isOpen) coroutineScope.launch { drawerState.close() }
         },
     )

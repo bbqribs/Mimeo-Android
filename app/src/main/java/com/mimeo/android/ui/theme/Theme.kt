@@ -18,9 +18,9 @@ import androidx.compose.ui.unit.dp
 import com.mimeo.android.model.VisualDensityPreference
 import com.mimeo.android.model.VisualThemePreference
 
-// Dev-only wrapper gate for the visual v1 path.
-// Keep this false until visual v1 replaces the legacy app theme.
-internal const val VISUAL_DESIGN_V1_ENABLED = false
+// Emergency compile-time override for local debug builds.
+// Primary control is the debug-only Developer Settings toggle.
+internal const val VISUAL_DESIGN_V1_FORCE_ENABLED = false
 
 internal enum class MimeoThemeRuntimePath {
     LEGACY,
@@ -51,10 +51,10 @@ private val MimeoDarkColors = darkColorScheme(
 fun MimeoAppTheme(
     visualThemePreference: VisualThemePreference,
     visualDensityPreference: VisualDensityPreference,
-    enableVisualDesignV1: Boolean = VISUAL_DESIGN_V1_ENABLED,
+    enableVisualDesignV1: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    when (resolveThemeRuntimePath(enableVisualDesignV1)) {
+    when (resolveThemeRuntimePath(enableVisualDesignV1 || VISUAL_DESIGN_V1_FORCE_ENABLED)) {
         MimeoThemeRuntimePath.LEGACY -> MimeoTheme(content = content)
         MimeoThemeRuntimePath.VISUAL_V1 -> MimeoThemeV1(
             visualThemePreference = visualThemePreference,

@@ -185,6 +185,9 @@ fun SettingsScreen(
     var showPendingOutcomeSimulator by remember(settings.showPendingOutcomeSimulator) {
         mutableStateOf(settings.showPendingOutcomeSimulator)
     }
+    var visualDesignV1Enabled by remember(settings.visualDesignV1Enabled) {
+        mutableStateOf(settings.visualDesignV1Enabled)
+    }
     var ttsVoiceName by remember(settings.ttsVoiceName) {
         mutableStateOf(settings.ttsVoiceName)
     }
@@ -1600,6 +1603,30 @@ fun SettingsScreen(
                             onCheckedChange = {
                                 showPendingOutcomeSimulator = it
                                 vm.saveShowPendingOutcomeSimulator(it)
+                            },
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text("Visual design v1 wrapper")
+                            Text(
+                                text = "Enable Paper & Ember token wrapper path for local visual review.",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = visualDesignV1Enabled,
+                            onCheckedChange = {
+                                visualDesignV1Enabled = it
+                                vm.saveVisualDesignV1Enabled(it)
                             },
                         )
                     }

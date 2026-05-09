@@ -3020,6 +3020,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun saveVisualDesignV1Enabled(enabled: Boolean) {
+        viewModelScope.launch {
+            _settings.update { current -> current.copy(visualDesignV1Enabled = enabled) }
+            settingsStore.saveVisualDesignV1Enabled(enabled)
+        }
+    }
+
     fun saveTtsVoiceName(ttsVoiceName: String) {
         viewModelScope.launch {
             _settings.update { current -> current.copy(ttsVoiceName = ttsVoiceName.trim()) }

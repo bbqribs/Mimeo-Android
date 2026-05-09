@@ -111,6 +111,8 @@ class SettingsStore(private val context: Context) {
         stringPreferencesKey("visual_theme_preference")
     private val visualDensityPreferenceKey: Preferences.Key<String> =
         stringPreferencesKey("visual_density_preference")
+    private val visualDesignV1EnabledKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("visual_design_v1_enabled")
     private val playerControlsModeKey: Preferences.Key<String> =
         stringPreferencesKey("player_controls_mode")
     private val playerLastNonNubModeKey: Preferences.Key<String> =
@@ -198,6 +200,7 @@ class SettingsStore(private val context: Context) {
                 ?: ParagraphSpacingOption.MEDIUM,
             visualThemePreference = parseVisualThemePreference(prefs[visualThemePreferenceKey]),
             visualDensityPreference = parseVisualDensityPreference(prefs[visualDensityPreferenceKey]),
+            visualDesignV1Enabled = prefs[visualDesignV1EnabledKey] ?: false,
             playerControlsMode = prefs[playerControlsModeKey]
                 ?.let { runCatching { PlayerControlsMode.valueOf(it) }.getOrNull() }
                 ?: PlayerControlsMode.FULL,
@@ -370,6 +373,12 @@ class SettingsStore(private val context: Context) {
     suspend fun saveVisualDensityPreference(visualDensityPreference: VisualDensityPreference) {
         context.dataStore.edit { prefs ->
             prefs[visualDensityPreferenceKey] = visualDensityPreference.name
+        }
+    }
+
+    suspend fun saveVisualDesignV1Enabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[visualDesignV1EnabledKey] = enabled
         }
     }
 
