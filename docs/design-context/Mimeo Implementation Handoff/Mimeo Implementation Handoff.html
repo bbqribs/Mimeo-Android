@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mimeo · Implementation Handoff</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg:#F4EFE7; --surface:#FAF7F1; --surface-hi:#FFFCF6;
+    --line:#E2DACB; --line-soft:#ECE5D6;
+    --fg:#1B1A17; --fg2:#67625A; --fg3:#9A9388; --fg4:#C7BEAE;
+    --accent:#C25B2E; --accent-dim:rgba(194,91,46,.10);
+    --code-bg:#1B1A17; --code-fg:#E8DDC8; --code-key:#C25B2E; --code-str:#7FA76A; --code-cm:#8A8378;
+    --sans:"Inter", system-ui, sans-serif;
+    --serif:"Source Serif 4", Georgia, serif;
+    --mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  body{font-size:15px;line-height:1.6}
+  main{max-width:920px;margin:0 auto;padding:64px 32px 120px}
+  .kicker{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--accent)}
+  h1{font-family:var(--serif);font-weight:500;font-size:46px;letter-spacing:-.015em;line-height:1.05;margin:14px 0 16px;color:var(--fg)}
+  h2{font-family:var(--serif);font-weight:500;font-size:30px;letter-spacing:-.01em;line-height:1.2;margin:64px 0 8px;border-top:1px solid var(--line);padding-top:36px}
+  h2:first-of-type{border-top:0;padding-top:0;margin-top:48px}
+  h3{font-family:var(--serif);font-weight:500;font-size:22px;letter-spacing:-.005em;margin:36px 0 6px;color:var(--fg)}
+  h4{font-family:var(--sans);font-weight:600;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg2);margin:24px 0 8px}
+  p{margin:0 0 14px;color:var(--fg);max-width:68ch}
+  p.lede{font-size:18px;color:var(--fg2);max-width:62ch;line-height:1.55}
+  ul,ol{margin:0 0 16px;padding-left:22px;max-width:68ch}
+  li{margin:6px 0}
+  li::marker{color:var(--fg3)}
+  strong{font-weight:600;color:var(--fg)}
+  code{font-family:var(--mono);font-size:13px;background:var(--surface);padding:1px 6px;border-radius:4px;border:1px solid var(--line);color:var(--fg)}
+  pre{font-family:var(--mono);font-size:12.5px;line-height:1.55;background:var(--code-bg);color:var(--code-fg);padding:18px 20px;border-radius:10px;overflow-x:auto;margin:14px 0 22px}
+  pre .k{color:#E8C26A}
+  pre .s{color:#A4C58B}
+  pre .c{color:#6B645A;font-style:italic}
+  pre .n{color:#9FB8D8}
+  pre .t{color:#D49B7A}
+  table{width:100%;border-collapse:collapse;margin:14px 0 22px;font-size:13.5px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  th{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3);border-bottom:1px solid var(--line);background:var(--surface)}
+  tr:hover td{background:var(--surface-hi)}
+  td.mono, td code{font-family:var(--mono);font-size:12.5px;color:var(--fg2)}
+  td .sw{display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid var(--line);vertical-align:-2px;margin-right:8px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:12px 0 20px}
+  .panel h4{margin-top:0}
+  .pill{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.04em;padding:3px 9px;border-radius:999px;background:var(--accent-dim);color:var(--accent);margin-right:6px;vertical-align:1px}
+  .pill.ok{background:rgba(63,122,82,.12);color:#3F7A52}
+  .pill.med{background:rgba(183,137,42,.12);color:#B7892A}
+  .pill.warn{background:rgba(184,74,63,.12);color:#B84A3F}
+  .toc{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 36px}
+  .toc h4{margin-top:0}
+  .toc ol{column-count:2;column-gap:32px;padding-left:20px;margin:0}
+  .toc a{color:var(--fg);text-decoration:none}
+  .toc a:hover{color:var(--accent)}
+  .swatch-row{display:flex;align-items:center;gap:10px;margin:6px 0}
+  .swatch-row .sw{width:28px;height:28px;border-radius:6px}
+  .meta{font-family:var(--mono);font-size:12px;color:var(--fg3)}
+  hr{border:0;border-top:1px solid var(--line);margin:48px 0}
+  .check{padding-left:0;list-style:none}
+  .check li{padding-left:26px;position:relative;margin:8px 0}
+  .check li:before{content:"";position:absolute;left:4px;top:9px;width:10px;height:6px;border-left:2px solid var(--accent);border-bottom:2px solid var(--accent);transform:rotate(-45deg)}
+  .footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--line);font-size:13px;color:var(--fg3)}
+  @media print {
+    body{background:#fff}
+    main{max-width:none;padding:0 24px}
+    h2{page-break-before:always}
+    h2:first-of-type{page-break-before:auto}
+    pre{page-break-inside:avoid}
+    .toc{page-break-after:always}
+  }
+</style>
+</head>
+<body>
+<main>
+
+<div class="kicker">Mimeo · Implementation handoff · v1</div>
+<h1>From visual design to a buildable spec.</h1>
+<p class="lede">This document converts the approved visual direction (Direction&nbsp;B · Paper &amp; Ember as the canonical baseline, with Direction&nbsp;A retained as the dark-theme variant) into a concrete implementation contract for Android (Jetpack Compose) and the server-rendered web app. Tokens, component rules, mapping snippets, rollout, QA — no new product, no new features.</p>
+
+<div class="toc">
+  <h4>Contents</h4>
+  <ol>
+    <li><a href="#tokens">1 · Design tokens</a></li>
+    <li><a href="#components">2 · Component rules</a></li>
+    <li><a href="#compose">3 · Android Compose mapping</a></li>
+    <li><a href="#web">4 · Web mapping</a></li>
+    <li><a href="#rollout">5 · Rollout plan</a></li>
+    <li><a href="#qa">6 · Design QA checklist</a></li>
+  </ol>
+</div>
+
+<!-- ─────────────── 1 TOKENS ─────────────── -->
+<h2 id="tokens">1 · Design tokens</h2>
+<p>All numeric values are unit-typed: dp on Android, px on web (1 dp ≈ 1 px at MDPI; the system scales). Token names are stable; theme files swap the values.</p>
+
+<h3>1.1 Color roles — light theme (canonical)</h3>
+<p>Light theme is the default for both platforms. Source: Direction&nbsp;B "Paper &amp; Ember".</p>
+<table>
+<thead><tr><th>Token</th><th>Hex</th><th>Role</th></tr></thead>
+<tbody>
+<tr><td><code>color.bg</code></td><td><span class="sw" style="background:#F4EFE7"></span><code>#F4EFE7</code></td><td>App background, drawer scrim background, status bar</td></tr>
+<tr><td><code>color.surface</code></td><td><span class="sw" style="background:#FAF7F1"></span><code>#FAF7F1</code></td><td>Cards, settings groups, input fields, candidate cards</td></tr>
+<tr><td><code>color.surface.hi</code></td><td><span class="sw" style="background:#FFFCF6"></span><code>#FFFCF6</code></td><td>Hover/pressed surface, raised popover</td></tr>
+<tr><td><code>color.line</code></td><td><span class="sw" style="background:#E2DACB"></span><code>#E2DACB</code></td><td>Card borders, chip outlines, divider on emphasis</td></tr>
+<tr><td><code>color.line.soft</code></td><td><span class="sw" style="background:#ECE5D6"></span><code>#ECE5D6</code></td><td>Row hairlines inside lists</td></tr>
+<tr><td><code>color.fg</code></td><td><span class="sw" style="background:#1B1A17"></span><code>#1B1A17</code></td><td>Primary text, titles</td></tr>
+<tr><td><code>color.fg.2</code></td><td><span class="sw" style="background:#67625A"></span><code>#67625A</code></td><td>Body, secondary actions, body labels</td></tr>
+<tr><td><code>color.fg.3</code></td><td><span class="sw" style="background:#9A9388"></span><code>#9A9388</code></td><td>Meta lines (host · 9 min), placeholders</td></tr>
+<tr><td><code>color.fg.4</code></td><td><span class="sw" style="background:#C7BEAE"></span><code>#C7BEAE</code></td><td>Disabled glyphs, dot separators</td></tr>
+<tr><td><code>color.accent</code></td><td><span class="sw" style="background:#C25B2E"></span><code>#C25B2E</code></td><td>Primary brand action, "Now playing" edge, focus ring</td></tr>
+<tr><td><code>color.accent.dim</code></td><td><span class="sw" style="background:rgba(194,91,46,.10)"></span><code>rgba(194,91,46,.10)</code></td><td>Selected drawer row, chip-on background, status pill</td></tr>
+<tr><td><code>color.accent.on</code></td><td><span class="sw" style="background:#FFFCF6"></span><code>#FFFCF6</code></td><td>Foreground on accent (button label)</td></tr>
+<tr><td><code>color.now.tint</code></td><td><span class="sw" style="background:rgba(194,91,46,.07)"></span><code>rgba(194,91,46,.07)</code></td><td>Reader "Now playing" bridge, mini-player glow</td></tr>
+<tr><td><code>color.success</code></td><td><span class="sw" style="background:#3F7A52"></span><code>#3F7A52</code></td><td>Privacy checks, connection OK</td></tr>
+<tr><td><code>color.warn</code></td><td><span class="sw" style="background:#B7892A"></span><code>#B7892A</code></td><td>Inline warnings (network mode demoted, etc.)</td></tr>
+<tr><td><code>color.danger</code></td><td><span class="sw" style="background:#B84A3F"></span><code>#B84A3F</code></td><td>Destructive: clear cache, delete</td></tr>
+</tbody>
+</table>
+
+<h3>1.2 Color roles — dark theme</h3>
+<p>Dark theme is "Direction A · Calm Lilac". Same role names; swap values.</p>
+<table>
+<thead><tr><th>Token</th><th>Hex</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>color.bg</code></td><td><span class="sw" style="background:#0B0B0E"></span><code>#0B0B0E</code></td><td>Near-black, never pure</td></tr>
+<tr><td><code>color.surface</code></td><td><span class="sw" style="background:#121217"></span><code>#121217</code></td><td></td></tr>
+<tr><td><code>color.surface.hi</code></td><td><span class="sw" style="background:#181822"></span><code>#181822</code></td><td>Pressed/hover</td></tr>
+<tr><td><code>color.line</code></td><td><span class="sw" style="background:#1F1F2A"></span><code>#1F1F2A</code></td><td></td></tr>
+<tr><td><code>color.line.soft</code></td><td><span class="sw" style="background:#15151D"></span><code>#15151D</code></td><td>Row hairlines</td></tr>
+<tr><td><code>color.fg</code></td><td><span class="sw" style="background:#ECECF1;border-color:#444"></span><code>#ECECF1</code></td><td></td></tr>
+<tr><td><code>color.fg.2</code></td><td><span class="sw" style="background:#9A99A6"></span><code>#9A99A6</code></td><td></td></tr>
+<tr><td><code>color.fg.3</code></td><td><span class="sw" style="background:#5E5D6B"></span><code>#5E5D6B</code></td><td></td></tr>
+<tr><td><code>color.fg.4</code></td><td><span class="sw" style="background:#3A3947"></span><code>#3A3947</code></td><td></td></tr>
+<tr><td><code>color.accent</code></td><td><span class="sw" style="background:#B6A1FF"></span><code>#B6A1FF</code></td><td>Calm lilac, slightly desaturated</td></tr>
+<tr><td><code>color.accent.dim</code></td><td><span class="sw" style="background:rgba(182,161,255,.14)"></span><code>rgba(182,161,255,.14)</code></td><td></td></tr>
+<tr><td><code>color.accent.on</code></td><td><span class="sw" style="background:#0B0B0E;border-color:#444"></span><code>#0B0B0E</code></td><td></td></tr>
+<tr><td><code>color.now.tint</code></td><td><code>rgba(182,161,255,.06)</code></td><td></td></tr>
+<tr><td><code>color.success</code></td><td><span class="sw" style="background:#7FD1A8"></span><code>#7FD1A8</code></td><td></td></tr>
+<tr><td><code>color.warn</code></td><td><span class="sw" style="background:#E8C26A"></span><code>#E8C26A</code></td><td></td></tr>
+<tr><td><code>color.danger</code></td><td><span class="sw" style="background:#F26E6E"></span><code>#F26E6E</code></td><td></td></tr>
+</tbody>
+</table>
+
+<h3>1.3 Accent variants</h3>
+<p>Single brand accent per theme. Do not introduce per-screen accents. The "Now playing" tint is derived from the same accent at low alpha. If we ever ship user-pickable accents, expose only these curated values:</p>
+<ul>
+  <li><strong>Light:</strong> <code>#C25B2E</code> (ember, default), <code>#3F7A52</code> (forest), <code>#2B567A</code> (slate blue), <code>#7A3E8C</code> (plum).</li>
+  <li><strong>Dark:</strong>  <code>#B6A1FF</code> (lilac, default), <code>#8FB6FF</code> (steel), <code>#7FD1A8</code> (sage), <code>#E8C26A</code> (sand).</li>
+</ul>
+
+<h3>1.4 Typography scale</h3>
+<table>
+<thead><tr><th>Token</th><th>Family</th><th>Weight</th><th>Size / line-height</th><th>Tracking</th><th>Use</th></tr></thead>
+<tbody>
+<tr><td><code>type.display</code></td><td>Serif</td><td>500</td><td>26 / 1.18</td><td>−.012em</td><td>Reader title; playlist detail title</td></tr>
+<tr><td><code>type.title</code></td><td>Serif</td><td>500</td><td>20 / 1.25</td><td>−.008em</td><td>App-bar title; settings group leader</td></tr>
+<tr><td><code>type.row</code></td><td>Serif</td><td>500</td><td>15 / 1.32</td><td>−.005em</td><td>Article rows, candidate titles</td></tr>
+<tr><td><code>type.body</code></td><td>Sans</td><td>400</td><td>14 / 1.55</td><td>0</td><td>Drawer rows, settings descriptions</td></tr>
+<tr><td><code>type.body.read</code></td><td>Serif</td><td>400</td><td>17 / 1.6</td><td>0</td><td>Reader body</td></tr>
+<tr><td><code>type.meta</code></td><td>Sans</td><td>400</td><td>12 / 1.45</td><td>0</td><td>host · duration · timestamp</td></tr>
+<tr><td><code>type.section</code></td><td>Sans</td><td>600</td><td>11 / 1.4</td><td>+.08em UPPER</td><td>Section headers in lists</td></tr>
+<tr><td><code>type.caption</code></td><td>Sans</td><td>500</td><td>11 / 1.4</td><td>+.04em</td><td>Status pills, badge labels</td></tr>
+<tr><td><code>type.button</code></td><td>Sans</td><td>600</td><td>13 / 1</td><td>−.005em</td><td>Primary &amp; secondary buttons</td></tr>
+<tr><td><code>type.mono</code></td><td>Mono</td><td>400</td><td>12 / 1.7</td><td>0</td><td>URLs, diagnostics, code</td></tr>
+</tbody>
+</table>
+
+<h3>1.5 Density scale</h3>
+<p>Density adjusts list-row vertical padding, the gap between row title and meta, and section gap. Type sizes do not change between densities — only spacing.</p>
+<table>
+<thead><tr><th>Token</th><th>Compact</th><th>Default</th><th>Comfortable</th></tr></thead>
+<tbody>
+<tr><td><code>density.row.padV</code></td><td>10</td><td>14</td><td>18</td></tr>
+<tr><td><code>density.row.gap</code> (title↔meta)</td><td>2</td><td>4</td><td>6</td></tr>
+<tr><td><code>density.section.gap</code></td><td>14</td><td>18</td><td>22</td></tr>
+<tr><td><code>density.list.divider</code></td><td>hairline</td><td>hairline</td><td>hairline + 4 gap</td></tr>
+</tbody>
+</table>
+
+<h3>1.6 Font options</h3>
+<p>Ship system-safe families first, custom faces opt-in via Settings → Reading &amp; playback.</p>
+<table>
+<thead><tr><th>Slot</th><th>Default (system-safe)</th><th>Optional custom</th></tr></thead>
+<tbody>
+<tr><td>Serif (titles, reader)</td><td>Android <code>serif</code> / Web <code>Georgia, "Times New Roman", serif</code></td><td>Source Serif 4 (preferred), Spectral, Crimson Pro</td></tr>
+<tr><td>Sans (UI body)</td><td>Android <code>system-ui</code> / Web <code>system-ui, -apple-system, sans-serif</code></td><td>Inter (preferred), IBM Plex Sans</td></tr>
+<tr><td>Mono (URLs/diag)</td><td>Android <code>monospace</code> / Web <code>ui-monospace, Menlo, Consolas, monospace</code></td><td>JetBrains Mono</td></tr>
+</tbody>
+</table>
+<p>Custom fonts are bundled as Compose <code>FontFamily</code> resources on Android and self-hosted <code>@font-face</code> on web. Never load them from a third-party CDN at runtime — that leaks reading-session timing to a CDN owner.</p>
+
+<h3>1.7 Spacing scale</h3>
+<p>4-pt base. Use only these values; do not introduce arbitrary spacing.</p>
+<table>
+<thead><tr><th>Token</th><th>dp / px</th><th>Used for</th></tr></thead>
+<tbody>
+<tr><td><code>space.0</code></td><td>0</td><td>—</td></tr>
+<tr><td><code>space.1</code></td><td>2</td><td>icon-to-icon nudge</td></tr>
+<tr><td><code>space.2</code></td><td>4</td><td>title↔meta gap (compact)</td></tr>
+<tr><td><code>space.3</code></td><td>6</td><td>chip gap</td></tr>
+<tr><td><code>space.4</code></td><td>8</td><td>icon↔label, button-internal gap</td></tr>
+<tr><td><code>space.5</code></td><td>10</td><td>row-internal vertical (compact)</td></tr>
+<tr><td><code>space.6</code></td><td>14</td><td>row vertical (default)</td></tr>
+<tr><td><code>space.7</code></td><td>18</td><td>screen-edge horizontal padding</td></tr>
+<tr><td><code>space.8</code></td><td>24</td><td>card↔card gap, drawer padding</td></tr>
+<tr><td><code>space.9</code></td><td>32</td><td>section breaks on hero panels</td></tr>
+<tr><td><code>space.10</code></td><td>48</td><td>page-level vertical breathing</td></tr>
+</tbody>
+</table>
+
+<h3>1.8 Corner radius</h3>
+<table>
+<thead><tr><th>Token</th><th>Value</th><th>Use</th></tr></thead>
+<tbody>
+<tr><td><code>radius.none</code></td><td>0</td><td>App-bar, dividers</td></tr>
+<tr><td><code>radius.input</code></td><td>8</td><td>Toggles, small inputs, status pill bg</td></tr>
+<tr><td><code>radius.item</code></td><td>10</td><td>Inline pills, search field</td></tr>
+<tr><td><code>radius.card</code></td><td>12</td><td>Now-playing card, candidate card, settings group</td></tr>
+<tr><td><code>radius.sheet</code></td><td>16</td><td>Bottom sheets, modal dialogs</td></tr>
+<tr><td><code>radius.pill</code></td><td>999</td><td>Chips, primary/secondary buttons</td></tr>
+</tbody>
+</table>
+
+<h3>1.9 Elevation / shadow</h3>
+<p>Shadows are reserved for transient surfaces (sheets, snackbars, the floating "Jump to Now Playing" pill). All persistent surfaces use borders, not shadows. This keeps light mode looking like paper and dark mode looking flat instead of plasticky.</p>
+<table>
+<thead><tr><th>Token</th><th>Value</th><th>Use</th></tr></thead>
+<tbody>
+<tr><td><code>elev.0</code></td><td>none</td><td>Cards, drawer, app-bar</td></tr>
+<tr><td><code>elev.1</code></td><td><code>0 1 2 rgba(0,0,0,.04)</code></td><td>Pressed-row hint (light)</td></tr>
+<tr><td><code>elev.2</code></td><td><code>0 4 14 rgba(0,0,0,.12)</code></td><td>Floating Jump pill, snackbars</td></tr>
+<tr><td><code>elev.3</code></td><td><code>0 12 32 rgba(0,0,0,.18)</code></td><td>Bottom sheets, dialogs</td></tr>
+</tbody>
+</table>
+
+<h3>1.10 Divider / border rules</h3>
+<ul>
+  <li><strong>Within a list:</strong> 1-px <code>color.line.soft</code> hairline, indented to start at the left edge of the row's text content (≈ 18 px from the screen edge, or 42 px when a drag handle is present).</li>
+  <li><strong>Between sections:</strong> No divider — separate by section header type + spacing only.</li>
+  <li><strong>Cards / containers:</strong> 1-px <code>color.line</code> all sides.</li>
+  <li><strong>Now-playing card:</strong> 1-px <code>color.accent</code> all sides + <strong>3-px left edge</strong>; no shadow.</li>
+  <li><strong>App bar &amp; sticky chip strip:</strong> 1-px <code>color.line.soft</code> bottom only.</li>
+  <li>Never combine a shadow and a border on the same element.</li>
+</ul>
+
+<!-- ─────────────── 2 COMPONENTS ─────────────── -->
+<h2 id="components">2 · Component rules</h2>
+
+<h3>2.1 App shell &amp; drawer</h3>
+<div class="panel">
+  <h4>Layout</h4>
+  <p>App bar height 56 dp. Title in <code>type.title</code>. Leading icon button is 44 × 44 dp tap target. Trailing action cluster is right-aligned, max 3 icons; overflow into <code>more</code>.</p>
+  <h4>Drawer</h4>
+  <p>Width 288 dp. Background <code>color.surface</code> (light) / <code>#0E0E14</code> (dark). Branding header (logo + wordmark) at top, 24 dp padding. Sections in this fixed order, each preceded by a <code>type.section</code> header:</p>
+  <ol>
+    <li><strong>Library:</strong> Inbox · Favorites · Archive · Bin (counts right-aligned)</li>
+    <li><strong>Listen:</strong> Up Next · Smart Queue · Bluesky</li>
+    <li><strong>Playlists:</strong> manual playlists, alphabetical, with item count</li>
+    <li><strong>Smart playlists:</strong> diamond glyph, with live result count</li>
+    <li><strong>Settings:</strong> pinned to bottom, separated by 1-px <code>color.line</code> top</li>
+  </ol>
+  <h4>Drawer row</h4>
+  <p>48 dp height, 18 dp horizontal padding, 14 dp icon-label gap. Selected: <code>color.accent.dim</code> background, <code>radius.card</code>, label and icon in <code>color.accent</code>, weight 600. Counts in <code>type.meta</code> right-aligned.</p>
+  <h4>States</h4>
+  <p>Hover (web) / pressed (Android): <code>color.surface.hi</code>. Disabled (e.g. Bin when empty): label <code>color.fg.3</code>, count omitted, no hover effect.</p>
+</div>
+
+<h3>2.2 Library item row</h3>
+<div class="panel">
+  <h4>Layout (single column)</h4>
+  <ul>
+    <li>Vertical padding from <code>density.row.padV</code>; horizontal 18 dp.</li>
+    <li>Row 1 — title, <code>type.row</code>, <code>color.fg</code>, max 2 lines, ellipsize end.</li>
+    <li>Row 2 — meta, <code>type.meta</code>, <code>color.fg.3</code>: <code>host · duration</code>. If favourited, append a tiny star glyph in <code>color.accent</code>, 12 dp.</li>
+    <li>Optional Row 3 — progress bar 2 dp tall, max 240 dp wide, <code>color.line.soft</code> background, <code>color.accent</code> fill at 70 % opacity. Only render when <code>read &gt; 0</code>.</li>
+    <li>Trailing — Play/Pause button (<code>color.accent</code>, 36 dp) and Overflow (<code>color.fg.2</code>, 36 dp).</li>
+  </ul>
+  <h4>Actions</h4>
+  <ul>
+    <li><strong>Tap row:</strong> open Reader.</li>
+    <li><strong>Tap Play:</strong> place item as Now Playing in the current Up Next session, start TTS. Does not clear Up Next.</li>
+    <li><strong>Tap overflow:</strong> bottom sheet — Add to Up Next · Add to playlist · Favourite · Archive · Move to Bin.</li>
+    <li><strong>Swipe-left:</strong> Archive (matches Material default; surfaced visually with <code>color.line</code> background reveal).</li>
+  </ul>
+  <h4>States</h4>
+  <p>Now-playing: row tinted with <code>color.now.tint</code>, Play icon switches to Pause in <code>color.accent</code>. Pressed: row background <code>color.surface.hi</code>. Read 100 %: title in <code>color.fg.2</code>, no progress bar.</p>
+</div>
+
+<h3>2.3 Playlist item row</h3>
+<p>Same skeleton as Library row, with the addition of a <strong>drag handle</strong> on the leading edge (manual playlists only) — 22 dp <code>I.drag</code> glyph in <code>color.fg.4</code>, 8 dp from screen edge. Long-press initiates reorder; haptic + 4 % scale feedback. Smart playlist rows do not show a handle.</p>
+
+<h3>2.4 Smart Queue row</h3>
+<p>Identical to Library row visually. Difference is in the surrounding chrome: a sticky filter bar above the list with search field (<code>radius.card</code>, <code>color.surface</code> bg) and chip strip (Newest · Oldest · Opened · Progress · All sources). Sections inside the list are time-bucketed (<em>Today · This week · Earlier</em>) using <code>type.section</code> headers and <code>color.accent</code> for the active bucket.</p>
+
+<h3>2.5 Up Next row &amp; sections</h3>
+<div class="panel">
+  <h4>Section order (top → bottom)</h4>
+  <ol>
+    <li><strong>History</strong> — items already played in this session. Rows rendered at <code>opacity 0.55</code>, dense density (override <code>density.row.padV</code> by −2). No drag handle.</li>
+    <li><strong>Earlier in queue</strong> — items skipped past. Dense, no drag handle.</li>
+    <li><strong>Now playing</strong> — anchored card (see below). Always present even at session start (collapsed empty state with prompt: "Pick something from Smart Queue or your Inbox.").</li>
+    <li><strong>Up Next</strong> — upcoming items. Default density. Drag handles enabled; reorder is the only interaction unique to this section.</li>
+  </ol>
+  <h4>Now-playing card</h4>
+  <ul>
+    <li><code>radius.card</code>, <code>color.now.tint</code> background, 1-px <code>color.accent</code> border, 3-px left edge.</li>
+    <li>Top kicker: pulsing dot + "Now playing · 4:32 / 9:18" in <code>type.section</code>, <code>color.accent</code>.</li>
+    <li>Title: <code>type.title</code>, max 3 lines.</li>
+    <li>Meta: <code>type.meta</code>, host only.</li>
+    <li>Progress: 3-px bar, <code>color.line</code> track, <code>color.accent</code> fill.</li>
+    <li>Tapping the card opens the Reader, prefilled with the playing item.</li>
+  </ul>
+  <h4>Header actions</h4>
+  <p>App-bar trailing icons: <code>refresh</code> (re-seed Up Next from Smart Queue, with confirmation dialog), <code>add</code> (queue picker sheet), <code>more</code>. The "Re-seed" copy ALSO appears as a labelled secondary button beneath the session-meta row, for first-use discoverability.</p>
+</div>
+
+<h3>2.6 Reader / Locus</h3>
+<div class="panel">
+  <h4>Layout</h4>
+  <ul>
+    <li>App bar with back arrow + favourite, archive, more.</li>
+    <li><strong>Now-playing bridge</strong> — only when this article is the playing item: 40 dp band below the app bar, <code>color.now.tint</code> background, dot + "Now playing · time" + speed pill.</li>
+    <li>Article header: kicker (host name in <code>type.section</code>, <code>color.accent</code>), title <code>type.display</code>, byline meta in <code>type.meta</code>.</li>
+    <li>Body: <code>type.body.read</code> in <code>color.fg</code>. First paragraph italicised when it reads as a kicker/dek (heuristic: ≤ 200 chars, plain-text). Highlights from TTS sync render as inline <code>color.accent.dim</code> background.</li>
+    <li>Max content width 640 dp, centered.</li>
+  </ul>
+  <h4>Mini-player</h4>
+  <p>Persistent across all screens except the Reader showing a different item (where the embedded bridge stands in). When reading a different item than what is playing, surface a floating <strong>"Jump to Now Playing"</strong> pill (<code>elev.2</code>) above the mini-player. Tapping it reroutes the Reader to the playing item; it does not modify Up Next.</p>
+  <h4>Actions</h4>
+  <p>Favourite ↔ heart fill toggle. Archive moves the item to Archive and snackbars "Archived · Undo". More opens: Mark as read · Share · Open in browser · Move to Bin.</p>
+</div>
+
+<h3>2.7 Bluesky candidate browser</h3>
+<div class="panel">
+  <h4>Hero context band</h4>
+  <p>One-line privacy reminder, <code>type.meta</code>, <code>color.fg.3</code>: <em>Live candidate links. Saving creates normal Mimeo items — nothing is harvested without you.</em> The phrase "nothing is harvested without you" is bolded, <code>color.fg.2</code>. This band is <strong>required</strong>; it is the only way the user reconciles the live-feed metaphor with the no-auto-save policy.</p>
+  <h4>Source selector card</h4>
+  <p><code>radius.card</code>, <code>color.surface</code>, 1-px <code>color.line</code>. Shows current source (Timeline / List / Feed / Account) and resolves to a list/picker on tap. Adding a source is two-step: pick kind, then enter handle/URL.</p>
+  <h4>Status pill</h4>
+  <p>Inline strip below selector. Shows scan state: dot + "Scanned N posts · M links · stop: max_age | rate_limit | manual". <code>color.accent</code> on <code>color.accent.dim</code>, <code>radius.item</code>.</p>
+  <h4>Candidate card</h4>
+  <ul>
+    <li>One per scanned link. <code>radius.card</code>, <code>color.surface</code>, 1-px <code>color.line</code>.</li>
+    <li>Title <code>type.row</code>, URL <code>type.meta</code> truncated, byline <code>author · @handle · age</code>.</li>
+    <li>Status badge in the top-right corner: <em>Saved</em> (<code>color.accent.dim</code> bg, accent fg) or <em>Unsaved</em> (<code>color.line.soft</code> bg, <code>color.fg.3</code> fg).</li>
+    <li>Action row: <em>Open link</em> · <em>Open post</em> · trailing <strong>Save</strong> primary button. When already saved, the button switches to a secondary <em>✓ Saved</em> pill and tapping again opens an undo sheet (Undo · Open in Mimeo · Move to playlist).</li>
+  </ul>
+  <h4>Hard rules</h4>
+  <ul>
+    <li>Save is the <strong>only</strong> way an item enters Mimeo. There is no auto-save toggle, no implied save on scroll, no save-by-default.</li>
+    <li>Saving never modifies Up Next. To play, the user opens the saved item in Mimeo and presses Play, or adds it from a row overflow.</li>
+    <li>Scanning never decrements a quota or surfaces "we crawled X" telemetry — the band's "Scanned 9 posts" is a session-local counter, not a server stat.</li>
+  </ul>
+</div>
+
+<h3>2.8 Settings section</h3>
+<p>Settings are organised into <strong>groups</strong>, each rendered as a single rounded card (<code>radius.card</code>, <code>color.surface</code>, 1-px <code>color.line</code>) with rows separated by 1-px <code>color.line.soft</code> hairlines. Each row is 56 dp:</p>
+<ul>
+  <li><strong>Leading:</strong> 32-dp tinted icon — <code>color.accent.dim</code> bg, <code>color.accent</code> glyph. Destructive rows use <code>color.danger</code> on a 12 % danger background.</li>
+  <li><strong>Center:</strong> Label <code>type.body</code> 14.5/600, value <code>type.meta</code> below.</li>
+  <li><strong>Trailing:</strong> Chevron, toggle, or chip-strip (e.g. Connection Mode: Local / LAN / Remote).</li>
+</ul>
+<p>Group order: <em>Connection · Sources · Reading &amp; playback · Privacy</em>. Connection group includes a tappable monospace endpoint, "Test connection" primary, "Diagnostics" secondary, and a green status line.</p>
+
+<h3>2.9 Dialog</h3>
+<div class="panel">
+  <h4>Centred dialog</h4>
+  <p>Width 320–360 dp, <code>radius.sheet</code>, <code>color.surface</code>, <code>elev.3</code>. Title <code>type.title</code>, body <code>type.body</code>, button row right-aligned: secondary (text only) + primary (filled). Destructive primary uses <code>color.danger</code>.</p>
+  <h4>Bottom sheet</h4>
+  <p>Used for row overflow and source pickers on mobile. <code>radius.sheet</code> top corners, drag handle 36 × 4 dp <code>color.fg.4</code>. Each action row 48 dp, 14 dp icon-label gap.</p>
+</div>
+
+<h3>2.10 Button</h3>
+<table>
+<thead><tr><th>Variant</th><th>Background</th><th>Foreground</th><th>Border</th><th>Use</th></tr></thead>
+<tbody>
+<tr><td>Primary filled</td><td><code>color.accent</code></td><td><code>color.accent.on</code></td><td>none</td><td>Save · Play all · Test connection</td></tr>
+<tr><td>Secondary outlined</td><td>transparent</td><td><code>color.fg</code></td><td>1 px <code>color.line</code></td><td>Edit rule · Diagnostics · Re-seed</td></tr>
+<tr><td>Quiet</td><td>transparent</td><td><code>color.fg.2</code></td><td>none</td><td>Open link · Open post · Cancel</td></tr>
+<tr><td>Destructive</td><td><code>color.danger</code></td><td><code>#fff</code></td><td>none</td><td>Move to Bin · Clear cache (confirm)</td></tr>
+</tbody>
+</table>
+<p>All buttons are <code>radius.pill</code>. Heights: 36 dp (compact, in-row), 40 dp (default), 44 dp (hero, e.g. Save in Bluesky card). Min tap target 44 dp regardless of visual height — extend with transparent padding.</p>
+
+<h3>2.11 Empty / loading / error states</h3>
+<div class="panel">
+  <h4>Empty</h4>
+  <p>Centred 48-dp circular icon (<code>color.surface</code> bg, <code>color.fg.3</code> glyph), <code>type.title</code> headline, <code>type.body</code> 1-line explanation, <em>no illustration</em>. Optional secondary action below.</p>
+  <h4>Loading</h4>
+  <ul>
+    <li><strong>List:</strong> 5 skeleton rows — title bar (60 % width × 12 dp), meta bar (40 % × 8 dp), <code>color.line.soft</code>, 1.4 s shimmer.</li>
+    <li><strong>Reader:</strong> kicker bar + 3-line title bar + 6 paragraph bars; same shimmer.</li>
+    <li><strong>Bluesky scan:</strong> the status pill animates a striped fill across the dot row to indicate active scan; cards shimmer in as they arrive.</li>
+  </ul>
+  <h4>Error</h4>
+  <p>Inline at the top of the affected list: <code>color.danger</code> 12 % bg, 1-px <code>color.danger</code> border, <code>type.body</code> message, secondary "Retry" outlined button. Never modal. Never dismisses on tap-outside.</p>
+</div>
+
+<!-- ─────────────── 3 COMPOSE ─────────────── -->
+<h2 id="compose">3 · Android Compose mapping</h2>
+
+<h3>3.1 MaterialTheme.colorScheme</h3>
+<p>Map Mimeo roles onto Material 3 <code>ColorScheme</code> slots so existing M3 components (TopAppBar, Snackbar, Switch) inherit our tokens for free. Anything Mimeo-specific lives in a sibling <code>MimeoColors</code> CompositionLocal.</p>
+<pre><span class="c">// theme/Color.kt</span>
+<span class="k">val</span> <span class="t">LightColorScheme</span> = <span class="n">lightColorScheme</span>(
+    <span class="n">primary</span>           = <span class="n">Color</span>(<span class="s">0xFFC25B2E</span>),  <span class="c">// color.accent</span>
+    <span class="n">onPrimary</span>         = <span class="n">Color</span>(<span class="s">0xFFFFFCF6</span>),  <span class="c">// color.accent.on</span>
+    <span class="n">primaryContainer</span>  = <span class="n">Color</span>(<span class="s">0x1AC25B2E</span>),  <span class="c">// color.accent.dim (≈10%)</span>
+    <span class="n">onPrimaryContainer</span>= <span class="n">Color</span>(<span class="s">0xFFC25B2E</span>),
+    <span class="n">background</span>        = <span class="n">Color</span>(<span class="s">0xFFF4EFE7</span>),  <span class="c">// color.bg</span>
+    <span class="n">onBackground</span>      = <span class="n">Color</span>(<span class="s">0xFF1B1A17</span>),
+    <span class="n">surface</span>           = <span class="n">Color</span>(<span class="s">0xFFFAF7F1</span>),  <span class="c">// color.surface</span>
+    <span class="n">surfaceVariant</span>    = <span class="n">Color</span>(<span class="s">0xFFFFFCF6</span>),  <span class="c">// color.surface.hi</span>
+    <span class="n">onSurface</span>         = <span class="n">Color</span>(<span class="s">0xFF1B1A17</span>),
+    <span class="n">onSurfaceVariant</span>  = <span class="n">Color</span>(<span class="s">0xFF67625A</span>),  <span class="c">// color.fg.2</span>
+    <span class="n">outline</span>           = <span class="n">Color</span>(<span class="s">0xFFE2DACB</span>),  <span class="c">// color.line</span>
+    <span class="n">outlineVariant</span>    = <span class="n">Color</span>(<span class="s">0xFFECE5D6</span>),  <span class="c">// color.line.soft</span>
+    <span class="n">error</span>             = <span class="n">Color</span>(<span class="s">0xFFB84A3F</span>),
+)
+
+<span class="c">// Mimeo-specific tokens that don't map cleanly to M3</span>
+<span class="k">data class</span> <span class="t">MimeoColors</span>(
+    <span class="k">val</span> <span class="n">fg3</span>: Color, <span class="k">val</span> <span class="n">fg4</span>: Color,
+    <span class="k">val</span> <span class="n">nowTint</span>: Color, <span class="k">val</span> <span class="n">success</span>: Color, <span class="k">val</span> <span class="n">warn</span>: Color,
+)
+<span class="k">val</span> <span class="t">LocalMimeoColors</span> = <span class="n">staticCompositionLocalOf</span> { <span class="n">MimeoColors</span>(...) }</pre>
+
+<h3>3.2 Typography</h3>
+<pre><span class="c">// theme/Type.kt</span>
+<span class="k">private val</span> <span class="n">Serif</span> = <span class="n">FontFamily</span>(<span class="n">Font</span>(R.font.source_serif_4_regular),
+                            <span class="n">Font</span>(R.font.source_serif_4_medium, <span class="n">FontWeight</span>.Medium))
+<span class="k">private val</span> <span class="n">Sans</span>  = <span class="n">FontFamily</span>(<span class="n">Font</span>(R.font.inter_regular),
+                            <span class="n">Font</span>(R.font.inter_medium, <span class="n">FontWeight</span>.Medium),
+                            <span class="n">Font</span>(R.font.inter_semibold, <span class="n">FontWeight</span>.SemiBold))
+
+<span class="k">val</span> <span class="t">MimeoTypography</span> = <span class="n">Typography</span>(
+    <span class="n">displayLarge</span>  = <span class="n">TextStyle</span>(<span class="n">fontFamily</span>=Serif, <span class="n">fontWeight</span>=FontWeight.Medium,
+                              <span class="n">fontSize</span>=26.sp, <span class="n">lineHeight</span>=30.sp, <span class="n">letterSpacing</span>=(-0.012).em),  <span class="c">// type.display</span>
+    <span class="n">titleLarge</span>    = <span class="n">TextStyle</span>(<span class="n">fontFamily</span>=Serif, <span class="n">fontWeight</span>=FontWeight.Medium,
+                              <span class="n">fontSize</span>=20.sp, <span class="n">lineHeight</span>=25.sp),                       <span class="c">// type.title</span>
+    <span class="n">titleMedium</span>   = <span class="n">TextStyle</span>(<span class="n">fontFamily</span>=Serif, <span class="n">fontWeight</span>=FontWeight.Medium,
+                              <span class="n">fontSize</span>=15.sp, <span class="n">lineHeight</span>=19.8.sp),                     <span class="c">// type.row</span>
+    <span class="n">bodyLarge</span>     = <span class="n">TextStyle</span>(<span class="n">fontFamily</span>=Serif, <span class="n">fontWeight</span>=FontWeight.Normal,
+                              <span class="n">fontSize</span>=17.sp, <span class="n">lineHeight</span>=27.sp),                       <span class="c">// type.body.read</span>
+    <span class="n">bodyMedium</span>    = <span class="n">TextStyle</span>(<span class="n">fontFamily</span>=Sans,  <span class="n">fontSize</span>=14.sp, <span class="n">lineHeight</span>=21.7.sp), <span class="c">// type.body</span>
+    <span class="n">bodySmall</span>     = <span class="n">TextStyle</span>(<span class="n">fontFamily</span>=Sans,  <span class="n">fontSize</span>=12.sp, <span class="n">lineHeight</span>=17.4.sp), <span class="c">// type.meta</span>
+    <span class="n">labelLarge</span>    = <span class="n">TextStyle</span>(<span class="n">fontFamily</span>=Sans,  <span class="n">fontWeight</span>=FontWeight.SemiBold,
+                              <span class="n">fontSize</span>=13.sp),                                            <span class="c">// type.button</span>
+    <span class="n">labelSmall</span>    = <span class="n">TextStyle</span>(<span class="n">fontFamily</span>=Sans,  <span class="n">fontWeight</span>=FontWeight.SemiBold,
+                              <span class="n">fontSize</span>=11.sp, <span class="n">letterSpacing</span>=0.08.em),                <span class="c">// type.section</span>
+)</pre>
+
+<h3>3.3 Shapes</h3>
+<pre><span class="k">val</span> <span class="t">MimeoShapes</span> = <span class="n">Shapes</span>(
+    <span class="n">extraSmall</span> = <span class="n">RoundedCornerShape</span>(8.dp),     <span class="c">// radius.input</span>
+    <span class="n">small</span>      = <span class="n">RoundedCornerShape</span>(10.dp),    <span class="c">// radius.item</span>
+    <span class="n">medium</span>     = <span class="n">RoundedCornerShape</span>(12.dp),    <span class="c">// radius.card</span>
+    <span class="n">large</span>      = <span class="n">RoundedCornerShape</span>(16.dp),    <span class="c">// radius.sheet</span>
+    <span class="n">extraLarge</span> = <span class="n">RoundedCornerShape</span>(50),       <span class="c">// radius.pill (use CircleShape for buttons)</span>
+)</pre>
+
+<h3>3.4 Spacing &amp; density constants</h3>
+<pre><span class="k">object</span> <span class="t">MimeoSpace</span> {
+    <span class="k">val</span> <span class="n">s1</span>=2.dp; <span class="k">val</span> <span class="n">s2</span>=4.dp; <span class="k">val</span> <span class="n">s3</span>=6.dp; <span class="k">val</span> <span class="n">s4</span>=8.dp
+    <span class="k">val</span> <span class="n">s5</span>=10.dp; <span class="k">val</span> <span class="n">s6</span>=14.dp; <span class="k">val</span> <span class="n">s7</span>=18.dp; <span class="k">val</span> <span class="n">s8</span>=24.dp
+    <span class="k">val</span> <span class="n">s9</span>=32.dp; <span class="k">val</span> <span class="n">s10</span>=48.dp
+}
+
+<span class="k">enum class</span> <span class="t">Density</span> { Compact, Default, Comfortable }
+<span class="k">data class</span> <span class="t">DensityTokens</span>(<span class="k">val</span> <span class="n">rowPadV</span>: Dp, <span class="k">val</span> <span class="n">rowGap</span>: Dp, <span class="k">val</span> <span class="n">sectGap</span>: Dp)
+<span class="k">val</span> <span class="t">LocalDensity</span> = <span class="n">staticCompositionLocalOf</span> { densityTokensFor(Density.Default) }
+<span class="k">fun</span> densityTokensFor(d: Density) = <span class="k">when</span>(d) {
+    Density.Compact     -> DensityTokens(10.dp, 2.dp, 14.dp)
+    Density.Default     -> DensityTokens(14.dp, 4.dp, 18.dp)
+    Density.Comfortable -> DensityTokens(18.dp, 6.dp, 22.dp)
+}</pre>
+
+<h3>3.5 Reusable composables</h3>
+<p>Build these in <code>:ui-core</code> and consume from every screen module. Each maps 1:1 to a Component-rules entry above.</p>
+<table>
+<thead><tr><th>Composable</th><th>Purpose</th><th>Key params</th></tr></thead>
+<tbody>
+<tr><td><code>MimeoTheme</code></td><td>Wraps content in M3 <code>MaterialTheme</code> + <code>LocalMimeoColors</code> + <code>LocalDensity</code></td><td><code>darkTheme</code>, <code>density</code>, <code>fontScale</code></td></tr>
+<tr><td><code>MimeoAppBar</code></td><td>Custom 56-dp top bar; not <code>TopAppBar</code> (we don't want M3 surface tone)</td><td><code>title</code>, <code>onNavClick</code>, <code>actions</code></td></tr>
+<tr><td><code>MimeoNavigationDrawer</code></td><td>Wraps <code>ModalNavigationDrawer</code>, fixes content slot to our drawer layout</td><td><code>state</code>, <code>currentRoute</code>, <code>destinations</code></td></tr>
+<tr><td><code>ArticleRow</code></td><td>Library/Smart Queue/Up Next row (variant via flag)</td><td><code>item</code>, <code>variant</code>, <code>showProgress</code>, <code>onPlay</code>, <code>onOpen</code>, <code>onMore</code></td></tr>
+<tr><td><code>NowPlayingCard</code></td><td>Anchored card in Up Next + Reader bridge (compact form)</td><td><code>item</code>, <code>position</code>, <code>onTap</code></td></tr>
+<tr><td><code>MiniPlayer</code></td><td>Persistent bottom strip with Jump pill</td><td><code>session</code>, <code>onJump</code>, <code>onOpenReader</code></td></tr>
+<tr><td><code>CandidateCard</code></td><td>Bluesky candidate</td><td><code>candidate</code>, <code>isSaved</code>, <code>onSave</code>, <code>onOpenLink</code>, <code>onOpenPost</code></td></tr>
+<tr><td><code>SettingsGroup</code> + <code>SettingsRow</code></td><td>Card-grouped settings rows</td><td><code>title</code>, <code>rows</code></td></tr>
+<tr><td><code>MimeoButton</code> (Primary/Secondary/Quiet/Destructive)</td><td>Pill buttons</td><td><code>variant</code>, <code>onClick</code></td></tr>
+<tr><td><code>MimeoChip</code></td><td>Filter / rule chip</td><td><code>active</code>, <code>onClick</code></td></tr>
+<tr><td><code>EmptyState</code> / <code>ErrorBanner</code> / <code>SkeletonRow</code></td><td>State helpers</td><td><code>icon</code>, <code>title</code>, <code>body</code>, <code>action</code></td></tr>
+</tbody>
+</table>
+
+<h3>3.6 Settings exposure</h3>
+<p>Three switches drive the entire visual surface. They live under <em>Settings → Reading &amp; playback</em>:</p>
+<ul>
+  <li><strong>Theme</strong> — System (default) · Light · Dark. Persisted in <code>DataStore</code>; flows through <code>MimeoTheme</code>.</li>
+  <li><strong>Density</strong> — Compact · Default · Comfortable. Default for new installs. Affects all <code>ArticleRow</code> instances and section spacing.</li>
+  <li><strong>Reader font</strong> — System serif · Source Serif 4 · Spectral · Crimson Pro. Custom faces are bundled, not downloaded.</li>
+</ul>
+<p>None of these are time-of-day or motion-detected. They are explicit user choices. Do not auto-switch on schedule.</p>
+
+<!-- ─────────────── 4 WEB ─────────────── -->
+<h2 id="web">4 · Web mapping</h2>
+<p>Server-rendered web should expose the same tokens as CSS custom properties on <code>:root</code>. Theme switching is a <code>data-theme</code> attribute on <code>&lt;html&gt;</code>; density is a separate <code>data-density</code>. No CSS-in-JS, no design-system runtime — this is plain CSS that a Rails/Phoenix/Django template can serve.</p>
+
+<pre><span class="c">/* /static/css/tokens.css */</span>
+<span class="t">:root</span>, <span class="t">[data-theme="light"]</span> {
+  <span class="n">--bg</span>:           #F4EFE7;
+  <span class="n">--surface</span>:      #FAF7F1;
+  <span class="n">--surface-hi</span>:   #FFFCF6;
+  <span class="n">--line</span>:         #E2DACB;
+  <span class="n">--line-soft</span>:    #ECE5D6;
+  <span class="n">--fg</span>:           #1B1A17;
+  <span class="n">--fg-2</span>:         #67625A;
+  <span class="n">--fg-3</span>:         #9A9388;
+  <span class="n">--fg-4</span>:         #C7BEAE;
+  <span class="n">--accent</span>:       #C25B2E;
+  <span class="n">--accent-dim</span>:   <span class="s">rgb(194 91 46 / 10%)</span>;
+  <span class="n">--accent-on</span>:    #FFFCF6;
+  <span class="n">--now-tint</span>:     <span class="s">rgb(194 91 46 / 7%)</span>;
+  <span class="n">--success</span>:      #3F7A52;
+  <span class="n">--warn</span>:         #B7892A;
+  <span class="n">--danger</span>:       #B84A3F;
+
+  <span class="n">--font-serif</span>:   "Source Serif 4", Georgia, "Times New Roman", serif;
+  <span class="n">--font-sans</span>:    "Inter", system-ui, -apple-system, sans-serif;
+  <span class="n">--font-mono</span>:    "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  <span class="n">--radius-input</span>: 8px;
+  <span class="n">--radius-item</span>:  10px;
+  <span class="n">--radius-card</span>:  12px;
+  <span class="n">--radius-sheet</span>: 16px;
+  <span class="n">--radius-pill</span>:  999px;
+
+  <span class="n">--space-1</span>: 2px;  <span class="n">--space-2</span>: 4px;  <span class="n">--space-3</span>: 6px;  <span class="n">--space-4</span>: 8px;
+  <span class="n">--space-5</span>:10px;  <span class="n">--space-6</span>:14px;  <span class="n">--space-7</span>:18px;  <span class="n">--space-8</span>:24px;
+  <span class="n">--space-9</span>:32px;  <span class="n">--space-10</span>:48px;
+
+  <span class="n">--elev-2</span>: 0 4px 14px <span class="s">rgb(0 0 0 / 12%)</span>;
+  <span class="n">--elev-3</span>: 0 12px 32px <span class="s">rgb(0 0 0 / 18%)</span>;
+}
+
+<span class="t">[data-theme="dark"]</span> {
+  <span class="n">--bg</span>: #0B0B0E;  <span class="n">--surface</span>: #121217;  <span class="n">--surface-hi</span>: #181822;
+  <span class="n">--line</span>: #1F1F2A; <span class="n">--line-soft</span>: #15151D;
+  <span class="n">--fg</span>: #ECECF1;  <span class="n">--fg-2</span>: #9A99A6;  <span class="n">--fg-3</span>: #5E5D6B;  <span class="n">--fg-4</span>: #3A3947;
+  <span class="n">--accent</span>: #B6A1FF; <span class="n">--accent-dim</span>: <span class="s">rgb(182 161 255 / 14%)</span>;
+  <span class="n">--accent-on</span>: #0B0B0E; <span class="n">--now-tint</span>: <span class="s">rgb(182 161 255 / 6%)</span>;
+  <span class="n">--success</span>: #7FD1A8; <span class="n">--warn</span>: #E8C26A; <span class="n">--danger</span>: #F26E6E;
+}
+
+<span class="t">[data-density="compact"]</span> { <span class="n">--row-pad-v</span>: 10px; <span class="n">--row-gap</span>: 2px; <span class="n">--sect-gap</span>: 14px; }
+<span class="t">[data-density="default"]</span> { <span class="n">--row-pad-v</span>: 14px; <span class="n">--row-gap</span>: 4px; <span class="n">--sect-gap</span>: 18px; }
+<span class="t">[data-density="comfy"]</span>   { <span class="n">--row-pad-v</span>: 18px; <span class="n">--row-gap</span>: 6px; <span class="n">--sect-gap</span>: 22px; }</pre>
+
+<p>Component classes mirror the Compose composables: <code>.m-row</code>, <code>.m-row__title</code>, <code>.m-row__meta</code>, <code>.m-card--candidate</code>, <code>.m-now-card</code>, <code>.m-mini-player</code>, etc. Theme/density preferences ride a server-set cookie so the first paint is correct without a flash. Use <code>prefers-color-scheme</code> only when no explicit preference cookie exists.</p>
+
+<!-- ─────────────── 5 ROLLOUT ─────────────── -->
+<h2 id="rollout">5 · Rollout plan</h2>
+<p>Goal: ship the visual change without freezing feature work. Each phase below is independently shippable behind a single feature flag (<code>theme_v2</code>) on Android and a build-time CSS swap on web.</p>
+
+<h3>Phase 0 — Foundation <span class="pill ok">~1 week</span></h3>
+<ul>
+  <li>Land <code>theme/Color.kt</code>, <code>theme/Type.kt</code>, <code>theme/Shapes.kt</code>, <code>theme/Spacing.kt</code>, plus <code>MimeoTheme</code> wrapper.</li>
+  <li>Bundle Source Serif 4 + Inter + JetBrains Mono as Android font resources.</li>
+  <li>Stand up <code>tokens.css</code> on web. Both stylesheets coexist; old screens still consume the old tokens.</li>
+  <li>Wire Settings → Theme + Density + Reader font preference to <code>DataStore</code> / cookie. No UI yet — just the storage.</li>
+</ul>
+
+<h3>Phase 1 — Shared components <span class="pill ok">~1.5 weeks</span></h3>
+<ul>
+  <li>Build <code>:ui-core</code> composables in this order (each replaces an existing helper):
+    <ol>
+      <li><code>MimeoAppBar</code>, <code>MimeoButton</code>, <code>MimeoChip</code>, <code>MimeoIcon</code>, <code>EmptyState</code>, <code>SkeletonRow</code>.</li>
+      <li><code>ArticleRow</code> (variant flag for Library / Smart Queue / Up Next / History).</li>
+      <li><code>NowPlayingCard</code> + <code>MiniPlayer</code> + Jump pill.</li>
+      <li><code>SettingsGroup</code> + <code>SettingsRow</code>.</li>
+      <li><code>CandidateCard</code>.</li>
+    </ol>
+  </li>
+  <li>Web: equivalent partials (<code>_row.html</code>, <code>_now_card.html</code>, <code>_mini_player.html</code>) consuming <code>tokens.css</code>.</li>
+  <li>Snapshot tests for each component in light + dark + each density.</li>
+</ul>
+
+<h3>Phase 2 — Screens, in order <span class="pill med">~3 weeks</span></h3>
+<p>Convert one screen per PR. Each PR ships disabled by default; QA flips the flag for that screen only.</p>
+<ol>
+  <li><strong>Drawer</strong> + <strong>App shell</strong> — sets the chrome.</li>
+  <li><strong>Inbox / Library</strong> — proves <code>ArticleRow</code> at scale.</li>
+  <li><strong>Up Next</strong> — proves <code>NowPlayingCard</code>, drag handles, reorder.</li>
+  <li><strong>Reader / Locus</strong> — proves serif body, Now-playing bridge, Jump pill.</li>
+  <li><strong>Smart Queue</strong> — proves filter strip + sticky search.</li>
+  <li><strong>Manual playlist detail</strong> · <strong>Smart playlist detail</strong>.</li>
+  <li><strong>Bluesky candidate browser</strong> — last because it touches the most subtle copy (privacy band, Save semantics).</li>
+  <li><strong>Settings</strong> overview + <strong>Privacy &amp; diagnostics</strong> — surfaces the Theme/Density/Font controls last so users discover them after the rest is already nice.</li>
+</ol>
+
+<h3>Phase 3 — Web harmonisation <span class="pill med">~1 week</span></h3>
+<ul>
+  <li>Apply <code>tokens.css</code> to existing server-rendered templates. Replace bespoke colour values with <code>var(--…)</code>.</li>
+  <li>Adopt <code>.m-row</code>, <code>.m-card</code>, <code>.m-mini-player</code> partials across the same screens, in the same order as Android.</li>
+  <li>Verify the Bluesky page reads identically on web — same hero band, same explicit Save button, same status pill semantics.</li>
+</ul>
+
+<h3>Phase 4 — Cleanup <span class="pill ok">~3 days</span></h3>
+<ul>
+  <li>Remove <code>theme_v2</code> flag. Delete legacy theme files and component helpers.</li>
+  <li>Audit for any remaining hard-coded colours / sizes; convert or delete.</li>
+  <li>Run the QA checklist (next section) end-to-end.</li>
+</ul>
+
+<!-- ─────────────── 6 QA ─────────────── -->
+<h2 id="qa">6 · Design QA checklist</h2>
+
+<h4>Tokens &amp; theming</h4>
+<ul class="check">
+  <li>Light and dark themes produce no contrast-ratio failures on body text (≥ 4.5:1) and large text (≥ 3:1).</li>
+  <li>System theme switch (Android quick settings) flips the app within 1 frame, no flicker.</li>
+  <li>No screen contains a raw hex value — grep <code>#[0-9A-F]{6}</code> against the screens module returns nothing.</li>
+  <li>Custom fonts load locally; airplane-mode launch shows correct typography on all screens.</li>
+</ul>
+
+<h4>Components</h4>
+<ul class="check">
+  <li><code>ArticleRow</code> truncates at exactly 2 lines, never 3, regardless of language.</li>
+  <li>Tap targets are ≥ 44 dp on every interactive element including icon buttons.</li>
+  <li>Drag handle on Up Next + manual playlists ONLY. Smart playlists and History have no handle.</li>
+  <li>Now-playing card uses the 3-px left edge; no shadow.</li>
+  <li>Mini-player persists across all non-reader screens; "Jump to Now Playing" pill appears <em>only</em> when the open Reader item differs from the playing item.</li>
+</ul>
+
+<h4>Up Next semantics</h4>
+<ul class="check">
+  <li>Re-seeding Up Next from Smart Queue prompts a confirmation dialog if the current Up Next has unplayed items.</li>
+  <li>Playing an item from Inbox/Library inserts it as Now Playing without clearing existing Up Next entries.</li>
+  <li>History items render at <code>opacity 0.55</code> and are not interactive for queue actions.</li>
+</ul>
+
+<h4>Bluesky semantics — non-negotiable</h4>
+<ul class="check">
+  <li>The hero context band is rendered above the source selector on every entry to the Bluesky screen.</li>
+  <li>Saving is the only path that creates a Mimeo item from Bluesky. No "auto-save" toggle exists in code or UI.</li>
+  <li>Saving never modifies Up Next. Verify by tracing: Save → Inbox + only.</li>
+  <li>Scanning state ("Scanned N posts · M links") is local to the session, not persisted server-side.</li>
+</ul>
+
+<h4>Privacy &amp; diagnostics</h4>
+<ul class="check">
+  <li>Default crash reports contain no article titles, URLs, domains, or source identities. Verify by inspecting an actual report payload.</li>
+  <li>Connectivity events log mode switches and timeouts only; no URL fields.</li>
+  <li>"Playback session length" toggle is OFF by default.</li>
+  <li>The Privacy hero "What never leaves the device" panel matches the actual telemetry behaviour line-for-line.</li>
+</ul>
+
+<h4>Compose feasibility</h4>
+<ul class="check">
+  <li>No screen requires custom <code>Modifier.layout</code> or <code>SubcomposeLayout</code> — every screen is composable with stock <code>Column</code> / <code>LazyColumn</code> / <code>Row</code>.</li>
+  <li>No screen depends on <code>BlurEffect</code> or other API ≥ 31. Backwards-compat is preserved.</li>
+  <li>Reorderable Up Next uses <code>androidx.compose.foundation.lazy.LazyColumn</code> + a community reorder helper, not a custom drag system.</li>
+</ul>
+
+<h4>Web feasibility</h4>
+<ul class="check">
+  <li>Server-rendered HTML for any screen is &lt; 80 KB unzipped.</li>
+  <li>JavaScript is required only for the mini-player and reorder; the rest of every page works with JS disabled.</li>
+  <li>First paint uses the server-set theme cookie; no FOUC between system-default and user preference.</li>
+</ul>
+
+<div class="footer">
+  Mimeo · Implementation handoff · prepared 2026-05-09 · target Android (Compose) + server-rendered web · pairs with <em>Mimeo Redesign.html</em>.
+</div>
+
+</main>
+</body>
+</html>
