@@ -389,6 +389,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val blueskyCandidateSavingUrls: StateFlow<Set<String>> get() = blueskyState.blueskyCandidateSavingUrls
     val blueskyCandidateSaveErrors: StateFlow<Map<String, String>> get() = blueskyState.blueskyCandidateSaveErrors
     val blueskyCandidatePinning: StateFlow<Boolean> get() = blueskyState.blueskyCandidatePinning
+    val blueskyScannerPreferences get() = blueskyState.blueskyScannerPreferences
+    val blueskyScannerPreferencesLoading get() = blueskyState.blueskyScannerPreferencesLoading
+    val blueskyScannerPreferencesSaving get() = blueskyState.blueskyScannerPreferencesSaving
+    val blueskyScannerPreferencesError get() = blueskyState.blueskyScannerPreferencesError
 
     private val suppressPendingFailureSnackbarsUntilMs = MutableStateFlow(0L)
     private val _signInState = MutableStateFlow<SignInState>(SignInState.Idle)
@@ -601,6 +605,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     pendingInitialPostSignInHydration = true
                     loadQueue()
                     blueskyCoordinator.refreshBlueskyStatus()
+                    blueskyCoordinator.loadBlueskyScannerPreferences()
                 } else if (previous.apiToken.isNotBlank() && next.apiToken.isBlank()) {
                     pendingInitialPostSignInHydration = false
                     settingsStore.clearQueueSnapshots()
@@ -1718,6 +1723,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun saveBlueskyCandidate(candidate: BlueskyCandidate) = blueskyCoordinator.saveBlueskyCandidate(candidate)
     fun pinCurrentBlueskyCandidateSource() = blueskyCoordinator.pinCurrentBlueskyCandidateSource()
     fun unpinBlueskyCandidateSource(sourceId: Int) = blueskyCoordinator.unpinBlueskyCandidateSource(sourceId)
+    fun loadBlueskyScannerPreferences() = blueskyCoordinator.loadBlueskyScannerPreferences()
+    fun saveBlueskyScannerPreferences(maxAgeHours: Int, maxPosts: Int, maxLinks: Int) =
+        blueskyCoordinator.saveBlueskyScannerPreferences(maxAgeHours, maxPosts, maxLinks)
 
     suspend fun loadQueueOnce(
         autoRetryPendingSaves: Boolean = true,

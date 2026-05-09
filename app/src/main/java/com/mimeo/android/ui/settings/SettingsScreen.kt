@@ -123,6 +123,10 @@ fun SettingsScreen(
     val blueskyConnectError by vm.blueskyConnectError.collectAsState()
     val blueskyConnectIsReadOnlyScope by vm.blueskyConnectIsReadOnlyScope.collectAsState()
     val blueskyDisconnecting by vm.blueskyDisconnecting.collectAsState()
+    val blueskyScannerPreferences by vm.blueskyScannerPreferences.collectAsState()
+    val blueskyScannerPreferencesLoading by vm.blueskyScannerPreferencesLoading.collectAsState()
+    val blueskyScannerPreferencesSaving by vm.blueskyScannerPreferencesSaving.collectAsState()
+    val blueskyScannerPreferencesError by vm.blueskyScannerPreferencesError.collectAsState()
     val autoDownloadDiagnostics by vm.autoDownloadDiagnostics.collectAsState()
     val passwordChangeState by vm.passwordChangeState.collectAsState()
     val playlists by vm.playlists.collectAsState()
@@ -251,6 +255,9 @@ fun SettingsScreen(
     val blueskySmartPlaylist = remember(smartPlaylists) { smartPlaylists.firstOrNull { it.isBlueskyHarvestPlaylist() } }
     var blueskyHandle by remember { mutableStateOf("") }
     var blueskyAppPassword by remember { mutableStateOf("") }
+    var localMaxAgeHours by remember { mutableStateOf("") }
+    var localMaxPosts by remember { mutableStateOf("") }
+    var localMaxLinks by remember { mutableStateOf("") }
 
     fun selectedModeBaseUrl(): String {
         return when (connectionMode) {
@@ -387,6 +394,14 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         vm.refreshPlaylists()
         vm.refreshBlueskyStatus()
+        vm.loadBlueskyScannerPreferences()
+    }
+
+    LaunchedEffect(blueskyScannerPreferences) {
+        val prefs = blueskyScannerPreferences ?: return@LaunchedEffect
+        localMaxAgeHours = prefs.maxAgeHours.toString()
+        localMaxPosts = prefs.maxPosts.toString()
+        localMaxLinks = prefs.maxLinks.toString()
     }
 
     LaunchedEffect(blueskyAccountConnection?.connected) {
@@ -985,6 +1000,85 @@ fun SettingsScreen(
                         onClick = { vm.refreshBlueskyStatus() },
                     ) {
                         Text(if (blueskyStatusLoading) "Refreshing..." else "Refresh status")
+                    }
+                }
+            }
+        }
+        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text("Candidate scanner defaults")
+                Text(
+                    text = "Default live scan caps — explicit scan requests may override them. These do not enable auto-save or mutate Up Next.",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                val prefs = blueskyScannerPreferences
+                if (blueskyScannerPreferencesLoading && prefs == null) {
+                    Text(
+                        text = "Loading scanner defaults...",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (prefs != null) {
+                    OutlinedTextField(
+                        value = localMaxAgeHours,
+                        onValueChange = { localMaxAgeHours = it },
+                        label = { Text("Max age (hours, 1–${prefs.maxAgeHoursCeiling})") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        enabled = !blueskyScannerPreferencesSaving,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = localMaxPosts,
+                        onValueChange = { localMaxPosts = it },
+                        label = { Text("Max posts scanned (1–${prefs.maxPostsCeiling})") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        enabled = !blueskyScannerPreferencesSaving,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = localMaxLinks,
+                        onValueChange = { localMaxLinks = it },
+                        label = { Text("Max candidate links (1–${prefs.maxLinksCeiling})") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        enabled = !blueskyScannerPreferencesSaving,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                if (!blueskyScannerPreferencesError.isNullOrBlank()) {
+                    Text(
+                        text = blueskyScannerPreferencesError.orEmpty(),
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.error,
+                    )
+                }
+                if (prefs != null) {
+                    val saveAgeHours = localMaxAgeHours.trim().toIntOrNull()
+                    val savePosts = localMaxPosts.trim().toIntOrNull()
+                    val saveLinks = localMaxLinks.trim().toIntOrNull()
+                    val saveInputValid = saveAgeHours != null && saveAgeHours >= 1 &&
+                        savePosts != null && savePosts >= 1 &&
+                        saveLinks != null && saveLinks >= 1
+                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                        Button(
+                            enabled = saveInputValid && !blueskyScannerPreferencesSaving && !blueskyScannerPreferencesLoading,
+                            onClick = {
+                                if (saveAgeHours != null && savePosts != null && saveLinks != null) {
+                                    vm.saveBlueskyScannerPreferences(saveAgeHours, savePosts, saveLinks)
+                                }
+                            },
+                        ) {
+                            Text(if (blueskyScannerPreferencesSaving) "Saving..." else "Save scanner defaults")
+                        }
                     }
                 }
             }
