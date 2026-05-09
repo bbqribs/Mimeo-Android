@@ -468,7 +468,7 @@ fun QueueScreen(
         // 1. Header card: seed-source labels + Refresh + Save + overflow
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.elevatedCardColors(containerColor = Color.Black),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
         ) {
             Column(
