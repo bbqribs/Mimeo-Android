@@ -1,9 +1,34 @@
 package com.mimeo.android.ui.theme
 
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.CornerBasedShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.dp
+import com.mimeo.android.model.VisualDensityPreference
+import com.mimeo.android.model.VisualThemePreference
+
+// Dev-only wrapper gate for the visual v1 path.
+// Keep this false until visual v1 replaces the legacy app theme.
+internal const val VISUAL_DESIGN_V1_ENABLED = false
+
+internal enum class MimeoThemeRuntimePath {
+    LEGACY,
+    VISUAL_V1,
+}
+
+internal fun resolveThemeRuntimePath(enableVisualDesignV1: Boolean): MimeoThemeRuntimePath =
+    if (enableVisualDesignV1) MimeoThemeRuntimePath.VISUAL_V1 else MimeoThemeRuntimePath.LEGACY
 
 private val MimeoDarkColors = darkColorScheme(
     primary = Color(0xFFC6A7FF),
@@ -23,9 +48,154 @@ private val MimeoDarkColors = darkColorScheme(
 )
 
 @Composable
+fun MimeoAppTheme(
+    visualThemePreference: VisualThemePreference,
+    visualDensityPreference: VisualDensityPreference,
+    enableVisualDesignV1: Boolean = VISUAL_DESIGN_V1_ENABLED,
+    content: @Composable () -> Unit,
+) {
+    when (resolveThemeRuntimePath(enableVisualDesignV1)) {
+        MimeoThemeRuntimePath.LEGACY -> MimeoTheme(content = content)
+        MimeoThemeRuntimePath.VISUAL_V1 -> MimeoThemeV1(
+            visualThemePreference = visualThemePreference,
+            visualDensityPreference = visualDensityPreference,
+            content = content,
+        )
+    }
+}
+
+@Composable
 fun MimeoTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = MimeoDarkColors,
         content = content,
     )
+}
+
+@Composable
+private fun MimeoThemeV1(
+    visualThemePreference: VisualThemePreference,
+    visualDensityPreference: VisualDensityPreference,
+    content: @Composable () -> Unit,
+) {
+    val systemIsDarkTheme = isSystemInDarkTheme()
+    val densityTokens = remember(visualDensityPreference) {
+        densityTokensFor(visualDensityPreference)
+    }
+    val themeTokens = remember(visualThemePreference, systemIsDarkTheme, densityTokens) {
+        mimeoThemeTokens(
+            preference = visualThemePreference,
+            systemIsDarkTheme = systemIsDarkTheme,
+            density = densityTokens,
+        )
+    }
+    val useDarkMaterialColors = remember(visualThemePreference, systemIsDarkTheme) {
+        resolveThemeChoice(visualThemePreference, systemIsDarkTheme) == MimeoThemeChoice.DARK
+    }
+    val colorScheme = remember(themeTokens.colors, useDarkMaterialColors) {
+        materialColorSchemeFrom(themeTokens.colors, useDarkMaterialColors)
+    }
+    val typography = remember(themeTokens.typography) {
+        materialTypographyFrom(themeTokens.typography)
+    }
+    val shapes = remember(themeTokens.shapes) {
+        materialShapesFrom(themeTokens.shapes)
+    }
+
+    CompositionLocalProvider(
+        LocalMimeoColorTokens provides themeTokens.colors,
+        LocalMimeoTypographyTokens provides themeTokens.typography,
+        LocalMimeoSpacingTokens provides themeTokens.spacing,
+        LocalMimeoDensityTokens provides themeTokens.density,
+        LocalMimeoShapeTokens provides themeTokens.shapes,
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = typography,
+            shapes = shapes,
+            content = content,
+        )
+    }
+}
+
+private fun materialColorSchemeFrom(colors: MimeoColorTokens, darkMode: Boolean): ColorScheme {
+    return if (darkMode) {
+        darkColorScheme(
+            primary = colors.accent,
+            onPrimary = colors.accentOn,
+            primaryContainer = colors.surfaceHi,
+            onPrimaryContainer = colors.fg,
+            secondary = colors.fg2,
+            onSecondary = colors.bg,
+            tertiary = colors.success,
+            onTertiary = colors.bg,
+            background = colors.bg,
+            onBackground = colors.fg,
+            surface = colors.surface,
+            onSurface = colors.fg,
+            surfaceVariant = colors.surfaceHi,
+            onSurfaceVariant = colors.fg2,
+            outline = colors.line,
+            outlineVariant = colors.lineSoft,
+            error = colors.danger,
+            onError = colors.accentOn,
+            errorContainer = colors.danger.copy(alpha = 0.2f),
+            onErrorContainer = colors.fg,
+        )
+    } else {
+        lightColorScheme(
+            primary = colors.accent,
+            onPrimary = colors.accentOn,
+            primaryContainer = colors.surfaceHi,
+            onPrimaryContainer = colors.fg,
+            secondary = colors.fg2,
+            onSecondary = colors.bg,
+            tertiary = colors.success,
+            onTertiary = colors.bg,
+            background = colors.bg,
+            onBackground = colors.fg,
+            surface = colors.surface,
+            onSurface = colors.fg,
+            surfaceVariant = colors.surfaceHi,
+            onSurfaceVariant = colors.fg2,
+            outline = colors.line,
+            outlineVariant = colors.lineSoft,
+            error = colors.danger,
+            onError = colors.accentOn,
+            errorContainer = colors.danger.copy(alpha = 0.2f),
+            onErrorContainer = colors.fg,
+        )
+    }
+}
+
+private fun materialTypographyFrom(tokens: MimeoTypographyTokens): Typography {
+    return Typography(
+        displayLarge = tokens.display,
+        displayMedium = tokens.display,
+        displaySmall = tokens.display,
+        headlineLarge = tokens.title,
+        headlineMedium = tokens.title,
+        headlineSmall = tokens.title,
+        titleLarge = tokens.title,
+        titleMedium = tokens.row,
+        titleSmall = tokens.row,
+        bodyLarge = tokens.body,
+        bodyMedium = tokens.body,
+        bodySmall = tokens.meta,
+        labelLarge = tokens.button,
+        labelMedium = tokens.caption,
+        labelSmall = tokens.caption,
+    )
+}
+
+private fun materialShapesFrom(tokens: MimeoShapeTokens): Shapes {
+    return Shapes(
+        small = cornerShapeOrDefault(tokens.input, RoundedCornerShape(8.dp)),
+        medium = cornerShapeOrDefault(tokens.card, RoundedCornerShape(12.dp)),
+        large = cornerShapeOrDefault(tokens.sheet, RoundedCornerShape(16.dp)),
+    )
+}
+
+private fun cornerShapeOrDefault(shape: Shape, fallback: CornerBasedShape): CornerBasedShape {
+    return shape as? CornerBasedShape ?: fallback
 }
