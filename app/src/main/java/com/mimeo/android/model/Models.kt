@@ -733,6 +733,23 @@ data class BlueskyCandidatePinResponse(
 )
 
 @Serializable
+data class BlueskyScannerPreferences(
+    @SerialName("max_age_hours") val maxAgeHours: Int,
+    @SerialName("max_posts") val maxPosts: Int,
+    @SerialName("max_links") val maxLinks: Int,
+    @SerialName("max_age_hours_ceiling") val maxAgeHoursCeiling: Int = 168,
+    @SerialName("max_posts_ceiling") val maxPostsCeiling: Int = 100,
+    @SerialName("max_links_ceiling") val maxLinksCeiling: Int = 50,
+)
+
+@Serializable
+data class BlueskyScannerPreferencesPatch(
+    @SerialName("max_age_hours") val maxAgeHours: Int? = null,
+    @SerialName("max_posts") val maxPosts: Int? = null,
+    @SerialName("max_links") val maxLinks: Int? = null,
+)
+
+@Serializable
 data class PendingManualSaveItem(
     val id: Long,
     val source: PendingSaveSource = PendingSaveSource.MANUAL,

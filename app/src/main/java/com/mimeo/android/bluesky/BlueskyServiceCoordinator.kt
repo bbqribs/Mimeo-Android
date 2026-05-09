@@ -9,6 +9,7 @@ import com.mimeo.android.model.ArticleSummary
 import com.mimeo.android.model.BlueskyCandidate
 import com.mimeo.android.model.BlueskyCandidateSaveRequest
 import com.mimeo.android.model.BlueskyCandidateSourceSelection
+import com.mimeo.android.model.BlueskyScannerPreferencesPatch
 import com.mimeo.android.state.BlueskyStateHolder
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
@@ -145,6 +146,70 @@ internal class BlueskyServiceCoordinator(
         state._blueskyStatusError.value = null
         state._blueskyConnectError.value = null
         state._blueskyConnectIsReadOnlyScope.value = false
+        state._blueskyScannerPreferences.value = null
+        state._blueskyScannerPreferencesError.value = null
+    }
+
+    // ── Scanner preferences ───────────────────────────────────────────────────
+
+    fun loadBlueskyScannerPreferences() {
+        val current = settings.value
+        if (current.apiToken.isBlank()) return
+        scope.launch {
+            state._blueskyScannerPreferencesLoading.value = true
+            state._blueskyScannerPreferencesError.value = null
+            try {
+                state._blueskyScannerPreferences.value =
+                    apiClient.getBlueskyPreferences(current.baseUrl, current.apiToken)
+            } catch (error: Throwable) {
+                state._blueskyScannerPreferencesError.value = when (error) {
+                    is ApiException -> when (error.statusCode) {
+                        401 -> "Unauthorized. Check token and try again."
+                        404 -> "Scanner preferences endpoint not available on this backend."
+                        in 500..599 -> "Backend error while loading scanner preferences."
+                        else -> userFacingRequestErrorMessage(error, "Couldn't load scanner preferences.")
+                    }
+                    is IOException -> "Couldn't reach server."
+                    else -> userFacingRequestErrorMessage(error, "Couldn't load scanner preferences.")
+                }
+            } finally {
+                state._blueskyScannerPreferencesLoading.value = false
+            }
+        }
+    }
+
+    fun saveBlueskyScannerPreferences(maxAgeHours: Int, maxPosts: Int, maxLinks: Int) {
+        val current = settings.value
+        if (current.apiToken.isBlank()) return
+        scope.launch {
+            state._blueskyScannerPreferencesSaving.value = true
+            state._blueskyScannerPreferencesError.value = null
+            try {
+                state._blueskyScannerPreferences.value = apiClient.patchBlueskyPreferences(
+                    current.baseUrl,
+                    current.apiToken,
+                    BlueskyScannerPreferencesPatch(
+                        maxAgeHours = maxAgeHours,
+                        maxPosts = maxPosts,
+                        maxLinks = maxLinks,
+                    ),
+                )
+                snackbarMessages.trySend(UiSnackbarMessage(message = "Scanner defaults saved.", actionLabel = null))
+            } catch (error: Throwable) {
+                state._blueskyScannerPreferencesError.value = when (error) {
+                    is ApiException -> when (error.statusCode) {
+                        401 -> "Unauthorized. Check token and try again."
+                        422 -> apiExceptionDetail(error) ?: "Invalid value. Check the allowed range and try again."
+                        in 500..599 -> "Backend error while saving scanner preferences."
+                        else -> userFacingRequestErrorMessage(error, "Couldn't save scanner preferences.")
+                    }
+                    is IOException -> "Couldn't reach server."
+                    else -> userFacingRequestErrorMessage(error, "Couldn't save scanner preferences.")
+                }
+            } finally {
+                state._blueskyScannerPreferencesSaving.value = false
+            }
+        }
     }
 
     // ── Browse ────────────────────────────────────────────────────────────────

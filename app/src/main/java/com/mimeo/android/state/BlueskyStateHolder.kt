@@ -7,6 +7,7 @@ import com.mimeo.android.model.BlueskyCandidateScanResponse
 import com.mimeo.android.model.BlueskyCandidateSourceSelection
 import com.mimeo.android.model.BlueskyOperatorStatusResponse
 import com.mimeo.android.model.BlueskyPickerResponse
+import com.mimeo.android.model.BlueskyScannerPreferences
 import com.mimeo.android.model.BlueskySourceInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -93,6 +94,19 @@ internal class BlueskyStateHolder {
 
     internal val _blueskyCandidateError = MutableStateFlow<String?>(null)
     val blueskyCandidateError: StateFlow<String?> = _blueskyCandidateError.asStateFlow()
+
+    // Scanner preferences
+    internal val _blueskyScannerPreferences = MutableStateFlow<BlueskyScannerPreferences?>(null)
+    val blueskyScannerPreferences: StateFlow<BlueskyScannerPreferences?> = _blueskyScannerPreferences.asStateFlow()
+
+    internal val _blueskyScannerPreferencesLoading = MutableStateFlow(false)
+    val blueskyScannerPreferencesLoading: StateFlow<Boolean> = _blueskyScannerPreferencesLoading.asStateFlow()
+
+    internal val _blueskyScannerPreferencesSaving = MutableStateFlow(false)
+    val blueskyScannerPreferencesSaving: StateFlow<Boolean> = _blueskyScannerPreferencesSaving.asStateFlow()
+
+    internal val _blueskyScannerPreferencesError = MutableStateFlow<String?>(null)
+    val blueskyScannerPreferencesError: StateFlow<String?> = _blueskyScannerPreferencesError.asStateFlow()
 
     // Candidate save / pin
     internal val _blueskyCandidateSavingUrls = MutableStateFlow<Set<String>>(emptySet())

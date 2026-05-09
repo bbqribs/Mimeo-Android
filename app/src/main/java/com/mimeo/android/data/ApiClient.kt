@@ -12,6 +12,8 @@ import com.mimeo.android.model.BlueskyAccountConnectionResponse
 import com.mimeo.android.model.BlueskyBrowseItem
 import com.mimeo.android.model.BlueskyBrowsePinCreateRequest
 import com.mimeo.android.model.BlueskyBrowsePinResponse
+import com.mimeo.android.model.BlueskyScannerPreferences
+import com.mimeo.android.model.BlueskyScannerPreferencesPatch
 import com.mimeo.android.model.BlueskyBrowseResponse
 import com.mimeo.android.model.BlueskyCandidatePinRequest
 import com.mimeo.android.model.BlueskyCandidatePinResponse
@@ -1155,6 +1157,31 @@ class ApiClient(
             .delete()
             .build()
         executeNoBody(request)
+    }
+
+    suspend fun getBlueskyPreferences(baseUrl: String, token: String): BlueskyScannerPreferences = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/bluesky/preferences"))
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .get()
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<BlueskyScannerPreferences>(payload) }
+    }
+
+    suspend fun patchBlueskyPreferences(
+        baseUrl: String,
+        token: String,
+        patch: BlueskyScannerPreferencesPatch,
+    ): BlueskyScannerPreferences = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(patch).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/bluesky/preferences"))
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .patch(body)
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<BlueskyScannerPreferences>(payload) }
     }
 
     suspend fun postProblemReport(
