@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
@@ -464,7 +465,7 @@ fun SettingsScreen(
             title = "Connection / Server",
             subtitle = "Choose Local, LAN, or Remote mode. Sign In is recommended; manual token entry replaces this device token.",
         )
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -738,7 +739,7 @@ fun SettingsScreen(
         )
 
         var blueskyExplainerExpanded by remember { mutableStateOf(false) }
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -782,7 +783,7 @@ fun SettingsScreen(
             }
         }
 
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -994,7 +995,7 @@ fun SettingsScreen(
             title = "Saving / Share-sheet",
             subtitle = "Control where shared links go and how share results are shown.",
         )
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1081,7 +1082,7 @@ fun SettingsScreen(
             title = "Playback",
             subtitle = "Session and listening behavior across tabs and reading mode.",
         )
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1446,7 +1447,7 @@ fun SettingsScreen(
             title = "Reader / Appearance",
             subtitle = "Tune typography and layout for reading comfort.",
         )
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1528,7 +1529,7 @@ fun SettingsScreen(
                         )
                     }
                 }
-                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1561,7 +1562,7 @@ fun SettingsScreen(
                 title = "Developer",
                 subtitle = "Debug-only diagnostics and playback instrumentation controls.",
             )
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
