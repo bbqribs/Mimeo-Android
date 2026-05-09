@@ -1618,78 +1618,76 @@ fun SettingsScreen(
                             },
                         )
                     }
-                    if (visualDesignV1Enabled) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(2.dp),
-                            ) {
-                                Text("Visual theme mode")
-                                Text(
-                                    text = "Force theme mode for v1 wrapper preview.",
-                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                            Text("Visual theme mode")
+                            Text(
+                                text = "Saved now; applied to Paper & Ember tokens when the v1 wrapper is enabled.",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Box {
+                            Button(onClick = { showVisualThemeMenu = true }) {
+                                Text(visualThemePreference.displayName())
                             }
-                            Box {
-                                Button(onClick = { showVisualThemeMenu = true }) {
-                                    Text(visualThemePreference.displayName())
-                                }
-                                DropdownMenu(
-                                    expanded = showVisualThemeMenu,
-                                    onDismissRequest = { showVisualThemeMenu = false },
-                                ) {
-                                    VisualThemePreference.entries.forEach { preference ->
-                                        DropdownMenuItem(
-                                            text = { Text(preference.displayName()) },
-                                            onClick = {
-                                                showVisualThemeMenu = false
-                                                visualThemePreference = preference
-                                                vm.saveVisualThemePreference(preference)
-                                            },
-                                        )
-                                    }
+                            DropdownMenu(
+                                expanded = showVisualThemeMenu,
+                                onDismissRequest = { showVisualThemeMenu = false },
+                            ) {
+                                VisualThemePreference.entries.forEach { preference ->
+                                    DropdownMenuItem(
+                                        text = { Text(preference.displayName()) },
+                                        onClick = {
+                                            showVisualThemeMenu = false
+                                            visualThemePreference = preference
+                                            vm.saveVisualThemePreference(preference)
+                                        },
+                                    )
                                 }
                             }
                         }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(2.dp),
-                            ) {
-                                Text("Visual density mode")
-                                Text(
-                                    text = "Force density tokens for v1 wrapper preview.",
-                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                            Text("Visual density mode")
+                            Text(
+                                text = "Saved now; applied to Paper & Ember density tokens when the v1 wrapper is enabled.",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Box {
+                            Button(onClick = { showVisualDensityMenu = true }) {
+                                Text(visualDensityPreference.displayName())
                             }
-                            Box {
-                                Button(onClick = { showVisualDensityMenu = true }) {
-                                    Text(visualDensityPreference.displayName())
-                                }
-                                DropdownMenu(
-                                    expanded = showVisualDensityMenu,
-                                    onDismissRequest = { showVisualDensityMenu = false },
-                                ) {
-                                    VisualDensityPreference.entries.forEach { preference ->
-                                        DropdownMenuItem(
-                                            text = { Text(preference.displayName()) },
-                                            onClick = {
-                                                showVisualDensityMenu = false
-                                                visualDensityPreference = preference
-                                                vm.saveVisualDensityPreference(preference)
-                                            },
-                                        )
-                                    }
+                            DropdownMenu(
+                                expanded = showVisualDensityMenu,
+                                onDismissRequest = { showVisualDensityMenu = false },
+                            ) {
+                                VisualDensityPreference.entries.forEach { preference ->
+                                    DropdownMenuItem(
+                                        text = { Text(preference.displayName()) },
+                                        onClick = {
+                                            showVisualDensityMenu = false
+                                            visualDensityPreference = preference
+                                            vm.saveVisualDensityPreference(preference)
+                                        },
+                                    )
                                 }
                             }
                         }
