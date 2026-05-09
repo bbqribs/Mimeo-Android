@@ -47,3 +47,4 @@ val LocalMimeoTypographyTokens = staticCompositionLocalOf { MimeoTypography.Pape
 val LocalMimeoSpacingTokens = staticCompositionLocalOf { MimeoSpacing }
 val LocalMimeoDensityTokens = staticCompositionLocalOf { MimeoDensityDefault }
 val LocalMimeoShapeTokens = staticCompositionLocalOf { MimeoShapes }
+val LocalMimeoV1Active = staticCompositionLocalOf { false }
