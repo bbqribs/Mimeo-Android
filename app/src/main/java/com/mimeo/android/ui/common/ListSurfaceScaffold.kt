@@ -24,6 +24,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mimeo.android.ui.theme.LocalMimeoColorTokens
+import com.mimeo.android.ui.theme.LocalMimeoDensityTokens
+import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
+import com.mimeo.android.ui.theme.LocalMimeoV1Active
 
 @Composable
 fun ListSurfaceScaffold(
@@ -77,13 +81,19 @@ fun LibraryItemRow(
     progressStateLine: (@Composable () -> Unit)? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
 ) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    val densityTokens = LocalMimeoDensityTokens.current
     val readerClickLabel = "Opens $title in reader"
     Row(
         modifier = modifier
             .fillMaxWidth()
             .then(
                 when {
-                    isSelected -> Modifier.background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+                    isSelected -> Modifier.background(
+                        if (isV1) mColors.accentDim else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                    )
                     containerColor != null -> Modifier.background(containerColor)
                     else -> Modifier
                 },
@@ -93,27 +103,32 @@ fun LibraryItemRow(
                 onClickLabel = readerClickLabel,
                 onLongClick = onLongClick,
             )
-            .padding(start = 8.dp, end = 2.dp, top = 8.dp, bottom = 8.dp),
+            .padding(
+                start = if (isV1) 12.dp else 8.dp,
+                end = 2.dp,
+                top = if (isV1) densityTokens.rowPadV else 8.dp,
+                bottom = if (isV1) densityTokens.rowPadV else 8.dp,
+            ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         leadingContent?.invoke(this)
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(if (isV1) densityTokens.rowGap else 2.dp),
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
-                color = titleColor,
+                style = if (isV1) mTypography.row else MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
+                color = if (isV1) mColors.fg else titleColor,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             if (!metadata.isNullOrBlank()) {
                 Text(
                     text = metadata,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                    color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -131,13 +146,15 @@ fun SelectionAffordance(
     selectedContentDescription: String = "Selected",
     unselectedContentDescription: String = "Not selected",
 ) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
     androidx.compose.material3.Icon(
         imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
         contentDescription = if (isSelected) selectedContentDescription else unselectedContentDescription,
         tint = if (isSelected) {
-            MaterialTheme.colorScheme.primary
+            if (isV1) mColors.accent else MaterialTheme.colorScheme.primary
         } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
+            if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant
         },
         modifier = modifier,
     )
@@ -145,21 +162,23 @@ fun SelectionAffordance(
 
 @Composable
 fun ListStatusPill(status: String) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
     val (label, containerColor, contentColor) = when (status) {
         "extracting", "saved" -> Triple(
             "Extracting",
-            MaterialTheme.colorScheme.surfaceVariant,
-            MaterialTheme.colorScheme.onSurfaceVariant,
+            if (isV1) mColors.surface else MaterialTheme.colorScheme.surfaceVariant,
+            if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         "failed" -> Triple(
             "Failed",
-            MaterialTheme.colorScheme.errorContainer,
-            MaterialTheme.colorScheme.onErrorContainer,
+            if (isV1) mColors.danger.copy(alpha = 0.18f) else MaterialTheme.colorScheme.errorContainer,
+            if (isV1) mColors.danger else MaterialTheme.colorScheme.onErrorContainer,
         )
         "blocked" -> Triple(
             "Blocked",
-            MaterialTheme.colorScheme.tertiaryContainer,
-            MaterialTheme.colorScheme.onTertiaryContainer,
+            if (isV1) mColors.warn.copy(alpha = 0.18f) else MaterialTheme.colorScheme.tertiaryContainer,
+            if (isV1) mColors.warn else MaterialTheme.colorScheme.onTertiaryContainer,
         )
         else -> return
     }
@@ -179,10 +198,13 @@ fun ListStatusPill(status: String) {
 
 @Composable
 fun DefaultListSurfaceMessage(text: String) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
     Text(
         text = text,
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = if (isV1) mTypography.body else MaterialTheme.typography.bodyMedium,
+        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
