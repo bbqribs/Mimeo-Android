@@ -33,6 +33,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -333,6 +334,10 @@ private fun SourcePicker(
                                         Text(option.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     },
                                     enabled = !loading,
+                                    colors = if (isV1) FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = mColors.accentDim,
+                                        selectedLabelColor = mColors.accent,
+                                    ) else FilterChipDefaults.filterChipColors(),
                                 )
                             }
                         }
