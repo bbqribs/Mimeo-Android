@@ -54,10 +54,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.ReaderFontOption
+import com.mimeo.android.ui.theme.LocalMimeoColorTokens
+import com.mimeo.android.ui.theme.LocalMimeoV1Active
 import com.mimeo.android.ui.theme.toFontFamily
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -99,15 +102,17 @@ fun ReaderBody(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
     val paragraphSpacingDp = when (paragraphSpacing) {
         ParagraphSpacingOption.SMALL -> 12.dp
         ParagraphSpacingOption.MEDIUM -> 18.dp
         ParagraphSpacingOption.LARGE -> 24.dp
     }
     val safeChunkIndex = currentChunkIndex.coerceIn(0, (chunks.lastIndex).coerceAtLeast(0))
-    val highlightBg = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
-    val searchHighlightBg = MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
-    val searchActiveHighlightBg = MaterialTheme.colorScheme.secondary.copy(alpha = 0.40f)
+    val highlightBg = if (isV1) mColors.accent.copy(alpha = 0.24f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+    val searchHighlightBg = if (isV1) mColors.accentDim else MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
+    val searchActiveHighlightBg = if (isV1) mColors.accent.copy(alpha = 0.35f) else MaterialTheme.colorScheme.secondary.copy(alpha = 0.40f)
     val useFullTextLayout = true
     val sentenceRangesByChunk = remember(chunks) {
         chunks.map { segmentSentences(it.text) }
@@ -323,10 +328,10 @@ fun ReaderBody(
     }
     val readingTextStyle = MaterialTheme.typography.bodyMedium.merge(
         TextStyle(
-            fontFamily = readingFontOption.toFontFamily(),
+            fontFamily = if (isV1) FontFamily.Serif else readingFontOption.toFontFamily(),
             fontSize = readingFontSizeSp.sp,
             lineHeight = (readingFontSizeSp * (readingLineHeightPercent / 100f)).sp,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
         ),
     )
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -357,7 +362,7 @@ fun ReaderBody(
         }
     }
     val scrollAnchorRange = followRange ?: anchorRange
-    val scrollbarColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+    val scrollbarColor = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
 
     Box(
         modifier = modifier
