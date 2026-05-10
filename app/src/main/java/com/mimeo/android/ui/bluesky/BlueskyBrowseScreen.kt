@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,6 +33,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -49,8 +51,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,6 +64,10 @@ import com.mimeo.android.model.BlueskyCandidateSourceSelection
 import com.mimeo.android.model.BlueskyPickerPinItem
 import com.mimeo.android.model.BlueskyPickerResponse
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
+import com.mimeo.android.ui.theme.LocalMimeoColorTokens
+import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
+import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
+import com.mimeo.android.ui.theme.LocalMimeoV1Active
 
 @Composable
 fun BlueskyBrowseScreen(
@@ -79,6 +85,9 @@ fun BlueskyBrowseScreen(
     val savingUrls by vm.blueskyCandidateSavingUrls.collectAsState()
     val saveErrors by vm.blueskyCandidateSaveErrors.collectAsState()
     val pinning by vm.blueskyCandidatePinning.collectAsState()
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
 
     LaunchedEffect(Unit) {
         vm.loadBlueskyCandidatePicker()
@@ -98,9 +107,10 @@ fun BlueskyBrowseScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .then(if (isV1) Modifier.background(mColors.bg) else Modifier)
             .passiveVerticalScrollIndicator(
                 listState = listState,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
+                color = if (isV1) mColors.line else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
             ),
     ) {
         LazyColumn(
@@ -151,7 +161,8 @@ fun BlueskyBrowseScreen(
                 scan != null && scan!!.candidates.isEmpty() -> item {
                     Text(
                         text = "No candidate links found for this source in the current scan window.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = if (isV1) mTypography.body else MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
                     )
                 }
@@ -171,32 +182,44 @@ fun BlueskyBrowseScreen(
 
 @Composable
 private fun Header() {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Text("Bluesky", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "Bluesky",
+            style = if (isV1) mTypography.title else MaterialTheme.typography.titleLarge,
+            color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
+        )
         Text(
             text = "Live candidate links. Saving creates normal Mimeo items.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
 
 @Composable
 private fun ScanDefaults(picker: BlueskyPickerResponse?) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    val mShapes = LocalMimeoShapeTokens.current
     val caps = picker?.caps
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        tonalElevation = 1.dp,
-        shape = MaterialTheme.shapes.medium,
+        color = if (isV1) mColors.surface else MaterialTheme.colorScheme.surface,
+        tonalElevation = if (isV1) 0.dp else 1.dp,
+        shape = if (isV1) mShapes.card else MaterialTheme.shapes.medium,
     ) {
         Text(
             text = "Scan defaults: ${caps?.maxAgeHours ?: 24} h, ${caps?.maxPosts ?: 30} posts, ${caps?.maxLinks ?: 15} links",
             modifier = Modifier.padding(12.dp),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -210,6 +233,10 @@ private fun SourcePicker(
     onReload: () -> Unit,
     onScan: (BlueskyCandidateSourceSelection) -> Unit,
 ) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    val mShapes = LocalMimeoShapeTokens.current
     var expanded by remember { mutableStateOf(false) }
     var handleDraft by remember { mutableStateOf("") }
     var listDraft by remember { mutableStateOf("") }
@@ -230,8 +257,9 @@ private fun SourcePicker(
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shape = if (isV1) mShapes.card else MaterialTheme.shapes.large,
+        color = if (isV1) mColors.surface else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -244,7 +272,8 @@ private fun SourcePicker(
             ) {
                 Text(
                     "Source picker",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = if (isV1) mTypography.row else MaterialTheme.typography.titleMedium,
+                    color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
                 if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp))
@@ -252,6 +281,7 @@ private fun SourcePicker(
                 Icon(
                     imageVector = Icons.Filled.KeyboardArrowDown,
                     contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .size(20.dp)
                         .rotate(sectionChevronRotation),
@@ -267,7 +297,11 @@ private fun SourcePicker(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     if (!error.isNullOrBlank()) {
-                        Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            error,
+                            color = if (isV1) mColors.danger else MaterialTheme.colorScheme.error,
+                            style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                        )
                     }
                     val connected = picker?.connection?.connected == true
                     val connectedHandle = picker?.connection?.handle ?: "Bluesky"
@@ -278,8 +312,8 @@ private fun SourcePicker(
                             connected = connected,
                             connectedHandle = connectedHandle,
                         ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
                     if (pinnedOptions.isNotEmpty()) {
@@ -300,6 +334,10 @@ private fun SourcePicker(
                                         Text(option.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     },
                                     enabled = !loading,
+                                    colors = if (isV1) FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = mColors.accentDim,
+                                        selectedLabelColor = mColors.accent,
+                                    ) else FilterChipDefaults.filterChipColors(),
                                 )
                             }
                         }
@@ -425,7 +463,11 @@ private fun SourcePicker(
                         Text("Scan list")
                     }
                     if (!inputError.isNullOrBlank()) {
-                        Text(inputError.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            inputError.orEmpty(),
+                            color = if (isV1) mColors.danger else MaterialTheme.colorScheme.error,
+                            style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                        )
                     }
                 }
             }
@@ -444,34 +486,49 @@ private fun ScanStatus(
     onPin: () -> Unit,
     onUnpin: (Int) -> Unit,
 ) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    val mShapes = LocalMimeoShapeTokens.current
     if (scan == null && selected == null && error.isNullOrBlank() && !scanning) {
         Text(
             text = "Choose a source to scan for candidate article links.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+            style = if (isV1) mTypography.body else MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(horizontal = 4.dp),
         )
         return
     }
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        tonalElevation = 1.dp,
+        shape = if (isV1) mShapes.card else MaterialTheme.shapes.medium,
+        color = if (isV1) mColors.surface else MaterialTheme.colorScheme.surface,
+        tonalElevation = if (isV1) 0.dp else 1.dp,
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             val label = cleanSourceLabel(
                 label = scan?.source?.displayLabel ?: selected?.displayLabel ?: "Selected source",
                 sourceType = scan?.source?.sourceType ?: selected?.sourceKind,
             )
-            Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(
+                label,
+                style = if (isV1) mTypography.row else MaterialTheme.typography.titleSmall,
+                color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+            )
             if (scan != null) {
                 Text(
                     text = "Scanned ${scan.scan.postsScanned} posts, ${scan.candidates.size} links. Stop: ${scan.scan.stoppedReason}.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                    color = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             if (!error.isNullOrBlank()) {
-                Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                Text(
+                    error,
+                    color = if (isV1) mColors.danger else MaterialTheme.colorScheme.error,
+                    style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                )
             }
             val pinnedSourceId = findPinnedSourceId(scan, selected, pins)
             val pinSupported = scan?.source?.sourceType == "author_feed" || scan?.source?.sourceType == "list_feed"
@@ -488,8 +545,8 @@ private fun ScanStatus(
                     }
                     Text(
                         text = "Pinning only stores the picker shortcut; it does not save or harvest links.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -506,11 +563,16 @@ private fun CandidateRow(
     onSave: () -> Unit,
     onOpenItem: (Int) -> Unit,
 ) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    val mShapes = LocalMimeoShapeTokens.current
     val uriHandler = LocalUriHandler.current
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shape = if (isV1) mShapes.card else MaterialTheme.shapes.large,
+        color = if (isV1) mColors.surface else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -520,15 +582,16 @@ private fun CandidateRow(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = candidate.title?.takeIf { it.isNotBlank() } ?: "Untitled link",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = if (isV1) mTypography.row else MaterialTheme.typography.titleMedium,
+                        color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = candidate.domain?.takeIf { it.isNotBlank() } ?: "External link",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -543,8 +606,8 @@ private fun CandidateRow(
             if (postMeta.isNotEmpty()) {
                 Text(
                     text = postMeta.joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                    color = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -552,17 +615,18 @@ private fun CandidateRow(
             if (!candidate.bluesky.textSnippet.isNullOrBlank()) {
                 Text(
                     text = candidate.bluesky.textSnippet,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = if (isV1) mTypography.body else MaterialTheme.typography.bodyMedium,
+                    color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
             Text(
                 text = "${cleanSourceLabel(candidate.sourceLabel, candidate.sourceType)} · ${formatSourceType(candidate.sourceType)}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = if (isV1) mTypography.meta else MaterialTheme.typography.labelSmall,
+                color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            HorizontalDivider()
+            HorizontalDivider(color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -580,7 +644,11 @@ private fun CandidateRow(
                 }
             }
             if (!saveError.isNullOrBlank()) {
-                Text(saveError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                Text(
+                    saveError,
+                    color = if (isV1) mColors.danger else MaterialTheme.colorScheme.error,
+                    style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                )
             }
         }
     }
@@ -588,15 +656,21 @@ private fun CandidateRow(
 
 @Composable
 private fun SavedBadge(candidate: BlueskyCandidate) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
     val (label, color) = when {
-        candidate.savedState == "failed_saved" -> "Saved failed" to MaterialTheme.colorScheme.error
-        candidate.saved -> "Saved" to MaterialTheme.colorScheme.primary
-        else -> "Unsaved" to MaterialTheme.colorScheme.outline
+        candidate.savedState == "failed_saved" ->
+            "Saved failed" to if (isV1) mColors.danger else MaterialTheme.colorScheme.error
+        candidate.saved ->
+            "Saved" to if (isV1) mColors.success else MaterialTheme.colorScheme.primary
+        else ->
+            "Unsaved" to if (isV1) mColors.fg4 else MaterialTheme.colorScheme.outline
     }
     Text(
         text = label,
         color = color,
-        style = MaterialTheme.typography.labelMedium,
+        style = if (isV1) mTypography.caption else MaterialTheme.typography.labelMedium,
         modifier = Modifier.padding(top = 2.dp),
     )
 }
@@ -703,4 +777,3 @@ private fun findPinnedSourceId(
         else -> null
     }
 }
-
