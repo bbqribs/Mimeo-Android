@@ -60,6 +60,10 @@ import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.queueCapturePresentation
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
+import com.mimeo.android.ui.theme.LocalMimeoColorTokens
+import com.mimeo.android.ui.theme.LocalMimeoDensityTokens
+import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
+import com.mimeo.android.ui.theme.LocalMimeoV1Active
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
@@ -78,6 +82,8 @@ fun SmartPlaylistDetailScreen(
 ) {
     val listState = rememberLazyListState()
     val actionScope = rememberCoroutineScope()
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     var detail by remember { mutableStateOf<SmartPlaylistDetail?>(null) }
     var pinnedItems by remember { mutableStateOf<List<PlaybackQueueItem>>(emptyList()) }
@@ -384,7 +390,7 @@ fun SmartPlaylistDetailScreen(
                     )
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 12.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                        color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
                     )
                 }
             }
@@ -429,7 +435,7 @@ fun SmartPlaylistDetailScreen(
                 )
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = 12.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                    color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
                 )
             }
         }
@@ -625,6 +631,9 @@ private fun SmartPlaylistHeader(
     deleteEnabled: Boolean,
     onDelete: () -> Unit,
 ) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -644,8 +653,8 @@ private fun SmartPlaylistHeader(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = detail?.name ?: "Smart playlist",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
+                        color = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -662,7 +671,7 @@ private fun SmartPlaylistHeader(
                             }
                         },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 if (loading) {
@@ -690,7 +699,7 @@ private fun SmartPlaylistHeader(
                         Icon(
                             imageVector = Icons.Default.MoreVert,
                             contentDescription = "Smart playlist actions",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp),
                         )
                     }
@@ -729,7 +738,7 @@ private fun SmartPlaylistHeader(
                 Text(
                     text = "${smartSortLabel(detail.sort)} - ${smartFilterSummary(detail.filterDefinition)}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -741,22 +750,26 @@ private fun SmartPlaylistSectionHeader(
     title: String,
     count: Int,
 ) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    val densityTokens = LocalMimeoDensityTokens.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp),
+            .padding(start = 16.dp, end = 16.dp, top = if (isV1) densityTokens.sectionGap else 14.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
+            style = if (isV1) mTypography.section else MaterialTheme.typography.labelLarge,
+            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.primary,
         )
         Text(
             text = "$count",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

@@ -76,6 +76,9 @@ import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.queueCapturePresentation
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
+import com.mimeo.android.ui.theme.LocalMimeoColorTokens
+import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
+import com.mimeo.android.ui.theme.LocalMimeoV1Active
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -108,6 +111,9 @@ fun PlaylistDetailScreen(
     val loading by vm.queueLoading.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val actionScope = rememberCoroutineScope()
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
 
     LaunchedEffect(playlistId) {
         vm.refreshPlaylists()
@@ -398,8 +404,8 @@ fun PlaylistDetailScreen(
                 ) {
                     Text(
                         text = playlist?.name ?: "Playlist",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
+                        color = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
@@ -447,7 +453,7 @@ fun PlaylistDetailScreen(
                                 Icon(
                                     imageVector = Icons.Default.MoreVert,
                                     contentDescription = "Playlist options",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(18.dp),
                                 )
                             }
@@ -650,7 +656,7 @@ fun PlaylistDetailScreen(
                                         .fillMaxWidth()
                                         .height(1.dp)
                                         .background(
-                                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                            if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                                         ),
                                 )
                             }
@@ -845,6 +851,8 @@ private fun PlaylistDetailRow(
     val title = presentation?.title ?: "Loading..."
     val status = queueItem?.status
     val metadata = presentation?.sourceLabel ?: queueItem?.host?.takeIf { queueItem.title != null } ?: queueItem?.url
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
     LibraryItemRow(
         title = title,
         metadata = metadata,
@@ -864,7 +872,7 @@ private fun PlaylistDetailRow(
                 Icon(
                     imageVector = Icons.Default.DragHandle,
                     contentDescription = "Drag to reorder",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .offset(x = (-4).dp)
                         .size(24.dp)
