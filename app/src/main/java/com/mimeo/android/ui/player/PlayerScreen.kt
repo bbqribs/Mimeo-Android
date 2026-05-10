@@ -147,6 +147,9 @@ import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import com.mimeo.android.ui.reader.ReaderBody
 import com.mimeo.android.ui.reader.extractReaderPreservedLinks
 import com.mimeo.android.ui.reader.segmentSentences
+import com.mimeo.android.ui.theme.LocalMimeoColorTokens
+import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
+import com.mimeo.android.ui.theme.LocalMimeoV1Active
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -842,6 +845,8 @@ fun PlayerScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
     val engineState by vm.playbackEngineState.collectAsState()
     val currentItemId = if (engineState.currentItemId > 0) engineState.currentItemId else initialItemId
     val sharedContentState = vm.playerSurfaceContentState
@@ -1978,7 +1983,7 @@ fun PlayerScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface)
+                .background(if (isV1) mColors.bg else MaterialTheme.colorScheme.surface)
                 .then(modifier),
             contentAlignment = Alignment.Center,
         ) {
@@ -2000,7 +2005,7 @@ fun PlayerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface)
+                .background(if (isV1) mColors.bg else MaterialTheme.colorScheme.surface)
                 .then(modifier),
             verticalArrangement = Arrangement.Top,
         ) {
@@ -2515,6 +2520,9 @@ private fun ExpandedPlayerTopBar(
     overflowMenuContent: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
     var titleExpanded by remember(title) { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxWidth()) {
         // Locus title strip — always visible when ExpandedPlayerTopBar is shown
@@ -2543,7 +2551,8 @@ private fun ExpandedPlayerTopBar(
                         }
                     },
                 maxLines = if (titleExpanded) 3 else 1,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                style = if (isV1) mTypography.title else MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
             )
             if (!titleDomain.isNullOrBlank()) {
                 val domainModifier = if (!titleSourceUrl.isNullOrBlank()) {
@@ -2571,7 +2580,7 @@ private fun ExpandedPlayerTopBar(
                     .fillMaxWidth()
                     .padding(horizontal = 10.dp)
                     .height(1.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
+                    .background(if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
             )
         }
         AnimatedVisibility(visible = showTopBar) {
@@ -2661,7 +2670,7 @@ private fun ExpandedPlayerTopBar(
         AnimatedVisibility(visible = searchActive) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = Color.Black,
+                color = if (isV1) mColors.surface else Color.Black,
                 tonalElevation = 1.dp,
                 shadowElevation = 1.dp,
             ) {
