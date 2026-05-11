@@ -3555,7 +3555,7 @@ private fun MinimalPlayerDock(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (isV1) Color.Transparent else MaterialTheme.colorScheme.surface)
+            .background(if (isV1) mColors.surfaceHi else MaterialTheme.colorScheme.surface)
             .then(
                 if (backgroundTapEnabled) {
                     Modifier.clickable(
