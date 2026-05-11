@@ -3465,10 +3465,6 @@ private fun FullPlayerDock(
         modifier = Modifier
             .fillMaxWidth()
             .background(if (isV1) mColors.surfaceHi else MaterialTheme.colorScheme.surface)
-            .border(
-                width = if (isV1) 1.dp else 0.dp,
-                color = if (isV1) mColors.line else Color.Transparent,
-            )
             .then(
                 if (backgroundTapEnabled) {
                     Modifier.clickable(
@@ -3481,6 +3477,13 @@ private fun FullPlayerDock(
                 },
             ),
     ) {
+        if (isV1) {
+            HorizontalDivider(
+                modifier = Modifier.align(Alignment.TopStart),
+                thickness = 1.dp,
+                color = mColors.line,
+            )
+        }
         CompositionLocalProvider(LocalContentColor provides if (isV1) mColors.fg2 else LocalContentColor.current) {
             content()
         }
@@ -3525,10 +3528,6 @@ private fun MinimalPlayerDock(
         modifier = Modifier
             .fillMaxWidth()
             .background(if (isV1) mColors.surfaceHi else MaterialTheme.colorScheme.surface)
-            .border(
-                width = if (isV1) 1.dp else 0.dp,
-                color = if (isV1) mColors.line else Color.Transparent,
-            )
             .then(
                 if (backgroundTapEnabled) {
                     Modifier.clickable(
@@ -3541,6 +3540,13 @@ private fun MinimalPlayerDock(
                 },
             ),
     ) {
+        if (isV1) {
+            HorizontalDivider(
+                modifier = Modifier.align(Alignment.TopStart),
+                thickness = 1.dp,
+                color = mColors.line,
+            )
+        }
         CompositionLocalProvider(LocalContentColor provides if (isV1) mColors.fg2 else LocalContentColor.current) {
             content()
         }

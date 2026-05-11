@@ -480,7 +480,6 @@ fun LibraryItemsScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 state = listState,
-                contentPadding = PaddingValues(end = 8.dp),
             ) {
             // Pending section (inbox only)
             if (pendingItems.isNotEmpty()) {
