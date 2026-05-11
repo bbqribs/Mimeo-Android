@@ -13,6 +13,7 @@ import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.DEFAULT_LAN_BASE_URL
 import com.mimeo.android.model.DEFAULT_LOCAL_BASE_URL
 import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
+import com.mimeo.android.model.DEFAULT_VISUAL_DESIGN_V1_ENABLED
 import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.DrawerPanelSide
@@ -200,7 +201,7 @@ class SettingsStore(private val context: Context) {
                 ?: ParagraphSpacingOption.MEDIUM,
             visualThemePreference = parseVisualThemePreference(prefs[visualThemePreferenceKey]),
             visualDensityPreference = parseVisualDensityPreference(prefs[visualDensityPreferenceKey]),
-            visualDesignV1Enabled = prefs[visualDesignV1EnabledKey] ?: false,
+            visualDesignV1Enabled = prefs[visualDesignV1EnabledKey] ?: DEFAULT_VISUAL_DESIGN_V1_ENABLED,
             playerControlsMode = prefs[playerControlsModeKey]
                 ?.let { runCatching { PlayerControlsMode.valueOf(it) }.getOrNull() }
                 ?: PlayerControlsMode.FULL,

@@ -35,6 +35,11 @@ Planning-doc ownership decision: `docs/planning/DOCS_OWNERSHIP_DECISION.md`.
 
 ### P0 — next Android implementation (post-redesign)
 
+Active guarded-default-enable PR: visual v1 defaults on for fresh installs
+and cleared app data while stored user opt-outs remain honored; merge is
+gated on the final QA matrix in
+`docs/ANDROID_VISUAL_V1_FINAL_QA_2026_05.md`.
+
 4. [ ] **Playback / queue UX cluster.** Smart Queue as playlist-like source,
    Up Next History / Earlier in queue implementation, and expanded Save
    queue-as-playlist options.
