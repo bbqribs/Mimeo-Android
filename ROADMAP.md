@@ -3,6 +3,7 @@
 Source of truth for redesign scope: `docs/REDESIGN_V2_PLAN.md`.
 Drift guard: `docs/REDESIGN_V2_DECISION_SNAPSHOT.md`.
 Most recent audit: `docs/REDESIGN_V2_AUDIT_2026-04-21.md`.
+Visual v1 final QA audit (2026-05): `docs/ANDROID_VISUAL_V1_FINAL_QA_2026_05.md`.
 Redesign completion plan (post-shipped-redesign forward sequence): `docs/REDESIGN_COMPLETION_PLAN.md`.
 Mini-player control spec (v1 shipped; time-based skip deferred): `docs/ANDROID_MINIPLAYER_CONTROL_SPEC.md`.
 Up Next layout spec for history / active / upcoming / snap-to-active: `docs/ANDROID_UP_NEXT_LAYOUT_SPEC.md`.
