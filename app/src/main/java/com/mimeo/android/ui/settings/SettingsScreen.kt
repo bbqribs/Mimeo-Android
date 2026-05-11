@@ -1776,7 +1776,7 @@ fun SettingsScreen(
                         ) {
                             Text("Visual theme mode")
                             Text(
-                                text = "Saved now; applied to Paper & Ember tokens when the v1 wrapper is enabled.",
+                                text = "Saved now; applied to Paper & Ember tokens while visual v1 is active.",
                                 style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                                 color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1813,7 +1813,7 @@ fun SettingsScreen(
                         ) {
                             Text("Visual density mode")
                             Text(
-                                text = "Saved now; applied to Paper & Ember density tokens when the v1 wrapper is enabled.",
+                                text = "Saved now; applied to Paper & Ember density tokens while visual v1 is active.",
                                 style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                                 color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1848,9 +1848,9 @@ fun SettingsScreen(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            Text("Visual design v1 wrapper")
+                            Text("Visual design v1")
                             Text(
-                                text = "Enable Paper & Ember token wrapper path for local visual review.",
+                                text = "On by default for new installs. Turn off to use the legacy visual path as an escape hatch.",
                                 style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                                 color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                             )
