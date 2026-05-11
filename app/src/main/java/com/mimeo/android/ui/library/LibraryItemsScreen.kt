@@ -474,7 +474,7 @@ fun LibraryItemsScreen(
                 .fillMaxSize()
                 .passiveVerticalScrollIndicator(
                     listState = listState,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
+                    color = if (isV1) mColors.fg4 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
                 ),
         ) {
             LazyColumn(

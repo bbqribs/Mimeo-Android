@@ -372,7 +372,7 @@ fun ReaderBody(
                 if (max > 0) {
                     val fraction = scrollState.value.toFloat() / max.toFloat()
                     val thumbH = (size.height * size.height / (size.height + max))
-                        .coerceAtLeast(48f)
+                        .coerceAtLeast(40.dp.toPx())
                     val trackH = size.height - thumbH
                     val thumbY = fraction * trackH
                     val thumbW = 3.dp.toPx()

@@ -2153,7 +2153,7 @@ private fun NowPlayingSessionPanel(
                 .onSizeChanged { listViewportHeight = it.height }
                 .passiveVerticalScrollIndicator(
                     scrollState = listScrollState,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f),
+                    color = if (isV1) mColors.fg4 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f),
                 ),
         ) {
             Column(
