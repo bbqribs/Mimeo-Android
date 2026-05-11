@@ -78,6 +78,9 @@ import com.mimeo.android.ui.bluesky.BlueskyBrowseScreen
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
 import com.mimeo.android.ui.settings.SettingsScreen
 import com.mimeo.android.ui.signin.SignInScreen
+import com.mimeo.android.ui.theme.LocalMimeoColorTokens
+import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
+import com.mimeo.android.ui.theme.LocalMimeoV1Active
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -118,6 +121,9 @@ internal fun MainActivityShell(
     shellState: PlayerShellState,
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
     val drawerItems = remember {
         listOf(
             DrawerDestination(ROUTE_INBOX, "Inbox"),
@@ -373,10 +379,12 @@ internal fun MainActivityShell(
 
         Scaffold(
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            containerColor = if (isV1) mColors.bg else MaterialTheme.colorScheme.background,
         ) { innerPadding ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .background(if (isV1) mColors.bg else MaterialTheme.colorScheme.background)
                     .padding(innerPadding)
                     .statusBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 4.dp),
@@ -396,18 +404,25 @@ internal fun MainActivityShell(
                     }
                     if (libraryShellVisible) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(if (isV1) mColors.bg else Color.Transparent),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             IconButton(
                                 onClick = { coroutineScope.launch { drawerState.open() } },
                                 modifier = Modifier.size(36.dp),
                             ) {
-                                Text("☰", style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    "☰",
+                                    style = if (isV1) mTypography.title else MaterialTheme.typography.titleMedium,
+                                    color = if (isV1) mColors.fg else Color.Unspecified,
+                                )
                             }
                             Text(
                                 text = drawerRouteLabel(selectedDrawerRoute, playlists, smartPlaylists),
-                                style = MaterialTheme.typography.titleMedium,
+                                style = if (isV1) mTypography.title else MaterialTheme.typography.titleMedium,
+                                color = if (isV1) mColors.fg else Color.Unspecified,
                             )
                         }
                     }
@@ -421,7 +436,7 @@ internal fun MainActivityShell(
                             startDestination = if (requiresSignIn) ROUTE_SIGN_IN else ROUTE_UP_NEXT,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.background),
+                                .background(if (isV1) mColors.bg else MaterialTheme.colorScheme.background),
                         ) {
                             composable(ROUTE_SIGN_IN) {
                                 SignInScreen(
@@ -834,7 +849,7 @@ internal fun MainActivityShell(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(shellBottomClearance)
-                                        .background(MaterialTheme.colorScheme.surface),
+                                        .background(if (isV1) mColors.surface else MaterialTheme.colorScheme.surface),
                                 )
                             }
                         }

@@ -58,6 +58,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalMinimumInteractiveComponentEnforcement
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -148,6 +149,7 @@ import com.mimeo.android.ui.reader.ReaderBody
 import com.mimeo.android.ui.reader.extractReaderPreservedLinks
 import com.mimeo.android.ui.reader.segmentSentences
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
+import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
 import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
 import com.mimeo.android.ui.theme.LocalMimeoV1Active
 import kotlinx.coroutines.CancellationException
@@ -2529,7 +2531,7 @@ private fun ExpandedPlayerTopBar(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface)
+                .background(if (isV1) mColors.surface else MaterialTheme.colorScheme.surface)
                 .padding(horizontal = 2.dp, vertical = 2.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
@@ -2571,7 +2573,7 @@ private fun ExpandedPlayerTopBar(
                     maxLines = 1,
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontStyle = FontStyle.Italic,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
                     ),
                 )
             }
@@ -2587,7 +2589,11 @@ private fun ExpandedPlayerTopBar(
             TopAppBar(
                 modifier = Modifier.height(48.dp),
                 windowInsets = WindowInsets(0, 0, 0, 0),
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = if (isV1) mColors.surface else MaterialTheme.colorScheme.surface,
+                    actionIconContentColor = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.onSurfaceVariant,
+                    titleContentColor = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
+                ),
                 title = {},
                 actions = {
                     ActionHintTooltip(label = if (isDone) "Mark as not done" else "Mark as done") {
@@ -2603,7 +2609,7 @@ private fun ExpandedPlayerTopBar(
                             Icon(
                                 painter = painterResource(id = if (isDone) R.drawable.ic_book_closed_24 else R.drawable.ic_book_open_24),
                                 contentDescription = if (isDone) "Mark as not done" else "Mark as done",
-                                tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                tint = if (isV1 && isDone) mColors.accent else if (isV1) mColors.fg3 else if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                                 modifier = Modifier.size(22.dp),
                             )
                         }
@@ -2640,9 +2646,9 @@ private fun ExpandedPlayerTopBar(
                                 text = if (isFavorited) "\u2665" else "\u2661",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = if (isFavorited) {
-                                    MaterialTheme.colorScheme.primary
+                                    if (isV1) mColors.accent else MaterialTheme.colorScheme.primary
                                 } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                    if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant
                                 },
                             )
                         }
@@ -2652,7 +2658,7 @@ private fun ExpandedPlayerTopBar(
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_archive_box_24),
                                 contentDescription = if (isArchived) "Unarchive item" else "Archive item",
-                                tint = if (isArchived) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = if (isV1 && isArchived) mColors.accent else if (isV1) mColors.fg3 else if (isArchived) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(20.dp),
                             )
                         }
@@ -3453,10 +3459,16 @@ private fun FullPlayerDock(
     content: @Composable () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
+            .background(if (isV1) mColors.surfaceHi else MaterialTheme.colorScheme.surface)
+            .border(
+                width = if (isV1) 1.dp else 0.dp,
+                color = if (isV1) mColors.line else Color.Transparent,
+            )
             .then(
                 if (backgroundTapEnabled) {
                     Modifier.clickable(
@@ -3469,7 +3481,9 @@ private fun FullPlayerDock(
                 },
             ),
     ) {
-        content()
+        CompositionLocalProvider(LocalContentColor provides if (isV1) mColors.fg2 else LocalContentColor.current) {
+            content()
+        }
         if (showChevron) {
             PlayerChromeChevron(
                 contentDescription = chevronContentDescription,
@@ -3505,10 +3519,16 @@ private fun MinimalPlayerDock(
     content: @Composable () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
+            .background(if (isV1) mColors.surfaceHi else MaterialTheme.colorScheme.surface)
+            .border(
+                width = if (isV1) 1.dp else 0.dp,
+                color = if (isV1) mColors.line else Color.Transparent,
+            )
             .then(
                 if (backgroundTapEnabled) {
                     Modifier.clickable(
@@ -3521,7 +3541,9 @@ private fun MinimalPlayerDock(
                 },
             ),
     ) {
-        content()
+        CompositionLocalProvider(LocalContentColor provides if (isV1) mColors.fg2 else LocalContentColor.current) {
+            content()
+        }
         if (showChevron) {
             PlayerChromeChevron(
                 contentDescription = chevronContentDescription,
@@ -3556,10 +3578,13 @@ private fun NubPlayerDock(
     onBackgroundTap: () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(PLAYER_TRANSPORT_ROW_HEIGHT)
+            .background(if (isV1) mColors.surfaceHi else Color.Transparent)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -3602,17 +3627,19 @@ private fun PlayerProgressLine(
     progressPercent: Int,
     modifier: Modifier = Modifier,
 ) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
     val clamped = progressPercent.coerceIn(0, 100)
     Box(
         modifier = modifier
             .height(3.dp)
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)),
+            .background(if (isV1) mColors.line else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth(clamped / 100f)
                 .height(3.dp)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.88f)),
+                .background(if (isV1) mColors.accent else MaterialTheme.colorScheme.primary.copy(alpha = 0.88f)),
         )
     }
 }
@@ -3628,8 +3655,11 @@ private fun PlayerChromeChevron(
     modifier: Modifier = Modifier,
 ) {
     var dragAccumulation by remember { mutableFloatStateOf(0f) }
-    val shape = RoundedCornerShape(18.dp)
-    val highlightColor = MaterialTheme.colorScheme.primary
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mShapes = LocalMimeoShapeTokens.current
+    val shape = if (isV1) mShapes.pill else RoundedCornerShape(18.dp)
+    val highlightColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary
     Box(
         modifier = modifier
             .requiredWidth(COMPACT_CONTROL_CHIP_WIDTH)
@@ -3698,6 +3728,9 @@ private fun PlayerControlBar(
     onNextItem: () -> Unit,
     onSpeedChange: (Float) -> Unit,
 ) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
     val sliderInteractionSource = remember { MutableInteractionSource() }
     val isDraggingSlider by sliderInteractionSource.collectIsDraggedAsState()
     val controlSlotSize = if (!minimal && showSpeedPill) COMPACT_FULL_CONTROL_SLOT_SIZE else CONTROL_SLOT_SIZE
@@ -3727,6 +3760,7 @@ private fun PlayerControlBar(
                         fontStyle = FontStyle.Italic,
                         fontSize = (MaterialTheme.typography.labelMedium.fontSize.value + 1f).sp,
                     ),
+                    color = if (isV1) mColors.accent else Color.Unspecified,
                 )
                 Text(
                     text = nowPlayingTitle,
@@ -3738,11 +3772,15 @@ private fun PlayerControlBar(
                             repeatDelayMillis = 5_000,
                         ),
                     maxLines = 1,
-                    style = MaterialTheme.typography.labelMedium.copy(
+                    style = if (isV1) mTypography.meta.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontStyle = FontStyle.Italic,
+                    ) else MaterialTheme.typography.labelMedium.copy(
                         fontWeight = FontWeight.SemiBold,
                         fontStyle = FontStyle.Italic,
                         fontSize = (MaterialTheme.typography.labelMedium.fontSize.value + 1f).sp,
                     ),
+                    color = if (isV1) mColors.fg else Color.Unspecified,
                 )
                 if (!nowPlayingSourceLabel.isNullOrBlank()) {
                     Text(
@@ -3752,7 +3790,7 @@ private fun PlayerControlBar(
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontStyle = FontStyle.Italic,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
                         ),
                     )
                 }
@@ -3774,6 +3812,18 @@ private fun PlayerControlBar(
                     },
                     enabled = canSeek,
                     interactionSource = sliderInteractionSource,
+                    colors = if (isV1) {
+                        SliderDefaults.colors(
+                            thumbColor = mColors.accent,
+                            activeTrackColor = mColors.accent,
+                            inactiveTrackColor = mColors.line,
+                            disabledThumbColor = mColors.fg3,
+                            disabledActiveTrackColor = mColors.line,
+                            disabledInactiveTrackColor = mColors.lineSoft,
+                        )
+                    } else {
+                        SliderDefaults.colors()
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.Center)
