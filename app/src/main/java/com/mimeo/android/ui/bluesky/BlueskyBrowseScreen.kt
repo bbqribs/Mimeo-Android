@@ -116,7 +116,6 @@ fun BlueskyBrowseScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             state = listState,
-            contentPadding = PaddingValues(end = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {

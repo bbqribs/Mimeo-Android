@@ -329,7 +329,6 @@ fun SmartPlaylistDetailScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 state = listState,
-                contentPadding = PaddingValues(end = 8.dp),
             ) {
             if (pinnedItems.isNotEmpty()) {
                 item(key = "pinned-header") {
