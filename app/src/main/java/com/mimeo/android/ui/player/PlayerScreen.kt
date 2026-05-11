@@ -94,6 +94,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -1925,41 +1926,57 @@ fun PlayerScreen(
             val locusTargetId = resolveLocusOpenTargetId()
             if (locusTargetId > 0) onOpenLocusForItem(locusTargetId)
         }
-        when (controlsMode) {
-            PlayerControlsMode.FULL -> FullPlayerDock(
-                chevronSide = chevronSide,
-                showChevron = showDockChevron,
-                chevronContentDescription = chevronDescription,
-                onChevronTap = handleChevronTap,
-                onChevronLongPress = handleChevronLongPress,
-                onChevronSnap = handleChevronSnap,
-                onBackgroundTap = openLocusFromDock,
-                backgroundTapEnabled = !compactControlsOnly,
-                content = renderPlayerControlBar,
-            )
+        val rootView = LocalView.current
+        // Escape any horizontal padding applied by ancestor containers so the dock
+        // always spans the full physical screen width. When there is no inset the
+        // layout modifier is a no-op (insetPerSide == 0).
+        Box(
+            modifier = Modifier.layout { measurable, constraints ->
+                val insetPerSide = maxOf(0, (rootView.width - constraints.maxWidth) / 2)
+                val placeable = measurable.measure(
+                    constraints.copy(minWidth = rootView.width, maxWidth = rootView.width),
+                )
+                layout(constraints.maxWidth, placeable.height) {
+                    placeable.placeRelative(-insetPerSide, 0)
+                }
+            },
+        ) {
+            when (controlsMode) {
+                PlayerControlsMode.FULL -> FullPlayerDock(
+                    chevronSide = chevronSide,
+                    showChevron = showDockChevron,
+                    chevronContentDescription = chevronDescription,
+                    onChevronTap = handleChevronTap,
+                    onChevronLongPress = handleChevronLongPress,
+                    onChevronSnap = handleChevronSnap,
+                    onBackgroundTap = openLocusFromDock,
+                    backgroundTapEnabled = !compactControlsOnly,
+                    content = renderPlayerControlBar,
+                )
 
-            PlayerControlsMode.MINIMAL -> MinimalPlayerDock(
-                chevronSide = chevronSide,
-                showChevron = showDockChevron,
-                chevronContentDescription = chevronDescription,
-                onChevronTap = handleChevronTap,
-                onChevronLongPress = handleChevronLongPress,
-                onChevronSnap = handleChevronSnap,
-                onBackgroundTap = openLocusFromDock,
-                backgroundTapEnabled = !compactControlsOnly,
-                content = renderPlayerControlBar,
-            )
+                PlayerControlsMode.MINIMAL -> MinimalPlayerDock(
+                    chevronSide = chevronSide,
+                    showChevron = showDockChevron,
+                    chevronContentDescription = chevronDescription,
+                    onChevronTap = handleChevronTap,
+                    onChevronLongPress = handleChevronLongPress,
+                    onChevronSnap = handleChevronSnap,
+                    onBackgroundTap = openLocusFromDock,
+                    backgroundTapEnabled = !compactControlsOnly,
+                    content = renderPlayerControlBar,
+                )
 
-            PlayerControlsMode.NUB -> NubPlayerDock(
-                progressPercent = currentPercent,
-                chevronSide = chevronSide,
-                showChevron = showDockChevron,
-                chevronContentDescription = chevronDescription,
-                onChevronTap = handleChevronTap,
-                onChevronLongPress = handleChevronLongPress,
-                onChevronSnap = handleChevronSnap,
-                onBackgroundTap = openLocusFromDock,
-            )
+                PlayerControlsMode.NUB -> NubPlayerDock(
+                    progressPercent = currentPercent,
+                    chevronSide = chevronSide,
+                    showChevron = showDockChevron,
+                    chevronContentDescription = chevronDescription,
+                    onChevronTap = handleChevronTap,
+                    onChevronLongPress = handleChevronLongPress,
+                    onChevronSnap = handleChevronSnap,
+                    onBackgroundTap = openLocusFromDock,
+                )
+            }
         }
     }
     val observabilityUiState = PlaybackObservabilityUiState(
@@ -2526,7 +2543,18 @@ private fun ExpandedPlayerTopBar(
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
     var titleExpanded by remember(title) { mutableStateOf(false) }
-    Column(modifier = Modifier.fillMaxWidth()) {
+    val rootView = LocalView.current
+    Column(
+        modifier = Modifier.fillMaxWidth().layout { measurable, constraints ->
+            val insetPerSide = maxOf(0, (rootView.width - constraints.maxWidth) / 2)
+            val placeable = measurable.measure(
+                constraints.copy(minWidth = rootView.width, maxWidth = rootView.width),
+            )
+            layout(constraints.maxWidth, placeable.height) {
+                placeable.placeRelative(-insetPerSide, 0)
+            }
+        },
+    ) {
         // Locus title strip — always visible when ExpandedPlayerTopBar is shown
         Column(
             modifier = Modifier
@@ -3465,10 +3493,6 @@ private fun FullPlayerDock(
         modifier = Modifier
             .fillMaxWidth()
             .background(if (isV1) mColors.surfaceHi else MaterialTheme.colorScheme.surface)
-            .border(
-                width = if (isV1) 1.dp else 0.dp,
-                color = if (isV1) mColors.line else Color.Transparent,
-            )
             .then(
                 if (backgroundTapEnabled) {
                     Modifier.clickable(
@@ -3481,6 +3505,13 @@ private fun FullPlayerDock(
                 },
             ),
     ) {
+        if (isV1) {
+            HorizontalDivider(
+                modifier = Modifier.align(Alignment.TopStart),
+                thickness = 1.dp,
+                color = mColors.line,
+            )
+        }
         CompositionLocalProvider(LocalContentColor provides if (isV1) mColors.fg2 else LocalContentColor.current) {
             content()
         }
@@ -3525,10 +3556,6 @@ private fun MinimalPlayerDock(
         modifier = Modifier
             .fillMaxWidth()
             .background(if (isV1) mColors.surfaceHi else MaterialTheme.colorScheme.surface)
-            .border(
-                width = if (isV1) 1.dp else 0.dp,
-                color = if (isV1) mColors.line else Color.Transparent,
-            )
             .then(
                 if (backgroundTapEnabled) {
                     Modifier.clickable(
@@ -3541,6 +3568,13 @@ private fun MinimalPlayerDock(
                 },
             ),
     ) {
+        if (isV1) {
+            HorizontalDivider(
+                modifier = Modifier.align(Alignment.TopStart),
+                thickness = 1.dp,
+                color = mColors.line,
+            )
+        }
         CompositionLocalProvider(LocalContentColor provides if (isV1) mColors.fg2 else LocalContentColor.current) {
             content()
         }
@@ -3584,7 +3618,7 @@ private fun NubPlayerDock(
         modifier = Modifier
             .fillMaxWidth()
             .height(PLAYER_TRANSPORT_ROW_HEIGHT)
-            .background(if (isV1) mColors.surfaceHi else Color.Transparent)
+            .background(Color.Transparent)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,

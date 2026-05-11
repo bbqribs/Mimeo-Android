@@ -387,10 +387,12 @@ internal fun MainActivityShell(
                     .background(if (isV1) mColors.bg else MaterialTheme.colorScheme.background)
                     .padding(innerPadding)
                     .statusBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                    .padding(vertical = 4.dp),
             ) {
                 Column(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     if (showGlobalBanner && !presentingLocus) {

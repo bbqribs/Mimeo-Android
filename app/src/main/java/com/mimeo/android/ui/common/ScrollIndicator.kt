@@ -2,15 +2,25 @@ package com.mimeo.android.ui.common
 
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.absoluteValue
+
+// Mutable holder used to pass layout-phase data (right inset) into the draw phase.
+// Not a Compose state — no recomposition triggered; onGloballyPositioned (Layout)
+// always runs before drawWithContent (Draw) in the same frame.
+private class FloatRef(var value: Float = 0f)
 
 fun Modifier.passiveVerticalScrollIndicator(
     scrollState: ScrollState,
@@ -18,8 +28,12 @@ fun Modifier.passiveVerticalScrollIndicator(
     minThumbHeight: Dp = 40.dp,
     thumbWidth: Dp = 3.dp,
     endPadding: Dp = 2.dp,
-): Modifier {
-    return this.drawWithContent {
+): Modifier = composed {
+    val rootView = LocalView.current
+    val rightInset = remember { FloatRef() }
+    onGloballyPositioned { coords ->
+        rightInset.value = rootView.width - coords.boundsInRoot().right
+    }.drawWithContent {
         drawContent()
         val max = scrollState.maxValue
         if (max <= 0) return@drawWithContent
@@ -36,7 +50,10 @@ fun Modifier.passiveVerticalScrollIndicator(
 
         drawRoundRect(
             color = color,
-            topLeft = Offset(x = size.width - thumbWidthPx - endPaddingPx, y = thumbY),
+            topLeft = Offset(
+                x = size.width + rightInset.value - thumbWidthPx - endPaddingPx,
+                y = thumbY,
+            ),
             size = Size(width = thumbWidthPx, height = thumbHeightPx),
             cornerRadius = CornerRadius(x = thumbWidthPx / 2f, y = thumbWidthPx / 2f),
         )
@@ -49,8 +66,12 @@ fun Modifier.passiveVerticalScrollIndicator(
     minThumbHeight: Dp = 40.dp,
     thumbWidth: Dp = 3.dp,
     endPadding: Dp = 2.dp,
-): Modifier {
-    return this.drawWithContent {
+): Modifier = composed {
+    val rootView = LocalView.current
+    val rightInset = remember { FloatRef() }
+    onGloballyPositioned { coords ->
+        rightInset.value = rootView.width - coords.boundsInRoot().right
+    }.drawWithContent {
         drawContent()
         val layoutInfo = listState.layoutInfo
         val totalItemsCount = layoutInfo.totalItemsCount
@@ -78,7 +99,10 @@ fun Modifier.passiveVerticalScrollIndicator(
 
         drawRoundRect(
             color = color,
-            topLeft = Offset(x = size.width - thumbWidthPx - endPaddingPx, y = thumbY),
+            topLeft = Offset(
+                x = size.width + rightInset.value - thumbWidthPx - endPaddingPx,
+                y = thumbY,
+            ),
             size = Size(width = thumbWidthPx, height = thumbHeightPx),
             cornerRadius = CornerRadius(x = thumbWidthPx / 2f, y = thumbWidthPx / 2f),
         )
