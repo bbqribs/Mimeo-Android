@@ -94,6 +94,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -1925,41 +1926,57 @@ fun PlayerScreen(
             val locusTargetId = resolveLocusOpenTargetId()
             if (locusTargetId > 0) onOpenLocusForItem(locusTargetId)
         }
-        when (controlsMode) {
-            PlayerControlsMode.FULL -> FullPlayerDock(
-                chevronSide = chevronSide,
-                showChevron = showDockChevron,
-                chevronContentDescription = chevronDescription,
-                onChevronTap = handleChevronTap,
-                onChevronLongPress = handleChevronLongPress,
-                onChevronSnap = handleChevronSnap,
-                onBackgroundTap = openLocusFromDock,
-                backgroundTapEnabled = !compactControlsOnly,
-                content = renderPlayerControlBar,
-            )
+        val rootView = LocalView.current
+        // Escape any horizontal padding applied by ancestor containers so the dock
+        // always spans the full physical screen width. When there is no inset the
+        // layout modifier is a no-op (insetPerSide == 0).
+        Box(
+            modifier = Modifier.layout { measurable, constraints ->
+                val insetPerSide = maxOf(0, (rootView.width - constraints.maxWidth) / 2)
+                val placeable = measurable.measure(
+                    constraints.copy(minWidth = rootView.width, maxWidth = rootView.width),
+                )
+                layout(constraints.maxWidth, placeable.height) {
+                    placeable.placeRelative(-insetPerSide, 0)
+                }
+            },
+        ) {
+            when (controlsMode) {
+                PlayerControlsMode.FULL -> FullPlayerDock(
+                    chevronSide = chevronSide,
+                    showChevron = showDockChevron,
+                    chevronContentDescription = chevronDescription,
+                    onChevronTap = handleChevronTap,
+                    onChevronLongPress = handleChevronLongPress,
+                    onChevronSnap = handleChevronSnap,
+                    onBackgroundTap = openLocusFromDock,
+                    backgroundTapEnabled = !compactControlsOnly,
+                    content = renderPlayerControlBar,
+                )
 
-            PlayerControlsMode.MINIMAL -> MinimalPlayerDock(
-                chevronSide = chevronSide,
-                showChevron = showDockChevron,
-                chevronContentDescription = chevronDescription,
-                onChevronTap = handleChevronTap,
-                onChevronLongPress = handleChevronLongPress,
-                onChevronSnap = handleChevronSnap,
-                onBackgroundTap = openLocusFromDock,
-                backgroundTapEnabled = !compactControlsOnly,
-                content = renderPlayerControlBar,
-            )
+                PlayerControlsMode.MINIMAL -> MinimalPlayerDock(
+                    chevronSide = chevronSide,
+                    showChevron = showDockChevron,
+                    chevronContentDescription = chevronDescription,
+                    onChevronTap = handleChevronTap,
+                    onChevronLongPress = handleChevronLongPress,
+                    onChevronSnap = handleChevronSnap,
+                    onBackgroundTap = openLocusFromDock,
+                    backgroundTapEnabled = !compactControlsOnly,
+                    content = renderPlayerControlBar,
+                )
 
-            PlayerControlsMode.NUB -> NubPlayerDock(
-                progressPercent = currentPercent,
-                chevronSide = chevronSide,
-                showChevron = showDockChevron,
-                chevronContentDescription = chevronDescription,
-                onChevronTap = handleChevronTap,
-                onChevronLongPress = handleChevronLongPress,
-                onChevronSnap = handleChevronSnap,
-                onBackgroundTap = openLocusFromDock,
-            )
+                PlayerControlsMode.NUB -> NubPlayerDock(
+                    progressPercent = currentPercent,
+                    chevronSide = chevronSide,
+                    showChevron = showDockChevron,
+                    chevronContentDescription = chevronDescription,
+                    onChevronTap = handleChevronTap,
+                    onChevronLongPress = handleChevronLongPress,
+                    onChevronSnap = handleChevronSnap,
+                    onBackgroundTap = openLocusFromDock,
+                )
+            }
         }
     }
     val observabilityUiState = PlaybackObservabilityUiState(

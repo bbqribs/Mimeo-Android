@@ -110,7 +110,7 @@ fun BlueskyBrowseScreen(
             .then(if (isV1) Modifier.background(mColors.bg) else Modifier)
             .passiveVerticalScrollIndicator(
                 listState = listState,
-                color = if (isV1) mColors.line else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
+                color = if (isV1) mColors.fg4 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
             ),
     ) {
         LazyColumn(
