@@ -91,6 +91,10 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import androidx.compose.ui.graphics.Color
+import com.mimeo.android.ui.theme.LocalMimeoColorTokens
+import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
+import com.mimeo.android.ui.theme.LocalMimeoV1Active
 
 private const val PREVIEW_PARAGRAPH_1 = "Mimeo now remembers your reading layout so Locus feels like a calm, bookish surface instead of a raw text dump."
 private const val PREVIEW_PARAGRAPH_2 = "Use this preview to check rhythm, paragraph spacing, and readability before returning to long-form listening sessions."
@@ -460,6 +464,10 @@ fun SettingsScreen(
 
     val defaultSavePlaylistName = playlists.firstOrNull { it.id == settings.defaultSavePlaylistId }?.name ?: "Smart Queue"
 
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+
     val previewTextStyle = TextStyle(
         fontFamily = readingFontOption.toFontFamily(),
         fontSize = readingFontSizeSp.sp,
@@ -488,7 +496,11 @@ fun SettingsScreen(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text("Connection")
+                Text(
+                    text = "Connection",
+                    style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    color = if (isV1) mColors.fg else Color.Unspecified,
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -715,7 +727,7 @@ fun SettingsScreen(
                 }
                 HorizontalDivider(
                     modifier = Modifier.fillMaxWidth(),
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                     thickness = 1.dp,
                 )
                 Row(
@@ -731,7 +743,7 @@ fun SettingsScreen(
                 }
                 HorizontalDivider(
                     modifier = Modifier.fillMaxWidth(),
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                     thickness = 1.dp,
                 )
                 Row(
@@ -806,7 +818,11 @@ fun SettingsScreen(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text("Bluesky status")
+                Text(
+                    text = "Bluesky status",
+                    style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    color = if (isV1) mColors.fg else Color.Unspecified,
+                )
                 if (blueskyStatusLoading) {
                     Text(
                         text = "Loading Bluesky status...",
@@ -874,7 +890,7 @@ fun SettingsScreen(
                         )
                         HorizontalDivider(
                             modifier = Modifier.fillMaxWidth(),
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                            color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                             thickness = 1.dp,
                         )
                         Text(
@@ -929,7 +945,7 @@ fun SettingsScreen(
                 if (scheduler != null) {
                     HorizontalDivider(
                         modifier = Modifier.fillMaxWidth(),
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                         thickness = 1.dp,
                     )
                     SettingsKeyValueLine("Scheduler enabled", formatBlueskyBool(scheduler.resolvedSchedulerEnabled))
@@ -941,7 +957,7 @@ fun SettingsScreen(
                     SettingsKeyValueLine("Last error", scheduler.resolvedLastErrorMessage?.takeIf { it.isNotBlank() } ?: "None")
                     HorizontalDivider(
                         modifier = Modifier.fillMaxWidth(),
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                         thickness = 1.dp,
                     )
                     Text(
@@ -1012,7 +1028,11 @@ fun SettingsScreen(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text("Candidate scanner defaults")
+                Text(
+                    text = "Candidate scanner defaults",
+                    style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    color = if (isV1) mColors.fg else Color.Unspecified,
+                )
                 Text(
                     text = "Default live scan caps — explicit scan requests may override them. These do not enable auto-save or mutate Up Next.",
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
@@ -1113,7 +1133,11 @@ fun SettingsScreen(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text("Saving")
+                Text(
+                    text = "Saving",
+                    style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    color = if (isV1) mColors.fg else Color.Unspecified,
+                )
                 SettingsDescribedRow(
                     title = "Default playlist",
                     description = "Shared links save to Smart Queue unless you choose a playlist here.",
@@ -1200,7 +1224,11 @@ fun SettingsScreen(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text("Playback")
+                Text(
+                    text = "Playback",
+                    style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    color = if (isV1) mColors.fg else Color.Unspecified,
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1565,7 +1593,11 @@ fun SettingsScreen(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text("Reading")
+                Text(
+                    text = "Reading",
+                    style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    color = if (isV1) mColors.fg else Color.Unspecified,
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1680,7 +1712,11 @@ fun SettingsScreen(
                         .padding(8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text("Developer")
+                    Text(
+                        text = "Developer",
+                        style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                        color = if (isV1) mColors.fg else Color.Unspecified,
+                    )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -2080,6 +2116,9 @@ fun SettingsScreen(
 
 @Composable
 private fun SettingsKeyValueLine(label: String, value: String) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -2087,12 +2126,13 @@ private fun SettingsKeyValueLine(label: String, value: String) {
     ) {
         Text(
             text = label,
-            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+            style = if (isV1) mTypography.meta else androidx.compose.material3.MaterialTheme.typography.bodySmall,
+            color = if (isV1) mColors.fg2 else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             text = value,
-            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+            style = if (isV1) mTypography.meta else androidx.compose.material3.MaterialTheme.typography.bodySmall,
+            color = if (isV1) mColors.fg else Color.Unspecified,
         )
     }
 }
@@ -2102,12 +2142,14 @@ private fun BlueskySourceRow(
     source: BlueskySourceDiagnostic,
     onCreateSmartPlaylist: ((name: String, captureKinds: String, sort: String) -> Unit)? = null,
 ) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
     val enabled = source.enabled != false
     val stateLabel = if (enabled) "Enabled" else "Paused"
     val stateColor = if (enabled) {
-        androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+        if (isV1) mColors.fg2 else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
     } else {
-        androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+        if (isV1) mColors.fg3 else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
     }
     val isAuthenticatedSource = source.typeLabel?.let {
         it.equals("Home timeline", ignoreCase = true) || it.equals("List feed", ignoreCase = true)
@@ -2195,6 +2237,9 @@ private fun SettingsSectionHeader(
     title: String,
     subtitle: String? = null,
 ) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -2203,13 +2248,14 @@ private fun SettingsSectionHeader(
     ) {
         Text(
             text = title,
-            style = androidx.compose.material3.MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            style = if (isV1) mTypography.title else androidx.compose.material3.MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = if (isV1) mColors.fg else Color.Unspecified,
         )
         if (!subtitle.isNullOrBlank()) {
             Text(
                 text = subtitle,
-                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                style = if (isV1) mTypography.body else androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = if (isV1) mColors.fg2 else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -2351,6 +2397,9 @@ private fun SettingsDescribedRow(
     modifier: Modifier = Modifier,
     trailing: (@Composable () -> Unit)? = null,
 ) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
     var descriptionVisible by remember { mutableStateOf(false) }
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -2362,16 +2411,20 @@ private fun SettingsDescribedRow(
                 modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(text = title)
+                Text(
+                    text = title,
+                    style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    color = if (isV1) mColors.fg else Color.Unspecified,
+                )
                 IconButton(onClick = { descriptionVisible = !descriptionVisible }) {
                     Icon(
                         Icons.Outlined.Info,
                         contentDescription = if (descriptionVisible) "Hide description" else "Show description",
                         modifier = Modifier.size(16.dp),
                         tint = if (descriptionVisible) {
-                            androidx.compose.material3.MaterialTheme.colorScheme.primary
+                            if (isV1) mColors.accent else androidx.compose.material3.MaterialTheme.colorScheme.primary
                         } else {
-                            androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            if (isV1) mColors.fg3 else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         },
                     )
                 }
@@ -2381,8 +2434,8 @@ private fun SettingsDescribedRow(
         AnimatedVisibility(visible = descriptionVisible) {
             Text(
                 text = description,
-                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                style = if (isV1) mTypography.body else androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = if (isV1) mColors.fg2 else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 4.dp),
             )
         }
@@ -2468,9 +2521,11 @@ private fun formatConnectionSnapshotTimestamp(succeededAtMs: Long): String {
 
 @Composable
 private fun SettingsSectionSeparator() {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
     HorizontalDivider(
         modifier = Modifier.fillMaxWidth(),
-        color = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+        color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
         thickness = 1.dp,
     )
 }
