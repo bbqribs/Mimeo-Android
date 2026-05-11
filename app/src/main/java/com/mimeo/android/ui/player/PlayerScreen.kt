@@ -2543,7 +2543,18 @@ private fun ExpandedPlayerTopBar(
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
     var titleExpanded by remember(title) { mutableStateOf(false) }
-    Column(modifier = Modifier.fillMaxWidth()) {
+    val rootView = LocalView.current
+    Column(
+        modifier = Modifier.fillMaxWidth().layout { measurable, constraints ->
+            val insetPerSide = maxOf(0, (rootView.width - constraints.maxWidth) / 2)
+            val placeable = measurable.measure(
+                constraints.copy(minWidth = rootView.width, maxWidth = rootView.width),
+            )
+            layout(constraints.maxWidth, placeable.height) {
+                placeable.placeRelative(-insetPerSide, 0)
+            }
+        },
+    ) {
         // Locus title strip — always visible when ExpandedPlayerTopBar is shown
         Column(
             modifier = Modifier
@@ -3544,7 +3555,7 @@ private fun MinimalPlayerDock(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (isV1) mColors.surfaceHi else MaterialTheme.colorScheme.surface)
+            .background(if (isV1) Color.Transparent else MaterialTheme.colorScheme.surface)
             .then(
                 if (backgroundTapEnabled) {
                     Modifier.clickable(
@@ -3607,7 +3618,7 @@ private fun NubPlayerDock(
         modifier = Modifier
             .fillMaxWidth()
             .height(PLAYER_TRANSPORT_ROW_HEIGHT)
-            .background(if (isV1) mColors.surfaceHi else Color.Transparent)
+            .background(Color.Transparent)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
