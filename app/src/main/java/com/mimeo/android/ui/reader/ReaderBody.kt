@@ -44,11 +44,9 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -366,24 +364,7 @@ fun ReaderBody(
 
     Box(
         modifier = modifier
-            .drawWithContent {
-                drawContent()
-                val max = scrollState.maxValue
-                if (max > 0) {
-                    val fraction = scrollState.value.toFloat() / max.toFloat()
-                    val thumbH = (size.height * size.height / (size.height + max))
-                        .coerceAtLeast(40.dp.toPx())
-                    val trackH = size.height - thumbH
-                    val thumbY = fraction * trackH
-                    val thumbW = 3.dp.toPx()
-                    drawRoundRect(
-                        color = scrollbarColor,
-                        topLeft = Offset(size.width - thumbW - 2.dp.toPx(), thumbY),
-                        size = Size(thumbW, thumbH),
-                        cornerRadius = CornerRadius(thumbW / 2f),
-                    )
-                }
-            }
+            .passiveVerticalScrollIndicator(scrollState = scrollState, color = scrollbarColor)
             .onSizeChanged { viewportSize = it }
             .onGloballyPositioned { coordinates ->
                 viewportTopInRootPx = coordinates.positionInRoot().y
