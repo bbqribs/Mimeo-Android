@@ -1,0 +1,160 @@
+package com.mimeo.android.ui.common
+
+import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.model.PlaylistSummary
+import com.mimeo.android.model.SmartPlaylistSummary
+import com.mimeo.android.repository.NowPlayingSession
+import com.mimeo.android.repository.NowPlayingSessionItem
+import com.mimeo.android.resolveSmartPlaylistSessionSourceId
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class SessionSourcePresentationTest {
+
+    @Test
+    fun resolvesSeedPresentation_whenSessionSeedAndCurrentSourceDiffer() {
+        val presentation = resolveSessionSeedSourcePresentation(
+            sessionSourcePlaylistId = 10,
+            selectedPlaylistId = null,
+            playlists = listOf(PlaylistSummary(id = 10, name = "Podcasts")),
+        )
+
+        assertEquals("Podcasts", presentation.seededFromLabel)
+        assertEquals("Smart queue", presentation.currentSourceLabel)
+    }
+
+    @Test
+    fun resolvesSeedPresentation_forSmartPlaylistSnapshotSource() {
+        val presentation = resolveSessionSeedSourcePresentation(
+            sessionSourcePlaylistId = resolveSmartPlaylistSessionSourceId(7),
+            selectedPlaylistId = null,
+            playlists = emptyList(),
+            smartPlaylists = listOf(
+                SmartPlaylistSummary(
+                    id = 7,
+                    name = "Unread Python",
+                ),
+            ),
+        )
+
+        assertEquals("Smart view: Unread Python", presentation.seededFromLabel)
+        assertEquals("Smart queue", presentation.currentSourceLabel)
+    }
+
+    @Test
+    fun resolvesSeedPresentation_forMissingSmartPlaylistName() {
+        val presentation = resolveSessionSeedSourcePresentation(
+            sessionSourcePlaylistId = resolveSmartPlaylistSessionSourceId(99),
+            selectedPlaylistId = null,
+            playlists = emptyList(),
+        )
+
+        assertEquals("Smart view (99)", presentation.seededFromLabel)
+    }
+
+    @Test
+    fun skipsReseedConfirmation_whenSessionAlreadyMatchesCurrentSource() {
+        val session = session(
+            sourcePlaylistId = -1,
+            itemIds = listOf(1, 2, 3),
+        )
+
+        assertFalse(
+            shouldConfirmReseedFromCurrentSource(
+                session = session,
+                sourceItems = listOf(queueItem(1), queueItem(2), queueItem(3)),
+                selectedPlaylistId = null,
+            ),
+        )
+    }
+
+    @Test
+    fun requiresReseedConfirmation_whenSessionOrderDiffersFromCurrentSource() {
+        val session = session(
+            sourcePlaylistId = -1,
+            itemIds = listOf(1, 3, 2),
+        )
+
+        assertTrue(
+            shouldConfirmReseedFromCurrentSource(
+                session = session,
+                sourceItems = listOf(queueItem(1), queueItem(2), queueItem(3)),
+                selectedPlaylistId = null,
+            ),
+        )
+    }
+
+    @Test
+    fun requiresReseedConfirmation_whenSeedContextDiffersFromCurrentSourceContext() {
+        val session = session(
+            sourcePlaylistId = 12,
+            itemIds = listOf(1, 2, 3),
+        )
+
+        assertTrue(
+            shouldConfirmReseedFromCurrentSource(
+                session = session,
+                sourceItems = listOf(queueItem(1), queueItem(2), queueItem(3)),
+                selectedPlaylistId = null,
+            ),
+        )
+    }
+
+    @Test
+    fun replaceUpNextFromHerePromptBody_withoutActiveSessionItems_hasBaseMessageOnly() {
+        assertEquals(
+            "This replaces Up Next with a snapshot from the selected playlist item through the end of the current order.",
+            replaceUpNextFromHerePromptBody(
+                sourceKind = "playlist item",
+                hasActiveSessionItems = false,
+            ),
+        )
+    }
+
+    @Test
+    fun replaceUpNextFromHerePromptBody_withActiveSessionItems_addsProgressLine() {
+        assertEquals(
+            "This replaces Up Next with a snapshot from the selected smart playlist item through the end of the current order.\n\nCurrently playing item will exit Up Next; its progress is kept.",
+            replaceUpNextFromHerePromptBody(
+                sourceKind = "smart playlist item",
+                hasActiveSessionItems = true,
+            ),
+        )
+    }
+
+    private fun session(sourcePlaylistId: Int, itemIds: List<Int>): NowPlayingSession {
+        return NowPlayingSession(
+            items = itemIds.map { id ->
+                NowPlayingSessionItem(
+                    itemId = id,
+                    title = "Item $id",
+                    url = "https://example.com/$id",
+                    host = null,
+                    sourceType = null,
+                    sourceLabel = null,
+                    sourceUrl = null,
+                    captureKind = null,
+                    sourceAppPackage = null,
+                    status = null,
+                    activeContentVersionId = null,
+                    lastReadPercent = null,
+                    chunkIndex = 0,
+                    offsetInChunkChars = 0,
+                    readerScrollOffset = 0,
+                )
+            },
+            currentIndex = 0,
+            updatedAt = 0L,
+            sourcePlaylistId = sourcePlaylistId,
+        )
+    }
+
+    private fun queueItem(itemId: Int): PlaybackQueueItem {
+        return PlaybackQueueItem(
+            itemId = itemId,
+            url = "https://example.com/$itemId",
+        )
+    }
+}
