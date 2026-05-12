@@ -74,6 +74,7 @@ import com.mimeo.android.ui.common.SelectionAffordance
 import com.mimeo.android.ui.common.itemStatusPillLine
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.queueCapturePresentation
+import com.mimeo.android.ui.common.replaceUpNextFromHerePromptBody
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
@@ -704,12 +705,10 @@ fun PlaylistDetailScreen(
             title = { Text("Replace Up Next with items from here down?") },
             text = {
                 Text(
-                    buildString {
-                        append("This replaces Up Next with a snapshot from the selected playlist item through the end of the current order.")
-                        if (nowPlayingSession?.items?.isNotEmpty() == true) {
-                            append("\n\nCurrently playing item will exit Up Next; its progress is kept.")
-                        }
-                    },
+                    replaceUpNextFromHerePromptBody(
+                        sourceKind = "playlist item",
+                        hasActiveSessionItems = nowPlayingSession?.items?.isNotEmpty() == true,
+                    ),
                 )
             },
             confirmButton = {

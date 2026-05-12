@@ -93,9 +93,6 @@ import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
 import com.mimeo.android.isTerminalPendingProcessingStatus
-import com.mimeo.android.resolveSmartPlaylistIdFromSessionSourceId
-import com.mimeo.android.resolveSessionSourcePlaylistId
-import com.mimeo.android.smartPlaylistSessionSourceLabel
 import com.mimeo.android.model.AutoDownloadDiagnostics
 import com.mimeo.android.model.AutoDownloadWorkerState
 import com.mimeo.android.model.PendingManualSaveItem
@@ -113,6 +110,9 @@ import com.mimeo.android.share.isRetryablePendingSaveResult
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
+import com.mimeo.android.ui.common.resolveSessionSeedSourcePresentation as resolveSessionSeedSourcePresentationCommon
+import com.mimeo.android.ui.common.SessionSeedSourcePresentation
+import com.mimeo.android.ui.common.shouldConfirmReseedFromCurrentSource as shouldConfirmReseedFromCurrentSourceCommon
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoDensityTokens
 import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
@@ -157,62 +157,29 @@ internal fun autoDownloadStatusLines(status: AutoDownloadDiagnostics): List<Stri
     )
 }
 
-internal data class SessionSeedSourcePresentation(
-    val seededFromLabel: String,
-    val currentSourceLabel: String,
-)
-
 internal fun resolveSessionSeedSourcePresentation(
     sessionSourcePlaylistId: Int?,
     selectedPlaylistId: Int?,
     playlists: List<PlaylistSummary>,
     smartPlaylists: List<SmartPlaylistSummary> = emptyList(),
-): SessionSeedSourcePresentation {
-    val seededFrom = if (sessionSourcePlaylistId == null) {
-        "Unknown source"
-    } else {
-        resolveQueueSourceLabel(sessionSourcePlaylistId, playlists, smartPlaylists)
-    }
-    val currentSource = resolveQueueSourceLabel(
-        selectedPlaylistId = resolveSessionSourcePlaylistId(selectedPlaylistId),
+): SessionSeedSourcePresentation =
+    resolveSessionSeedSourcePresentationCommon(
+        sessionSourcePlaylistId = sessionSourcePlaylistId,
+        selectedPlaylistId = selectedPlaylistId,
         playlists = playlists,
         smartPlaylists = smartPlaylists,
     )
-    return SessionSeedSourcePresentation(
-        seededFromLabel = seededFrom,
-        currentSourceLabel = currentSource,
-    )
-}
 
 internal fun shouldConfirmReseedFromCurrentSource(
     session: NowPlayingSession?,
     sourceItems: List<PlaybackQueueItem>,
     selectedPlaylistId: Int?,
-): Boolean {
-    val activeSession = session ?: return false
-    val sessionItemIds = activeSession.items.map { it.itemId }
-    val sourceItemIds = sourceItems.map { it.itemId }
-    val currentSourceId = resolveSessionSourcePlaylistId(selectedPlaylistId)
-    return activeSession.sourcePlaylistId != currentSourceId || sessionItemIds != sourceItemIds
-}
-
-private fun resolveQueueSourceLabel(
-    selectedPlaylistId: Int,
-    playlists: List<PlaylistSummary>,
-    smartPlaylists: List<SmartPlaylistSummary> = emptyList(),
-): String {
-    resolveSmartPlaylistIdFromSessionSourceId(selectedPlaylistId)?.let { smartPlaylistId ->
-        val smartName = smartPlaylists.firstOrNull { it.id == smartPlaylistId }?.name
-        return if (smartName.isNullOrBlank()) {
-            "Smart view ($smartPlaylistId)"
-        } else {
-            smartPlaylistSessionSourceLabel(smartName)
-        }
-    }
-    if (selectedPlaylistId < 0) return "Smart queue"
-    return playlists.firstOrNull { it.id == selectedPlaylistId }?.name
-        ?: "Playlist ($selectedPlaylistId)"
-}
+): Boolean =
+    shouldConfirmReseedFromCurrentSourceCommon(
+        session = session,
+        sourceItems = sourceItems,
+        selectedPlaylistId = selectedPlaylistId,
+    )
 
 internal enum class ManualSaveMode {
     URL,
