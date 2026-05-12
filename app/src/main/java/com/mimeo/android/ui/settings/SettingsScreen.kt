@@ -79,7 +79,9 @@ import com.mimeo.android.model.VisualDensityPreference
 import com.mimeo.android.model.VisualThemePreference
 import com.mimeo.android.model.BlueskySourceDiagnostic
 import com.mimeo.android.model.SmartPlaylistSummary
+import com.mimeo.android.ui.bluesky.BlueskyHandleField
 import com.mimeo.android.ui.bluesky.blueskySourceDisplayName
+import com.mimeo.android.util.bluesky.normalizeBlueskyHandleInput
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.queue.autoDownloadStatusLines
 import com.mimeo.android.ui.theme.toFontFamily
@@ -897,12 +899,10 @@ fun SettingsScreen(
                             text = "Connect Bluesky account",
                             style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                         )
-                        OutlinedTextField(
+                        BlueskyHandleField(
                             value = blueskyHandle,
                             onValueChange = { blueskyHandle = it },
-                            label = { Text("Bluesky handle") },
-                            placeholder = { Text("alice.bsky.social") },
-                            singleLine = true,
+                            label = "Bluesky handle",
                             enabled = !blueskyConnecting,
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -934,8 +934,8 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.End,
                         ) {
                             Button(
-                                enabled = blueskyHandle.isNotBlank() && blueskyAppPassword.isNotBlank() && !blueskyConnecting,
-                                onClick = { vm.connectBluesky(blueskyHandle.trim(), blueskyAppPassword) },
+                                enabled = normalizeBlueskyHandleInput(blueskyHandle) != null && blueskyAppPassword.isNotBlank() && !blueskyConnecting,
+                                onClick = { vm.connectBluesky(normalizeBlueskyHandleInput(blueskyHandle)!!, blueskyAppPassword) },
                             ) {
                                 Text(if (blueskyConnecting) "Connecting..." else "Connect")
                             }

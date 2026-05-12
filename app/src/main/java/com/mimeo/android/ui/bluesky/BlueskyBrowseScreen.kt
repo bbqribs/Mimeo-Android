@@ -24,8 +24,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Button
@@ -38,7 +36,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -54,7 +51,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
@@ -237,9 +233,6 @@ private fun SourcePicker(
     val mTypography = LocalMimeoTypographyTokens.current
     val mShapes = LocalMimeoShapeTokens.current
     var expanded by remember { mutableStateOf(false) }
-    var handleDraft by remember { mutableStateOf("") }
-    var listDraft by remember { mutableStateOf("") }
-    var inputError by remember { mutableStateOf<String?>(null) }
     var dropdownExpanded by remember { mutableStateOf(false) }
     val pinnedOptions = picker.pinnedSourceOptions()
     val browseOptions = picker.browseSourceOptions()
@@ -387,7 +380,6 @@ private fun SourcePicker(
                                         },
                                         onClick = {
                                             dropdownExpanded = false
-                                            inputError = null
                                             onScan(option.selection)
                                         },
                                     )
@@ -396,78 +388,7 @@ private fun SourcePicker(
                         }
                     }
 
-                    OutlinedTextField(
-                        value = handleDraft,
-                        onValueChange = { handleDraft = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Account by handle") },
-                        placeholder = { Text("alice.bsky.social") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = {
-                            val handle = normalizeBlueskyHandleInput(handleDraft)
-                            if (handle != null) {
-                                inputError = null
-                                onScan(BlueskyCandidateSourceSelection("account", "@$handle", actor = handle))
-                            } else {
-                                inputError = "Handle is required."
-                            }
-                        }),
-                    )
-                    Button(
-                        onClick = {
-                            val handle = normalizeBlueskyHandleInput(handleDraft)
-                            if (handle != null) {
-                                inputError = null
-                                onScan(BlueskyCandidateSourceSelection("account", "@$handle", actor = handle))
-                            } else {
-                                inputError = "Handle is required."
-                            }
-                        },
-                        enabled = !loading,
-                    ) {
-                        Text("Scan account")
-                    }
-
-                    OutlinedTextField(
-                        value = listDraft,
-                        onValueChange = { listDraft = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("List URL") },
-                        placeholder = { Text("https://bsky.app/profile/.../lists/...") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = {
-                            val parsed = parseBlueskyListIdentifierInput(listDraft)
-                            if (parsed.ok) {
-                                inputError = null
-                                onScan(BlueskyCandidateSourceSelection("list_feed", "Bluesky List", uri = parsed.uri))
-                            } else {
-                                inputError = parsed.error
-                            }
-                        }),
-                    )
-                    Button(
-                        onClick = {
-                            val parsed = parseBlueskyListIdentifierInput(listDraft)
-                            if (parsed.ok) {
-                                inputError = null
-                                onScan(BlueskyCandidateSourceSelection("list_feed", "Bluesky List", uri = parsed.uri))
-                            } else {
-                                inputError = parsed.error
-                            }
-                        },
-                        enabled = !loading,
-                    ) {
-                        Text("Scan list")
-                    }
-                    if (!inputError.isNullOrBlank()) {
-                        Text(
-                            inputError.orEmpty(),
-                            color = if (isV1) mColors.danger else MaterialTheme.colorScheme.error,
-                            style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
-                        )
-                    }
+                    BlueskyCandidateInputSection(loading = loading, onScan = onScan)
                 }
             }
         }
