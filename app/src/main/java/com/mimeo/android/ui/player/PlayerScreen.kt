@@ -1905,11 +1905,12 @@ fun PlayerScreen(
                     if (prevId == null) {
                         uiMessage = "No previous item"
                     } else {
+                        val wasActive = isSpeaking || isAutoPlaying || autoPlayAfterLoad
                         stopSpeaking(forceSync = true)
                         vm.playbackOpenItem(
                             itemId = prevId,
                             intent = PlaybackOpenIntent.AutoContinue,
-                            autoPlayAfterLoad = true,
+                            autoPlayAfterLoad = wasActive,
                         )
                         onOpenItem(prevId)
                     }

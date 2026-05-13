@@ -233,6 +233,7 @@ class PlaybackEngine(
     fun advanceToNextItem() {
         val current = _state.value
         if (current.currentItemId <= 0) return
+        val wasActive = current.isSpeaking || current.isAutoPlaying || current.autoPlayAfterLoad
         scope.launch {
             val nextId = host.nextSessionItemId(current.currentItemId)
             if (nextId == null) {
@@ -241,7 +242,7 @@ class PlaybackEngine(
             }
             stopInternal(forceSync = true)
             host.setPlaybackPosition(nextId, 0, 0)
-            openItem(nextId, PlaybackOpenIntent.AutoContinue, autoPlayAfterLoad = true)
+            openItem(nextId, PlaybackOpenIntent.AutoContinue, autoPlayAfterLoad = wasActive)
             _events.tryEmit(PlaybackEngineEvent.NavigateToItem(nextId))
         }
     }
