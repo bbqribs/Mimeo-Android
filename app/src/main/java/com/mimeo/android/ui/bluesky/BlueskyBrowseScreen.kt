@@ -451,14 +451,15 @@ private fun ScanStatus(
                 )
             }
             val pinnedSourceId = findPinnedSourceId(scan, selected, pins)
-            val pinSupported = scan?.source?.sourceType == "author_feed" || scan?.source?.sourceType == "list_feed"
-            if (scan != null && pinSupported) {
+            val sourceType = scan?.source?.sourceType ?: selected?.sourceKind
+            val pinSupported = sourceType == "author_feed" || sourceType == "list_feed" || sourceType == "account"
+            if (pinSupported && (scan != null || pinnedSourceId != null)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (pinnedSourceId != null) {
                         OutlinedButton(onClick = { onUnpin(pinnedSourceId) }, enabled = !pinning) {
                             Text(if (pinning) "Updating..." else "Unpin source")
                         }
-                    } else {
+                    } else if (scan != null) {
                         OutlinedButton(onClick = onPin, enabled = !pinning) {
                             Text(if (pinning) "Pinning..." else "Pin source")
                         }
@@ -676,13 +677,15 @@ private fun BlueskyPickerResponse?.browseSourceOptions(): List<SourceDropdownOpt
     }
 }
 
-private fun findPinnedSourceId(
+internal fun findPinnedSourceId(
     scan: BlueskyCandidateScanResponse?,
     selected: BlueskyCandidateSourceSelection?,
     pins: List<BlueskyPickerPinItem>,
 ): Int? {
     val scanSourceId = scan?.source?.sourceId
     if (scanSourceId != null && pins.any { it.sourceId == scanSourceId }) return scanSourceId
+    val selectedSourceId = selected?.sourceId
+    if (selectedSourceId != null && pins.any { it.sourceId == selectedSourceId }) return selectedSourceId
     val sourceType = scan?.source?.sourceType ?: selected?.sourceKind
     val identifier = scan?.source?.identifier
     return when (sourceType) {

@@ -3,7 +3,6 @@ package com.mimeo.android.ui.bluesky
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -62,9 +61,6 @@ internal fun BlueskyCandidateInputSection(
             enabled = !loading,
             onSearch = submitHandle,
         )
-        Button(onClick = submitHandle, enabled = !loading) {
-            Text("Scan account")
-        }
         BlueskyListUriField(
             value = listDraft,
             onValueChange = { listDraft = it },
@@ -72,9 +68,6 @@ internal fun BlueskyCandidateInputSection(
             enabled = !loading,
             onSearch = submitList,
         )
-        Button(onClick = submitList, enabled = !loading) {
-            Text("Scan list")
-        }
         if (!inputError.isNullOrBlank()) {
             Text(
                 inputError.orEmpty(),

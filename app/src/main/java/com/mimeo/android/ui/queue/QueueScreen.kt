@@ -68,6 +68,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -261,6 +262,46 @@ internal fun shouldShowJumpToNowPlayingPill(
 
 internal fun nowPlayingScrollTargetPx(activeTopOffsetPx: Float?): Int? {
     return activeTopOffsetPx?.toInt()
+}
+
+internal data class SessionStickyHeaderBounds(
+    val title: String,
+    val count: Int,
+    val topPx: Float,
+    val headerHeightPx: Float,
+    val bottomPx: Float,
+)
+
+internal data class SessionStickyHeaderPresentation(
+    val title: String,
+    val count: Int,
+    val offsetYPx: Float,
+)
+
+internal fun activeSessionStickyHeader(
+    scrollOffsetPx: Int,
+    sections: List<SessionStickyHeaderBounds>,
+): SessionStickyHeaderPresentation? {
+    val scrollTop = scrollOffsetPx.toFloat()
+    val section = sections.lastOrNull { bounds ->
+        scrollTop >= bounds.topPx && scrollTop < bounds.bottomPx && bounds.headerHeightPx > 0f
+    } ?: return null
+    val offsetY = (section.bottomPx - scrollTop - section.headerHeightPx).coerceAtMost(0f)
+    return SessionStickyHeaderPresentation(
+        title = section.title,
+        count = section.count,
+        offsetYPx = offsetY,
+    )
+}
+
+internal fun activeAnchorTailSpacerPx(
+    hasRowsBeforeActive: Boolean,
+    viewportHeightPx: Int,
+    activeHeightPx: Float,
+    belowActiveContentHeightPx: Float,
+): Float {
+    if (!hasRowsBeforeActive || viewportHeightPx <= 0 || activeHeightPx <= 0f) return 0f
+    return (viewportHeightPx.toFloat() - activeHeightPx - belowActiveContentHeightPx).coerceAtLeast(0f)
 }
 
 internal fun sessionRowTrailingActionOrder(
@@ -2046,14 +2087,44 @@ private fun NowPlayingSessionPanel(
     val activeItem = localItems.getOrNull(currentIndex)
     val historyItems = session.historyItems
     val earlierItems = localItems.take(currentIndex)
+    val hasRowsBeforeActive = historyItems.isNotEmpty() || earlierItems.isNotEmpty()
     val upcomingStartIndex = (currentIndex + 1).coerceIn(0, localItems.size)
     val upcomingItems = localItems.drop(upcomingStartIndex)
+    val upcomingItemIds = remember(upcomingItems) { upcomingItems.map { it.itemId } }
     val density = LocalDensity.current
     val minVisibleActiveHeightPx = with(density) { 24.dp.toPx() }
+    var historyStickyBounds by remember { mutableStateOf<SessionStickyHeaderBounds?>(null) }
+    var earlierStickyBounds by remember { mutableStateOf<SessionStickyHeaderBounds?>(null) }
+    var historyHeaderHeightPx by remember { mutableFloatStateOf(0f) }
+    var earlierHeaderHeightPx by remember { mutableFloatStateOf(0f) }
+    var upcomingSectionTopOffset by remember(currentItemId, upcomingItemIds) { mutableStateOf<Float?>(null) }
+    var upcomingSectionBottomOffset by remember(currentItemId, upcomingItemIds) { mutableStateOf<Float?>(null) }
+    val upcomingSectionHeightPx = remember(upcomingSectionTopOffset, upcomingSectionBottomOffset) {
+        val top = upcomingSectionTopOffset
+        val bottom = upcomingSectionBottomOffset
+        if (top != null && bottom != null && bottom >= top) bottom - top else null
+    }
+    val activeTailSpacerPx = activeAnchorTailSpacerPx(
+        hasRowsBeforeActive = hasRowsBeforeActive,
+        viewportHeightPx = listViewportHeight,
+        activeHeightPx = activeMeasuredHeight,
+        belowActiveContentHeightPx = upcomingSectionHeightPx ?: 0f,
+    )
     var initialActiveAnchorReady by remember(currentItemId, serverItemIds) {
         mutableStateOf(currentItemId == null)
     }
-
+    LaunchedEffect(historyItems.isEmpty()) {
+        if (historyItems.isEmpty()) {
+            historyStickyBounds = null
+            historyHeaderHeightPx = 0f
+        }
+    }
+    LaunchedEffect(earlierItems.isEmpty()) {
+        if (earlierItems.isEmpty()) {
+            earlierStickyBounds = null
+            earlierHeaderHeightPx = 0f
+        }
+    }
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -2096,12 +2167,26 @@ private fun NowPlayingSessionPanel(
                 )
             }
         }
-        LaunchedEffect(currentItemId, activeTopOffset, initialActiveAnchorReady) {
+        LaunchedEffect(
+            currentItemId,
+            activeTopOffset,
+            activeMeasuredHeight,
+            listViewportHeight,
+            hasRowsBeforeActive,
+            upcomingSectionHeightPx,
+            initialActiveAnchorReady,
+        ) {
             if (currentItemId == null) {
                 initialActiveAnchorReady = true
                 return@LaunchedEffect
             }
             if (initialActiveAnchorReady) return@LaunchedEffect
+            if (hasRowsBeforeActive && (listViewportHeight <= 0 || activeMeasuredHeight <= 0f)) {
+                return@LaunchedEffect
+            }
+            if (hasRowsBeforeActive && upcomingSectionHeightPx == null) {
+                return@LaunchedEffect
+            }
             val target = nowPlayingScrollTargetPx(activeTopOffset) ?: return@LaunchedEffect
             listScrollState.scrollTo(target)
             initialActiveAnchorReady = true
@@ -2118,6 +2203,7 @@ private fun NowPlayingSessionPanel(
                 .fillMaxWidth()
                 .weight(1f)
                 .onSizeChanged { listViewportHeight = it.height }
+                .clipToBounds()
                 .passiveVerticalScrollIndicator(
                     scrollState = listScrollState,
                     color = if (isV1) mColors.fg4 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f),
@@ -2130,40 +2216,76 @@ private fun NowPlayingSessionPanel(
                     .verticalScroll(listScrollState),
             ) {
                 if (historyItems.isNotEmpty()) {
-                    SessionSectionHeader(
-                        title = "History",
-                        count = historyItems.size,
-                    )
-                    historyItems.forEachIndexed { index, item ->
-                        SessionStaticItemRow(
-                            item = item,
-                            onOpenItem = onOpenItem,
-                            onJumpToItem = onJumpToHistoryItem,
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onGloballyPositioned { coords ->
+                                val top = coords.positionInParent().y
+                                historyStickyBounds = SessionStickyHeaderBounds(
+                                    title = "History",
+                                    count = historyItems.size,
+                                    topPx = top,
+                                    headerHeightPx = historyHeaderHeightPx,
+                                    bottomPx = top + coords.size.height,
+                                )
+                            },
+                    ) {
+                        SessionSectionHeader(
+                            title = "History",
+                            count = historyItems.size,
+                            modifier = Modifier.onSizeChanged { size ->
+                                historyHeaderHeightPx = size.height.toFloat()
+                            },
                         )
-                        if (index < historyItems.lastIndex) {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 12.dp),
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                        historyItems.forEachIndexed { index, item ->
+                            SessionStaticItemRow(
+                                item = item,
+                                onOpenItem = onOpenItem,
+                                onJumpToItem = onJumpToHistoryItem,
                             )
+                            if (index < historyItems.lastIndex) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 12.dp),
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                                )
+                            }
                         }
                     }
                 }
                 if (earlierItems.isNotEmpty()) {
-                    SessionSectionHeader(
-                        title = "Earlier in queue",
-                        count = earlierItems.size,
-                    )
-                    earlierItems.forEachIndexed { index, item ->
-                        SessionStaticItemRow(
-                            item = item,
-                            onOpenItem = onOpenItem,
-                            onJumpToItem = onJumpToQueueItem,
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onGloballyPositioned { coords ->
+                                val top = coords.positionInParent().y
+                                earlierStickyBounds = SessionStickyHeaderBounds(
+                                    title = "Earlier in queue",
+                                    count = earlierItems.size,
+                                    topPx = top,
+                                    headerHeightPx = earlierHeaderHeightPx,
+                                    bottomPx = top + coords.size.height,
+                                )
+                            },
+                    ) {
+                        SessionSectionHeader(
+                            title = "Earlier in queue",
+                            count = earlierItems.size,
+                            modifier = Modifier.onSizeChanged { size ->
+                                earlierHeaderHeightPx = size.height.toFloat()
+                            },
                         )
-                        if (index < earlierItems.lastIndex) {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 12.dp),
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                        earlierItems.forEachIndexed { index, item ->
+                            SessionStaticItemRow(
+                                item = item,
+                                onOpenItem = onOpenItem,
+                                onJumpToItem = onJumpToQueueItem,
                             )
+                            if (index < earlierItems.lastIndex) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 12.dp),
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                                )
+                            }
                         }
                     }
                 }
@@ -2235,6 +2357,11 @@ private fun NowPlayingSessionPanel(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .onGloballyPositioned { coords ->
+                            val top = coords.positionInParent().y
+                            upcomingSectionTopOffset = top
+                            upcomingSectionBottomOffset = top + coords.size.height
+                        }
                         .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
@@ -2259,7 +2386,12 @@ private fun NowPlayingSessionPanel(
                         text = "No upcoming items.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        modifier = Modifier
+                            .onGloballyPositioned { coords ->
+                                val top = coords.positionInParent().y
+                                upcomingSectionBottomOffset = top + coords.size.height
+                            }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                     )
                 }
                 upcomingItems.forEachIndexed { index, item ->
@@ -2280,8 +2412,11 @@ private fun NowPlayingSessionPanel(
                                 .zIndex(if (isDragging) 1f else 0f)
                                 .graphicsLayer { translationY = itemVisualOffsetY }
                                 .onGloballyPositioned { coords ->
-                                    itemTopOffsets[item.itemId] = coords.positionInParent().y
+                                    val top = coords.positionInParent().y
+                                    itemTopOffsets[item.itemId] = top
                                     itemHeights[item.itemId] = coords.size.height.toFloat()
+                                    upcomingSectionBottomOffset = (top + coords.size.height)
+                                        .coerceAtLeast(upcomingSectionBottomOffset ?: top)
                                 },
                         ) {
                             Row(
@@ -2385,6 +2520,24 @@ private fun NowPlayingSessionPanel(
                         }
                     }
                 }
+                if (activeTailSpacerPx > 0f) {
+                    Spacer(modifier = Modifier.height(with(density) { activeTailSpacerPx.toDp() }))
+                }
+            }
+            activeSessionStickyHeader(
+                scrollOffsetPx = listScrollState.value,
+                sections = listOfNotNull(historyStickyBounds, earlierStickyBounds),
+            )?.let { stickyHeader ->
+                SessionSectionHeader(
+                    title = stickyHeader.title,
+                    count = stickyHeader.count,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .fillMaxWidth()
+                        .zIndex(2f)
+                        .graphicsLayer { translationY = stickyHeader.offsetYPx }
+                        .background(if (isV1) mColors.surface else MaterialTheme.colorScheme.surface),
+                )
             }
             val showSnapToActive = activeItem != null &&
                 initialActiveAnchorReady &&
