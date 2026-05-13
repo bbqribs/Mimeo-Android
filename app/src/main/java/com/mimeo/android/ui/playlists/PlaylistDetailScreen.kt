@@ -67,11 +67,9 @@ import com.mimeo.android.ACTION_KEY_UNDO_PLAYLIST_REMOVE
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackQueueItem
-import com.mimeo.android.ui.common.ItemRowTrailingActions
-import com.mimeo.android.ui.common.LibraryItemRow
+import com.mimeo.android.ui.common.ItemActionMenuEntry
+import com.mimeo.android.ui.common.ItemRow
 import com.mimeo.android.ui.common.ListSurfaceScaffold
-import com.mimeo.android.ui.common.SelectionAffordance
-import com.mimeo.android.ui.common.itemStatusPillLine
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.queueCapturePresentation
 import com.mimeo.android.ui.common.replaceUpNextFromHerePromptBody
@@ -852,9 +850,26 @@ private fun PlaylistDetailRow(
     val metadata = presentation?.sourceLabel ?: queueItem?.host?.takeIf { queueItem.title != null } ?: queueItem?.url
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
-    LibraryItemRow(
+    val menuEntries = if (queueItem != null) {
+        buildList {
+            add(ItemActionMenuEntry.Action("Play Next") { onPlayNext() })
+            add(ItemActionMenuEntry.Action("Play Last") { onPlayLast() })
+            if (onPlayFromHere != null) {
+                add(ItemActionMenuEntry.Action("Play from Here") { onPlayFromHere() })
+            }
+            add(ItemActionMenuEntry.Divider)
+            add(ItemActionMenuEntry.Action("Move to Top of Playlist") { onMoveToTop() })
+            add(ItemActionMenuEntry.Action("Move to Bottom") { onMoveToBottom() })
+            add(ItemActionMenuEntry.Action("Remove") { onRemoveFromPlaylist() })
+        }
+    } else {
+        emptyList()
+    }
+    ItemRow(
         title = title,
         metadata = metadata,
+        status = status,
+        isSelectionActive = isSelectionActive,
         isSelected = isSelected,
         containerColor = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
         titleColor = if (queueItem == null) {
@@ -862,69 +877,28 @@ private fun PlaylistDetailRow(
         } else {
             MaterialTheme.colorScheme.onSurface
         },
-        onClick = if (isSelectionActive) onToggleSelect else onTap,
-        onLongClick = if (!isSelectionActive) onEnterSelection else null,
+        onOpen = onTap,
+        onToggleSelect = onToggleSelect,
+        onEnterSelection = onEnterSelection,
         leadingContent = {
-            if (isSelectionActive) {
-                SelectionAffordance(isSelected = isSelected)
-            } else {
-                Icon(
-                    imageVector = Icons.Default.DragHandle,
-                    contentDescription = "Drag to reorder",
-                    tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .offset(x = (-4).dp)
-                        .size(24.dp)
-                        .pointerInput(index) {
-                            detectDragGestures(
-                                onDragStart = { onDragStart(index) },
-                                onDrag = { _, dragAmount -> onDrag(dragAmount.y) },
-                                onDragEnd = { onDragEnd() },
-                                onDragCancel = { onDragEnd() },
-                            )
-                        },
-                )
-            }
-        },
-        progressStateLine = itemStatusPillLine(status),
-        trailingContent = if (!isSelectionActive && queueItem != null) {
-            {
-                ItemRowTrailingActions(
-                    title = title,
-                    onPlayNow = onPlayNow,
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Play Next") },
-                        onClick = { onPlayNext() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Play Last") },
-                        onClick = { onPlayLast() },
-                    )
-                    if (onPlayFromHere != null) {
-                        DropdownMenuItem(
-                            text = { Text("Play from Here") },
-                            onClick = { onPlayFromHere() },
+            Icon(
+                imageVector = Icons.Default.DragHandle,
+                contentDescription = "Drag to reorder",
+                tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .offset(x = (-4).dp)
+                    .size(24.dp)
+                    .pointerInput(index) {
+                        detectDragGestures(
+                            onDragStart = { onDragStart(index) },
+                            onDrag = { _, dragAmount -> onDrag(dragAmount.y) },
+                            onDragEnd = { onDragEnd() },
+                            onDragCancel = { onDragEnd() },
                         )
-                    }
-                    androidx.compose.material3.HorizontalDivider()
-                    DropdownMenuItem(
-                        text = { Text("Move to Top of Playlist") },
-                        onClick = { onMoveToTop() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Move to Bottom") },
-                        onClick = { onMoveToBottom() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Remove") },
-                        onClick = { onRemoveFromPlaylist() },
-                    )
-                }
-            }
-        } else {
-            null
+                    },
+            )
         },
+        onPlayNow = if (queueItem != null) onPlayNow else null,
+        menuEntries = menuEntries,
     )
 }
-

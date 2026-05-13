@@ -54,11 +54,9 @@ import com.mimeo.android.smartPlaylistSessionSourceLabel
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.SmartPlaylistDetail
 import com.mimeo.android.ui.common.DefaultListSurfaceMessage
-import com.mimeo.android.ui.common.ItemRowTrailingActions
-import com.mimeo.android.ui.common.LibraryItemRow
+import com.mimeo.android.ui.common.ItemActionMenuEntry
+import com.mimeo.android.ui.common.ItemRow
 import com.mimeo.android.ui.common.ListSurfaceScaffold
-import com.mimeo.android.ui.common.SelectionAffordance
-import com.mimeo.android.ui.common.itemStatusPillLine
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.queueCapturePresentation
 import com.mimeo.android.ui.common.replaceUpNextFromHerePromptBody
@@ -800,49 +798,26 @@ private fun SmartPlaylistItemRow(
 ) {
     val presentation = remember(item) { queueCapturePresentation(item) }
 
-    LibraryItemRow(
+    val menuEntries = buildList {
+        add(ItemActionMenuEntry.Action("Play Next") { onPlayNext() })
+        add(ItemActionMenuEntry.Action("Play Last") { onPlayLast() })
+        add(ItemActionMenuEntry.Action("Play from Here") { onPlayFromHere() })
+        if (isPinned) {
+            add(ItemActionMenuEntry.Divider)
+            add(ItemActionMenuEntry.Action(label = "Remove", enabled = pinActionEnabled) { onUnpin() })
+        }
+    }
+    ItemRow(
         title = presentation.title,
         metadata = presentation.sourceLabel ?: item.host ?: item.url,
+        status = item.status,
+        isSelectionActive = isSelectionActive,
         isSelected = isSelected,
-        onClick = if (isSelectionActive) onToggleSelect else onOpen,
-        onLongClick = if (!isSelectionActive) onEnterSelection else null,
-        leadingContent = if (isSelectionActive) {
-            { SelectionAffordance(isSelected = isSelected) }
-        } else {
-            null
-        },
-        progressStateLine = itemStatusPillLine(item.status),
-        trailingContent = if (!isSelectionActive) {
-            {
-                ItemRowTrailingActions(
-                    title = presentation.title,
-                    onPlayNow = onPlayNow,
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Play Next") },
-                        onClick = { onPlayNext() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Play Last") },
-                        onClick = { onPlayLast() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Play from Here") },
-                        onClick = { onPlayFromHere() },
-                    )
-                    if (isPinned) {
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            enabled = pinActionEnabled,
-                            text = { Text("Remove") },
-                            onClick = { onUnpin() },
-                        )
-                    }
-                }
-            }
-        } else {
-            null
-        },
+        onOpen = onOpen,
+        onToggleSelect = onToggleSelect,
+        onEnterSelection = onEnterSelection,
+        onPlayNow = onPlayNow,
+        menuEntries = menuEntries,
     )
 }
 
