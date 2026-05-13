@@ -57,6 +57,50 @@ class PlaybackEngineReducerTest {
     }
 
     @Test
+    fun `open item with autoPlayAfterLoad false does not schedule auto-play`() {
+        val previous = PlaybackEngineState(
+            currentItemId = 10,
+            openIntent = PlaybackOpenIntent.ManualOpen,
+            isSpeaking = false,
+            isAutoPlaying = false,
+            autoPlayAfterLoad = false,
+        )
+
+        val reduced = reduceOpenItemState(
+            previous = previous,
+            itemId = 20,
+            intent = PlaybackOpenIntent.AutoContinue,
+            autoPlayAfterLoad = false,
+        )
+
+        assertFalse(reduced.isSpeaking)
+        assertFalse(reduced.isAutoPlaying)
+        assertFalse(reduced.autoPlayAfterLoad)
+    }
+
+    @Test
+    fun `open item with autoPlayAfterLoad true schedules auto-play`() {
+        val previous = PlaybackEngineState(
+            currentItemId = 10,
+            openIntent = PlaybackOpenIntent.ManualOpen,
+            isSpeaking = true,
+            isAutoPlaying = true,
+            autoPlayAfterLoad = false,
+        )
+
+        val reduced = reduceOpenItemState(
+            previous = previous,
+            itemId = 20,
+            intent = PlaybackOpenIntent.AutoContinue,
+            autoPlayAfterLoad = true,
+        )
+
+        assertFalse(reduced.isSpeaking)
+        assertFalse(reduced.isAutoPlaying)
+        assertTrue(reduced.autoPlayAfterLoad)
+    }
+
+    @Test
     fun `reload increments nonce and clears autoplay flag`() {
         val current = PlaybackEngineState(
             currentItemId = 908,
