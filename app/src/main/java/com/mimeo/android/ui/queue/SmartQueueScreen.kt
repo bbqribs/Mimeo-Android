@@ -45,6 +45,20 @@ fun SmartQueueScreen(
         itemCount = queueItems.size,
         reorderSaving = reorderSaving,
     )
+    val showReorderHandle = sortOption == LibrarySortOption.SMART_QUEUE &&
+        searchQuery.isBlank() &&
+        queueItems.size > 1
+    val reorderStatusLabel = smartQueueReorderStatusLabel(
+        dragReorderEnabled = dragReorderEnabled,
+        backendReorderAllowed = reorderAllowed,
+        unavailableReason = reorderUnavailableReason,
+        searchQuery = searchQuery,
+        sortOption = sortOption,
+        hasMorePages = hasMorePages,
+        itemCount = queueItems.size,
+        loading = loading,
+        reorderSaving = reorderSaving,
+    )
 
     LaunchedEffect(Unit) {
         if (settings.selectedPlaylistId == null) {
@@ -67,8 +81,10 @@ fun SmartQueueScreen(
         availableSorts = LibrarySortOption.SMART_QUEUE_SORTS,
         searchQuery = searchQuery,
         clientSideSearch = true,
+        showDragReorderHandle = showReorderHandle,
         dragReorderEnabled = dragReorderEnabled,
         dragReorderUnavailableReason = reorderUnavailableReason,
+        dragReorderStatusLabel = reorderStatusLabel,
         onDragReorder = { orderedItemIds -> vm.reorderSmartQueueItems(orderedItemIds) },
         batchActions = listOf(
             LibraryBatchAction("Archive", Icons.Default.Archive, "archive"),

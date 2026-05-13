@@ -56,4 +56,22 @@ class SmartQueueReorderPolicyTest {
         assertEquals(listOf(1, 3, 4, 2), movedSmartQueueItemIds(listOf(1, 2, 3, 4), 1, 3))
         assertEquals(listOf(1, 2, 3, 4), movedSmartQueueItemIds(listOf(1, 2, 3, 4), -1, 3))
     }
+
+    @Test
+    fun statusLabelReportsBackendUnavailableReason() {
+        assertEquals(
+            "Reorder: unavailable (filtered_or_sorted)",
+            smartQueueReorderStatusLabel(
+                dragReorderEnabled = false,
+                backendReorderAllowed = false,
+                unavailableReason = "filtered_or_sorted",
+                searchQuery = "",
+                sortOption = LibrarySortOption.SMART_QUEUE,
+                hasMorePages = false,
+                itemCount = 3,
+                loading = false,
+                reorderSaving = false,
+            ),
+        )
+    }
 }

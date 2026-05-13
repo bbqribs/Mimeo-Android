@@ -159,8 +159,10 @@ fun LibraryItemsScreen(
     clientSideSearch: Boolean = false,
     isInbox: Boolean = false,
     isBin: Boolean = false,
+    showDragReorderHandle: Boolean = false,
     dragReorderEnabled: Boolean = false,
     dragReorderUnavailableReason: String? = null,
+    dragReorderStatusLabel: String? = null,
     onDragReorder: (suspend (orderedItemIds: List<Int>) -> Result<Unit>)? = null,
     batchActions: List<LibraryBatchAction> = emptyList(),
     playlists: List<PlaylistSummary> = emptyList(),
@@ -277,6 +279,7 @@ fun LibraryItemsScreen(
         searchQuery.isBlank() &&
         sortOption == LibrarySortOption.SMART_QUEUE &&
         onDragReorder != null
+    val showReorderHandle = showDragReorderHandle && !selectionActive && !isInbox && !isBin
 
     LaunchedEffect(items.map { it.itemId }, dragReorderEnabled, sortOption, searchQuery, dragReorderUnavailableReason) {
         localReorderItems = null
@@ -582,6 +585,14 @@ fun LibraryItemsScreen(
                         )
                     }
                 }
+                if (dragReorderStatusLabel != null) {
+                    Text(
+                        text = dragReorderStatusLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                }
             }
         } else {
             null
@@ -675,8 +686,9 @@ fun LibraryItemsScreen(
                                     }
                                     .graphicsLayer { translationY = visualOffset }
                                     .zIndex(if (isDragging) 1f else 0f)
-                                val dragHandleModifier = if (reorderActive && readyIndex >= 0) {
-                                    Modifier.pointerInput(entry.item.itemId, readyIndex) {
+                                val dragHandleModifier = if (showReorderHandle && readyIndex >= 0) {
+                                    if (reorderActive) {
+                                        Modifier.pointerInput(entry.item.itemId, readyIndex) {
                                         detectDragGestures(
                                             onDragStart = {
                                                 dragStartTopOffsets = itemTopOffsets.toMap()
@@ -696,6 +708,9 @@ fun LibraryItemsScreen(
                                             onDragCancel = { finishDrag() },
                                         )
                                     }
+                                    } else {
+                                        Modifier
+                                    }
                                 } else {
                                     null
                                 }
@@ -705,6 +720,12 @@ fun LibraryItemsScreen(
                                     isSelected = entry.item.itemId in selectedIds,
                                     modifier = rowModifier,
                                     dragHandleModifier = dragHandleModifier,
+                                    dragHandleContentDescription = if (reorderActive) {
+                                        "Drag to reorder"
+                                    } else {
+                                        dragReorderUnavailableReason?.let { "Reorder unavailable: $it" }
+                                            ?: "Reorder unavailable"
+                                    },
                                     onOpen = { onOpenItem(entry.item.itemId) },
                                     onToggleSelect = { toggleSelection(entry.item.itemId) },
                                     onEnterSelection = { enterSelectionMode(entry.item.itemId) },
@@ -896,6 +917,7 @@ private fun LibraryQueueItemRow(
     isSelected: Boolean,
     modifier: Modifier = Modifier,
     dragHandleModifier: Modifier? = null,
+    dragHandleContentDescription: String = "Drag to reorder",
     onOpen: () -> Unit,
     onToggleSelect: () -> Unit,
     onEnterSelection: () -> Unit,
@@ -971,7 +993,7 @@ private fun LibraryQueueItemRow(
             {
                 Icon(
                     imageVector = Icons.Default.DragHandle,
-                    contentDescription = "Drag to reorder",
+                    contentDescription = dragHandleContentDescription,
                     tint = if (LocalMimeoV1Active.current) {
                         LocalMimeoColorTokens.current.fg3
                     } else {
