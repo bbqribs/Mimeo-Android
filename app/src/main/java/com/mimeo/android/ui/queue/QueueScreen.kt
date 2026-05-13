@@ -68,6 +68,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -297,9 +298,10 @@ internal fun activeAnchorTailSpacerPx(
     hasRowsBeforeActive: Boolean,
     viewportHeightPx: Int,
     activeHeightPx: Float,
+    belowActiveContentHeightPx: Float,
 ): Float {
     if (!hasRowsBeforeActive || viewportHeightPx <= 0 || activeHeightPx <= 0f) return 0f
-    return (viewportHeightPx.toFloat() - activeHeightPx).coerceAtLeast(0f)
+    return (viewportHeightPx.toFloat() - activeHeightPx - belowActiveContentHeightPx).coerceAtLeast(0f)
 }
 
 internal fun sessionRowTrailingActionOrder(
@@ -2088,17 +2090,26 @@ private fun NowPlayingSessionPanel(
     val hasRowsBeforeActive = historyItems.isNotEmpty() || earlierItems.isNotEmpty()
     val upcomingStartIndex = (currentIndex + 1).coerceIn(0, localItems.size)
     val upcomingItems = localItems.drop(upcomingStartIndex)
+    val upcomingItemIds = remember(upcomingItems) { upcomingItems.map { it.itemId } }
     val density = LocalDensity.current
     val minVisibleActiveHeightPx = with(density) { 24.dp.toPx() }
-    val activeTailSpacerPx = activeAnchorTailSpacerPx(
-        hasRowsBeforeActive = hasRowsBeforeActive,
-        viewportHeightPx = listViewportHeight,
-        activeHeightPx = activeMeasuredHeight,
-    )
     var historyStickyBounds by remember { mutableStateOf<SessionStickyHeaderBounds?>(null) }
     var earlierStickyBounds by remember { mutableStateOf<SessionStickyHeaderBounds?>(null) }
     var historyHeaderHeightPx by remember { mutableFloatStateOf(0f) }
     var earlierHeaderHeightPx by remember { mutableFloatStateOf(0f) }
+    var upcomingSectionTopOffset by remember(currentItemId, upcomingItemIds) { mutableStateOf<Float?>(null) }
+    var upcomingSectionBottomOffset by remember(currentItemId, upcomingItemIds) { mutableStateOf<Float?>(null) }
+    val upcomingSectionHeightPx = remember(upcomingSectionTopOffset, upcomingSectionBottomOffset) {
+        val top = upcomingSectionTopOffset
+        val bottom = upcomingSectionBottomOffset
+        if (top != null && bottom != null && bottom >= top) bottom - top else null
+    }
+    val activeTailSpacerPx = activeAnchorTailSpacerPx(
+        hasRowsBeforeActive = hasRowsBeforeActive,
+        viewportHeightPx = listViewportHeight,
+        activeHeightPx = activeMeasuredHeight,
+        belowActiveContentHeightPx = upcomingSectionHeightPx ?: 0f,
+    )
     var initialActiveAnchorReady by remember(currentItemId, serverItemIds) {
         mutableStateOf(currentItemId == null)
     }
@@ -2114,7 +2125,6 @@ private fun NowPlayingSessionPanel(
             earlierHeaderHeightPx = 0f
         }
     }
-
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -2163,6 +2173,7 @@ private fun NowPlayingSessionPanel(
             activeMeasuredHeight,
             listViewportHeight,
             hasRowsBeforeActive,
+            upcomingSectionHeightPx,
             initialActiveAnchorReady,
         ) {
             if (currentItemId == null) {
@@ -2171,6 +2182,9 @@ private fun NowPlayingSessionPanel(
             }
             if (initialActiveAnchorReady) return@LaunchedEffect
             if (hasRowsBeforeActive && (listViewportHeight <= 0 || activeMeasuredHeight <= 0f)) {
+                return@LaunchedEffect
+            }
+            if (hasRowsBeforeActive && upcomingSectionHeightPx == null) {
                 return@LaunchedEffect
             }
             val target = nowPlayingScrollTargetPx(activeTopOffset) ?: return@LaunchedEffect
@@ -2189,6 +2203,7 @@ private fun NowPlayingSessionPanel(
                 .fillMaxWidth()
                 .weight(1f)
                 .onSizeChanged { listViewportHeight = it.height }
+                .clipToBounds()
                 .passiveVerticalScrollIndicator(
                     scrollState = listScrollState,
                     color = if (isV1) mColors.fg4 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f),
@@ -2342,6 +2357,11 @@ private fun NowPlayingSessionPanel(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .onGloballyPositioned { coords ->
+                            val top = coords.positionInParent().y
+                            upcomingSectionTopOffset = top
+                            upcomingSectionBottomOffset = top + coords.size.height
+                        }
                         .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
@@ -2366,7 +2386,12 @@ private fun NowPlayingSessionPanel(
                         text = "No upcoming items.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        modifier = Modifier
+                            .onGloballyPositioned { coords ->
+                                val top = coords.positionInParent().y
+                                upcomingSectionBottomOffset = top + coords.size.height
+                            }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                     )
                 }
                 upcomingItems.forEachIndexed { index, item ->
@@ -2387,8 +2412,11 @@ private fun NowPlayingSessionPanel(
                                 .zIndex(if (isDragging) 1f else 0f)
                                 .graphicsLayer { translationY = itemVisualOffsetY }
                                 .onGloballyPositioned { coords ->
-                                    itemTopOffsets[item.itemId] = coords.positionInParent().y
+                                    val top = coords.positionInParent().y
+                                    itemTopOffsets[item.itemId] = top
                                     itemHeights[item.itemId] = coords.size.height.toFloat()
+                                    upcomingSectionBottomOffset = (top + coords.size.height)
+                                        .coerceAtLeast(upcomingSectionBottomOffset ?: top)
                                 },
                         ) {
                             Row(

@@ -81,8 +81,24 @@ class UpNextSessionPresentationTest {
 
     @Test
     fun activeAnchorSpacerOnlyAppearsWhenRowsPrecedeNowPlaying() {
-        assertEquals(0f, activeAnchorTailSpacerPx(false, viewportHeightPx = 640, activeHeightPx = 180f))
-        assertEquals(460f, activeAnchorTailSpacerPx(true, viewportHeightPx = 640, activeHeightPx = 180f))
+        assertEquals(
+            0f,
+            activeAnchorTailSpacerPx(
+                hasRowsBeforeActive = false,
+                viewportHeightPx = 640,
+                activeHeightPx = 180f,
+                belowActiveContentHeightPx = 80f,
+            ),
+        )
+        assertEquals(
+            380f,
+            activeAnchorTailSpacerPx(
+                hasRowsBeforeActive = true,
+                viewportHeightPx = 640,
+                activeHeightPx = 180f,
+                belowActiveContentHeightPx = 80f,
+            ),
+        )
     }
 
     @Test

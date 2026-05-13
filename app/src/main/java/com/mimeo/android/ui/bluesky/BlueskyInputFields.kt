@@ -17,7 +17,7 @@ internal fun BlueskyHandleField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    label: String = "Account by handle",
+    label: String = "Scan account by handle",
     enabled: Boolean = true,
     onSearch: (() -> Unit)? = null,
 ) {
@@ -32,7 +32,7 @@ internal fun BlueskyHandleField(
         trailingIcon = if (onSearch != null) {
             {
                 IconButton(onClick = onSearch, enabled = enabled) {
-                    Icon(Icons.Default.Search, contentDescription = "Scan account")
+                    Icon(Icons.Default.Search, contentDescription = "Scan account by handle")
                 }
             }
         } else {
@@ -55,14 +55,14 @@ internal fun BlueskyListUriField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier,
-        label = { Text("List URL") },
+        label = { Text("Scan List by URL") },
         placeholder = { Text("https://bsky.app/profile/.../lists/...") },
         singleLine = true,
         enabled = enabled,
         trailingIcon = if (onSearch != null) {
             {
                 IconButton(onClick = onSearch, enabled = enabled) {
-                    Icon(Icons.Default.Search, contentDescription = "Scan list")
+                    Icon(Icons.Default.Search, contentDescription = "Scan List by URL")
                 }
             }
         } else {

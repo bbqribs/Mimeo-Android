@@ -420,23 +420,24 @@ fun LibraryItemsScreen(
                         pullProgress = 0f,
                     )
                     if (!isBin && onPlayAll != null) {
-                        TextButton(
+                        LibrarySelectionIconButton(
+                            label = "Play all",
                             enabled = visiblePlaybackItems.isNotEmpty(),
                             onClick = {
                                 val snapshot = visiblePlaybackItems
-                                if (snapshot.isEmpty()) return@TextButton
-                                if (nowPlayingHasItems) {
-                                    pendingPlayAllSnapshot = snapshot
-                                } else {
-                                    onPlayAll(snapshot)
+                                if (snapshot.isNotEmpty()) {
+                                    if (nowPlayingHasItems) {
+                                        pendingPlayAllSnapshot = snapshot
+                                    } else {
+                                        onPlayAll(snapshot)
+                                    }
                                 }
                             },
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PlayArrow,
-                                contentDescription = null,
+                                contentDescription = "Play all",
                             )
-                            Text("All")
                         }
                     }
                 }
