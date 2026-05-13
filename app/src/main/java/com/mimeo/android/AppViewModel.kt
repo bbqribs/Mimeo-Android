@@ -97,6 +97,7 @@ import com.mimeo.android.data.ItemBatchResponse
 import com.mimeo.android.data.AutoDownloadStatusStore
 import com.mimeo.android.data.AppDatabase
 import com.mimeo.android.data.NoActiveContentStore
+import com.mimeo.android.data.QueueFetchResult
 import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.AutoDownloadDiagnostics
@@ -1779,14 +1780,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }.getOrNull()?.let { loaded ->
                 _smartPlaylists.value = loaded
             }
-            val queueResult = repository.loadQueueAndPrefetch(
-                current.baseUrl,
-                current.apiToken,
+            val queueResult = loadQueueForCurrentSurface(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
                 playlistId = queuePlaylistId,
                 prefetchCount = 0,
-                sortField = queueServerSortField,
-                sortDir = queueServerSortDir,
-                includeDone = queueFetchIncludeDone(queuePlaylistId),
             )
             val queue = queueResult.payload
             val queueItems = applyPendingBinProjectionToNonBinItems(
@@ -1881,14 +1879,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             if (autoRetrySuccessCount > 0) {
                 val previousVisibleAfterAutoRetryIds = _queueItems.value.mapTo(linkedSetOf()) { it.itemId }
-                val refreshedQueueResult = repository.loadQueueAndPrefetch(
-                    current.baseUrl,
-                    current.apiToken,
+                val refreshedQueueResult = loadQueueForCurrentSurface(
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
                     playlistId = queuePlaylistId,
                     prefetchCount = 0,
-                    sortField = queueServerSortField,
-                    sortDir = queueServerSortDir,
-                    includeDone = queueFetchIncludeDone(queuePlaylistId),
                 )
                 val refreshedQueue = refreshedQueueResult.payload
                 val refreshedQueueItems = applyPendingBinProjectionToNonBinItems(
@@ -2029,6 +2024,63 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun queueFetchIncludeDone(playlistId: Int?): Boolean =
         playlistId != null || queueServerSortField.isNotBlank() || queueServerSortDir.isNotBlank()
+
+    private fun isDefaultSmartQueueSurface(playlistId: Int?): Boolean =
+        playlistId == null && queueServerSortField.isBlank() && queueServerSortDir.isBlank()
+
+    private suspend fun loadQueueForCurrentSurface(
+        baseUrl: String,
+        token: String,
+        playlistId: Int?,
+        prefetchCount: Int = 0,
+    ): QueueFetchResult {
+        val firstPage = repository.loadQueueAndPrefetch(
+            baseUrl,
+            token,
+            playlistId = playlistId,
+            prefetchCount = prefetchCount,
+            sortField = queueServerSortField,
+            sortDir = queueServerSortDir,
+            includeDone = queueFetchIncludeDone(playlistId),
+        )
+        val firstPayload = firstPage.payload
+        if (!isDefaultSmartQueueSurface(playlistId) || firstPayload.totalCount <= firstPayload.items.size) {
+            return firstPage
+        }
+
+        val combined = firstPayload.items.toMutableList()
+        var totalCount = firstPayload.totalCount
+        var offset = combined.size
+        while (totalCount > 0 && offset < totalCount) {
+            val nextPage = apiClient.getQueue(
+                baseUrl = baseUrl,
+                token = token,
+                playlistId = null,
+                offset = offset,
+                limit = ApiClient.QUEUE_LOAD_MORE_LIMIT,
+                sortField = queueServerSortField,
+                sortDir = queueServerSortDir,
+                includeDone = false,
+            )
+            val fetched = nextPage.payload.items
+            if (fetched.isEmpty()) break
+            val existingIds = combined.mapTo(mutableSetOf()) { it.itemId }
+            combined += fetched.filterNot { it.itemId in existingIds }
+            offset += fetched.size
+            if (nextPage.payload.totalCount > 0) {
+                totalCount = nextPage.payload.totalCount
+            }
+        }
+
+        return firstPage.copy(
+            payload = firstPayload.copy(
+                count = combined.size,
+                totalCount = totalCount,
+                items = combined,
+            ),
+            debugSnapshot = firstPage.debugSnapshot.copy(responseItemCount = combined.size),
+        )
+    }
 
     private fun updateSmartQueueReorderAvailability(selectedPlaylistId: Int?) {
         val itemIds = _queueItems.value.map { it.itemId }
@@ -3521,14 +3573,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 queuePlaylistId = manualPlaylistIdOrNull(current.selectedPlaylistId)
             }
 
-            val queueResult = repository.loadQueueAndPrefetch(
-                current.baseUrl,
-                current.apiToken,
+            val queueResult = loadQueueForCurrentSurface(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
                 playlistId = queuePlaylistId,
                 prefetchCount = 0,
-                sortField = queueServerSortField,
-                sortDir = queueServerSortDir,
-                includeDone = queueFetchIncludeDone(queuePlaylistId),
             )
             val queue = queueResult.payload
             val queueItems = applyFavoriteOverrides(queue.items)
