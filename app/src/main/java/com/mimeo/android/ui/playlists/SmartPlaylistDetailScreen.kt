@@ -1,6 +1,8 @@
 package com.mimeo.android.ui.playlists
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -75,6 +77,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SmartPlaylistDetailScreen(
     playlistId: Int,
@@ -332,23 +335,90 @@ fun SmartPlaylistDetailScreen(
                 modifier = Modifier.fillMaxSize(),
                 state = listState,
             ) {
-            if (pinnedItems.isNotEmpty()) {
-                item(key = "pinned-header") {
+                if (pinnedItems.isNotEmpty()) {
+                    stickyHeader(key = "pinned-header") {
+                        SmartPlaylistSectionHeader(
+                            title = "Pinned",
+                            count = pinnedItems.size,
+                        )
+                    }
+                    items(items = pinnedItems, key = { "pinned-${it.itemId}" }) { item ->
+                        val index = pinnedItems.indexOfFirst { it.itemId == item.itemId }
+                        SmartPlaylistItemRow(
+                            item = item,
+                            isPinned = true,
+                            isSelectionActive = selectionActive,
+                            isSelected = item.itemId in selectedIds,
+                            pinActionEnabled = !pinActionInProgress,
+                            canMoveUp = index > 0,
+                            canMoveDown = index >= 0 && index < pinnedItems.lastIndex,
+                            onOpen = { onOpenPlayer(item.itemId) },
+                            onToggleSelect = { toggleSelection(item.itemId) },
+                            onEnterSelection = { enterSelectionMode(item.itemId) },
+                            onPlayNow = { vm.playNow(item.itemId) },
+                            onPlayNext = { vm.playNext(item.itemId) },
+                            onPlayLast = { vm.playLast(item.itemId) },
+                            onPlayFromHere = { pendingPlayFromHereItemId = item.itemId },
+                            onPin = {},
+                            onUnpin = {
+                                actionScope.launch {
+                                    runPinMutation("Couldn't unpin item.") {
+                                        vm.unpinSmartPlaylistItem(playlistId, item.itemId)
+                                    }
+                                }
+                            },
+                            onMoveUp = {
+                                if (index > 0) {
+                                    val nextIds = pinnedItems.map { it.itemId }.toMutableList()
+                                    val moved = nextIds.removeAt(index)
+                                    nextIds.add(index - 1, moved)
+                                    actionScope.launch {
+                                        runPinMutation("Couldn't reorder pinned items.") {
+                                            vm.reorderSmartPlaylistPins(playlistId, nextIds)
+                                        }
+                                    }
+                                }
+                            },
+                            onMoveDown = {
+                                if (index >= 0 && index < pinnedItems.lastIndex) {
+                                    val nextIds = pinnedItems.map { it.itemId }.toMutableList()
+                                    val moved = nextIds.removeAt(index)
+                                    nextIds.add(index + 1, moved)
+                                    actionScope.launch {
+                                        runPinMutation("Couldn't reorder pinned items.") {
+                                            vm.reorderSmartPlaylistPins(playlistId, nextIds)
+                                        }
+                                    }
+                                }
+                            },
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                        )
+                    }
+                }
+
+                stickyHeader(key = "live-header") {
                     SmartPlaylistSectionHeader(
-                        title = "Pinned",
-                        count = pinnedItems.size,
+                        title = "Live results",
+                        count = liveItems.size,
                     )
                 }
-                items(items = pinnedItems, key = { "pinned-${it.itemId}" }) { item ->
-                    val index = pinnedItems.indexOfFirst { it.itemId == item.itemId }
+                if (liveItems.isEmpty() && pinnedItems.isNotEmpty()) {
+                    item(key = "live-empty") {
+                        DefaultListSurfaceMessage("No additional live results below pinned items.")
+                    }
+                }
+                items(items = liveItems, key = { "live-${it.itemId}" }) { item ->
                     SmartPlaylistItemRow(
                         item = item,
-                        isPinned = true,
+                        isPinned = false,
                         isSelectionActive = selectionActive,
                         isSelected = item.itemId in selectedIds,
                         pinActionEnabled = !pinActionInProgress,
-                        canMoveUp = index > 0,
-                        canMoveDown = index >= 0 && index < pinnedItems.lastIndex,
+                        canMoveUp = false,
+                        canMoveDown = false,
                         onOpen = { onOpenPlayer(item.itemId) },
                         onToggleSelect = { toggleSelection(item.itemId) },
                         onEnterSelection = { enterSelectionMode(item.itemId) },
@@ -356,38 +426,16 @@ fun SmartPlaylistDetailScreen(
                         onPlayNext = { vm.playNext(item.itemId) },
                         onPlayLast = { vm.playLast(item.itemId) },
                         onPlayFromHere = { pendingPlayFromHereItemId = item.itemId },
-                        onPin = {},
-                        onUnpin = {
+                        onPin = {
                             actionScope.launch {
-                                runPinMutation("Couldn't unpin item.") {
-                                    vm.unpinSmartPlaylistItem(playlistId, item.itemId)
+                                runPinMutation("Couldn't pin item.") {
+                                    vm.pinSmartPlaylistItem(playlistId, item.itemId)
                                 }
                             }
                         },
-                        onMoveUp = {
-                            if (index > 0) {
-                                val nextIds = pinnedItems.map { it.itemId }.toMutableList()
-                                val moved = nextIds.removeAt(index)
-                                nextIds.add(index - 1, moved)
-                                actionScope.launch {
-                                    runPinMutation("Couldn't reorder pinned items.") {
-                                        vm.reorderSmartPlaylistPins(playlistId, nextIds)
-                                    }
-                                }
-                            }
-                        },
-                        onMoveDown = {
-                            if (index >= 0 && index < pinnedItems.lastIndex) {
-                                val nextIds = pinnedItems.map { it.itemId }.toMutableList()
-                                val moved = nextIds.removeAt(index)
-                                nextIds.add(index + 1, moved)
-                                actionScope.launch {
-                                    runPinMutation("Couldn't reorder pinned items.") {
-                                        vm.reorderSmartPlaylistPins(playlistId, nextIds)
-                                    }
-                                }
-                            }
-                        },
+                        onUnpin = {},
+                        onMoveUp = {},
+                        onMoveDown = {},
                     )
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 12.dp),
@@ -395,51 +443,6 @@ fun SmartPlaylistDetailScreen(
                     )
                 }
             }
-
-            item(key = "live-header") {
-                SmartPlaylistSectionHeader(
-                    title = "Live results",
-                    count = liveItems.size,
-                )
-            }
-            if (liveItems.isEmpty() && pinnedItems.isNotEmpty()) {
-                item(key = "live-empty") {
-                    DefaultListSurfaceMessage("No additional live results below pinned items.")
-                }
-            }
-            items(items = liveItems, key = { "live-${it.itemId}" }) { item ->
-                SmartPlaylistItemRow(
-                    item = item,
-                    isPinned = false,
-                    isSelectionActive = selectionActive,
-                    isSelected = item.itemId in selectedIds,
-                    pinActionEnabled = !pinActionInProgress,
-                    canMoveUp = false,
-                    canMoveDown = false,
-                    onOpen = { onOpenPlayer(item.itemId) },
-                    onToggleSelect = { toggleSelection(item.itemId) },
-                    onEnterSelection = { enterSelectionMode(item.itemId) },
-                    onPlayNow = { vm.playNow(item.itemId) },
-                    onPlayNext = { vm.playNext(item.itemId) },
-                    onPlayLast = { vm.playLast(item.itemId) },
-                    onPlayFromHere = { pendingPlayFromHereItemId = item.itemId },
-                    onPin = {
-                        actionScope.launch {
-                            runPinMutation("Couldn't pin item.") {
-                                vm.pinSmartPlaylistItem(playlistId, item.itemId)
-                            }
-                        }
-                    },
-                    onUnpin = {},
-                    onMoveUp = {},
-                    onMoveDown = {},
-                )
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                    color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
-                )
-            }
-        }
         }
     }
 
@@ -756,6 +759,7 @@ private fun SmartPlaylistSectionHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .background(if (isV1) mColors.surface else MaterialTheme.colorScheme.surface)
             .padding(start = 16.dp, end = 16.dp, top = if (isV1) densityTokens.sectionGap else 14.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,

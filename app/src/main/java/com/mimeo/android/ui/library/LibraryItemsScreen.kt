@@ -1,6 +1,8 @@
 package com.mimeo.android.ui.library
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -138,6 +140,7 @@ data class LibraryBatchAction(
 
 private val PENDING_STATUSES = setOf("extracting", "saved", "failed", "blocked")
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LibraryItemsScreen(
     title: String,
@@ -482,107 +485,98 @@ fun LibraryItemsScreen(
                 modifier = Modifier.fillMaxSize(),
                 state = listState,
             ) {
-            // Pending section (inbox only)
-            if (pendingItems.isNotEmpty()) {
-                item(key = "pending_header") {
-                    PendingSectionHeader(
-                        count = pendingItems.size,
-                        expanded = pendingExpanded,
-                        onToggle = { pendingExpanded = !pendingExpanded },
-                    )
-                }
-                if (pendingExpanded) {
-                    items(items = pendingItems, key = { "p_${it.itemId}" }) { item ->
-                        LibraryQueueItemRow(
-                            item = item,
-                            isSelectionActive = selectionActive,
-                            isSelected = item.itemId in selectedIds,
-                            onOpen = { onOpenItem(item.itemId) },
-                            onToggleSelect = { toggleSelection(item.itemId) },
-                            onEnterSelection = { enterSelectionMode(item.itemId) },
-                            onPlayNow = onPlayNow?.let { cb -> { cb(item.itemId) } },
-                            onPlayNext = onPlayNext?.let { cb -> { cb(item.itemId) } },
-                            onPlayLast = onPlayLast?.let { cb -> { cb(item.itemId) } },
-                            onPlayFromHere = onPlayFromHere?.let { { pendingPlayFromHereItemId = item.itemId } },
-                            onAddToPlaylist = if (!isBin) onBatchAddToPlaylist?.let {
-                                {
-                                    batchPlaylistPickerIds = setOf(item.itemId)
-                                    showBatchPlaylistPicker = true
-                                }
-                            } else null,
-                            onFavoriteToggle = if (!isBin) ({
-                                onBatchAction(if (item.isFavorited) "unfavorite" else "favorite", setOf(item.itemId))
-                            }) else null,
-                            onArchiveToggle = if (!isBin) ({
-                                onBatchAction(if (title == "Archive") "unarchive" else "archive", setOf(item.itemId))
-                            }) else null,
-                            archiveToggleLabel = if (title == "Archive") "Unarchive" else "Archive",
-                            onBin = if (!isBin) ({ onBatchAction("bin", setOf(item.itemId)) }) else null,
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 12.dp),
-                            color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                // Pending section (inbox only)
+                if (pendingItems.isNotEmpty()) {
+                    stickyHeader(key = "pending_header") {
+                        PendingSectionHeader(
+                            count = pendingItems.size,
+                            expanded = pendingExpanded,
+                            onToggle = { pendingExpanded = !pendingExpanded },
                         )
                     }
+                    if (pendingExpanded) {
+                        items(items = pendingItems, key = { "p_${it.itemId}" }) { item ->
+                            LibraryQueueItemRow(
+                                item = item,
+                                isSelectionActive = selectionActive,
+                                isSelected = item.itemId in selectedIds,
+                                onOpen = { onOpenItem(item.itemId) },
+                                onToggleSelect = { toggleSelection(item.itemId) },
+                                onEnterSelection = { enterSelectionMode(item.itemId) },
+                                onPlayNow = onPlayNow?.let { cb -> { cb(item.itemId) } },
+                                onPlayNext = onPlayNext?.let { cb -> { cb(item.itemId) } },
+                                onPlayLast = onPlayLast?.let { cb -> { cb(item.itemId) } },
+                                onPlayFromHere = onPlayFromHere?.let { { pendingPlayFromHereItemId = item.itemId } },
+                                onAddToPlaylist = if (!isBin) onBatchAddToPlaylist?.let {
+                                    {
+                                        batchPlaylistPickerIds = setOf(item.itemId)
+                                        showBatchPlaylistPicker = true
+                                    }
+                                } else null,
+                                onFavoriteToggle = if (!isBin) ({
+                                    onBatchAction(if (item.isFavorited) "unfavorite" else "favorite", setOf(item.itemId))
+                                }) else null,
+                                onArchiveToggle = if (!isBin) ({
+                                    onBatchAction(if (title == "Archive") "unarchive" else "archive", setOf(item.itemId))
+                                }) else null,
+                                archiveToggleLabel = if (title == "Archive") "Unarchive" else "Archive",
+                                onBin = if (!isBin) ({ onBatchAction("bin", setOf(item.itemId)) }) else null,
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 12.dp),
+                                color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                            )
+                        }
+                    }
                 }
-            }
 
-            // Ready / main items — with optional date section headers for NEWEST sort.
-            items(
-                items = sectionedReadyItems,
-                key = { entry ->
+                // Ready / main items — with optional date section headers for NEWEST sort.
+                sectionedReadyItems.forEach { entry ->
                     when (entry) {
-                        is LibraryListEntry.Header -> entry.key
-                        is LibraryListEntry.Item -> entry.item.itemId
-                    }
-                },
-                contentType = { entry ->
-                    when (entry) {
-                        is LibraryListEntry.Header -> "header"
-                        is LibraryListEntry.Item -> "item"
-                    }
-                },
-            ) { entry ->
-                when (entry) {
-                    is LibraryListEntry.Header -> DateSectionHeader(label = entry.label)
-                    is LibraryListEntry.Item -> {
-                        LibraryQueueItemRow(
-                            item = entry.item,
-                            isSelectionActive = selectionActive,
-                            isSelected = entry.item.itemId in selectedIds,
-                            onOpen = { onOpenItem(entry.item.itemId) },
-                            onToggleSelect = { toggleSelection(entry.item.itemId) },
-                            onEnterSelection = { enterSelectionMode(entry.item.itemId) },
-                            onPlayNow = onPlayNow?.let { cb -> { cb(entry.item.itemId) } },
-                            onPlayNext = onPlayNext?.let { cb -> { cb(entry.item.itemId) } },
-                            onPlayLast = onPlayLast?.let { cb -> { cb(entry.item.itemId) } },
-                            onPlayFromHere = onPlayFromHere?.let { { pendingPlayFromHereItemId = entry.item.itemId } },
-                            onAddToPlaylist = if (!isBin) onBatchAddToPlaylist?.let {
-                                {
-                                    batchPlaylistPickerIds = setOf(entry.item.itemId)
-                                    showBatchPlaylistPicker = true
-                                }
-                            } else null,
-                            onFavoriteToggle = if (!isBin) ({
-                                onBatchAction(if (entry.item.isFavorited) "unfavorite" else "favorite", setOf(entry.item.itemId))
-                            }) else null,
-                            onArchiveToggle = if (!isBin) ({
-                                onBatchAction(if (title == "Archive") "unarchive" else "archive", setOf(entry.item.itemId))
-                            }) else null,
-                            archiveToggleLabel = if (title == "Archive") "Unarchive" else "Archive",
-                            onBin = if (!isBin) ({ onBatchAction("bin", setOf(entry.item.itemId)) }) else null,
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 12.dp),
-                            color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
-                        )
+                        is LibraryListEntry.Header -> {
+                            stickyHeader(key = entry.key) {
+                                DateSectionHeader(label = entry.label)
+                            }
+                        }
+                        is LibraryListEntry.Item -> {
+                            item(key = entry.item.itemId) {
+                                LibraryQueueItemRow(
+                                    item = entry.item,
+                                    isSelectionActive = selectionActive,
+                                    isSelected = entry.item.itemId in selectedIds,
+                                    onOpen = { onOpenItem(entry.item.itemId) },
+                                    onToggleSelect = { toggleSelection(entry.item.itemId) },
+                                    onEnterSelection = { enterSelectionMode(entry.item.itemId) },
+                                    onPlayNow = onPlayNow?.let { cb -> { cb(entry.item.itemId) } },
+                                    onPlayNext = onPlayNext?.let { cb -> { cb(entry.item.itemId) } },
+                                    onPlayLast = onPlayLast?.let { cb -> { cb(entry.item.itemId) } },
+                                    onPlayFromHere = onPlayFromHere?.let { { pendingPlayFromHereItemId = entry.item.itemId } },
+                                    onAddToPlaylist = if (!isBin) onBatchAddToPlaylist?.let {
+                                        {
+                                            batchPlaylistPickerIds = setOf(entry.item.itemId)
+                                            showBatchPlaylistPicker = true
+                                        }
+                                    } else null,
+                                    onFavoriteToggle = if (!isBin) ({
+                                        onBatchAction(if (entry.item.isFavorited) "unfavorite" else "favorite", setOf(entry.item.itemId))
+                                    }) else null,
+                                    onArchiveToggle = if (!isBin) ({
+                                        onBatchAction(if (title == "Archive") "unarchive" else "archive", setOf(entry.item.itemId))
+                                    }) else null,
+                                    archiveToggleLabel = if (title == "Archive") "Unarchive" else "Archive",
+                                    onBin = if (!isBin) ({ onBatchAction("bin", setOf(entry.item.itemId)) }) else null,
+                                )
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 12.dp),
+                                    color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                                )
+                            }
+                        }
                     }
                 }
             }
-        }
         }
     }
-
     if (showBatchPlaylistPicker && onBatchAddToPlaylist != null) {
         BatchPlaylistPickerDialog(
             itemCount = batchPlaylistPickerIds.size,
@@ -693,6 +687,7 @@ private fun PendingSectionHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .background(if (isV1) mColors.surface else MaterialTheme.colorScheme.surface)
             .clickable(onClick = onToggle)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -723,6 +718,7 @@ private fun DateSectionHeader(label: String) {
         color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.primary,
         modifier = Modifier
             .fillMaxWidth()
+            .background(if (isV1) mColors.surface else MaterialTheme.colorScheme.surface)
             .padding(
                 start = 16.dp,
                 end = 16.dp,
