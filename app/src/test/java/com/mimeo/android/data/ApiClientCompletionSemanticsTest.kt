@@ -106,6 +106,55 @@ class ApiClientCompletionSemanticsTest {
     }
 
     @Test
+    fun getDefaultSmartQueueOmitsCustomSortAndIncludeDoneFlags() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(500)
+                .setBody("""{"detail":"stop after request capture"}"""),
+        )
+        server.start()
+        try {
+            val client = ApiClient(okHttpClient = OkHttpClient.Builder().followRedirects(false).build())
+            runCatching {
+                client.getQueue(
+                baseUrl = server.url("/").toString(),
+                token = "token",
+                sortField = "",
+                sortDir = "",
+                includeDone = false,
+                )
+            }
+
+            val request = server.takeRequest()
+            assertEquals("GET", request.method)
+            assertEquals("/playback/queue?limit=100&offset=0", request.path)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun reorderSmartQueueUsesPersistedContractPayload() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"reorder_allowed":true,"count":3,"items":[]}"""))
+        server.start()
+        try {
+            val client = ApiClient(okHttpClient = OkHttpClient.Builder().followRedirects(false).build())
+            client.reorderSmartQueue(server.url("/").toString(), "token", listOf(30, 10, 20))
+
+            val request = server.takeRequest()
+            val body = request.body.readUtf8()
+            assertEquals("PUT", request.method)
+            assertEquals("/playback/queue/reorder", request.path)
+            assertTrue(body, body.contains("\"item_ids\":[30,10,20]"))
+            assertTrue(body, body.contains("\"filtered\":false"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun restoreFromBinUsesRestoreRoute() = runBlocking {
         val server = MockWebServer()
         server.enqueue(MockResponse().setResponseCode(200))

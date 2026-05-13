@@ -177,6 +177,8 @@ data class AuthTokenResponse(
 data class PlaybackQueueResponse(
     val count: Int,
     @SerialName("total_count") val totalCount: Int = 0,
+    @SerialName("reorder_allowed") val reorderAllowed: Boolean = false,
+    @SerialName("reorder_unavailable_reason") val reorderUnavailableReason: String? = null,
     val items: List<PlaybackQueueItem>,
 )
 
@@ -263,6 +265,7 @@ data class PlaybackQueueItem(
     @SerialName("furthest_percent") val apiFurthestPercent: Int? = null,
     @SerialName("last_opened_at") val lastOpenedAt: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("smart_queue_position") val smartQueuePosition: Double? = null,
     @SerialName("is_favorited") val isFavorited: Boolean = false,
 ) {
     val progressPercent: Int

@@ -28,11 +28,37 @@ fun SmartQueueScreen(
     val settings by vm.settings.collectAsState()
     val queueItems by vm.queueItems.collectAsState()
     val loading by vm.queueLoading.collectAsState()
+    val hasMorePages by vm.queueHasMorePages.collectAsState()
+    val reorderAllowed by vm.smartQueueReorderAllowed.collectAsState()
+    val reorderUnavailableReason by vm.smartQueueReorderUnavailableReason.collectAsState()
+    val reorderSaving by vm.smartQueueReorderSaving.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val actionScope = rememberCoroutineScope()
-    var sortOption by rememberSaveable { mutableStateOf(LibrarySortOption.NEWEST) }
+    var sortOption by rememberSaveable { mutableStateOf(LibrarySortOption.SMART_QUEUE) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
+    val dragReorderEnabled = smartQueueDragReorderEnabled(
+        backendReorderAllowed = reorderAllowed,
+        searchQuery = searchQuery,
+        sortOption = sortOption,
+        hasMorePages = hasMorePages,
+        itemCount = queueItems.size,
+        reorderSaving = reorderSaving,
+    )
+    val showReorderHandle = sortOption == LibrarySortOption.SMART_QUEUE &&
+        searchQuery.isBlank() &&
+        queueItems.size > 1
+    val reorderStatusLabel = smartQueueReorderStatusLabel(
+        dragReorderEnabled = dragReorderEnabled,
+        backendReorderAllowed = reorderAllowed,
+        unavailableReason = reorderUnavailableReason,
+        searchQuery = searchQuery,
+        sortOption = sortOption,
+        hasMorePages = hasMorePages,
+        itemCount = queueItems.size,
+        loading = loading,
+        reorderSaving = reorderSaving,
+    )
 
     LaunchedEffect(Unit) {
         if (settings.selectedPlaylistId == null) {
@@ -52,9 +78,14 @@ fun SmartQueueScreen(
             "No Smart Queue items match this search."
         },
         sortOption = sortOption,
-        availableSorts = LibrarySortOption.INBOX_SORTS,
+        availableSorts = LibrarySortOption.SMART_QUEUE_SORTS,
         searchQuery = searchQuery,
         clientSideSearch = true,
+        showDragReorderHandle = showReorderHandle,
+        dragReorderEnabled = dragReorderEnabled,
+        dragReorderUnavailableReason = reorderUnavailableReason,
+        dragReorderStatusLabel = reorderStatusLabel,
+        onDragReorder = { orderedItemIds -> vm.reorderSmartQueueItems(orderedItemIds) },
         batchActions = listOf(
             LibraryBatchAction("Archive", Icons.Default.Archive, "archive"),
             LibraryBatchAction("Move to Bin", Icons.Default.Delete, "bin"),

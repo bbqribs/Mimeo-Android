@@ -318,10 +318,18 @@ class PlaybackRepository(
         token: String,
         playlistId: Int? = null,
         prefetchCount: Int = PREFETCH_DEFAULT,
-        sortField: String = "created",
-        sortDir: String = "desc",
+        sortField: String? = "created",
+        sortDir: String? = "desc",
+        includeDone: Boolean = true,
     ): QueueFetchResult {
-        val queueResult = apiClient.getQueue(baseUrl, token, playlistId = playlistId, sortField = sortField, sortDir = sortDir)
+        val queueResult = apiClient.getQueue(
+            baseUrl,
+            token,
+            playlistId = playlistId,
+            sortField = sortField,
+            sortDir = sortDir,
+            includeDone = includeDone,
+        )
         val queue = queueResult.payload
         val targets = if (prefetchCount <= 0) {
             emptyList()
@@ -671,6 +679,10 @@ class PlaybackRepository(
 
     suspend fun reorderPlaylistEntries(baseUrl: String, token: String, playlistId: Int, entryIds: List<Int>) {
         apiClient.reorderPlaylistEntries(baseUrl, token, playlistId, entryIds)
+    }
+
+    suspend fun reorderSmartQueue(baseUrl: String, token: String, itemIds: List<Int>) {
+        apiClient.reorderSmartQueue(baseUrl, token, itemIds)
     }
 
     suspend fun batchAddItemsToPlaylist(

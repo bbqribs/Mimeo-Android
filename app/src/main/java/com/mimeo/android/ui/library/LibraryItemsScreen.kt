@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -52,6 +54,8 @@ import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,8 +64,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.ui.common.DefaultListSurfaceMessage
@@ -150,6 +159,11 @@ fun LibraryItemsScreen(
     clientSideSearch: Boolean = false,
     isInbox: Boolean = false,
     isBin: Boolean = false,
+    showDragReorderHandle: Boolean = false,
+    dragReorderEnabled: Boolean = false,
+    dragReorderUnavailableReason: String? = null,
+    dragReorderStatusLabel: String? = null,
+    onDragReorder: (suspend (orderedItemIds: List<Int>) -> Result<Unit>)? = null,
     batchActions: List<LibraryBatchAction> = emptyList(),
     playlists: List<PlaylistSummary> = emptyList(),
     onBatchAddToPlaylist: ((playlistId: Int, playlistName: String, itemIds: Set<Int>) -> Unit)? = null,
@@ -238,6 +252,7 @@ fun LibraryItemsScreen(
 
     val sortedItems = remember(searchedItems, sortOption) {
         when (sortOption) {
+            LibrarySortOption.SMART_QUEUE -> searchedItems
             LibrarySortOption.NEWEST -> searchedItems.sortedByDescending { it.createdAt }
             LibrarySortOption.OLDEST -> searchedItems.sortedBy { it.createdAt }
             LibrarySortOption.OPENED -> searchedItems.sortedWith(
@@ -249,8 +264,35 @@ fun LibraryItemsScreen(
         }
     }
 
+    var localReorderItems by remember { mutableStateOf<List<PlaybackQueueItem>?>(null) }
+    var itemTopOffsets by remember { mutableStateOf<Map<Int, Float>>(emptyMap()) }
+    var itemHeights by remember { mutableStateOf<Map<Int, Float>>(emptyMap()) }
+    var dragStartTopOffsets by remember { mutableStateOf<Map<Int, Float>>(emptyMap()) }
+    var dragStartHeights by remember { mutableStateOf<Map<Int, Float>>(emptyMap()) }
+    var draggingIndex by remember { mutableIntStateOf(-1) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    var currentTargetIndex by remember { mutableIntStateOf(-1) }
+    val reorderActive = dragReorderEnabled &&
+        !selectionActive &&
+        !isInbox &&
+        !isBin &&
+        searchQuery.isBlank() &&
+        sortOption == LibrarySortOption.SMART_QUEUE &&
+        onDragReorder != null
+    val showReorderHandle = showDragReorderHandle && !selectionActive && !isInbox && !isBin
+
+    LaunchedEffect(items.map { it.itemId }, dragReorderEnabled, sortOption, searchQuery, dragReorderUnavailableReason) {
+        localReorderItems = null
+        draggingIndex = -1
+        dragOffsetY = 0f
+        currentTargetIndex = -1
+        dragStartTopOffsets = emptyMap()
+        dragStartHeights = emptyMap()
+    }
+
     val pendingItems = if (isInbox) sortedItems.filter { it.status in PENDING_STATUSES } else emptyList()
-    val readyItems = if (isInbox) sortedItems.filter { it.status !in PENDING_STATUSES } else sortedItems
+    val baseReadyItems = if (isInbox) sortedItems.filter { it.status !in PENDING_STATUSES } else sortedItems
+    val readyItems = if (reorderActive) localReorderItems ?: baseReadyItems else baseReadyItems
     val visiblePlaybackItems = remember(isInbox, pendingExpanded, pendingItems, readyItems, sortedItems) {
         if (isInbox) {
             buildList {
@@ -259,6 +301,87 @@ fun LibraryItemsScreen(
             }
         } else {
             sortedItems
+        }
+    }
+
+    fun avgItemHeight(): Float =
+        if (itemHeights.isEmpty()) 72f else itemHeights.values.average().toFloat()
+
+    fun computeTargetIndex(from: Int, offsetY: Float): Int {
+        if (readyItems.size <= 1 || from !in readyItems.indices) return from
+        val tops = dragStartTopOffsets.takeIf { it.isNotEmpty() } ?: itemTopOffsets
+        val heights = dragStartHeights.takeIf { it.isNotEmpty() } ?: itemHeights
+        val fromItemId = readyItems[from].itemId
+        val height = heights[fromItemId] ?: avgItemHeight()
+        val top = tops[fromItemId] ?: (from * avgItemHeight())
+        val draggedTopY = top + offsetY
+        val draggedBottomY = draggedTopY + height
+        var target = from
+        readyItems.indices.forEach { index ->
+            if (index == from) return@forEach
+            val itemId = readyItems[index].itemId
+            val itemTop = tops[itemId] ?: (index * avgItemHeight())
+            val itemHeight = heights[itemId] ?: avgItemHeight()
+            val itemMidY = itemTop + itemHeight / 2f
+            if (from < index && draggedBottomY > itemMidY) target = index
+            if (from > index && draggedTopY < itemMidY && index < target) target = index
+        }
+        return target.coerceIn(0, readyItems.lastIndex)
+    }
+
+    fun visualOffsetForItem(index: Int, from: Int, target: Int): Float {
+        if (from < 0 || from == target || index == from || from !in readyItems.indices) return 0f
+        val draggedItemId = readyItems[from].itemId
+        val heights = dragStartHeights.takeIf { it.isNotEmpty() } ?: itemHeights
+        val draggedHeight = heights[draggedItemId] ?: avgItemHeight()
+        return when {
+            target > from && index in (from + 1)..target -> -draggedHeight
+            target < from && index in target until from -> draggedHeight
+            else -> 0f
+        }
+    }
+
+    LaunchedEffect(draggingIndex) {
+        while (draggingIndex >= 0) {
+            val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
+            if (newTarget != currentTargetIndex) currentTargetIndex = newTarget
+            delay(16)
+        }
+    }
+
+    fun finishDrag() {
+        val from = draggingIndex
+        val target = currentTargetIndex
+        val shouldReorder = reorderActive &&
+            from in readyItems.indices &&
+            target in readyItems.indices &&
+            target != from
+        val reorderedItems = if (shouldReorder) {
+            readyItems.toMutableList().apply {
+                val moved = removeAt(from)
+                add(target, moved)
+            }
+        } else {
+            readyItems
+        }
+        draggingIndex = -1
+        dragOffsetY = 0f
+        currentTargetIndex = -1
+        dragStartTopOffsets = emptyMap()
+        dragStartHeights = emptyMap()
+        if (!shouldReorder) return
+        localReorderItems = reorderedItems
+        val persistReorder = onDragReorder
+        actionScope.launch {
+            val result = persistReorder(reorderedItems.map { it.itemId })
+            localReorderItems = null
+            if (result.isFailure) {
+                refreshActionState = RefreshActionVisualState.Failure
+                delay(700)
+                if (refreshActionState == RefreshActionVisualState.Failure) {
+                    refreshActionState = RefreshActionVisualState.Idle
+                }
+            }
         }
     }
 
@@ -462,6 +585,14 @@ fun LibraryItemsScreen(
                         )
                     }
                 }
+                if (dragReorderStatusLabel != null) {
+                    Text(
+                        text = dragReorderStatusLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                }
             }
         } else {
             null
@@ -537,10 +668,64 @@ fun LibraryItemsScreen(
                         }
                         is LibraryListEntry.Item -> {
                             item(key = entry.item.itemId) {
+                                val readyIndex = readyItems.indexOfFirst { it.itemId == entry.item.itemId }
+                                val isDragging = reorderActive && draggingIndex == readyIndex
+                                val visualOffset = when {
+                                    isDragging -> dragOffsetY
+                                    reorderActive && draggingIndex >= 0 -> visualOffsetForItem(
+                                        index = readyIndex,
+                                        from = draggingIndex,
+                                        target = currentTargetIndex,
+                                    )
+                                    else -> 0f
+                                }
+                                val rowModifier = Modifier
+                                    .onGloballyPositioned { coordinates ->
+                                        itemTopOffsets = itemTopOffsets + (entry.item.itemId to coordinates.positionInParent().y)
+                                        itemHeights = itemHeights + (entry.item.itemId to coordinates.size.height.toFloat())
+                                    }
+                                    .graphicsLayer { translationY = visualOffset }
+                                    .zIndex(if (isDragging) 1f else 0f)
+                                val dragHandleModifier = if (showReorderHandle && readyIndex >= 0) {
+                                    if (reorderActive) {
+                                        Modifier.pointerInput(entry.item.itemId, readyIndex) {
+                                        detectDragGestures(
+                                            onDragStart = {
+                                                dragStartTopOffsets = itemTopOffsets.toMap()
+                                                dragStartHeights = itemHeights.toMap()
+                                                draggingIndex = readyIndex
+                                                dragOffsetY = 0f
+                                                currentTargetIndex = readyIndex
+                                            },
+                                            onDrag = { _, dragAmount ->
+                                                dragOffsetY += dragAmount.y
+                                                val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
+                                                if (newTarget != currentTargetIndex) {
+                                                    currentTargetIndex = newTarget
+                                                }
+                                            },
+                                            onDragEnd = { finishDrag() },
+                                            onDragCancel = { finishDrag() },
+                                        )
+                                    }
+                                    } else {
+                                        Modifier
+                                    }
+                                } else {
+                                    null
+                                }
                                 LibraryQueueItemRow(
                                     item = entry.item,
                                     isSelectionActive = selectionActive,
                                     isSelected = entry.item.itemId in selectedIds,
+                                    modifier = rowModifier,
+                                    dragHandleModifier = dragHandleModifier,
+                                    dragHandleContentDescription = if (reorderActive) {
+                                        "Drag to reorder"
+                                    } else {
+                                        dragReorderUnavailableReason?.let { "Reorder unavailable: $it" }
+                                            ?: "Reorder unavailable"
+                                    },
                                     onOpen = { onOpenItem(entry.item.itemId) },
                                     onToggleSelect = { toggleSelection(entry.item.itemId) },
                                     onEnterSelection = { enterSelectionMode(entry.item.itemId) },
@@ -730,6 +915,9 @@ private fun LibraryQueueItemRow(
     item: PlaybackQueueItem,
     isSelectionActive: Boolean,
     isSelected: Boolean,
+    modifier: Modifier = Modifier,
+    dragHandleModifier: Modifier? = null,
+    dragHandleContentDescription: String = "Drag to reorder",
     onOpen: () -> Unit,
     onToggleSelect: () -> Unit,
     onEnterSelection: () -> Unit,
@@ -797,9 +985,24 @@ private fun LibraryQueueItemRow(
         status = status,
         isSelectionActive = isSelectionActive,
         isSelected = isSelected,
+        modifier = modifier,
         onOpen = onOpen,
         onToggleSelect = onToggleSelect,
         onEnterSelection = onEnterSelection,
+        leadingContent = dragHandleModifier?.let { handleModifier ->
+            {
+                Icon(
+                    imageVector = Icons.Default.DragHandle,
+                    contentDescription = dragHandleContentDescription,
+                    tint = if (LocalMimeoV1Active.current) {
+                        LocalMimeoColorTokens.current.fg3
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = handleModifier.size(24.dp),
+                )
+            }
+        },
         onPlayNow = onPlayNow,
         menuEntries = if (hasTrailingActions) menuEntries else emptyList(),
     )

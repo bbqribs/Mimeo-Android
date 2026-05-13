@@ -8,6 +8,30 @@ class PlaybackQueueItemSerializationTest {
     private val json = Json { ignoreUnknownKeys = true }
 
     @Test
+    fun decodesSmartQueueReorderMetadata() {
+        val response = json.decodeFromString<PlaybackQueueResponse>(
+            """
+            {
+              "count": 1,
+              "total_count": 1,
+              "reorder_allowed": true,
+              "reorder_unavailable_reason": null,
+              "items": [
+                {
+                  "item_id": 7,
+                  "url": "https://example.com/item",
+                  "smart_queue_position": 1.0
+                }
+              ]
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals(true, response.reorderAllowed)
+        assertEquals(1.0, response.items.single().smartQueuePosition ?: -1.0, 0.0)
+    }
+
+    @Test
     fun prefersAliasFieldsWhenPresent() {
         val item = json.decodeFromString<PlaybackQueueItem>(
             """

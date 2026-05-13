@@ -157,6 +157,12 @@ private data class PlaylistReorderItem(
 )
 
 @Serializable
+private data class SmartQueueReorderPayload(
+    @kotlinx.serialization.SerialName("item_ids") val itemIds: List<Int>,
+    val filtered: Boolean,
+)
+
+@Serializable
 data class PlaylistBatchAddResult(
     @kotlinx.serialization.SerialName("item_id") val itemId: Int,
     val ok: Boolean,
@@ -357,13 +363,21 @@ class ApiClient(
         playlistId: Int? = null,
         offset: Int = 0,
         limit: Int = QUEUE_FETCH_LIMIT,
-        sortField: String = "created",
-        sortDir: String = "desc",
+        sortField: String? = "created",
+        sortDir: String? = "desc",
+        includeDone: Boolean = true,
     ): QueueFetchResult = withContext(Dispatchers.IO) {
-        val playlistParam = playlistId?.let { "&playlist_id=$it" } ?: ""
+        val queryParts = buildList {
+            if (includeDone) add("include_done=true")
+            add("limit=$limit")
+            add("offset=$offset")
+            if (!sortField.isNullOrBlank()) add("sort=$sortField")
+            if (!sortDir.isNullOrBlank()) add("dir=$sortDir")
+            playlistId?.let { add("playlist_id=$it") }
+        }
         val requestUrl = resolveUrl(
             baseUrl,
-            "/playback/queue?include_done=true&limit=$limit&offset=$offset&sort=$sortField&dir=$sortDir$playlistParam",
+            "/playback/queue?${queryParts.joinToString("&")}",
         )
         val request = Request.Builder()
             .url(requestUrl)
@@ -737,6 +751,21 @@ class ApiClient(
             .toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
             .url(resolveUrl(baseUrl, "/playlists/$playlistId/entries/reorder"))
+            .header("Authorization", "Bearer $token")
+            .put(body)
+            .build()
+        executeNoBody(request)
+    }
+
+    suspend fun reorderSmartQueue(
+        baseUrl: String,
+        token: String,
+        itemIds: List<Int>,
+    ) = withContext(Dispatchers.IO) {
+        val payload = SmartQueueReorderPayload(itemIds = itemIds, filtered = false)
+        val body = json.encodeToString(payload).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/playback/queue/reorder"))
             .header("Authorization", "Bearer $token")
             .put(body)
             .build()
