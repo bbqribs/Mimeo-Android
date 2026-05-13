@@ -42,6 +42,50 @@ class UpNextSessionPresentationTest {
     }
 
     @Test
+    fun stickyHistoryHeaderStaysPinnedUntilSectionRowsLeave() {
+        val presentation = activeSessionStickyHeader(
+            scrollOffsetPx = 80,
+            sections = listOf(
+                SessionStickyHeaderBounds(
+                    title = "History",
+                    count = 2,
+                    topPx = 0f,
+                    headerHeightPx = 40f,
+                    bottomPx = 180f,
+                ),
+            ),
+        )
+
+        assertEquals("History", presentation?.title)
+        assertEquals(0f, presentation?.offsetYPx)
+    }
+
+    @Test
+    fun stickyHeaderPushesAwayAtSectionEnd() {
+        val presentation = activeSessionStickyHeader(
+            scrollOffsetPx = 160,
+            sections = listOf(
+                SessionStickyHeaderBounds(
+                    title = "Earlier in queue",
+                    count = 1,
+                    topPx = 0f,
+                    headerHeightPx = 40f,
+                    bottomPx = 180f,
+                ),
+            ),
+        )
+
+        assertEquals("Earlier in queue", presentation?.title)
+        assertEquals(-20f, presentation?.offsetYPx)
+    }
+
+    @Test
+    fun activeAnchorSpacerOnlyAppearsWhenRowsPrecedeNowPlaying() {
+        assertEquals(0f, activeAnchorTailSpacerPx(false, viewportHeightPx = 640, activeHeightPx = 180f))
+        assertEquals(460f, activeAnchorTailSpacerPx(true, viewportHeightPx = 640, activeHeightPx = 180f))
+    }
+
+    @Test
     fun rowTrailingActionOrderPlacesJumpImmediatelyBeforeRemove() {
         assertEquals(
             listOf(SessionRowAction.JumpPlay, SessionRowAction.Remove),
