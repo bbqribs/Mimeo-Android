@@ -43,6 +43,14 @@ gated on the final QA matrix in
 4. [ ] **Playback / queue UX cluster.** Smart Queue as playlist-like source,
    Up Next History / Earlier in queue implementation, and expanded Save
    queue-as-playlist options.
+   Smart Queue reorder decision: Smart Queue should become a persisted,
+   reorderable inbox view, distinct from chronological Inbox and local Up
+   Next. New items default to the top; user-adjusted relative order persists
+   below/around new arrivals. Android reorder UI is blocked until the Mimeo
+   backend owns a Smart Queue ordinal/rank contract and reorder endpoint
+   (CONTRACT CHANGE). V1 search remains supported, but drag reorder should be
+   disabled while search/filter is active unless filtered-reorder semantics
+   are explicitly specified.
 5. [ ] **Startup polish cluster.** No sign-in flash for restored sessions,
    neutral loading/splash state, and drawer closed on launch.
 6. [ ] **Instrumented tests cluster.** Startup/auth restoration coverage,
