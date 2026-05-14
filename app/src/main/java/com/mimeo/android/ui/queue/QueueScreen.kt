@@ -110,6 +110,7 @@ import com.mimeo.android.share.extractFirstHttpUrl
 import com.mimeo.android.share.isRetryablePendingSaveResult
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
+import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.resolveSessionSeedSourcePresentation as resolveSessionSeedSourcePresentationCommon
 import com.mimeo.android.ui.common.SessionSeedSourcePresentation
@@ -2551,6 +2552,26 @@ private fun NowPlayingSessionPanel(
             LaunchedEffect(showSnapToActive) {
                 onSnapPillVisibilityChange(showSnapToActive)
             }
+            val showJumpToTop = listViewportHeight > 0 &&
+                localItems.size > 16 &&
+                listScrollState.value > (listViewportHeight / 2)
+            if (showJumpToTop) {
+                JumpPill(
+                    label = "Jump to top",
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(
+                            bottom = if (renderSnapPillLocally && showSnapToActive) {
+                                snapBottomClearance + 46.dp
+                            } else {
+                                snapBottomClearance
+                            },
+                        ),
+                    onClick = {
+                        snapScope.launch { listScrollState.animateScrollTo(0) }
+                    },
+                )
+            }
             if (renderSnapPillLocally && showSnapToActive) {
                 JumpToNowPlayingPill(
                     modifier = Modifier
@@ -2575,25 +2596,5 @@ fun JumpToNowPlayingPill(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    val isV1 = LocalMimeoV1Active.current
-    val mColors = LocalMimeoColorTokens.current
-    val mShapes = LocalMimeoShapeTokens.current
-    val shape = if (isV1) mShapes.pill else RoundedCornerShape(18.dp)
-    val bgColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primaryContainer
-    val textColor = if (isV1) mColors.accentOn else MaterialTheme.colorScheme.onPrimaryContainer
-    Box(
-        modifier = modifier
-            .height(34.dp)
-            .clickable(onClick = onClick)
-            .background(bgColor, shape)
-            .padding(horizontal = 16.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = "Jump to Now Playing",
-            style = MaterialTheme.typography.labelMedium,
-            color = textColor,
-            maxLines = 1,
-        )
-    }
+    JumpPill(label = "Jump to Now Playing", modifier = modifier, onClick = onClick)
 }

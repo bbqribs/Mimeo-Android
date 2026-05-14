@@ -54,6 +54,7 @@ import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
@@ -76,6 +77,7 @@ import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.ui.common.DefaultListSurfaceMessage
 import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
+import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.ListSurfaceScaffold
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.queueCapturePresentation
@@ -184,6 +186,12 @@ fun LibraryItemsScreen(
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
     val listState = rememberLazyListState()
+    val showJumpToTop by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 10 ||
+                (listState.firstVisibleItemIndex > 2 && listState.firstVisibleItemScrollOffset > 300)
+        }
+    }
     var pendingExpanded by rememberSaveable { mutableStateOf(false) }
     val actionScope = rememberCoroutineScope()
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
@@ -756,6 +764,17 @@ fun LibraryItemsScreen(
                         }
                     }
                 }
+            }
+            if (showJumpToTop) {
+                JumpPill(
+                    label = "Jump to top",
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 12.dp),
+                    onClick = {
+                        actionScope.launch { listState.animateScrollToItem(index = 0) }
+                    },
+                )
             }
         }
     }
