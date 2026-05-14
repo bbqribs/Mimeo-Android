@@ -76,7 +76,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -540,9 +539,10 @@ private fun MimeoApp(vm: AppViewModel) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val currentRoute = navBackStack?.destination?.route.orEmpty()
     val settings by vm.settings.collectAsState()
-    val startupRestoreComplete by vm.startupRestoreComplete.collectAsState()
+    val startupAuthState by vm.startupAuthState.collectAsState()
+    val startupReady = startupAuthState as? StartupAuthState.Ready
     val pendingNavigationRoute by vm.pendingNavigationRoute.collectAsState()
-    if (!startupRestoreComplete) {
+    if (startupReady == null) {
         StartupLoadingScreen()
         return
     }
@@ -674,6 +674,7 @@ private fun MimeoApp(vm: AppViewModel) {
         settings = settings,
         currentRoute = currentRoute,
         requiresSignIn = requiresSignIn,
+        startupInitialRequiresSignIn = startupReady.requiresSignIn,
         libraryShellVisible = libraryShellVisible,
         shellState = shellState,
     )
@@ -684,7 +685,7 @@ internal fun StartupLoadingScreen() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center,
     ) {
         Column(

@@ -118,6 +118,7 @@ internal fun MainActivityShell(
     settings: AppSettings,
     currentRoute: String,
     requiresSignIn: Boolean,
+    startupInitialRequiresSignIn: Boolean,
     libraryShellVisible: Boolean,
     shellState: PlayerShellState,
 ) {
@@ -436,7 +437,7 @@ internal fun MainActivityShell(
                     ) {
                         NavHost(
                             navController = nav,
-                            startDestination = if (requiresSignIn) ROUTE_SIGN_IN else ROUTE_UP_NEXT,
+                            startDestination = if (startupInitialRequiresSignIn) ROUTE_SIGN_IN else ROUTE_UP_NEXT,
                             modifier = Modifier
                                 .fillMaxSize()
                                 .background(if (isV1) mColors.bg else MaterialTheme.colorScheme.background),
