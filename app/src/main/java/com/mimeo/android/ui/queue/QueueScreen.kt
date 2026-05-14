@@ -781,8 +781,7 @@ fun QueueScreen(
             NowPlayingSessionPanel(
                 modifier = Modifier.weight(1f),
                 session = session,
-                seededFromLabel = sessionSeedPresentation?.seededFromLabel ?: "Unknown source",
-                currentSourceLabel = sessionSeedPresentation?.currentSourceLabel ?: selectedPlaylistName,
+                seededFromLabel = sessionSeedPresentation?.seededFromLabel ?: selectedPlaylistName,
                 onOpenItem = { itemId -> onOpenPlayer(itemId) },
                 onJumpToQueueItem = { itemId -> vm.jumpToUpcomingSessionItem(itemId) },
                 onJumpToHistoryItem = { itemId -> vm.jumpToHistorySessionItem(itemId) },
@@ -791,19 +790,6 @@ fun QueueScreen(
                 },
                 onRemoveItem = { itemId -> vm.removeItemFromSession(itemId) },
                 onClearUpcoming = { showClearUpcomingConfirmation = true },
-                reseedEnabled = canReseedFromCurrentSource,
-                onReseed = {
-                    if (shouldConfirmReseedFromCurrentSource(
-                            session = nowPlayingSession,
-                            sourceItems = items,
-                            selectedPlaylistId = settings.selectedPlaylistId,
-                        )
-                    ) {
-                        showReseedConfirmation = true
-                    } else {
-                        actionScope.launch { executeReseedFromCurrentSource() }
-                    }
-                },
                 snapBottomClearance = snapBottomClearance,
                 snapToActiveSignal = snapToActiveSignal,
                 renderSnapPillLocally = renderSnapPillLocally,
@@ -1922,15 +1908,12 @@ private fun SessionStaticItemRow(
 private fun NowPlayingSessionPanel(
     session: NowPlayingSession,
     seededFromLabel: String,
-    currentSourceLabel: String,
     onOpenItem: (Int) -> Unit,
     onJumpToQueueItem: (Int) -> Unit,
     onJumpToHistoryItem: (Int) -> Unit,
     onReorderItem: (fromIndex: Int, toIndex: Int) -> Unit,
     onRemoveItem: (Int) -> Unit,
     onClearUpcoming: () -> Unit,
-    reseedEnabled: Boolean,
-    onReseed: () -> Unit,
     modifier: Modifier = Modifier,
     snapBottomClearance: Dp = 0.dp,
     snapToActiveSignal: Int = 0,
@@ -1943,7 +1926,6 @@ private fun NowPlayingSessionPanel(
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
     val mShapes = LocalMimeoShapeTokens.current
-    val showCurrentSource = seededFromLabel != currentSourceLabel
 
     // Local item list for optimistic drag reorder — only mutated on drop.
     // Keyed by itemId so position-only updates from the VM do not reset local order.
@@ -2142,32 +2124,14 @@ private fun NowPlayingSessionPanel(
                     color = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    text = "Seeded from: $seededFromLabel",
+                    text = seededFromLabel,
                     style = if (isV1) mTypography.meta else MaterialTheme.typography.labelSmall,
                     color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (showCurrentSource) {
-                    Text(
-                        text = "Current source: $currentSourceLabel",
-                        style = if (isV1) mTypography.meta else MaterialTheme.typography.labelSmall,
-                        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
             }
             trailingActions?.invoke(this)
-            TextButton(
-                enabled = reseedEnabled,
-                onClick = onReseed,
-            ) {
-                Text(
-                    text = "Re-seed",
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
         }
         LaunchedEffect(
             currentItemId,

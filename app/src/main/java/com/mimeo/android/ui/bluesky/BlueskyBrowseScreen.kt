@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -26,13 +25,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -526,7 +523,11 @@ private fun CandidateRow(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { uriHandler.openUri(candidate.articleUrl) },
+                ) {
                     Text(
                         text = candidate.title?.takeIf { it.isNotBlank() } ?: "Untitled link",
                         style = if (isV1) mTypography.row else MaterialTheme.typography.titleMedium,
@@ -543,53 +544,58 @@ private fun CandidateRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                SavedBadge(candidate = candidate)
+                SaveActionChip(
+                    candidate = candidate,
+                    saving = saving,
+                    onSave = onSave,
+                    onOpenItem = onOpenItem,
+                )
             }
             val postMeta = buildList {
                 candidate.bluesky.authorDisplayName?.takeIf { it.isNotBlank() }?.let { add(it) }
                 candidate.bluesky.authorHandle?.takeIf { it.isNotBlank() }?.let { add("@$it") }
                 candidate.bluesky.indexedAt?.takeIf { it.isNotBlank() }?.let { add(formatCandidateTimestamp(it)) }
             }
-            if (postMeta.isNotEmpty()) {
-                Text(
-                    text = postMeta.joinToString(" · "),
-                    style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
-                    color = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (!candidate.bluesky.textSnippet.isNullOrBlank()) {
-                Text(
-                    text = candidate.bluesky.textSnippet,
-                    style = if (isV1) mTypography.body else MaterialTheme.typography.bodyMedium,
-                    color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            val postUrl = candidate.bluesky.postUrl
+            val hasPostContent = postMeta.isNotEmpty() || !candidate.bluesky.textSnippet.isNullOrBlank()
+            if (hasPostContent) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (!postUrl.isNullOrBlank()) {
+                                Modifier.clickable { uriHandler.openUri(postUrl) }
+                            } else {
+                                Modifier
+                            },
+                        ),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    if (postMeta.isNotEmpty()) {
+                        Text(
+                            text = postMeta.joinToString(" · "),
+                            style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                            color = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (!candidate.bluesky.textSnippet.isNullOrBlank()) {
+                        Text(
+                            text = candidate.bluesky.textSnippet,
+                            style = if (isV1) mTypography.body else MaterialTheme.typography.bodyMedium,
+                            color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
             Text(
                 text = "${cleanSourceLabel(candidate.sourceLabel, candidate.sourceType)} · ${formatSourceType(candidate.sourceType)}",
                 style = if (isV1) mTypography.meta else MaterialTheme.typography.labelSmall,
                 color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            HorizontalDivider(color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(onClick = { uriHandler.openUri(candidate.articleUrl) }) { Text("Open link") }
-                if (!candidate.bluesky.postUrl.isNullOrBlank()) {
-                    TextButton(onClick = { uriHandler.openUri(candidate.bluesky.postUrl) }) { Text("Open post") }
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                if (candidate.saved && candidate.itemId != null) {
-                    Button(onClick = { onOpenItem(candidate.itemId) }) { Text("Read") }
-                } else {
-                    Button(onClick = onSave, enabled = !saving) { Text(if (saving) "Saving..." else "Save") }
-                }
-            }
             if (!saveError.isNullOrBlank()) {
                 Text(
                     saveError,
@@ -602,24 +608,43 @@ private fun CandidateRow(
 }
 
 @Composable
-private fun SavedBadge(candidate: BlueskyCandidate) {
+private fun SaveActionChip(
+    candidate: BlueskyCandidate,
+    saving: Boolean,
+    onSave: () -> Unit,
+    onOpenItem: (Int) -> Unit,
+) {
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
-    val mTypography = LocalMimeoTypographyTokens.current
-    val (label, color) = when {
+    when {
         candidate.savedState == "failed_saved" ->
-            "Saved failed" to if (isV1) mColors.danger else MaterialTheme.colorScheme.error
-        candidate.saved ->
-            "Saved" to if (isV1) mColors.success else MaterialTheme.colorScheme.primary
+            FilterChip(
+                selected = false,
+                onClick = onSave,
+                label = { Text("Retry") },
+                colors = FilterChipDefaults.filterChipColors(
+                    containerColor = if (isV1) mColors.danger.copy(alpha = 0.12f) else MaterialTheme.colorScheme.errorContainer,
+                    labelColor = if (isV1) mColors.danger else MaterialTheme.colorScheme.onErrorContainer,
+                ),
+            )
+        candidate.saved && candidate.itemId != null ->
+            FilterChip(
+                selected = true,
+                onClick = { onOpenItem(candidate.itemId!!) },
+                label = { Text("Read") },
+                colors = if (isV1) FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = mColors.accentDim,
+                    selectedLabelColor = mColors.accent,
+                ) else FilterChipDefaults.filterChipColors(),
+            )
         else ->
-            "Unsaved" to if (isV1) mColors.fg4 else MaterialTheme.colorScheme.outline
+            FilterChip(
+                selected = false,
+                enabled = !saving,
+                onClick = onSave,
+                label = { Text(if (saving) "Saving…" else "Save") },
+            )
     }
-    Text(
-        text = label,
-        color = color,
-        style = if (isV1) mTypography.caption else MaterialTheme.typography.labelMedium,
-        modifier = Modifier.padding(top = 2.dp),
-    )
 }
 
 private data class SourceDropdownOption(
