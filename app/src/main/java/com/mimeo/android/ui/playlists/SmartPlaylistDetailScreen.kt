@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -41,6 +42,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -822,6 +824,14 @@ private fun SmartPlaylistHeader(
                                     SuggestionChip(
                                         onClick = {},
                                         label = { Text(part) },
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isV1) mColors.fg4.copy(alpha = 0.62f) else MaterialTheme.colorScheme.outlineVariant,
+                                        ),
+                                        colors = if (isV1) SuggestionChipDefaults.suggestionChipColors(
+                                            containerColor = mColors.surfaceHi,
+                                            labelColor = mColors.fg2,
+                                        ) else SuggestionChipDefaults.suggestionChipColors(),
                                     )
                                 }
                             }

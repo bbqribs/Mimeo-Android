@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -549,6 +550,7 @@ private fun CandidateRow(
                     saving = saving,
                     onSave = onSave,
                     onOpenItem = onOpenItem,
+                    modifier = Modifier.offset(y = (-3).dp),
                 )
             }
             val postMeta = buildList {
@@ -611,6 +613,7 @@ private fun SaveActionChip(
     saving: Boolean,
     onSave: () -> Unit,
     onOpenItem: (Int) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
@@ -620,6 +623,8 @@ private fun SaveActionChip(
                 selected = false,
                 onClick = onSave,
                 label = { Text("Retry") },
+                modifier = modifier,
+                border = BorderStroke(1.dp, if (isV1) mColors.danger.copy(alpha = 0.58f) else MaterialTheme.colorScheme.error),
                 colors = FilterChipDefaults.filterChipColors(
                     containerColor = if (isV1) mColors.danger.copy(alpha = 0.12f) else MaterialTheme.colorScheme.errorContainer,
                     labelColor = if (isV1) mColors.danger else MaterialTheme.colorScheme.onErrorContainer,
@@ -628,8 +633,10 @@ private fun SaveActionChip(
         candidate.saved && candidate.itemId != null ->
             FilterChip(
                 selected = true,
-                onClick = { onOpenItem(candidate.itemId!!) },
+                onClick = { onOpenItem(candidate.itemId) },
                 label = { Text("Read") },
+                modifier = modifier,
+                border = BorderStroke(1.dp, if (isV1) mColors.accent.copy(alpha = 0.62f) else MaterialTheme.colorScheme.primary),
                 colors = if (isV1) FilterChipDefaults.filterChipColors(
                     selectedContainerColor = mColors.accentDim,
                     selectedLabelColor = mColors.accent,
@@ -641,7 +648,17 @@ private fun SaveActionChip(
                 enabled = !saving,
                 onClick = onSave,
                 label = { Text(if (saving) "Saving…" else "Save") },
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                modifier = modifier,
+                border = BorderStroke(
+                    1.dp,
+                    if (isV1) mColors.fg4.copy(alpha = 0.72f) else MaterialTheme.colorScheme.outline,
+                ),
+                colors = if (isV1) FilterChipDefaults.filterChipColors(
+                    containerColor = mColors.surfaceHi,
+                    labelColor = mColors.fg2,
+                    disabledContainerColor = mColors.surfaceHi.copy(alpha = 0.58f),
+                    disabledLabelColor = mColors.fg3,
+                ) else FilterChipDefaults.filterChipColors(),
             )
     }
 }

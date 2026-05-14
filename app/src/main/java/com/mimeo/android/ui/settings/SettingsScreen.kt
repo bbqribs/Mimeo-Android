@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -566,26 +567,23 @@ fun SettingsScreen(
                     singleLine = true,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    androidx.compose.material3.SuggestionChip(
+                    Button(
                         onClick = {
                             showPasswordChangeDialog = true
                             onClearPasswordChangeState()
                         },
-                        label = { Text("Change password") },
-                    )
-                    androidx.compose.material3.SuggestionChip(
+                    ) {
+                        Text("Change Password")
+                    }
+                    Button(
                         onClick = { showSignOutDialog = true },
-                        label = {
-                            Text(
-                                "Sign out",
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.error,
-                            )
-                        },
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            androidx.compose.material3.MaterialTheme.colorScheme.error.copy(alpha = 0.5f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isV1) mColors.danger else androidx.compose.material3.MaterialTheme.colorScheme.error,
+                            contentColor = if (isV1) mColors.accentOn else androidx.compose.material3.MaterialTheme.colorScheme.onError,
                         ),
-                    )
+                    ) {
+                        Text("Sign Out")
+                    }
                 }
                 var connectionHelpExpanded by remember { mutableStateOf(false) }
                 Row(

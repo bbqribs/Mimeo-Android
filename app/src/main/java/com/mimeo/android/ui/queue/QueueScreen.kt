@@ -2118,7 +2118,7 @@ private fun NowPlayingSessionPanel(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                text = "${session.items.size} items · $seededFromLabel",
+                text = seededFromLabel,
                 style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
                 color = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.primary,
                 maxLines = 1,
