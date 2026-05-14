@@ -231,6 +231,11 @@ internal fun smartPlaylistPinnedItemIds(
     .take(pinCount.coerceIn(0, items.size))
     .mapTo(linkedSetOf()) { it.itemId }
 
+sealed class StartupAuthState {
+    object Loading : StartupAuthState()
+    data class Ready(val requiresSignIn: Boolean) : StartupAuthState()
+}
+
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     data class SessionReseedResult(
         val sourceLabel: String,
@@ -267,6 +272,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
     private val _startupRestoreComplete = MutableStateFlow(false)
     val startupRestoreComplete: StateFlow<Boolean> = _startupRestoreComplete.asStateFlow()
+    private val _startupAuthState = MutableStateFlow<StartupAuthState>(StartupAuthState.Loading)
+    val startupAuthState: StateFlow<StartupAuthState> = _startupAuthState.asStateFlow()
 
     private val _queueItems = MutableStateFlow<List<PlaybackQueueItem>>(emptyList())
     val queueItems: StateFlow<List<PlaybackQueueItem>> = _queueItems.asStateFlow()
@@ -624,6 +631,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 previous = next
                 if (firstSettingsEmission) {
                     firstSettingsEmission = false
+                    _startupAuthState.value = StartupAuthState.Ready(requiresSignIn = next.apiToken.isBlank())
                     _startupRestoreComplete.value = true
                 }
             }
