@@ -565,6 +565,28 @@ fun SettingsScreen(
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.material3.SuggestionChip(
+                        onClick = {
+                            showPasswordChangeDialog = true
+                            onClearPasswordChangeState()
+                        },
+                        label = { Text("Change password") },
+                    )
+                    androidx.compose.material3.SuggestionChip(
+                        onClick = { showSignOutDialog = true },
+                        label = {
+                            Text(
+                                "Sign out",
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.error,
+                            )
+                        },
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            androidx.compose.material3.MaterialTheme.colorScheme.error.copy(alpha = 0.5f),
+                        ),
+                    )
+                }
                 var connectionHelpExpanded by remember { mutableStateOf(false) }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -759,38 +781,6 @@ fun SettingsScreen(
                                 )
                             }
                         }
-                    }
-                }
-                HorizontalDivider(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                    thickness = 1.dp,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(onClick = {
-                        showPasswordChangeDialog = true
-                        onClearPasswordChangeState()
-                    }) {
-                        Text("Change password")
-                    }
-                }
-                HorizontalDivider(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                    thickness = 1.dp,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(onClick = { showSignOutDialog = true }) {
-                        Text(
-                            text = "Sign out",
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.error,
-                        )
                     }
                 }
             }

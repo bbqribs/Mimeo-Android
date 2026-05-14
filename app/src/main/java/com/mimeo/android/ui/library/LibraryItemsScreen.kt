@@ -580,23 +580,25 @@ fun LibraryItemsScreen(
                 }
 
                 // Sort chips row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    availableSorts.forEach { option ->
-                        FilterChip(
-                            selected = option == sortOption,
-                            onClick = { onSortChange(option) },
-                            label = { Text(option.label) },
-                            colors = if (isV1) FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = mColors.accentDim,
-                                selectedLabelColor = mColors.accent,
-                            ) else FilterChipDefaults.filterChipColors(),
-                        )
+                if (availableSorts.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        availableSorts.forEach { option ->
+                            FilterChip(
+                                selected = option == sortOption,
+                                onClick = { onSortChange(option) },
+                                label = { Text(option.label) },
+                                colors = if (isV1) FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = mColors.accentDim,
+                                    selectedLabelColor = mColors.accent,
+                                ) else FilterChipDefaults.filterChipColors(),
+                            )
+                        }
                     }
                 }
                 if (dragReorderStatusLabel != null) {

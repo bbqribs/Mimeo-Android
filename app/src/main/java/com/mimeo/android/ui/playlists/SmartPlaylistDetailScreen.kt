@@ -16,7 +16,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -682,9 +684,8 @@ private fun SmartPlaylistHeader(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.wrapContentWidth()) {
                     Text(
                         text = detail?.name ?: "Smart playlist",
                         style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
@@ -708,6 +709,20 @@ private fun SmartPlaylistHeader(
                         color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                IconButton(
+                    onClick = { metadataExpanded = !metadataExpanded },
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (metadataExpanded) "Collapse filters" else "Show filters",
+                        tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .rotate(arrowRotation),
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
                 if (loading) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 }
@@ -721,19 +736,6 @@ private fun SmartPlaylistHeader(
                         contentDescription = "Play All",
                         tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp),
-                    )
-                }
-                IconButton(
-                    onClick = { metadataExpanded = !metadataExpanded },
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = if (metadataExpanded) "Collapse filters" else "Show filters",
-                        tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .size(18.dp)
-                            .rotate(arrowRotation),
                     )
                 }
                 RefreshActionButton(
@@ -917,7 +919,7 @@ private fun smartFilterParts(filter: JsonObject): List<String> {
     val parts = mutableListOf<String>()
     filter.stringValue("keyword")?.let { parts += "keyword: $it" }
     filter.stringList("source_labels").takeIf { it.isNotEmpty() }?.let { parts += "source: ${it.joinToString()}" }
-    filter.stringList("domains").takeIf { it.isNotEmpty() }?.let { parts += "domain: ${it.joinToString()}" }
+    filter.stringList("domains").forEach { domain -> parts += domain }
     filter.stringList("capture_kinds").takeIf { it.isNotEmpty() }?.let { parts += "kind: ${it.joinToString()}" }
     filter.stringValue("date_window")?.let { parts += "window: ${it.replace('_', ' ')}" }
     val after = filter.stringValue("saved_after")

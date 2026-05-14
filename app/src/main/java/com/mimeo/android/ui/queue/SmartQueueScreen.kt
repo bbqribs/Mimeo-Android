@@ -81,7 +81,7 @@ fun SmartQueueScreen(
             "No Smart Queue items match this search."
         },
         sortOption = sortOption,
-        availableSorts = LibrarySortOption.SMART_QUEUE_SORTS,
+        availableSorts = emptyList(),
         searchQuery = searchQuery,
         clientSideSearch = true,
         showDragReorderHandle = showReorderHandle,

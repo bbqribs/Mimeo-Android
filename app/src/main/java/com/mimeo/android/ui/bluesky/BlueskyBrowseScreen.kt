@@ -585,8 +585,6 @@ private fun CandidateRow(
                             text = candidate.bluesky.textSnippet,
                             style = if (isV1) mTypography.body else MaterialTheme.typography.bodyMedium,
                             color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -643,6 +641,7 @@ private fun SaveActionChip(
                 enabled = !saving,
                 onClick = onSave,
                 label = { Text(if (saving) "Saving…" else "Save") },
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             )
     }
 }

@@ -2117,20 +2117,14 @@ private fun NowPlayingSessionPanel(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Session queue · ${session.items.size}",
-                    style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
-                    color = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = seededFromLabel,
-                    style = if (isV1) mTypography.meta else MaterialTheme.typography.labelSmall,
-                    color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            Text(
+                text = "${session.items.size} items · $seededFromLabel",
+                style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
+                color = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
             trailingActions?.invoke(this)
         }
         LaunchedEffect(
