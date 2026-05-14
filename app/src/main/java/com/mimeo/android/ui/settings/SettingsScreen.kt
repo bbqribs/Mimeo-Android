@@ -9,7 +9,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -82,7 +82,6 @@ import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.VisualDensityPreference
 import com.mimeo.android.model.VisualThemePreference
 import com.mimeo.android.model.BlueskySourceDiagnostic
-import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.ui.bluesky.BlueskyHandleField
 import com.mimeo.android.ui.bluesky.blueskySourceDisplayName
 import com.mimeo.android.util.bluesky.normalizeBlueskyHandleInput
@@ -114,10 +113,8 @@ private const val TTS_PREVIEW_PHRASE = "The quick brown fox jumps over the lazy 
 fun SettingsScreen(
     vm: AppViewModel,
     onOpenDiagnostics: () -> Unit,
-    onOpenBlueskyBrowse: () -> Unit,
     onCreateBlueskySmartPlaylist: () -> Unit,
     onCreateSourceSmartPlaylist: (name: String, captureKinds: String, sort: String) -> Unit,
-    onOpenSmartPlaylist: (Int) -> Unit,
     onChangePassword: (String, String, String) -> Unit,
     onClearPasswordChangeState: () -> Unit,
     onSignOut: () -> Unit,
@@ -146,7 +143,6 @@ fun SettingsScreen(
     val autoDownloadDiagnostics by vm.autoDownloadDiagnostics.collectAsState()
     val passwordChangeState by vm.passwordChangeState.collectAsState()
     val playlists by vm.playlists.collectAsState()
-    val smartPlaylists by vm.smartPlaylists.collectAsState()
     val scrollState = rememberScrollState()
     val actionScope = rememberCoroutineScope()
     val showJumpToTop by remember {
@@ -272,7 +268,6 @@ fun SettingsScreen(
     var confirmNewPassword by remember { mutableStateOf("") }
     var lastConnectionTestResult by remember { mutableStateOf<String?>(null) }
     var lastConnectionTestedAtMs by remember { mutableStateOf<Long?>(null) }
-    val blueskySmartPlaylist = remember(smartPlaylists) { smartPlaylists.firstOrNull { it.isBlueskyHarvestPlaylist() } }
     var blueskyHandle by remember { mutableStateOf("") }
     var blueskyAppPassword by remember { mutableStateOf("") }
     var localMaxAgeHours by remember { mutableStateOf("") }
@@ -513,6 +508,25 @@ fun SettingsScreen(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            showPasswordChangeDialog = true
+                            onClearPasswordChangeState()
+                        },
+                    ) {
+                        Text("Change Password")
+                    }
+                    Button(
+                        onClick = { showSignOutDialog = true },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isV1) mColors.danger else androidx.compose.material3.MaterialTheme.colorScheme.error,
+                            contentColor = if (isV1) mColors.accentOn else androidx.compose.material3.MaterialTheme.colorScheme.onError,
+                        ),
+                    ) {
+                        Text("Sign Out")
+                    }
+                }
                 Text(
                     text = "Connection",
                     style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
@@ -563,11 +577,6 @@ fun SettingsScreen(
                         color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Text(
-                    text = connectionModeBaseUrlGuidance(connectionMode),
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 OutlinedTextField(
                     value = token,
                     onValueChange = { token = it },
@@ -576,31 +585,61 @@ fun SettingsScreen(
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                 )
-                Text(
-                    text = connectionModeTokenAuthHelp(connectionMode),
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = deviceTokenScopeHint(),
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = formatAuthSessionStatusSummary(
-                        savedToken = settings.apiToken,
-                        editedToken = token,
-                    ),
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = authSessionConsequenceSummary(),
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                var connectionHelpExpanded by remember { mutableStateOf(false) }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "Connection help",
+                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 4.dp),
+                    )
+                    TextButton(onClick = { connectionHelpExpanded = !connectionHelpExpanded }) {
+                        Text(if (connectionHelpExpanded) "Hide" else "Show")
+                    }
+                }
+                AnimatedVisibility(visible = connectionHelpExpanded) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = connectionModeBaseUrlGuidance(connectionMode),
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = connectionModeTokenAuthHelp(connectionMode),
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = deviceTokenScopeHint(),
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = formatAuthSessionStatusSummary(
+                                savedToken = settings.apiToken,
+                                editedToken = token,
+                            ),
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = authSessionConsequenceSummary(),
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 val currentModeSnapshot = connectionTestSuccessByMode[connectionMode]
                 val hasUnsavedModeUrlEdit =
                     normalizeConnectionBaseUrl(selectedModeBaseUrl()) != normalizeConnectionBaseUrl(savedModeBaseUrl())
@@ -742,38 +781,6 @@ fun SettingsScreen(
                         }
                     }
                 }
-                HorizontalDivider(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                    thickness = 1.dp,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(onClick = {
-                        showPasswordChangeDialog = true
-                        onClearPasswordChangeState()
-                    }) {
-                        Text("Change password")
-                    }
-                }
-                HorizontalDivider(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                    thickness = 1.dp,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(onClick = { showSignOutDialog = true }) {
-                        Text(
-                            text = "Sign out",
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
             }
         }
         SettingsSectionSeparator()
@@ -871,16 +878,6 @@ fun SettingsScreen(
                                 color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Text(
-                            text = "Connected for authenticated Bluesky harvesting. Home timeline and list-feed sources are managed from the Mimeo web or operator panel — not from this app.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = "Harvested posts are not added to Up Next automatically. Use smart playlists or tap “Use as Up Next” on a playlist to listen.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                         if (account.disconnectAvailable == true) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -897,11 +894,6 @@ fun SettingsScreen(
                     } else {
                         Text(
                             text = "No Bluesky account is connected.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = "Mimeo is currently using public author-feed harvesting. Connect an account for authenticated home-timeline and list-feed access.",
                             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                             color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -963,37 +955,55 @@ fun SettingsScreen(
                         color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                         thickness = 1.dp,
                     )
-                    SettingsKeyValueLine("Scheduler enabled", formatBlueskyBool(scheduler.resolvedSchedulerEnabled))
-                    SettingsKeyValueLine("State", scheduler.state ?: "Unknown")
-                    SettingsKeyValueLine("Enabled source count", scheduler.enabledSourceCount?.toString() ?: "0")
-                    SettingsKeyValueLine("Due source count", scheduler.dueSourceCount?.toString() ?: "0")
-                    SettingsKeyValueLine("Next due", scheduler.resolvedNextDue ?: "Not scheduled")
-                    SettingsKeyValueLine("Last run status", scheduler.lastRunStatus ?: "Unknown")
-                    SettingsKeyValueLine("Last error", scheduler.resolvedLastErrorMessage?.takeIf { it.isNotBlank() } ?: "None")
-                    HorizontalDivider(
+                    var schedulerDetailsExpanded by remember { mutableStateOf(false) }
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                        thickness = 1.dp,
-                    )
-                    Text(
-                        text = "Bluesky sources",
-                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                    )
-                    val visibleSources = scheduler.sources.filterNot { it.hidden == true || it.archived == true }
-                    if (visibleSources.isEmpty()) {
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
-                            text = "No visible Bluesky sources.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            text = "Scheduler & sources",
+                            style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.weight(1f),
                         )
-                    } else {
-                        visibleSources.forEach { source ->
-                            BlueskySourceRow(
-                                source = source,
-                                onCreateSmartPlaylist = { name, captureKinds, sort ->
-                                    onCreateSourceSmartPlaylist(name, captureKinds, sort)
-                                },
+                        TextButton(onClick = { schedulerDetailsExpanded = !schedulerDetailsExpanded }) {
+                            Text(if (schedulerDetailsExpanded) "Hide" else "Show")
+                        }
+                    }
+                    AnimatedVisibility(visible = schedulerDetailsExpanded) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            SettingsKeyValueLine("Scheduler enabled", formatBlueskyBool(scheduler.resolvedSchedulerEnabled))
+                            SettingsKeyValueLine("State", scheduler.state ?: "Unknown")
+                            SettingsKeyValueLine("Enabled source count", scheduler.enabledSourceCount?.toString() ?: "0")
+                            SettingsKeyValueLine("Due source count", scheduler.dueSourceCount?.toString() ?: "0")
+                            SettingsKeyValueLine("Next due", scheduler.resolvedNextDue ?: "Not scheduled")
+                            SettingsKeyValueLine("Last run status", scheduler.lastRunStatus ?: "Unknown")
+                            SettingsKeyValueLine("Last error", scheduler.resolvedLastErrorMessage?.takeIf { it.isNotBlank() } ?: "None")
+                            HorizontalDivider(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                                thickness = 1.dp,
                             )
+                            Text(
+                                text = "Bluesky sources",
+                                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                            )
+                            val visibleSources = scheduler.sources.filterNot { it.hidden == true || it.archived == true }
+                            if (visibleSources.isEmpty()) {
+                                Text(
+                                    text = "No visible Bluesky sources.",
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else {
+                                visibleSources.forEach { source ->
+                                    BlueskySourceRow(
+                                        source = source,
+                                        onCreateSmartPlaylist = { name, captureKinds, sort ->
+                                            onCreateSourceSmartPlaylist(name, captureKinds, sort)
+                                        },
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1004,34 +1014,21 @@ fun SettingsScreen(
                         color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                FlowRow(
+                Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
                 ) {
                     TextButton(
-                        onClick = onOpenBlueskyBrowse,
-                    ) {
-                        Text("Open candidate browser")
-                    }
-                    if (blueskySmartPlaylist != null) {
-                        TextButton(
-                            enabled = !blueskyStatusLoading,
-                            onClick = { onOpenSmartPlaylist(blueskySmartPlaylist.id) },
-                        ) {
-                            Text("Open Bluesky smart playlist")
-                        }
-                    }
-                    TextButton(
                         enabled = !blueskyStatusLoading,
                         onClick = onCreateBlueskySmartPlaylist,
                     ) {
-                        Text("Create Bluesky smart playlist")
+                        Text("Create smart playlist")
                     }
                     TextButton(
                         enabled = !blueskyStatusLoading,
                         onClick = { vm.refreshBlueskyStatus() },
                     ) {
-                        Text(if (blueskyStatusLoading) "Refreshing..." else "Refresh status")
+                        Text(if (blueskyStatusLoading) "Refreshing..." else "Refresh")
                     }
                 }
             }
@@ -1043,11 +1040,23 @@ fun SettingsScreen(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text(
-                    text = "Candidate scanner defaults",
-                    style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                    color = if (isV1) mColors.fg else Color.Unspecified,
-                )
+                var scannerDefaultsExpanded by remember { mutableStateOf(false) }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Candidate scanner defaults",
+                        style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                        color = if (isV1) mColors.fg else Color.Unspecified,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { scannerDefaultsExpanded = !scannerDefaultsExpanded }) {
+                        Text(if (scannerDefaultsExpanded) "Hide" else "Show")
+                    }
+                }
+                AnimatedVisibility(visible = scannerDefaultsExpanded) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
                     text = "Default live scan caps — explicit scan requests may override them. These do not enable auto-save or mutate Up Next.",
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
@@ -1132,6 +1141,8 @@ fun SettingsScreen(
                             Text(if (blueskyScannerPreferencesSaving) "Saving..." else "Save scanner defaults")
                         }
                     }
+                }
+                }
                 }
             }
         }
@@ -2518,11 +2529,6 @@ private fun formatBlueskyBool(value: Boolean?): String {
         false -> "No"
         null -> "Unknown"
     }
-}
-
-private fun SmartPlaylistSummary.isBlueskyHarvestPlaylist(): Boolean {
-    val captureKinds = filterDefinition.stringList("capture_kinds")
-    return captureKinds.any { it.equals("bluesky_harvest", ignoreCase = true) }
 }
 
 private fun JsonObject.stringList(key: String): List<String> {

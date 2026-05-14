@@ -1,6 +1,11 @@
 package com.mimeo.android.ui.playlists
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -11,7 +16,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -19,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
@@ -32,6 +41,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -45,6 +56,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.style.TextOverflow
@@ -658,6 +670,8 @@ private fun SmartPlaylistHeader(
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
+    var metadataExpanded by remember { mutableStateOf(false) }
+    val arrowRotation by animateFloatAsState(if (metadataExpanded) 180f else 0f, label = "arrowRotation")
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -672,9 +686,8 @@ private fun SmartPlaylistHeader(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.wrapContentWidth()) {
                     Text(
                         text = detail?.name ?: "Smart playlist",
                         style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
@@ -698,14 +711,34 @@ private fun SmartPlaylistHeader(
                         color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                IconButton(
+                    onClick = { metadataExpanded = !metadataExpanded },
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (metadataExpanded) "Collapse filters" else "Show filters",
+                        tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .rotate(arrowRotation),
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
                 if (loading) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 }
-                TextButton(
+                IconButton(
                     enabled = seedEnabled,
                     onClick = onSeedUpNext,
+                    modifier = Modifier.size(32.dp),
                 ) {
-                    Text("Use as Up Next")
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "Play All",
+                        tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
                 RefreshActionButton(
                     state = refreshActionState,
@@ -759,11 +792,52 @@ private fun SmartPlaylistHeader(
                 }
             }
             if (detail != null) {
-                Text(
-                    text = "${smartSortLabel(detail.sort)} - ${smartFilterSummary(detail.filterDefinition)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                AnimatedVisibility(
+                    visible = metadataExpanded,
+                    enter = expandVertically(),
+                    exit = shrinkVertically(),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = smartSortLabel(detail.sort),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        val filterParts = smartFilterParts(detail.filterDefinition)
+                        if (filterParts.isEmpty()) {
+                            Text(
+                                text = "All non-trashed, non-archived items",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                filterParts.forEach { part ->
+                                    SuggestionChip(
+                                        onClick = {},
+                                        label = { Text(part) },
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isV1) mColors.fg4.copy(alpha = 0.62f) else MaterialTheme.colorScheme.outlineVariant,
+                                        ),
+                                        colors = if (isV1) SuggestionChipDefaults.suggestionChipColors(
+                                            containerColor = mColors.surfaceHi,
+                                            labelColor = mColors.fg2,
+                                        ) else SuggestionChipDefaults.suggestionChipColors(),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -851,11 +925,11 @@ private fun smartSortLabel(sort: String): String =
         else -> "Newest first"
     }
 
-private fun smartFilterSummary(filter: JsonObject): String {
+private fun smartFilterParts(filter: JsonObject): List<String> {
     val parts = mutableListOf<String>()
     filter.stringValue("keyword")?.let { parts += "keyword: $it" }
     filter.stringList("source_labels").takeIf { it.isNotEmpty() }?.let { parts += "source: ${it.joinToString()}" }
-    filter.stringList("domains").takeIf { it.isNotEmpty() }?.let { parts += "domain: ${it.joinToString()}" }
+    filter.stringList("domains").forEach { domain -> parts += domain }
     filter.stringList("capture_kinds").takeIf { it.isNotEmpty() }?.let { parts += "kind: ${it.joinToString()}" }
     filter.stringValue("date_window")?.let { parts += "window: ${it.replace('_', ' ')}" }
     val after = filter.stringValue("saved_after")
@@ -874,7 +948,7 @@ private fun smartFilterSummary(filter: JsonObject): String {
     filter.stringValue("read_status")
         ?.takeIf { it != "any" }
         ?.let { parts += "read: ${it.replace('_', ' ')}" }
-    return parts.joinToString(" - ").ifBlank { "all non-trashed, non-archived items" }
+    return parts
 }
 
 private fun JsonObject.stringValue(key: String): String? =

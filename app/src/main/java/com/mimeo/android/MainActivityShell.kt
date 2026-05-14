@@ -737,7 +737,6 @@ internal fun MainActivityShell(
                                 SettingsScreen(
                                     vm = vm,
                                     onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
-                                    onOpenBlueskyBrowse = { nav.navigate(ROUTE_BLUESKY_BROWSE) { launchSingleTop = true } },
                                     onCreateBlueskySmartPlaylist = {
                                         newSmartPlaylistInitialState = SmartPlaylistFormState(
                                             name = "Bluesky harvests",
@@ -753,9 +752,6 @@ internal fun MainActivityShell(
                                             sort = sort,
                                         )
                                         showNewSmartPlaylistDialog = true
-                                    },
-                                    onOpenSmartPlaylist = { playlistId ->
-                                        nav.navigate("smartPlaylist/$playlistId") { launchSingleTop = true }
                                     },
                                     onChangePassword = vm::changePassword,
                                     onClearPasswordChangeState = vm::clearPasswordChangeState,
