@@ -12,6 +12,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.mimeo.android.ACTION_KEY_UNDO_BATCH
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.SMART_QUEUE_SESSION_CONTEXT_ID
@@ -24,6 +26,7 @@ import kotlinx.coroutines.launch
 fun SmartQueueScreen(
     vm: AppViewModel,
     onOpenPlayer: (Int) -> Unit,
+    jumpPillBottomClearance: Dp = 0.dp,
 ) {
     val settings by vm.settings.collectAsState()
     val queueItems by vm.queueItems.collectAsState()
@@ -131,5 +134,6 @@ fun SmartQueueScreen(
                 sourceLabel = "Smart Queue",
             )
         },
+        jumpPillBottomClearance = jumpPillBottomClearance,
     )
 }

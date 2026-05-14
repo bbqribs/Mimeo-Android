@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -37,10 +38,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,6 +58,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.compose.material.icons.Icons
@@ -82,7 +86,10 @@ import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.ui.bluesky.BlueskyHandleField
 import com.mimeo.android.ui.bluesky.blueskySourceDisplayName
 import com.mimeo.android.util.bluesky.normalizeBlueskyHandleInput
+import com.mimeo.android.ui.common.JumpPill
+import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
+import com.mimeo.android.ui.common.shouldShowJumpToTopScroll
 import com.mimeo.android.ui.queue.autoDownloadStatusLines
 import com.mimeo.android.ui.theme.toFontFamily
 import java.net.URI
@@ -97,6 +104,7 @@ import androidx.compose.ui.graphics.Color
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
 import com.mimeo.android.ui.theme.LocalMimeoV1Active
+import kotlinx.coroutines.launch
 
 private const val PREVIEW_PARAGRAPH_1 = "Mimeo now remembers your reading layout so Locus feels like a calm, bookish surface instead of a raw text dump."
 private const val PREVIEW_PARAGRAPH_2 = "Use this preview to check rhythm, paragraph spacing, and readability before returning to long-form listening sessions."
@@ -113,6 +121,7 @@ fun SettingsScreen(
     onChangePassword: (String, String, String) -> Unit,
     onClearPasswordChangeState: () -> Unit,
     onSignOut: () -> Unit,
+    jumpPillBottomClearance: Dp = 0.dp,
 ) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
@@ -139,6 +148,10 @@ fun SettingsScreen(
     val playlists by vm.playlists.collectAsState()
     val smartPlaylists by vm.smartPlaylists.collectAsState()
     val scrollState = rememberScrollState()
+    val actionScope = rememberCoroutineScope()
+    val showJumpToTop by remember {
+        derivedStateOf { shouldShowJumpToTopScroll(scrollState.value, thresholdPx = 220) }
+    }
     var restoredScrollOffset by remember { mutableStateOf(false) }
     var connectionMode by remember(settings.connectionMode) { mutableStateOf(settings.connectionMode) }
     var localBaseUrl by remember(settings.localBaseUrl) { mutableStateOf(settings.localBaseUrl) }
@@ -477,16 +490,18 @@ fun SettingsScreen(
         color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
     )
 
-    Column(
-        modifier = Modifier
-            .passiveVerticalScrollIndicator(
-                scrollState = scrollState,
-                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
-            )
-            .verticalScroll(scrollState)
-            .padding(bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .passiveVerticalScrollIndicator(
+                    scrollState = scrollState,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
+                )
+                .verticalScroll(scrollState)
+                .padding(bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
         SettingsSectionHeader(
             title = "Connection / Server",
             subtitle = "Choose Local, LAN, or Remote mode. Sign In is recommended; manual token entry replaces this device token.",
@@ -2111,6 +2126,16 @@ fun SettingsScreen(
                 }
             },
         )
+        }
+        if (showJumpToTop) {
+            JumpPill(
+                label = "Jump to top",
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = jumpPillBottomPadding(jumpPillBottomClearance)),
+                onClick = { actionScope.launch { scrollState.animateScrollTo(0) } },
+            )
+        }
     }
 }
 

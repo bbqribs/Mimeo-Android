@@ -54,6 +54,7 @@ import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
@@ -69,6 +70,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.mimeo.android.model.PlaybackQueueItem
@@ -76,9 +78,12 @@ import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.ui.common.DefaultListSurfaceMessage
 import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
+import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.ListSurfaceScaffold
+import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.queueCapturePresentation
+import com.mimeo.android.ui.common.shouldShowJumpToTopLazy
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.playlists.BatchPlaylistPickerDialog
@@ -180,10 +185,19 @@ fun LibraryItemsScreen(
     onPlayNext: ((itemId: Int) -> Unit)? = null,
     onPlayLast: ((itemId: Int) -> Unit)? = null,
     onPlayFromHere: ((itemsFromHere: List<PlaybackQueueItem>, selectedItemId: Int) -> Unit)? = null,
+    jumpPillBottomClearance: Dp = 0.dp,
 ) {
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
     val listState = rememberLazyListState()
+    val showJumpToTop by remember {
+        derivedStateOf {
+            shouldShowJumpToTopLazy(
+                firstVisibleItemIndex = listState.firstVisibleItemIndex,
+                firstVisibleItemScrollOffset = listState.firstVisibleItemScrollOffset,
+            )
+        }
+    }
     var pendingExpanded by rememberSaveable { mutableStateOf(false) }
     val actionScope = rememberCoroutineScope()
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
@@ -756,6 +770,17 @@ fun LibraryItemsScreen(
                         }
                     }
                 }
+            }
+            if (showJumpToTop) {
+                JumpPill(
+                    label = "Jump to top",
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = jumpPillBottomPadding(jumpPillBottomClearance)),
+                    onClick = {
+                        actionScope.launch { listState.animateScrollToItem(index = 0) }
+                    },
+                )
             }
         }
     }

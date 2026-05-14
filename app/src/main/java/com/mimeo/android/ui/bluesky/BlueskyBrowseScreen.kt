@@ -41,10 +41,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +54,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.BlueskyCandidate
@@ -59,18 +62,24 @@ import com.mimeo.android.model.BlueskyCandidateScanResponse
 import com.mimeo.android.model.BlueskyCandidateSourceSelection
 import com.mimeo.android.model.BlueskyPickerPinItem
 import com.mimeo.android.model.BlueskyPickerResponse
+import com.mimeo.android.ui.common.JumpPill
+import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
+import com.mimeo.android.ui.common.shouldShowJumpToTopLazy
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
 import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
 import com.mimeo.android.ui.theme.LocalMimeoV1Active
+import kotlinx.coroutines.launch
 
 @Composable
 fun BlueskyBrowseScreen(
     vm: AppViewModel,
     onOpenItem: (Int) -> Unit,
+    jumpPillBottomClearance: Dp = 0.dp,
 ) {
     val listState = rememberLazyListState()
+    val actionScope = rememberCoroutineScope()
     val picker by vm.blueskyCandidatePicker.collectAsState()
     val pickerLoading by vm.blueskyCandidatePickerLoading.collectAsState()
     val pickerError by vm.blueskyCandidatePickerError.collectAsState()
@@ -84,6 +93,14 @@ fun BlueskyBrowseScreen(
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
+    val showJumpToTop by remember {
+        derivedStateOf {
+            shouldShowJumpToTopLazy(
+                firstVisibleItemIndex = listState.firstVisibleItemIndex,
+                firstVisibleItemScrollOffset = listState.firstVisibleItemScrollOffset,
+            )
+        }
+    }
 
     LaunchedEffect(Unit) {
         vm.loadBlueskyCandidatePicker()
@@ -171,6 +188,15 @@ fun BlueskyBrowseScreen(
                     )
                 }
             }
+        }
+        if (showJumpToTop) {
+            JumpPill(
+                label = "Jump to top",
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = jumpPillBottomPadding(jumpPillBottomClearance)),
+                onClick = { actionScope.launch { listState.animateScrollToItem(0) } },
+            )
         }
     }
 }

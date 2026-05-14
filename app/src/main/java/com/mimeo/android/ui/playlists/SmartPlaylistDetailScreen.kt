@@ -37,6 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.ACTION_KEY_OPEN_PLAYLIST_PREFIX
@@ -56,10 +58,13 @@ import com.mimeo.android.model.SmartPlaylistDetail
 import com.mimeo.android.ui.common.DefaultListSurfaceMessage
 import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
+import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.ListSurfaceScaffold
+import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.queueCapturePresentation
 import com.mimeo.android.ui.common.replaceUpNextFromHerePromptBody
+import com.mimeo.android.ui.common.shouldShowJumpToTopLazy
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
@@ -82,6 +87,7 @@ fun SmartPlaylistDetailScreen(
     vm: AppViewModel,
     onOpenPlayer: (Int) -> Unit,
     onNavigateAfterDelete: () -> Unit,
+    jumpPillBottomClearance: Dp = 0.dp,
 ) {
     val listState = rememberLazyListState()
     val actionScope = rememberCoroutineScope()
@@ -108,6 +114,15 @@ fun SmartPlaylistDetailScreen(
     var pendingPlayFromHereItemId by remember { mutableStateOf<Int?>(null) }
 
     fun displayedItems(): List<PlaybackQueueItem> = pinnedItems + liveItems
+    val showJumpToTop by remember {
+        derivedStateOf {
+            displayedItems().size > 6 &&
+                shouldShowJumpToTopLazy(
+                    firstVisibleItemIndex = listState.firstVisibleItemIndex,
+                    firstVisibleItemScrollOffset = listState.firstVisibleItemScrollOffset,
+                )
+        }
+    }
 
     fun applyContent(content: AppViewModel.SmartPlaylistContent) {
         detail = content.detail
@@ -440,6 +455,15 @@ fun SmartPlaylistDetailScreen(
                         color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
                     )
                 }
+            }
+            if (showJumpToTop) {
+                JumpPill(
+                    label = "Jump to top",
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = jumpPillBottomPadding(jumpPillBottomClearance)),
+                    onClick = { actionScope.launch { listState.animateScrollToItem(0) } },
+                )
             }
         }
     }
