@@ -146,7 +146,7 @@ fun SettingsScreen(
     val scrollState = rememberScrollState()
     val actionScope = rememberCoroutineScope()
     val showJumpToTop by remember {
-        derivedStateOf { scrollState.value > 480 }
+        derivedStateOf { scrollState.value > 220 }
     }
     var restoredScrollOffset by remember { mutableStateOf(false) }
     var connectionMode by remember(settings.connectionMode) { mutableStateOf(settings.connectionMode) }
@@ -2128,7 +2128,7 @@ fun SettingsScreen(
                 label = "Jump to top",
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 12.dp),
+                    .padding(bottom = 72.dp),
                 onClick = { actionScope.launch { scrollState.animateScrollTo(0) } },
             )
         }

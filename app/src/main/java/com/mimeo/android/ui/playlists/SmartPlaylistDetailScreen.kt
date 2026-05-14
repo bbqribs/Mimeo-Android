@@ -112,9 +112,8 @@ fun SmartPlaylistDetailScreen(
     fun displayedItems(): List<PlaybackQueueItem> = pinnedItems + liveItems
     val showJumpToTop by remember {
         derivedStateOf {
-            displayedItems().size > 12 &&
-                (listState.firstVisibleItemIndex > 4 ||
-                    (listState.firstVisibleItemIndex > 1 && listState.firstVisibleItemScrollOffset > 220))
+            displayedItems().size > 6 &&
+                (listState.firstVisibleItemIndex > 1 || listState.firstVisibleItemScrollOffset > 160)
         }
     }
 
@@ -455,7 +454,7 @@ fun SmartPlaylistDetailScreen(
                     label = "Jump to top",
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 12.dp),
+                        .padding(bottom = 72.dp),
                     onClick = { actionScope.launch { listState.animateScrollToItem(0) } },
                 )
             }

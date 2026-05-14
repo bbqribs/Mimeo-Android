@@ -91,8 +91,8 @@ fun BlueskyBrowseScreen(
     val mTypography = LocalMimeoTypographyTokens.current
     val showJumpToTop by remember {
         derivedStateOf {
-            listState.firstVisibleItemIndex > 5 ||
-                (listState.firstVisibleItemIndex > 1 && listState.firstVisibleItemScrollOffset > 220)
+            listState.firstVisibleItemIndex > 1 ||
+                listState.firstVisibleItemScrollOffset > 160
         }
     }
 
@@ -188,7 +188,7 @@ fun BlueskyBrowseScreen(
                 label = "Jump to top",
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 12.dp),
+                    .padding(bottom = 72.dp),
                 onClick = { actionScope.launch { listState.animateScrollToItem(0) } },
             )
         }

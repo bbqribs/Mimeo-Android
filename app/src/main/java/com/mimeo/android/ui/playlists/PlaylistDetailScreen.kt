@@ -166,7 +166,7 @@ fun PlaylistDetailScreen(
     var listViewportHeight by remember { mutableIntStateOf(0) }
     val showJumpToTop by remember {
         derivedStateOf {
-            localEntries.size > 12 && listScrollState.value > (listViewportHeight / 2)
+            localEntries.size > 6 && listScrollState.value > 180
         }
     }
 
@@ -675,7 +675,7 @@ fun PlaylistDetailScreen(
                     label = "Jump to top",
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 12.dp),
+                        .padding(bottom = 72.dp),
                     onClick = { actionScope.launch { listScrollState.animateScrollTo(0) } },
                 )
             }

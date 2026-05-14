@@ -11,7 +11,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import kotlin.math.absoluteValue
 
 fun Modifier.passiveVerticalScrollIndicator(
     scrollState: ScrollState,
@@ -61,12 +60,12 @@ fun Modifier.passiveVerticalScrollIndicator(
         val visibleItems = layoutInfo.visibleItemsInfo
         if (totalItemsCount <= 0 || visibleItems.isEmpty()) return@drawWithContent
 
-        val firstVisible = visibleItems.first()
         val averageItemHeightPx = visibleItems.map { it.size }.average().toFloat().coerceAtLeast(1f)
         val estimatedContentHeightPx = (totalItemsCount * averageItemHeightPx).coerceAtLeast(size.height)
-        val estimatedScrollPx =
-            (firstVisible.index * averageItemHeightPx + firstVisible.offset.absoluteValue)
-                .coerceAtLeast(0f)
+        val estimatedScrollPx = (
+            listState.firstVisibleItemIndex * averageItemHeightPx +
+                listState.firstVisibleItemScrollOffset.toFloat()
+            ).coerceAtLeast(0f)
         val maxScrollPx = (estimatedContentHeightPx - size.height).coerceAtLeast(0f)
         if (maxScrollPx <= 0f) return@drawWithContent
 

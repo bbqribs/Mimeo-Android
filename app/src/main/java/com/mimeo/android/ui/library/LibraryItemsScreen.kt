@@ -188,8 +188,8 @@ fun LibraryItemsScreen(
     val listState = rememberLazyListState()
     val showJumpToTop by remember {
         derivedStateOf {
-            listState.firstVisibleItemIndex > 10 ||
-                (listState.firstVisibleItemIndex > 2 && listState.firstVisibleItemScrollOffset > 300)
+            listState.firstVisibleItemIndex > 1 ||
+                listState.firstVisibleItemScrollOffset > 160
         }
     }
     var pendingExpanded by rememberSaveable { mutableStateOf(false) }
@@ -770,7 +770,7 @@ fun LibraryItemsScreen(
                     label = "Jump to top",
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 12.dp),
+                        .padding(bottom = 72.dp),
                     onClick = {
                         actionScope.launch { listState.animateScrollToItem(index = 0) }
                     },
