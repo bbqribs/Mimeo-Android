@@ -550,7 +550,7 @@ private fun CandidateRow(
                     saving = saving,
                     onSave = onSave,
                     onOpenItem = onOpenItem,
-                    modifier = Modifier.offset(y = (-3).dp),
+                    modifier = Modifier.offset(y = (-8).dp),
                 )
             }
             val postMeta = buildList {

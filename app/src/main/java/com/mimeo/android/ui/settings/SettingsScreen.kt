@@ -508,6 +508,25 @@ fun SettingsScreen(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            showPasswordChangeDialog = true
+                            onClearPasswordChangeState()
+                        },
+                    ) {
+                        Text("Change Password")
+                    }
+                    Button(
+                        onClick = { showSignOutDialog = true },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isV1) mColors.danger else androidx.compose.material3.MaterialTheme.colorScheme.error,
+                            contentColor = if (isV1) mColors.accentOn else androidx.compose.material3.MaterialTheme.colorScheme.onError,
+                        ),
+                    ) {
+                        Text("Sign Out")
+                    }
+                }
                 Text(
                     text = "Connection",
                     style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
@@ -566,25 +585,6 @@ fun SettingsScreen(
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            showPasswordChangeDialog = true
-                            onClearPasswordChangeState()
-                        },
-                    ) {
-                        Text("Change Password")
-                    }
-                    Button(
-                        onClick = { showSignOutDialog = true },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isV1) mColors.danger else androidx.compose.material3.MaterialTheme.colorScheme.error,
-                            contentColor = if (isV1) mColors.accentOn else androidx.compose.material3.MaterialTheme.colorScheme.onError,
-                        ),
-                    ) {
-                        Text("Sign Out")
-                    }
-                }
                 var connectionHelpExpanded by remember { mutableStateOf(false) }
                 Row(
                     modifier = Modifier.fillMaxWidth(),

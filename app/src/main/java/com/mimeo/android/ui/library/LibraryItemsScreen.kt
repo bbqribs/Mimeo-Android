@@ -70,6 +70,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -161,6 +162,7 @@ fun LibraryItemsScreen(
     sortOption: LibrarySortOption,
     availableSorts: List<LibrarySortOption> = LibrarySortOption.entries,
     searchQuery: String,
+    searchPlaceholder: String? = null,
     clientSideSearch: Boolean = false,
     isInbox: Boolean = false,
     isBin: Boolean = false,
@@ -532,7 +534,13 @@ fun LibraryItemsScreen(
                         value = searchQuery,
                         onValueChange = onSearchQueryChange,
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Search $title...") },
+                        placeholder = {
+                            Text(
+                                text = searchPlaceholder ?: "Search $title...",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {

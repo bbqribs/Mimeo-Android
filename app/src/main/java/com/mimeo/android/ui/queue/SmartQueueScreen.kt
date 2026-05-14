@@ -71,6 +71,7 @@ fun SmartQueueScreen(
         sortOption = sortOption,
         availableSorts = emptyList(),
         searchQuery = searchQuery,
+        searchPlaceholder = "Search...",
         clientSideSearch = true,
         showDragReorderHandle = showReorderHandle,
         dragReorderEnabled = dragReorderEnabled,
