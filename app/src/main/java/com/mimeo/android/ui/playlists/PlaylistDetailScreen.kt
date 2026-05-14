@@ -62,6 +62,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.mimeo.android.ACTION_KEY_UNDO_PLAYLIST_REMOVE
@@ -72,9 +73,11 @@ import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
 import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.ListSurfaceScaffold
+import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.queueCapturePresentation
 import com.mimeo.android.ui.common.replaceUpNextFromHerePromptBody
+import com.mimeo.android.ui.common.shouldShowJumpToTopScroll
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
@@ -102,6 +105,7 @@ fun PlaylistDetailScreen(
     onOpenPlayer: (Int) -> Unit,
     onShowSnackbar: (String, String?, String?) -> Unit,
     onNavigateBack: () -> Unit = {},
+    jumpPillBottomClearance: Dp = 0.dp,
 ) {
     val playlists by vm.playlists.collectAsState()
     val queueItems by vm.queueItems.collectAsState()
@@ -166,7 +170,7 @@ fun PlaylistDetailScreen(
     var listViewportHeight by remember { mutableIntStateOf(0) }
     val showJumpToTop by remember {
         derivedStateOf {
-            localEntries.size > 6 && listScrollState.value > 180
+            localEntries.size > 6 && shouldShowJumpToTopScroll(listScrollState.value, thresholdPx = 180)
         }
     }
 
@@ -675,7 +679,7 @@ fun PlaylistDetailScreen(
                     label = "Jump to top",
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 72.dp),
+                        .padding(bottom = jumpPillBottomPadding(jumpPillBottomClearance)),
                     onClick = { actionScope.launch { listScrollState.animateScrollTo(0) } },
                 )
             }

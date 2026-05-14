@@ -54,6 +54,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.BlueskyCandidate
@@ -62,7 +63,9 @@ import com.mimeo.android.model.BlueskyCandidateSourceSelection
 import com.mimeo.android.model.BlueskyPickerPinItem
 import com.mimeo.android.model.BlueskyPickerResponse
 import com.mimeo.android.ui.common.JumpPill
+import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
+import com.mimeo.android.ui.common.shouldShowJumpToTopLazy
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
 import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
@@ -73,6 +76,7 @@ import kotlinx.coroutines.launch
 fun BlueskyBrowseScreen(
     vm: AppViewModel,
     onOpenItem: (Int) -> Unit,
+    jumpPillBottomClearance: Dp = 0.dp,
 ) {
     val listState = rememberLazyListState()
     val actionScope = rememberCoroutineScope()
@@ -91,8 +95,10 @@ fun BlueskyBrowseScreen(
     val mTypography = LocalMimeoTypographyTokens.current
     val showJumpToTop by remember {
         derivedStateOf {
-            listState.firstVisibleItemIndex > 1 ||
-                listState.firstVisibleItemScrollOffset > 160
+            shouldShowJumpToTopLazy(
+                firstVisibleItemIndex = listState.firstVisibleItemIndex,
+                firstVisibleItemScrollOffset = listState.firstVisibleItemScrollOffset,
+            )
         }
     }
 
@@ -188,7 +194,7 @@ fun BlueskyBrowseScreen(
                 label = "Jump to top",
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 72.dp),
+                    .padding(bottom = jumpPillBottomPadding(jumpPillBottomClearance)),
                 onClick = { actionScope.launch { listState.animateScrollToItem(0) } },
             )
         }

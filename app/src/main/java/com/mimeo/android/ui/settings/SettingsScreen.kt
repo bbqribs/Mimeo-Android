@@ -58,6 +58,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.compose.material.icons.Icons
@@ -86,7 +87,9 @@ import com.mimeo.android.ui.bluesky.BlueskyHandleField
 import com.mimeo.android.ui.bluesky.blueskySourceDisplayName
 import com.mimeo.android.util.bluesky.normalizeBlueskyHandleInput
 import com.mimeo.android.ui.common.JumpPill
+import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
+import com.mimeo.android.ui.common.shouldShowJumpToTopScroll
 import com.mimeo.android.ui.queue.autoDownloadStatusLines
 import com.mimeo.android.ui.theme.toFontFamily
 import java.net.URI
@@ -118,6 +121,7 @@ fun SettingsScreen(
     onChangePassword: (String, String, String) -> Unit,
     onClearPasswordChangeState: () -> Unit,
     onSignOut: () -> Unit,
+    jumpPillBottomClearance: Dp = 0.dp,
 ) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
@@ -146,7 +150,7 @@ fun SettingsScreen(
     val scrollState = rememberScrollState()
     val actionScope = rememberCoroutineScope()
     val showJumpToTop by remember {
-        derivedStateOf { scrollState.value > 220 }
+        derivedStateOf { shouldShowJumpToTopScroll(scrollState.value, thresholdPx = 220) }
     }
     var restoredScrollOffset by remember { mutableStateOf(false) }
     var connectionMode by remember(settings.connectionMode) { mutableStateOf(settings.connectionMode) }
@@ -2128,7 +2132,7 @@ fun SettingsScreen(
                 label = "Jump to top",
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 72.dp),
+                    .padding(bottom = jumpPillBottomPadding(jumpPillBottomClearance)),
                 onClick = { actionScope.launch { scrollState.animateScrollTo(0) } },
             )
         }

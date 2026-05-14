@@ -72,6 +72,7 @@ import com.mimeo.android.ui.playlists.SmartPlaylistDetailScreen
 import com.mimeo.android.ui.playlists.SmartPlaylistFormDialog
 import com.mimeo.android.ui.playlists.SmartPlaylistFormState
 import com.mimeo.android.ui.queue.JumpToNowPlayingPill
+import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.ui.queue.SmartQueueScreen
 import com.mimeo.android.ui.bluesky.BlueskyBrowseScreen
@@ -514,6 +515,7 @@ internal fun MainActivityShell(
                                             sourceLabel = "Inbox",
                                         )
                                     },
+                                    jumpPillBottomClearance = snapBottomClearance,
                                 )
                             }
                             composable(ROUTE_FAVORITES) {
@@ -578,6 +580,7 @@ internal fun MainActivityShell(
                                             sourceLabel = "Favorites",
                                         )
                                     },
+                                    jumpPillBottomClearance = snapBottomClearance,
                                 )
                             }
                             composable(ROUTE_ARCHIVE) {
@@ -641,6 +644,7 @@ internal fun MainActivityShell(
                                             sourceLabel = "Archive",
                                         )
                                     },
+                                    jumpPillBottomClearance = snapBottomClearance,
                                 )
                             }
                             composable(ROUTE_BIN) {
@@ -680,12 +684,14 @@ internal fun MainActivityShell(
                                             loading = false
                                         }
                                     },
+                                    jumpPillBottomClearance = snapBottomClearance,
                                 )
                             }
                             composable(ROUTE_SMART_QUEUE) {
                                 SmartQueueScreen(
                                     vm = vm,
                                     onOpenPlayer = shellState.openItemInLocus,
+                                    jumpPillBottomClearance = snapBottomClearance,
                                 )
                             }
                             composable(
@@ -699,6 +705,7 @@ internal fun MainActivityShell(
                                     onOpenPlayer = shellState.openItemInLocus,
                                     onShowSnackbar = playerHandlers.onShowSnackbar,
                                     onNavigateBack = { nav.popBackStack() },
+                                    jumpPillBottomClearance = snapBottomClearance,
                                 )
                             }
                             composable(
@@ -716,12 +723,14 @@ internal fun MainActivityShell(
                                             launchSingleTop = true
                                         }
                                     },
+                                    jumpPillBottomClearance = snapBottomClearance,
                                 )
                             }
                             composable(ROUTE_BLUESKY_BROWSE) {
                                 BlueskyBrowseScreen(
                                     vm = vm,
                                     onOpenItem = shellState.openItemInLocus,
+                                    jumpPillBottomClearance = snapBottomClearance,
                                 )
                             }
                             composable(ROUTE_SETTINGS) {
@@ -751,6 +760,7 @@ internal fun MainActivityShell(
                                     onChangePassword = vm::changePassword,
                                     onClearPasswordChangeState = vm::clearPasswordChangeState,
                                     onSignOut = vm::signOut,
+                                    jumpPillBottomClearance = snapBottomClearance,
                                 )
                             }
                             composable(ROUTE_SETTINGS_DIAGNOSTICS) {
@@ -859,7 +869,7 @@ internal fun MainActivityShell(
                             JumpToNowPlayingPill(
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
-                                    .padding(bottom = snapBottomClearance),
+                                    .padding(bottom = jumpPillBottomPadding(snapBottomClearance)),
                                 onClick = { snapToActiveSignal += 1 },
                             )
                         }

@@ -111,6 +111,7 @@ import com.mimeo.android.share.isRetryablePendingSaveResult
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.common.JumpPill
+import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.resolveSessionSeedSourcePresentation as resolveSessionSeedSourcePresentationCommon
 import com.mimeo.android.ui.common.SessionSeedSourcePresentation
@@ -2556,7 +2557,7 @@ private fun NowPlayingSessionPanel(
                 JumpToNowPlayingPill(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = snapBottomClearance),
+                        .padding(bottom = jumpPillBottomPadding(snapBottomClearance)),
                     onClick = {
                         snapScope.launch {
                             nowPlayingScrollTargetPx(activeTopOffset)?.let { target ->

@@ -11,6 +11,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
@@ -43,4 +44,24 @@ fun JumpPill(
             maxLines = 1,
         )
     }
+}
+
+private val JumpPillPanelGap = 2.dp
+
+fun jumpPillBottomPadding(baseBottomClearance: Dp): Dp = baseBottomClearance + JumpPillPanelGap
+
+fun shouldShowJumpToTopLazy(
+    firstVisibleItemIndex: Int,
+    firstVisibleItemScrollOffset: Int,
+    indexThreshold: Int = 1,
+    offsetThresholdPx: Int = 160,
+): Boolean {
+    return firstVisibleItemIndex > indexThreshold || firstVisibleItemScrollOffset > offsetThresholdPx
+}
+
+fun shouldShowJumpToTopScroll(
+    scrollValuePx: Int,
+    thresholdPx: Int = 220,
+): Boolean {
+    return scrollValuePx > thresholdPx
 }
