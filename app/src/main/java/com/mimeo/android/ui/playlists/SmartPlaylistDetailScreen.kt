@@ -37,6 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +57,7 @@ import com.mimeo.android.model.SmartPlaylistDetail
 import com.mimeo.android.ui.common.DefaultListSurfaceMessage
 import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
+import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.ListSurfaceScaffold
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.queueCapturePresentation
@@ -108,6 +110,13 @@ fun SmartPlaylistDetailScreen(
     var pendingPlayFromHereItemId by remember { mutableStateOf<Int?>(null) }
 
     fun displayedItems(): List<PlaybackQueueItem> = pinnedItems + liveItems
+    val showJumpToTop by remember {
+        derivedStateOf {
+            displayedItems().size > 12 &&
+                (listState.firstVisibleItemIndex > 4 ||
+                    (listState.firstVisibleItemIndex > 1 && listState.firstVisibleItemScrollOffset > 220))
+        }
+    }
 
     fun applyContent(content: AppViewModel.SmartPlaylistContent) {
         detail = content.detail
@@ -440,6 +449,15 @@ fun SmartPlaylistDetailScreen(
                         color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
                     )
                 }
+            }
+            if (showJumpToTop) {
+                JumpPill(
+                    label = "Jump to top",
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 12.dp),
+                    onClick = { actionScope.launch { listState.animateScrollToItem(0) } },
+                )
             }
         }
     }

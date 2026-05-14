@@ -41,10 +41,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,11 +61,13 @@ import com.mimeo.android.model.BlueskyCandidateScanResponse
 import com.mimeo.android.model.BlueskyCandidateSourceSelection
 import com.mimeo.android.model.BlueskyPickerPinItem
 import com.mimeo.android.model.BlueskyPickerResponse
+import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
 import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
 import com.mimeo.android.ui.theme.LocalMimeoV1Active
+import kotlinx.coroutines.launch
 
 @Composable
 fun BlueskyBrowseScreen(
@@ -71,6 +75,7 @@ fun BlueskyBrowseScreen(
     onOpenItem: (Int) -> Unit,
 ) {
     val listState = rememberLazyListState()
+    val actionScope = rememberCoroutineScope()
     val picker by vm.blueskyCandidatePicker.collectAsState()
     val pickerLoading by vm.blueskyCandidatePickerLoading.collectAsState()
     val pickerError by vm.blueskyCandidatePickerError.collectAsState()
@@ -84,6 +89,12 @@ fun BlueskyBrowseScreen(
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
+    val showJumpToTop by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 5 ||
+                (listState.firstVisibleItemIndex > 1 && listState.firstVisibleItemScrollOffset > 220)
+        }
+    }
 
     LaunchedEffect(Unit) {
         vm.loadBlueskyCandidatePicker()
@@ -171,6 +182,15 @@ fun BlueskyBrowseScreen(
                     )
                 }
             }
+        }
+        if (showJumpToTop) {
+            JumpPill(
+                label = "Jump to top",
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 12.dp),
+                onClick = { actionScope.launch { listState.animateScrollToItem(0) } },
+            )
         }
     }
 }

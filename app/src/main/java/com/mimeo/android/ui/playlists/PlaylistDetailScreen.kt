@@ -43,6 +43,7 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -69,6 +70,7 @@ import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
+import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.ListSurfaceScaffold
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.queueCapturePresentation
@@ -162,6 +164,11 @@ fun PlaylistDetailScreen(
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
     val listScrollState = rememberScrollState()
     var listViewportHeight by remember { mutableIntStateOf(0) }
+    val showJumpToTop by remember {
+        derivedStateOf {
+            localEntries.size > 12 && listScrollState.value > (listViewportHeight / 2)
+        }
+    }
 
     var showQueueChooser by remember { mutableStateOf(false) }
 
@@ -662,6 +669,15 @@ fun PlaylistDetailScreen(
                         }
                     }
                 }
+            }
+            if (showJumpToTop) {
+                JumpPill(
+                    label = "Jump to top",
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 12.dp),
+                    onClick = { actionScope.launch { listScrollState.animateScrollTo(0) } },
+                )
             }
         }
     }

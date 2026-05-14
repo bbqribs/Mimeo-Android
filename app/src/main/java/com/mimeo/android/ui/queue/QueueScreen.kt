@@ -2552,26 +2552,6 @@ private fun NowPlayingSessionPanel(
             LaunchedEffect(showSnapToActive) {
                 onSnapPillVisibilityChange(showSnapToActive)
             }
-            val showJumpToTop = listViewportHeight > 0 &&
-                localItems.size > 16 &&
-                listScrollState.value > (listViewportHeight / 2)
-            if (showJumpToTop) {
-                JumpPill(
-                    label = "Jump to top",
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(
-                            bottom = if (renderSnapPillLocally && showSnapToActive) {
-                                snapBottomClearance + 46.dp
-                            } else {
-                                snapBottomClearance
-                            },
-                        ),
-                    onClick = {
-                        snapScope.launch { listScrollState.animateScrollTo(0) }
-                    },
-                )
-            }
             if (renderSnapPillLocally && showSnapToActive) {
                 JumpToNowPlayingPill(
                     modifier = Modifier
