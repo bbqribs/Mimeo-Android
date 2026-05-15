@@ -5098,6 +5098,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun archiveSessionItem(itemId: Int) {
+        viewModelScope.launch {
+            archiveItem(itemId)
+        }
+    }
+
+    fun binSessionHistoryItem(itemId: Int) {
+        viewModelScope.launch {
+            val result = moveItemToBin(itemId)
+            if (result.isSuccess) {
+                val updated = repository.removeHistoryItemFromSession(itemId) ?: return@launch
+                _nowPlayingSession.value = updated
+            }
+        }
+    }
+
+    fun binSessionEarlierItem(itemId: Int) {
+        viewModelScope.launch {
+            val result = moveItemToBin(itemId)
+            if (result.isSuccess) {
+                val updated = repository.removeItemFromSession(itemId) ?: return@launch
+                _nowPlayingSession.value = updated
+            }
+        }
+    }
+
     fun reorderNowPlayingSessionItem(fromIndex: Int, toIndex: Int) {
         viewModelScope.launch {
             val session = repository.reorderSessionItem(fromIndex = fromIndex, toIndex = toIndex) ?: return@launch
