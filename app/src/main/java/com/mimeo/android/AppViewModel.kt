@@ -366,6 +366,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
     private val _snackbarMessages = Channel<UiSnackbarMessage>(capacity = Channel.BUFFERED)
     val snackbarMessages: Flow<UiSnackbarMessage> = _snackbarMessages.receiveAsFlow()
+    private val _archivedSessionHistoryIds = MutableStateFlow<Set<Int>>(emptySet())
+    val archivedSessionHistoryIds: StateFlow<Set<Int>> = _archivedSessionHistoryIds.asStateFlow()
     private val _testingConnection = MutableStateFlow(false)
     val testingConnection: StateFlow<Boolean> = _testingConnection.asStateFlow()
     internal val blueskyState = BlueskyStateHolder()
@@ -4577,28 +4579,39 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             _archivedItems.update { previous -> previous.filterNot { it.itemId == snapshot.item.itemId } }
             _binItems.update { previous -> previous.filterNot { it.itemId == snapshot.item.itemId } }
-            _queueItems.update { previous ->
-                val withoutItem = previous.filterNot { it.itemId == snapshot.item.itemId }
-                val insertAt = snapshot.originalIndex.coerceIn(0, withoutItem.size)
-                withoutItem.toMutableList().apply {
-                    add(insertAt, snapshot.item)
+            if (snapshot.source != ArchiveActionSource.HISTORY_EARLIER) {
+                _queueItems.update { previous ->
+                    val withoutItem = previous.filterNot { it.itemId == snapshot.item.itemId }
+                    val insertAt = snapshot.originalIndex.coerceIn(0, withoutItem.size)
+                    withoutItem.toMutableList().apply {
+                        add(insertAt, snapshot.item)
+                    }
                 }
+                if (snapshot.wasCached) {
+                    _cachedItemIds.update { previous -> previous + snapshot.item.itemId }
+                }
+                if (snapshot.wasNoActiveContent) {
+                    _noActiveContentItemIds.update { previous -> previous + snapshot.item.itemId }
+                }
+                updateAutoDownloadQueueSnapshotDiagnostics(
+                    current = settings.value,
+                    queueItems = _queueItems.value,
+                    offlineReadyIds = _cachedItemIds.value,
+                    knownNoActiveIds = _noActiveContentItemIds.value,
+                )
             }
-            if (snapshot.wasCached) {
-                _cachedItemIds.update { previous -> previous + snapshot.item.itemId }
+            _archivedSessionHistoryIds.update { it - snapshot.item.itemId }
+            // Restore item to its session position for History/Earlier bin undos.
+            if (snapshot.source == ArchiveActionSource.HISTORY_EARLIER && snapshot.isSessionHistoryItem) {
+                repository.restoreHistoryItemToSession(snapshot.item, snapshot.originalSessionIndex.coerceAtLeast(0))?.let { _nowPlayingSession.value = it }
+                runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
+            } else if (snapshot.source == ArchiveActionSource.UP_NEXT && snapshot.originalSessionIndex >= 0) {
+                repository.insertItemAtIndexInSession(snapshot.item, snapshot.originalSessionIndex)
+                    ?.let { _nowPlayingSession.value = it }
             }
-            if (snapshot.wasNoActiveContent) {
-                _noActiveContentItemIds.update { previous -> previous + snapshot.item.itemId }
-            }
-            updateAutoDownloadQueueSnapshotDiagnostics(
-                current = settings.value,
-                queueItems = _queueItems.value,
-                offlineReadyIds = _cachedItemIds.value,
-                knownNoActiveIds = _noActiveContentItemIds.value,
-            )
             val reopenItemId = when (snapshot.source) {
                 ArchiveActionSource.LOCUS -> snapshot.item.itemId
-                ArchiveActionSource.UP_NEXT -> null
+                ArchiveActionSource.UP_NEXT, ArchiveActionSource.HISTORY_EARLIER -> null
             }
             if (reopenItemId != null) {
                 startNowPlayingSession(startItemId = reopenItemId)
@@ -5100,26 +5113,133 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun archiveSessionItem(itemId: Int) {
         viewModelScope.launch {
-            archiveItem(itemId)
+            val session = _nowPlayingSession.value
+            val historyItem = session?.historyItems?.firstOrNull { it.itemId == itemId }
+            val isEarlierItem = historyItem == null && session != null &&
+                session.items.indexOfFirst { it.itemId == itemId }.let { idx ->
+                    idx >= 0 && idx < session.currentIndex
+                }
+            val result = archiveItem(itemId)
+            if (historyItem != null && result.isSuccess) {
+                // If archiveItem() did not set a snapshot (item not in queue), provide one.
+                // If it did (item was also in queue), keep that snapshot since it has the right
+                // originalIndex — just upgrade the source so undo skips queue reinsertion.
+                if (lastArchiveUndoSnapshot == null) {
+                    lastArchiveUndoSnapshot = ArchiveUndoSnapshot(
+                        item = PlaybackQueueItem(
+                            itemId = historyItem.itemId,
+                            title = historyItem.title,
+                            url = historyItem.url,
+                            host = historyItem.host,
+                            sourceType = historyItem.sourceType,
+                            sourceLabel = historyItem.sourceLabel,
+                            sourceUrl = historyItem.sourceUrl,
+                            captureKind = historyItem.captureKind,
+                            sourceAppPackage = historyItem.sourceAppPackage,
+                            status = historyItem.status,
+                            activeContentVersionId = historyItem.activeContentVersionId,
+                        ),
+                        originalIndex = -1,
+                        wasCached = false,
+                        wasNoActiveContent = false,
+                        source = ArchiveActionSource.HISTORY_EARLIER,
+                        actionType = UndoableActionType.ARCHIVE,
+                    )
+                } else {
+                    lastArchiveUndoSnapshot = lastArchiveUndoSnapshot?.copy(
+                        source = ArchiveActionSource.HISTORY_EARLIER,
+                    )
+                }
+                _archivedSessionHistoryIds.update { it + itemId }
+            } else if (isEarlierItem && result.isSuccess) {
+                // Earlier items are in the queue, so archiveItem() already set the snapshot
+                // with source=UP_NEXT (correct for queue re-insertion on undo). Just mark
+                // the item so the Earlier row shows the "Archived" indicator.
+                _archivedSessionHistoryIds.update { it + itemId }
+            }
+            if (result.isSuccess && !_queueOffline.value) {
+                showSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
+            }
+        }
+    }
+
+    fun unarchiveSessionHistoryItem(itemId: Int) {
+        viewModelScope.launch {
+            val current = settings.value
+            try {
+                repository.unarchiveItem(current.baseUrl, current.apiToken, itemId)
+                repository.toggleCompletion(current.baseUrl, current.apiToken, itemId, markDone = false)
+                _archivedSessionHistoryIds.update { it - itemId }
+                if (lastArchiveUndoSnapshot?.item?.itemId == itemId) lastArchiveUndoSnapshot = null
+                runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
+                showSnackbar("Unarchived")
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (!handleAuthFailureIfNeeded(error)) {
+                    showSnackbar("Unarchive failed")
+                }
+            }
         }
     }
 
     fun binSessionHistoryItem(itemId: Int) {
         viewModelScope.launch {
+            val session = _nowPlayingSession.value
+            val historyItem = session?.historyItems?.firstOrNull { it.itemId == itemId }
+            val historyIndex = session?.historyItems?.indexOfFirst { it.itemId == itemId } ?: -1
             val result = moveItemToBin(itemId)
             if (result.isSuccess) {
+                if (historyItem != null) {
+                    // Upgrade or create the snapshot with history session context so undo
+                    // restores the item to session history instead of reinserting into the queue.
+                    // originalSessionIndex holds the history list index for position-accurate restore.
+                    lastArchiveUndoSnapshot = (lastArchiveUndoSnapshot ?: ArchiveUndoSnapshot(
+                        item = PlaybackQueueItem(
+                            itemId = historyItem.itemId,
+                            title = historyItem.title,
+                            url = historyItem.url,
+                            host = historyItem.host,
+                            sourceType = historyItem.sourceType,
+                            sourceLabel = historyItem.sourceLabel,
+                            sourceUrl = historyItem.sourceUrl,
+                            captureKind = historyItem.captureKind,
+                            sourceAppPackage = historyItem.sourceAppPackage,
+                            status = historyItem.status,
+                            activeContentVersionId = historyItem.activeContentVersionId,
+                        ),
+                        originalIndex = -1,
+                        wasCached = false,
+                        wasNoActiveContent = false,
+                        source = ArchiveActionSource.HISTORY_EARLIER,
+                        actionType = UndoableActionType.BIN,
+                    )).copy(
+                        source = ArchiveActionSource.HISTORY_EARLIER,
+                        isSessionHistoryItem = true,
+                        originalSessionIndex = historyIndex,
+                    )
+                }
                 val updated = repository.removeHistoryItemFromSession(itemId) ?: return@launch
                 _nowPlayingSession.value = updated
+                if (!_queueOffline.value) {
+                    showSnackbar("Moved to Bin (14 days)", "Undo", ACTION_KEY_UNDO_ARCHIVE)
+                }
             }
         }
     }
 
     fun binSessionEarlierItem(itemId: Int) {
         viewModelScope.launch {
+            val sessionIndex = _nowPlayingSession.value?.items?.indexOfFirst { it.itemId == itemId } ?: -1
             val result = moveItemToBin(itemId)
             if (result.isSuccess) {
+                // Record session index so undo can restore the item to Earlier section.
+                lastArchiveUndoSnapshot = lastArchiveUndoSnapshot?.copy(originalSessionIndex = sessionIndex)
                 val updated = repository.removeItemFromSession(itemId) ?: return@launch
                 _nowPlayingSession.value = updated
+                if (!_queueOffline.value) {
+                    showSnackbar("Moved to Bin (14 days)", "Undo", ACTION_KEY_UNDO_ARCHIVE)
+                }
             }
         }
     }

@@ -66,6 +66,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -341,6 +342,7 @@ fun QueueScreen(
     val pendingManualSaves by vm.pendingManualSaves.collectAsState()
     val pendingManualRetryInProgress by vm.pendingManualRetryInProgress.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
+    val archivedSessionHistoryIds by vm.archivedSessionHistoryIds.collectAsState()
     val actionScope = rememberCoroutineScope()
 
     var topActionsMenuExpanded by remember { mutableStateOf(false) }
@@ -791,8 +793,10 @@ fun QueueScreen(
                 onRemoveItem = { itemId -> vm.removeItemFromSession(itemId) },
                 onClearUpcoming = { showClearUpcomingConfirmation = true },
                 onArchiveSessionItem = { itemId -> vm.archiveSessionItem(itemId) },
+                onUnarchiveSessionHistoryItem = { itemId -> vm.unarchiveSessionHistoryItem(itemId) },
                 onBinSessionHistoryItem = { itemId -> vm.binSessionHistoryItem(itemId) },
                 onBinSessionEarlierItem = { itemId -> vm.binSessionEarlierItem(itemId) },
+                archivedHistoryItemIds = archivedSessionHistoryIds,
                 snapBottomClearance = snapBottomClearance,
                 snapToActiveSignal = snapToActiveSignal,
                 renderSnapPillLocally = renderSnapPillLocally,
@@ -1851,7 +1855,9 @@ private fun SessionStaticItemRow(
     onOpenItem: (Int) -> Unit,
     onJumpToItem: (Int) -> Unit,
     onArchiveItem: ((Int) -> Unit)? = null,
+    onUnarchiveItem: ((Int) -> Unit)? = null,
     onBinItem: ((Int) -> Unit)? = null,
+    showArchivedIndicator: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val isV1 = LocalMimeoV1Active.current
@@ -1895,6 +1901,13 @@ private fun SessionStaticItemRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            if (showArchivedIndicator) {
+                Text(
+                    text = "Archived",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         IconButton(
             onClick = { onJumpToItem(item.itemId) },
@@ -1924,7 +1937,15 @@ private fun SessionStaticItemRow(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false },
                 ) {
-                    if (onArchiveItem != null) {
+                    if (showArchivedIndicator && onUnarchiveItem != null) {
+                        DropdownMenuItem(
+                            text = { Text("Unarchive") },
+                            onClick = {
+                                showMenu = false
+                                onUnarchiveItem(item.itemId)
+                            },
+                        )
+                    } else if (!showArchivedIndicator && onArchiveItem != null) {
                         DropdownMenuItem(
                             text = { Text("Archive") },
                             onClick = {
@@ -1965,8 +1986,10 @@ private fun NowPlayingSessionPanel(
     onSnapPillVisibilityChange: (Boolean) -> Unit = {},
     trailingActions: (@Composable RowScope.() -> Unit)? = null,
     onArchiveSessionItem: (Int) -> Unit = {},
+    onUnarchiveSessionHistoryItem: (Int) -> Unit = {},
     onBinSessionHistoryItem: (Int) -> Unit = {},
     onBinSessionEarlierItem: (Int) -> Unit = {},
+    archivedHistoryItemIds: Set<Int> = emptySet(),
 ) {
     val densityTokens = LocalMimeoDensityTokens.current
     val isV1 = LocalMimeoV1Active.current
@@ -2141,7 +2164,7 @@ private fun NowPlayingSessionPanel(
         activeHeightPx = activeMeasuredHeight,
         belowActiveContentHeightPx = upcomingSectionHeightPx ?: 0f,
     )
-    var initialActiveAnchorReady by remember(currentItemId, serverItemIds) {
+    var initialActiveAnchorReady by remember(currentItemId) {
         mutableStateOf(currentItemId == null)
     }
     LaunchedEffect(historyItems.isEmpty()) {
@@ -2155,6 +2178,31 @@ private fun NowPlayingSessionPanel(
             earlierStickyBounds = null
             earlierHeaderHeightPx = 0f
         }
+    }
+    // Track measured heights of Earlier rows so scroll compensation uses exact values.
+    val earlierItemHeights = remember { mutableMapOf<Int, Float>() }
+    // When items are re-inserted into Earlier in Queue (e.g. bin undo), compensate the
+    // scroll position in the same composition frame so layout sees the corrected offset
+    // before draw. SideEffect runs synchronously after composition, before layout/draw.
+    val prevEarlierIds = remember { mutableListOf<Int>() }
+    SideEffect {
+        val curIds = earlierItems.map { it.itemId }
+        val prevSet = prevEarlierIds.toHashSet()
+        val added = curIds.filter { it !in prevSet }
+        // Only compensate when the viewport is already scrolled past 0. When scroll == 0
+        // everything is visible at the top; dispatchRawDelta would push content above the
+        // viewport even though it was visible before the undo.
+        if (added.isNotEmpty() && listScrollState.value > 0) {
+            var totalHeight = added.sumOf {
+                (earlierItemHeights[it] ?: avgItemHeight()).toDouble()
+            }.toFloat()
+            // If the Earlier section just appeared (was absent before), the section header
+            // is also new content that pushes items below it downward.
+            if (prevSet.isEmpty()) totalHeight += earlierHeaderHeightPx
+            listScrollState.dispatchRawDelta(totalHeight)
+        }
+        prevEarlierIds.clear()
+        prevEarlierIds.addAll(curIds)
     }
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -2250,7 +2298,9 @@ private fun NowPlayingSessionPanel(
                                 onOpenItem = onOpenItem,
                                 onJumpToItem = onJumpToHistoryItem,
                                 onArchiveItem = onArchiveSessionItem,
+                                onUnarchiveItem = onUnarchiveSessionHistoryItem,
                                 onBinItem = onBinSessionHistoryItem,
+                                showArchivedIndicator = item.itemId in archivedHistoryItemIds,
                             )
                             if (index < historyItems.lastIndex) {
                                 HorizontalDivider(
@@ -2289,7 +2339,12 @@ private fun NowPlayingSessionPanel(
                                 onOpenItem = onOpenItem,
                                 onJumpToItem = onJumpToQueueItem,
                                 onArchiveItem = onArchiveSessionItem,
+                                onUnarchiveItem = onUnarchiveSessionHistoryItem,
                                 onBinItem = onBinSessionEarlierItem,
+                                showArchivedIndicator = item.itemId in archivedHistoryItemIds,
+                                modifier = Modifier.onSizeChanged { size ->
+                                    earlierItemHeights[item.itemId] = size.height.toFloat()
+                                },
                             )
                             if (index < earlierItems.lastIndex) {
                                 HorizontalDivider(
