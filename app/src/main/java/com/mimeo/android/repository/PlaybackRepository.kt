@@ -1347,6 +1347,21 @@ class PlaybackRepository(
         return updatedRow.toSession(stored)
     }
 
+    suspend fun removeHistoryItemFromSession(itemId: Int): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson)
+        val history = parseStoredNowPlayingHistory(row.queueJson)
+        val newHistory = history.filterNot { it.itemId == itemId }
+        if (newHistory.size == history.size) return row.toSession(stored)
+        val updatedRow = row.copy(
+            queueJson = encodeStoredNowPlaying(stored, newHistory),
+            updatedAt = System.currentTimeMillis(),
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(stored)
+    }
+
     suspend fun reorderSessionItem(fromIndex: Int, toIndex: Int): NowPlayingSession? {
         val dao = database.nowPlayingDao()
         val row = dao.getSession() ?: return null

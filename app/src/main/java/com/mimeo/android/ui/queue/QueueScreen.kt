@@ -790,6 +790,9 @@ fun QueueScreen(
                 },
                 onRemoveItem = { itemId -> vm.removeItemFromSession(itemId) },
                 onClearUpcoming = { showClearUpcomingConfirmation = true },
+                onArchiveSessionItem = { itemId -> vm.archiveSessionItem(itemId) },
+                onBinSessionHistoryItem = { itemId -> vm.binSessionHistoryItem(itemId) },
+                onBinSessionEarlierItem = { itemId -> vm.binSessionEarlierItem(itemId) },
                 snapBottomClearance = snapBottomClearance,
                 snapToActiveSignal = snapToActiveSignal,
                 renderSnapPillLocally = renderSnapPillLocally,
@@ -1847,6 +1850,8 @@ private fun SessionStaticItemRow(
     item: NowPlayingSessionItem,
     onOpenItem: (Int) -> Unit,
     onJumpToItem: (Int) -> Unit,
+    onArchiveItem: ((Int) -> Unit)? = null,
+    onBinItem: ((Int) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val isV1 = LocalMimeoV1Active.current
@@ -1857,6 +1862,7 @@ private fun SessionStaticItemRow(
     val sourceLabel = item.host
         ?: item.sourceLabel?.takeIf { it.isNotBlank() }
         ?: item.sourceType?.takeIf { it.isNotBlank() }
+    var showMenu by remember { mutableStateOf(false) }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1901,6 +1907,44 @@ private fun SessionStaticItemRow(
                 modifier = Modifier.size(20.dp),
             )
         }
+        if (onArchiveItem != null || onBinItem != null) {
+            Box {
+                IconButton(
+                    onClick = { showMenu = true },
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.msr_more_vert_24),
+                        contentDescription = "More actions for ${item.title?.ifBlank { null } ?: item.url}",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                ) {
+                    if (onArchiveItem != null) {
+                        DropdownMenuItem(
+                            text = { Text("Archive") },
+                            onClick = {
+                                showMenu = false
+                                onArchiveItem(item.itemId)
+                            },
+                        )
+                    }
+                    if (onBinItem != null) {
+                        DropdownMenuItem(
+                            text = { Text("Move to Bin") },
+                            onClick = {
+                                showMenu = false
+                                onBinItem(item.itemId)
+                            },
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1920,6 +1964,9 @@ private fun NowPlayingSessionPanel(
     renderSnapPillLocally: Boolean = true,
     onSnapPillVisibilityChange: (Boolean) -> Unit = {},
     trailingActions: (@Composable RowScope.() -> Unit)? = null,
+    onArchiveSessionItem: (Int) -> Unit = {},
+    onBinSessionHistoryItem: (Int) -> Unit = {},
+    onBinSessionEarlierItem: (Int) -> Unit = {},
 ) {
     val densityTokens = LocalMimeoDensityTokens.current
     val isV1 = LocalMimeoV1Active.current
@@ -2202,6 +2249,8 @@ private fun NowPlayingSessionPanel(
                                 item = item,
                                 onOpenItem = onOpenItem,
                                 onJumpToItem = onJumpToHistoryItem,
+                                onArchiveItem = onArchiveSessionItem,
+                                onBinItem = onBinSessionHistoryItem,
                             )
                             if (index < historyItems.lastIndex) {
                                 HorizontalDivider(
@@ -2239,6 +2288,8 @@ private fun NowPlayingSessionPanel(
                                 item = item,
                                 onOpenItem = onOpenItem,
                                 onJumpToItem = onJumpToQueueItem,
+                                onArchiveItem = onArchiveSessionItem,
+                                onBinItem = onBinSessionEarlierItem,
                             )
                             if (index < earlierItems.lastIndex) {
                                 HorizontalDivider(
