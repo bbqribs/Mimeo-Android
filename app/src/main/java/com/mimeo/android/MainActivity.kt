@@ -385,6 +385,7 @@ internal fun coalescePendingItemActions(actions: List<PendingItemAction>): List<
 enum class ArchiveActionSource {
     UP_NEXT,
     LOCUS,
+    HISTORY_EARLIER,
 }
 
 internal data class ArchiveUndoSnapshot(

@@ -341,6 +341,7 @@ fun QueueScreen(
     val pendingManualSaves by vm.pendingManualSaves.collectAsState()
     val pendingManualRetryInProgress by vm.pendingManualRetryInProgress.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
+    val archivedSessionHistoryIds by vm.archivedSessionHistoryIds.collectAsState()
     val actionScope = rememberCoroutineScope()
 
     var topActionsMenuExpanded by remember { mutableStateOf(false) }
@@ -793,6 +794,7 @@ fun QueueScreen(
                 onArchiveSessionItem = { itemId -> vm.archiveSessionItem(itemId) },
                 onBinSessionHistoryItem = { itemId -> vm.binSessionHistoryItem(itemId) },
                 onBinSessionEarlierItem = { itemId -> vm.binSessionEarlierItem(itemId) },
+                archivedHistoryItemIds = archivedSessionHistoryIds,
                 snapBottomClearance = snapBottomClearance,
                 snapToActiveSignal = snapToActiveSignal,
                 renderSnapPillLocally = renderSnapPillLocally,
@@ -1852,6 +1854,7 @@ private fun SessionStaticItemRow(
     onJumpToItem: (Int) -> Unit,
     onArchiveItem: ((Int) -> Unit)? = null,
     onBinItem: ((Int) -> Unit)? = null,
+    showArchivedIndicator: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val isV1 = LocalMimeoV1Active.current
@@ -1893,6 +1896,13 @@ private fun SessionStaticItemRow(
                     color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (showArchivedIndicator) {
+                Text(
+                    text = "Archived",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -1967,6 +1977,7 @@ private fun NowPlayingSessionPanel(
     onArchiveSessionItem: (Int) -> Unit = {},
     onBinSessionHistoryItem: (Int) -> Unit = {},
     onBinSessionEarlierItem: (Int) -> Unit = {},
+    archivedHistoryItemIds: Set<Int> = emptySet(),
 ) {
     val densityTokens = LocalMimeoDensityTokens.current
     val isV1 = LocalMimeoV1Active.current
@@ -2251,6 +2262,7 @@ private fun NowPlayingSessionPanel(
                                 onJumpToItem = onJumpToHistoryItem,
                                 onArchiveItem = onArchiveSessionItem,
                                 onBinItem = onBinSessionHistoryItem,
+                                showArchivedIndicator = item.itemId in archivedHistoryItemIds,
                             )
                             if (index < historyItems.lastIndex) {
                                 HorizontalDivider(

@@ -366,6 +366,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
     private val _snackbarMessages = Channel<UiSnackbarMessage>(capacity = Channel.BUFFERED)
     val snackbarMessages: Flow<UiSnackbarMessage> = _snackbarMessages.receiveAsFlow()
+    private val _archivedSessionHistoryIds = MutableStateFlow<Set<Int>>(emptySet())
+    val archivedSessionHistoryIds: StateFlow<Set<Int>> = _archivedSessionHistoryIds.asStateFlow()
     private val _testingConnection = MutableStateFlow(false)
     val testingConnection: StateFlow<Boolean> = _testingConnection.asStateFlow()
     internal val blueskyState = BlueskyStateHolder()
@@ -4577,28 +4579,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             _archivedItems.update { previous -> previous.filterNot { it.itemId == snapshot.item.itemId } }
             _binItems.update { previous -> previous.filterNot { it.itemId == snapshot.item.itemId } }
-            _queueItems.update { previous ->
-                val withoutItem = previous.filterNot { it.itemId == snapshot.item.itemId }
-                val insertAt = snapshot.originalIndex.coerceIn(0, withoutItem.size)
-                withoutItem.toMutableList().apply {
-                    add(insertAt, snapshot.item)
+            if (snapshot.source != ArchiveActionSource.HISTORY_EARLIER) {
+                _queueItems.update { previous ->
+                    val withoutItem = previous.filterNot { it.itemId == snapshot.item.itemId }
+                    val insertAt = snapshot.originalIndex.coerceIn(0, withoutItem.size)
+                    withoutItem.toMutableList().apply {
+                        add(insertAt, snapshot.item)
+                    }
                 }
+                if (snapshot.wasCached) {
+                    _cachedItemIds.update { previous -> previous + snapshot.item.itemId }
+                }
+                if (snapshot.wasNoActiveContent) {
+                    _noActiveContentItemIds.update { previous -> previous + snapshot.item.itemId }
+                }
+                updateAutoDownloadQueueSnapshotDiagnostics(
+                    current = settings.value,
+                    queueItems = _queueItems.value,
+                    offlineReadyIds = _cachedItemIds.value,
+                    knownNoActiveIds = _noActiveContentItemIds.value,
+                )
             }
-            if (snapshot.wasCached) {
-                _cachedItemIds.update { previous -> previous + snapshot.item.itemId }
-            }
-            if (snapshot.wasNoActiveContent) {
-                _noActiveContentItemIds.update { previous -> previous + snapshot.item.itemId }
-            }
-            updateAutoDownloadQueueSnapshotDiagnostics(
-                current = settings.value,
-                queueItems = _queueItems.value,
-                offlineReadyIds = _cachedItemIds.value,
-                knownNoActiveIds = _noActiveContentItemIds.value,
-            )
+            _archivedSessionHistoryIds.update { it - snapshot.item.itemId }
             val reopenItemId = when (snapshot.source) {
                 ArchiveActionSource.LOCUS -> snapshot.item.itemId
-                ArchiveActionSource.UP_NEXT -> null
+                ArchiveActionSource.UP_NEXT, ArchiveActionSource.HISTORY_EARLIER -> null
             }
             if (reopenItemId != null) {
                 startNowPlayingSession(startItemId = reopenItemId)
@@ -5100,16 +5105,71 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun archiveSessionItem(itemId: Int) {
         viewModelScope.launch {
-            archiveItem(itemId)
+            val historyItem = _nowPlayingSession.value?.historyItems?.firstOrNull { it.itemId == itemId }
+            val result = archiveItem(itemId)
+            // archiveItem() nulls the snapshot for items not in queue (history items). Restore it.
+            if (historyItem != null && lastArchiveUndoSnapshot == null && result.isSuccess) {
+                lastArchiveUndoSnapshot = ArchiveUndoSnapshot(
+                    item = PlaybackQueueItem(
+                        itemId = historyItem.itemId,
+                        title = historyItem.title,
+                        url = historyItem.url,
+                        host = historyItem.host,
+                        sourceType = historyItem.sourceType,
+                        sourceLabel = historyItem.sourceLabel,
+                        sourceUrl = historyItem.sourceUrl,
+                        captureKind = historyItem.captureKind,
+                        sourceAppPackage = historyItem.sourceAppPackage,
+                        status = historyItem.status,
+                        activeContentVersionId = historyItem.activeContentVersionId,
+                    ),
+                    originalIndex = -1,
+                    wasCached = false,
+                    wasNoActiveContent = false,
+                    source = ArchiveActionSource.HISTORY_EARLIER,
+                    actionType = UndoableActionType.ARCHIVE,
+                )
+                _archivedSessionHistoryIds.update { it + itemId }
+            }
+            if (result.isSuccess && !_queueOffline.value) {
+                showSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
+            }
         }
     }
 
     fun binSessionHistoryItem(itemId: Int) {
         viewModelScope.launch {
+            val historyItem = _nowPlayingSession.value?.historyItems?.firstOrNull { it.itemId == itemId }
             val result = moveItemToBin(itemId)
             if (result.isSuccess) {
+                // moveItemToBin() nulls the snapshot for items not in queue (history items). Restore it.
+                if (historyItem != null && lastArchiveUndoSnapshot == null) {
+                    lastArchiveUndoSnapshot = ArchiveUndoSnapshot(
+                        item = PlaybackQueueItem(
+                            itemId = historyItem.itemId,
+                            title = historyItem.title,
+                            url = historyItem.url,
+                            host = historyItem.host,
+                            sourceType = historyItem.sourceType,
+                            sourceLabel = historyItem.sourceLabel,
+                            sourceUrl = historyItem.sourceUrl,
+                            captureKind = historyItem.captureKind,
+                            sourceAppPackage = historyItem.sourceAppPackage,
+                            status = historyItem.status,
+                            activeContentVersionId = historyItem.activeContentVersionId,
+                        ),
+                        originalIndex = -1,
+                        wasCached = false,
+                        wasNoActiveContent = false,
+                        source = ArchiveActionSource.HISTORY_EARLIER,
+                        actionType = UndoableActionType.BIN,
+                    )
+                }
                 val updated = repository.removeHistoryItemFromSession(itemId) ?: return@launch
                 _nowPlayingSession.value = updated
+                if (!_queueOffline.value) {
+                    showSnackbar("Moved to Bin (14 days)", "Undo", ACTION_KEY_UNDO_ARCHIVE)
+                }
             }
         }
     }
@@ -5120,6 +5180,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (result.isSuccess) {
                 val updated = repository.removeItemFromSession(itemId) ?: return@launch
                 _nowPlayingSession.value = updated
+                if (!_queueOffline.value) {
+                    showSnackbar("Moved to Bin (14 days)", "Undo", ACTION_KEY_UNDO_ARCHIVE)
+                }
             }
         }
     }
