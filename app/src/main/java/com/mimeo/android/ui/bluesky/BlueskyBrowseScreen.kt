@@ -130,9 +130,6 @@ fun BlueskyBrowseScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {
-                Header()
-            }
-            item {
                 ScanDefaults(picker = picker)
             }
             item {
@@ -196,28 +193,6 @@ fun BlueskyBrowseScreen(
                 onClick = { actionScope.launch { listState.animateScrollToItem(0) } },
             )
         }
-    }
-}
-
-@Composable
-private fun Header() {
-    val isV1 = LocalMimeoV1Active.current
-    val mColors = LocalMimeoColorTokens.current
-    val mTypography = LocalMimeoTypographyTokens.current
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(
-            "Bluesky",
-            style = if (isV1) mTypography.title else MaterialTheme.typography.titleLarge,
-            color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            text = "Live candidate links. Saving creates normal Mimeo items.",
-            style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
-            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 

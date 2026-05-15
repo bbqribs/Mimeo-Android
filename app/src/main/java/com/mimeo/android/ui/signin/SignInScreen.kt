@@ -157,7 +157,7 @@ fun SignInScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(usernameFocusRequester),
-                    label = { Text("Username") },
+                    label = { Text("Username or email") },
                     singleLine = true,
                     enabled = !loading,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
