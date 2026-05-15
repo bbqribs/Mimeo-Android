@@ -66,6 +66,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -2178,17 +2179,17 @@ private fun NowPlayingSessionPanel(
             earlierHeaderHeightPx = 0f
         }
     }
-    // When items are re-inserted into Earlier in Queue (e.g. bin undo), compensate for
-    // the downward scroll jump caused by the list growing above the viewport.
-    var prevEarlierCountForScroll by remember { mutableIntStateOf(-1) }
-    LaunchedEffect(earlierItems.size) {
-        if (prevEarlierCountForScroll >= 0) {
-            val delta = earlierItems.size - prevEarlierCountForScroll
-            if (delta > 0) {
-                listScrollState.dispatchRawDelta(delta * avgItemHeight())
-            }
+    // When items are re-inserted into Earlier in Queue (e.g. bin undo), compensate the
+    // scroll position in the same composition frame so layout sees the corrected offset
+    // before draw. SideEffect runs synchronously after composition, before layout/draw.
+    val prevEarlierCount = remember { intArrayOf(-1) }
+    SideEffect {
+        val cur = earlierItems.size
+        if (prevEarlierCount[0] >= 0) {
+            val delta = cur - prevEarlierCount[0]
+            if (delta > 0) listScrollState.dispatchRawDelta(delta * avgItemHeight())
         }
-        prevEarlierCountForScroll = earlierItems.size
+        prevEarlierCount[0] = cur
     }
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
