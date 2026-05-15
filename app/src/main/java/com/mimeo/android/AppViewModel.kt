@@ -5113,7 +5113,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun archiveSessionItem(itemId: Int) {
         viewModelScope.launch {
-            val historyItem = _nowPlayingSession.value?.historyItems?.firstOrNull { it.itemId == itemId }
+            val session = _nowPlayingSession.value
+            val historyItem = session?.historyItems?.firstOrNull { it.itemId == itemId }
+            val isEarlierItem = historyItem == null && session != null &&
+                session.items.indexOfFirst { it.itemId == itemId }.let { idx ->
+                    idx >= 0 && idx < session.currentIndex
+                }
             val result = archiveItem(itemId)
             if (historyItem != null && result.isSuccess) {
                 // If archiveItem() did not set a snapshot (item not in queue), provide one.
@@ -5145,6 +5150,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         source = ArchiveActionSource.HISTORY_EARLIER,
                     )
                 }
+                _archivedSessionHistoryIds.update { it + itemId }
+            } else if (isEarlierItem && result.isSuccess) {
+                // Earlier items are in the queue, so archiveItem() already set the snapshot
+                // with source=UP_NEXT (correct for queue re-insertion on undo). Just mark
+                // the item so the Earlier row shows the "Archived" indicator.
                 _archivedSessionHistoryIds.update { it + itemId }
             }
             if (result.isSuccess && !_queueOffline.value) {

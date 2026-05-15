@@ -2163,7 +2163,7 @@ private fun NowPlayingSessionPanel(
         activeHeightPx = activeMeasuredHeight,
         belowActiveContentHeightPx = upcomingSectionHeightPx ?: 0f,
     )
-    var initialActiveAnchorReady by remember(currentItemId, serverItemIds) {
+    var initialActiveAnchorReady by remember(currentItemId) {
         mutableStateOf(currentItemId == null)
     }
     LaunchedEffect(historyItems.isEmpty()) {
@@ -2325,7 +2325,9 @@ private fun NowPlayingSessionPanel(
                                 onOpenItem = onOpenItem,
                                 onJumpToItem = onJumpToQueueItem,
                                 onArchiveItem = onArchiveSessionItem,
+                                onUnarchiveItem = onUnarchiveSessionHistoryItem,
                                 onBinItem = onBinSessionEarlierItem,
+                                showArchivedIndicator = item.itemId in archivedHistoryItemIds,
                             )
                             if (index < earlierItems.lastIndex) {
                                 HorizontalDivider(
