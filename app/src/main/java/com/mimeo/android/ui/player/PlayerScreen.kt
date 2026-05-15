@@ -1933,9 +1933,13 @@ fun PlayerScreen(
         // layout modifier is a no-op (insetPerSide == 0).
         Box(
             modifier = Modifier.layout { measurable, constraints ->
-                val insetPerSide = maxOf(0, (rootView.width - constraints.maxWidth) / 2)
+                // rootView.width is 0 before the Android view system has run its first layout
+                // pass (e.g. immediately after app resume). Fall back to constraints.maxWidth so
+                // the escape becomes a no-op rather than forcing a zero-width measurement.
+                val viewWidth = rootView.width.takeIf { it > 0 } ?: constraints.maxWidth
+                val insetPerSide = maxOf(0, (viewWidth - constraints.maxWidth) / 2)
                 val placeable = measurable.measure(
-                    constraints.copy(minWidth = rootView.width, maxWidth = rootView.width),
+                    constraints.copy(minWidth = viewWidth, maxWidth = viewWidth),
                 )
                 layout(constraints.maxWidth, placeable.height) {
                     placeable.placeRelative(-insetPerSide, 0)
