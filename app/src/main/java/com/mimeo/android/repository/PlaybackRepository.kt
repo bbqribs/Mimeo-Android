@@ -1362,14 +1362,14 @@ class PlaybackRepository(
         return updatedRow.toSession(stored)
     }
 
-    suspend fun restoreHistoryItemToSession(item: PlaybackQueueItem): NowPlayingSession? {
+    suspend fun restoreHistoryItemToSession(item: PlaybackQueueItem, index: Int = 0): NowPlayingSession? {
         val dao = database.nowPlayingDao()
         val row = dao.getSession() ?: return null
         val stored = parseStoredNowPlaying(row.queueJson)
         val history = parseStoredNowPlayingHistory(row.queueJson).toMutableList()
         if (history.any { it.itemId == item.itemId }) return row.toSession(stored)
         history.add(
-            0,
+            index.coerceIn(0, history.size),
             StoredNowPlayingItem(
                 itemId = item.itemId,
                 title = item.title,

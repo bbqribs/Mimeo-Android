@@ -4603,7 +4603,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _archivedSessionHistoryIds.update { it - snapshot.item.itemId }
             // Restore item to its session position for History/Earlier bin undos.
             if (snapshot.source == ArchiveActionSource.HISTORY_EARLIER && snapshot.isSessionHistoryItem) {
-                repository.restoreHistoryItemToSession(snapshot.item)?.let { _nowPlayingSession.value = it }
+                repository.restoreHistoryItemToSession(snapshot.item, snapshot.originalSessionIndex.coerceAtLeast(0))?.let { _nowPlayingSession.value = it }
                 runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
             } else if (snapshot.source == ArchiveActionSource.UP_NEXT && snapshot.originalSessionIndex >= 0) {
                 repository.insertItemAtIndexInSession(snapshot.item, snapshot.originalSessionIndex)
@@ -5185,12 +5185,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun binSessionHistoryItem(itemId: Int) {
         viewModelScope.launch {
-            val historyItem = _nowPlayingSession.value?.historyItems?.firstOrNull { it.itemId == itemId }
+            val session = _nowPlayingSession.value
+            val historyItem = session?.historyItems?.firstOrNull { it.itemId == itemId }
+            val historyIndex = session?.historyItems?.indexOfFirst { it.itemId == itemId } ?: -1
             val result = moveItemToBin(itemId)
             if (result.isSuccess) {
                 if (historyItem != null) {
                     // Upgrade or create the snapshot with history session context so undo
                     // restores the item to session history instead of reinserting into the queue.
+                    // originalSessionIndex holds the history list index for position-accurate restore.
                     lastArchiveUndoSnapshot = (lastArchiveUndoSnapshot ?: ArchiveUndoSnapshot(
                         item = PlaybackQueueItem(
                             itemId = historyItem.itemId,
@@ -5210,7 +5213,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         wasNoActiveContent = false,
                         source = ArchiveActionSource.HISTORY_EARLIER,
                         actionType = UndoableActionType.BIN,
-                    )).copy(source = ArchiveActionSource.HISTORY_EARLIER, isSessionHistoryItem = true)
+                    )).copy(
+                        source = ArchiveActionSource.HISTORY_EARLIER,
+                        isSessionHistoryItem = true,
+                        originalSessionIndex = historyIndex,
+                    )
                 }
                 val updated = repository.removeHistoryItemFromSession(itemId) ?: return@launch
                 _nowPlayingSession.value = updated

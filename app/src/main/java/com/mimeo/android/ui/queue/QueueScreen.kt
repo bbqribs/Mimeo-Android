@@ -2179,17 +2179,24 @@ private fun NowPlayingSessionPanel(
             earlierHeaderHeightPx = 0f
         }
     }
+    // Track measured heights of Earlier rows so scroll compensation uses exact values.
+    val earlierItemHeights = remember { mutableMapOf<Int, Float>() }
     // When items are re-inserted into Earlier in Queue (e.g. bin undo), compensate the
     // scroll position in the same composition frame so layout sees the corrected offset
     // before draw. SideEffect runs synchronously after composition, before layout/draw.
-    val prevEarlierCount = remember { intArrayOf(-1) }
+    val prevEarlierIds = remember { mutableListOf<Int>() }
     SideEffect {
-        val cur = earlierItems.size
-        if (prevEarlierCount[0] >= 0) {
-            val delta = cur - prevEarlierCount[0]
-            if (delta > 0) listScrollState.dispatchRawDelta(delta * avgItemHeight())
+        val curIds = earlierItems.map { it.itemId }
+        val prevSet = prevEarlierIds.toHashSet()
+        val added = curIds.filter { it !in prevSet }
+        if (added.isNotEmpty()) {
+            val totalHeight = added.sumOf {
+                (earlierItemHeights[it] ?: avgItemHeight()).toDouble()
+            }.toFloat()
+            listScrollState.dispatchRawDelta(totalHeight)
         }
-        prevEarlierCount[0] = cur
+        prevEarlierIds.clear()
+        prevEarlierIds.addAll(curIds)
     }
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -2329,6 +2336,9 @@ private fun NowPlayingSessionPanel(
                                 onUnarchiveItem = onUnarchiveSessionHistoryItem,
                                 onBinItem = onBinSessionEarlierItem,
                                 showArchivedIndicator = item.itemId in archivedHistoryItemIds,
+                                modifier = Modifier.onSizeChanged { size ->
+                                    earlierItemHeights[item.itemId] = size.height.toFloat()
+                                },
                             )
                             if (index < earlierItems.lastIndex) {
                                 HorizontalDivider(
