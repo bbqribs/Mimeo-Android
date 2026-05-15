@@ -2178,6 +2178,18 @@ private fun NowPlayingSessionPanel(
             earlierHeaderHeightPx = 0f
         }
     }
+    // When items are re-inserted into Earlier in Queue (e.g. bin undo), compensate for
+    // the downward scroll jump caused by the list growing above the viewport.
+    var prevEarlierCountForScroll by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(earlierItems.size) {
+        if (prevEarlierCountForScroll >= 0) {
+            val delta = earlierItems.size - prevEarlierCountForScroll
+            if (delta > 0) {
+                listScrollState.dispatchRawDelta(delta * avgItemHeight())
+            }
+        }
+        prevEarlierCountForScroll = earlierItems.size
+    }
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier

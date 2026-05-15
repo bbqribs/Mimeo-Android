@@ -5115,28 +5115,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val historyItem = _nowPlayingSession.value?.historyItems?.firstOrNull { it.itemId == itemId }
             val result = archiveItem(itemId)
-            // archiveItem() nulls the snapshot for items not in queue (history items). Restore it.
-            if (historyItem != null && lastArchiveUndoSnapshot == null && result.isSuccess) {
-                lastArchiveUndoSnapshot = ArchiveUndoSnapshot(
-                    item = PlaybackQueueItem(
-                        itemId = historyItem.itemId,
-                        title = historyItem.title,
-                        url = historyItem.url,
-                        host = historyItem.host,
-                        sourceType = historyItem.sourceType,
-                        sourceLabel = historyItem.sourceLabel,
-                        sourceUrl = historyItem.sourceUrl,
-                        captureKind = historyItem.captureKind,
-                        sourceAppPackage = historyItem.sourceAppPackage,
-                        status = historyItem.status,
-                        activeContentVersionId = historyItem.activeContentVersionId,
-                    ),
-                    originalIndex = -1,
-                    wasCached = false,
-                    wasNoActiveContent = false,
-                    source = ArchiveActionSource.HISTORY_EARLIER,
-                    actionType = UndoableActionType.ARCHIVE,
-                )
+            if (historyItem != null && result.isSuccess) {
+                // If archiveItem() did not set a snapshot (item not in queue), provide one.
+                // If it did (item was also in queue), keep that snapshot since it has the right
+                // originalIndex — just upgrade the source so undo skips queue reinsertion.
+                if (lastArchiveUndoSnapshot == null) {
+                    lastArchiveUndoSnapshot = ArchiveUndoSnapshot(
+                        item = PlaybackQueueItem(
+                            itemId = historyItem.itemId,
+                            title = historyItem.title,
+                            url = historyItem.url,
+                            host = historyItem.host,
+                            sourceType = historyItem.sourceType,
+                            sourceLabel = historyItem.sourceLabel,
+                            sourceUrl = historyItem.sourceUrl,
+                            captureKind = historyItem.captureKind,
+                            sourceAppPackage = historyItem.sourceAppPackage,
+                            status = historyItem.status,
+                            activeContentVersionId = historyItem.activeContentVersionId,
+                        ),
+                        originalIndex = -1,
+                        wasCached = false,
+                        wasNoActiveContent = false,
+                        source = ArchiveActionSource.HISTORY_EARLIER,
+                        actionType = UndoableActionType.ARCHIVE,
+                    )
+                } else {
+                    lastArchiveUndoSnapshot = lastArchiveUndoSnapshot?.copy(
+                        source = ArchiveActionSource.HISTORY_EARLIER,
+                    )
+                }
                 _archivedSessionHistoryIds.update { it + itemId }
             }
             if (result.isSuccess && !_queueOffline.value) {
@@ -5170,9 +5178,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val historyItem = _nowPlayingSession.value?.historyItems?.firstOrNull { it.itemId == itemId }
             val result = moveItemToBin(itemId)
             if (result.isSuccess) {
-                // moveItemToBin() nulls the snapshot for items not in queue (history items). Restore it.
-                if (historyItem != null && lastArchiveUndoSnapshot == null) {
-                    lastArchiveUndoSnapshot = ArchiveUndoSnapshot(
+                if (historyItem != null) {
+                    // Upgrade or create the snapshot with history session context so undo
+                    // restores the item to session history instead of reinserting into the queue.
+                    lastArchiveUndoSnapshot = (lastArchiveUndoSnapshot ?: ArchiveUndoSnapshot(
                         item = PlaybackQueueItem(
                             itemId = historyItem.itemId,
                             title = historyItem.title,
@@ -5191,8 +5200,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         wasNoActiveContent = false,
                         source = ArchiveActionSource.HISTORY_EARLIER,
                         actionType = UndoableActionType.BIN,
-                        isSessionHistoryItem = true,
-                    )
+                    )).copy(source = ArchiveActionSource.HISTORY_EARLIER, isSessionHistoryItem = true)
                 }
                 val updated = repository.removeHistoryItemFromSession(itemId) ?: return@launch
                 _nowPlayingSession.value = updated
