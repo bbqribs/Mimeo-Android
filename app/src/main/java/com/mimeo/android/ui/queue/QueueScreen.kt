@@ -2189,10 +2189,16 @@ private fun NowPlayingSessionPanel(
         val curIds = earlierItems.map { it.itemId }
         val prevSet = prevEarlierIds.toHashSet()
         val added = curIds.filter { it !in prevSet }
-        if (added.isNotEmpty()) {
-            val totalHeight = added.sumOf {
+        // Only compensate when the viewport is already scrolled past 0. When scroll == 0
+        // everything is visible at the top; dispatchRawDelta would push content above the
+        // viewport even though it was visible before the undo.
+        if (added.isNotEmpty() && listScrollState.value > 0) {
+            var totalHeight = added.sumOf {
                 (earlierItemHeights[it] ?: avgItemHeight()).toDouble()
             }.toFloat()
+            // If the Earlier section just appeared (was absent before), the section header
+            // is also new content that pushes items below it downward.
+            if (prevSet.isEmpty()) totalHeight += earlierHeaderHeightPx
             listScrollState.dispatchRawDelta(totalHeight)
         }
         prevEarlierIds.clear()
