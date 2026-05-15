@@ -4601,6 +4601,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             _archivedSessionHistoryIds.update { it - snapshot.item.itemId }
+            // Restore item to its session position for History/Earlier bin undos.
+            if (snapshot.source == ArchiveActionSource.HISTORY_EARLIER && snapshot.isSessionHistoryItem) {
+                repository.restoreHistoryItemToSession(snapshot.item)?.let { _nowPlayingSession.value = it }
+                runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
+            } else if (snapshot.source == ArchiveActionSource.UP_NEXT && snapshot.originalSessionIndex >= 0) {
+                repository.insertItemAtIndexInSession(snapshot.item, snapshot.originalSessionIndex)
+                    ?.let { _nowPlayingSession.value = it }
+            }
             val reopenItemId = when (snapshot.source) {
                 ArchiveActionSource.LOCUS -> snapshot.item.itemId
                 ArchiveActionSource.UP_NEXT, ArchiveActionSource.HISTORY_EARLIER -> null
@@ -5137,6 +5145,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun unarchiveSessionHistoryItem(itemId: Int) {
+        viewModelScope.launch {
+            val current = settings.value
+            try {
+                repository.unarchiveItem(current.baseUrl, current.apiToken, itemId)
+                repository.toggleCompletion(current.baseUrl, current.apiToken, itemId, markDone = false)
+                _archivedSessionHistoryIds.update { it - itemId }
+                if (lastArchiveUndoSnapshot?.item?.itemId == itemId) lastArchiveUndoSnapshot = null
+                runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
+                showSnackbar("Unarchived")
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (!handleAuthFailureIfNeeded(error)) {
+                    showSnackbar("Unarchive failed")
+                }
+            }
+        }
+    }
+
     fun binSessionHistoryItem(itemId: Int) {
         viewModelScope.launch {
             val historyItem = _nowPlayingSession.value?.historyItems?.firstOrNull { it.itemId == itemId }
@@ -5163,6 +5191,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         wasNoActiveContent = false,
                         source = ArchiveActionSource.HISTORY_EARLIER,
                         actionType = UndoableActionType.BIN,
+                        isSessionHistoryItem = true,
                     )
                 }
                 val updated = repository.removeHistoryItemFromSession(itemId) ?: return@launch
@@ -5176,8 +5205,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun binSessionEarlierItem(itemId: Int) {
         viewModelScope.launch {
+            val sessionIndex = _nowPlayingSession.value?.items?.indexOfFirst { it.itemId == itemId } ?: -1
             val result = moveItemToBin(itemId)
             if (result.isSuccess) {
+                // Record session index so undo can restore the item to Earlier section.
+                lastArchiveUndoSnapshot = lastArchiveUndoSnapshot?.copy(originalSessionIndex = sessionIndex)
                 val updated = repository.removeItemFromSession(itemId) ?: return@launch
                 _nowPlayingSession.value = updated
                 if (!_queueOffline.value) {

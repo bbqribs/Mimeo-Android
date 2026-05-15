@@ -1362,6 +1362,72 @@ class PlaybackRepository(
         return updatedRow.toSession(stored)
     }
 
+    suspend fun restoreHistoryItemToSession(item: PlaybackQueueItem): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson)
+        val history = parseStoredNowPlayingHistory(row.queueJson).toMutableList()
+        if (history.any { it.itemId == item.itemId }) return row.toSession(stored)
+        history.add(
+            0,
+            StoredNowPlayingItem(
+                itemId = item.itemId,
+                title = item.title,
+                url = item.url,
+                host = item.host,
+                sourceType = item.sourceType,
+                sourceLabel = item.sourceLabel,
+                sourceUrl = item.sourceUrl,
+                captureKind = item.captureKind,
+                sourceAppPackage = item.sourceAppPackage,
+                status = item.status,
+                activeContentVersionId = item.activeContentVersionId,
+            ),
+        )
+        val updatedRow = row.copy(
+            queueJson = encodeStoredNowPlaying(stored, history),
+            updatedAt = System.currentTimeMillis(),
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(stored)
+    }
+
+    suspend fun insertItemAtIndexInSession(item: PlaybackQueueItem, index: Int): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson).toMutableList()
+        if (stored.any { it.itemId == item.itemId }) return row.toSession(stored)
+        val insertAt = index.coerceIn(0, stored.size)
+        stored.add(
+            insertAt,
+            StoredNowPlayingItem(
+                itemId = item.itemId,
+                title = item.title,
+                url = item.url,
+                host = item.host,
+                sourceType = item.sourceType,
+                sourceLabel = item.sourceLabel,
+                sourceUrl = item.sourceUrl,
+                captureKind = item.captureKind,
+                sourceAppPackage = item.sourceAppPackage,
+                status = item.status,
+                activeContentVersionId = item.activeContentVersionId,
+            ),
+        )
+        val newCurrentIndex = if (insertAt <= row.currentIndex) {
+            (row.currentIndex + 1).coerceIn(0, stored.lastIndex)
+        } else {
+            row.currentIndex
+        }
+        val updatedRow = row.copy(
+            queueJson = encodeStoredNowPlaying(stored, parseStoredNowPlayingHistory(row.queueJson)),
+            currentIndex = newCurrentIndex,
+            updatedAt = System.currentTimeMillis(),
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(stored)
+    }
+
     suspend fun reorderSessionItem(fromIndex: Int, toIndex: Int): NowPlayingSession? {
         val dao = database.nowPlayingDao()
         val row = dao.getSession() ?: return null

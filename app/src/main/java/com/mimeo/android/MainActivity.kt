@@ -395,6 +395,8 @@ internal data class ArchiveUndoSnapshot(
     val wasNoActiveContent: Boolean,
     val source: ArchiveActionSource,
     val actionType: UndoableActionType,
+    val originalSessionIndex: Int = -1,
+    val isSessionHistoryItem: Boolean = false,
 )
 
 enum class UndoableActionType {

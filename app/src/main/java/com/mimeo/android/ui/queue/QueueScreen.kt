@@ -792,6 +792,7 @@ fun QueueScreen(
                 onRemoveItem = { itemId -> vm.removeItemFromSession(itemId) },
                 onClearUpcoming = { showClearUpcomingConfirmation = true },
                 onArchiveSessionItem = { itemId -> vm.archiveSessionItem(itemId) },
+                onUnarchiveSessionHistoryItem = { itemId -> vm.unarchiveSessionHistoryItem(itemId) },
                 onBinSessionHistoryItem = { itemId -> vm.binSessionHistoryItem(itemId) },
                 onBinSessionEarlierItem = { itemId -> vm.binSessionEarlierItem(itemId) },
                 archivedHistoryItemIds = archivedSessionHistoryIds,
@@ -1853,6 +1854,7 @@ private fun SessionStaticItemRow(
     onOpenItem: (Int) -> Unit,
     onJumpToItem: (Int) -> Unit,
     onArchiveItem: ((Int) -> Unit)? = null,
+    onUnarchiveItem: ((Int) -> Unit)? = null,
     onBinItem: ((Int) -> Unit)? = null,
     showArchivedIndicator: Boolean = false,
     modifier: Modifier = Modifier,
@@ -1934,7 +1936,15 @@ private fun SessionStaticItemRow(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false },
                 ) {
-                    if (onArchiveItem != null) {
+                    if (showArchivedIndicator && onUnarchiveItem != null) {
+                        DropdownMenuItem(
+                            text = { Text("Unarchive") },
+                            onClick = {
+                                showMenu = false
+                                onUnarchiveItem(item.itemId)
+                            },
+                        )
+                    } else if (!showArchivedIndicator && onArchiveItem != null) {
                         DropdownMenuItem(
                             text = { Text("Archive") },
                             onClick = {
@@ -1975,6 +1985,7 @@ private fun NowPlayingSessionPanel(
     onSnapPillVisibilityChange: (Boolean) -> Unit = {},
     trailingActions: (@Composable RowScope.() -> Unit)? = null,
     onArchiveSessionItem: (Int) -> Unit = {},
+    onUnarchiveSessionHistoryItem: (Int) -> Unit = {},
     onBinSessionHistoryItem: (Int) -> Unit = {},
     onBinSessionEarlierItem: (Int) -> Unit = {},
     archivedHistoryItemIds: Set<Int> = emptySet(),
@@ -2261,6 +2272,7 @@ private fun NowPlayingSessionPanel(
                                 onOpenItem = onOpenItem,
                                 onJumpToItem = onJumpToHistoryItem,
                                 onArchiveItem = onArchiveSessionItem,
+                                onUnarchiveItem = onUnarchiveSessionHistoryItem,
                                 onBinItem = onBinSessionHistoryItem,
                                 showArchivedIndicator = item.itemId in archivedHistoryItemIds,
                             )
