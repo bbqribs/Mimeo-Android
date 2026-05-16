@@ -1640,7 +1640,7 @@ fun SettingsScreen(
                     ) {
                         Text("Visual theme mode")
                         Text(
-                            text = "Saved now; applied to Paper & Ember tokens while visual v1 is active.",
+                            text = "Saved now; applied to visual design colors while visual v1 is active.",
                             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                             color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1677,7 +1677,7 @@ fun SettingsScreen(
                     ) {
                         Text("Accent")
                         Text(
-                            text = "Saved now; changes the Paper & Ember accent colors while visual v1 is active.",
+                            text = "Saved now; changes accent colors while visual v1 is active.",
                             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                             color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                         )
