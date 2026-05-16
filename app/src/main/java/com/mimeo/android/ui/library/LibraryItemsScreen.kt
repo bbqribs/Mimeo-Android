@@ -332,7 +332,13 @@ fun LibraryItemsScreen(
 
     val pendingItems = if (isInbox) sortedItems.filter { it.status in PENDING_STATUSES } else emptyList()
     val baseReadyItems = if (isInbox) sortedItems.filter { it.status !in PENDING_STATUSES } else sortedItems
-    val readyItems = if (reorderActive) localReorderItems ?: baseReadyItems else baseReadyItems
+    val shouldShowLocalReorderItems = localReorderItems != null &&
+        !selectionActive &&
+        !isInbox &&
+        !isBin &&
+        searchQuery.isBlank() &&
+        sortOption == LibrarySortOption.SMART_QUEUE
+    val readyItems = if (shouldShowLocalReorderItems) localReorderItems ?: baseReadyItems else baseReadyItems
     val visiblePlaybackItems = remember(isInbox, pendingExpanded, pendingItems, readyItems, sortedItems) {
         if (isInbox) {
             buildList {
