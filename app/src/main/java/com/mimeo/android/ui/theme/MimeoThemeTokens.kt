@@ -27,7 +27,7 @@ fun resolveThemeChoice(
 
 fun colorTokensFor(
     choice: MimeoThemeChoice,
-    scheme: MimeoAccentScheme = MimeoAccentScheme.EMBER,
+    scheme: MimeoAccentScheme = MimeoAccentScheme.LILAC,
 ): MimeoColorTokens {
     val accent = accentTokensFor(scheme, choice)
     val base = when (choice) {
@@ -46,7 +46,7 @@ fun mimeoThemeTokens(
     preference: VisualThemePreference,
     systemIsDarkTheme: Boolean,
     density: MimeoDensityTokens,
-    scheme: MimeoAccentScheme = MimeoAccentScheme.EMBER,
+    scheme: MimeoAccentScheme = MimeoAccentScheme.LILAC,
 ): MimeoThemeTokens = MimeoThemeTokens(
     colors = colorTokensFor(resolveThemeChoice(preference, systemIsDarkTheme), scheme),
     typography = MimeoTypography.PaperEmber,
@@ -61,4 +61,4 @@ val LocalMimeoSpacingTokens = staticCompositionLocalOf { MimeoSpacing }
 val LocalMimeoDensityTokens = staticCompositionLocalOf { MimeoDensityDefault }
 val LocalMimeoShapeTokens = staticCompositionLocalOf { MimeoShapes }
 val LocalMimeoV1Active = staticCompositionLocalOf { false }
-val LocalMimeoAccentScheme = staticCompositionLocalOf { MimeoAccentScheme.EMBER }
+val LocalMimeoAccentScheme = staticCompositionLocalOf { MimeoAccentScheme.LILAC }

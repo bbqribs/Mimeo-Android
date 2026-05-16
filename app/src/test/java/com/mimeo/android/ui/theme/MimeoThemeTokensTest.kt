@@ -2,6 +2,7 @@ package com.mimeo.android.ui.theme
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.VisualDensityPreference
 import com.mimeo.android.model.VisualThemePreference
 import org.junit.Assert.assertEquals
@@ -158,16 +159,16 @@ class MimeoThemeTokensTest {
     // Accent scheme variants
 
     @Test
-    fun defaultAccentScheme_isEmber() {
-        // colorTokensFor with no explicit scheme must produce Ember accent values
+    fun defaultAccentScheme_isLilac() {
+        // colorTokensFor with no explicit scheme must produce Lilac accent values
         val light = colorTokensFor(MimeoThemeChoice.LIGHT)
         val dark  = colorTokensFor(MimeoThemeChoice.DARK)
-        assertEquals(MimeoAccentSchemes.EmberLight.accent, light.accent)
-        assertEquals(MimeoAccentSchemes.EmberDark.accent,  dark.accent)
+        assertEquals(MimeoAccentSchemes.LilacLight.accent, light.accent)
+        assertEquals(MimeoAccentSchemes.LilacDark.accent,  dark.accent)
     }
 
     @Test
-    fun defaultScheme_paperLightAndEmberDarkBindingsUnchanged() {
+    fun emberScheme_paperLightAndEmberDarkBindingsUnchanged() {
         // Passing EMBER explicitly must produce identical accent fields to the static objects
         val light = colorTokensFor(MimeoThemeChoice.LIGHT, MimeoAccentScheme.EMBER)
         val dark  = colorTokensFor(MimeoThemeChoice.DARK,  MimeoAccentScheme.EMBER)
@@ -195,6 +196,12 @@ class MimeoThemeTokensTest {
     }
 
     @Test
+    fun lilacScheme_usesChipPurpleInLightAndPastelPurpleInDark() {
+        assertEquals(Color(0xFF6B49CC), MimeoAccentSchemes.LilacLight.accent)
+        assertEquals(Color(0xFFC9B8FF), MimeoAccentSchemes.LilacDark.accent)
+    }
+
+    @Test
     fun forestScheme_resolvesDifferentAccentFromEmber() {
         val light = colorTokensFor(MimeoThemeChoice.LIGHT, MimeoAccentScheme.FOREST)
         val dark  = colorTokensFor(MimeoThemeChoice.DARK,  MimeoAccentScheme.FOREST)
@@ -212,6 +219,13 @@ class MimeoThemeTokensTest {
         assertEquals(MimeoAccentSchemes.SlateDark.accent,  dark.accent)
         assert(light.accent != colorTokensFor(MimeoThemeChoice.LIGHT, MimeoAccentScheme.EMBER).accent)
         assert(dark.accent  != colorTokensFor(MimeoThemeChoice.DARK,  MimeoAccentScheme.EMBER).accent)
+    }
+
+    @Test
+    fun accentPreferenceMapping_feedsThemeTokenResolution() {
+        val selectedScheme = AccentSchemePreference.SLATE.toMimeoAccentScheme()
+        val tokens = colorTokensFor(MimeoThemeChoice.LIGHT, selectedScheme)
+        assertEquals(MimeoAccentSchemes.SlateLight.accent, tokens.accent)
     }
 
     @Test

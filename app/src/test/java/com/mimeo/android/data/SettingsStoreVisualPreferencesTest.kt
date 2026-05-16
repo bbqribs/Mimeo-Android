@@ -2,6 +2,7 @@ package com.mimeo.android.data
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.ReaderFontOption
@@ -33,6 +34,7 @@ class SettingsStoreVisualPreferencesTest {
         val defaults = AppSettings()
         assertEquals(VisualThemePreference.FOLLOW_SYSTEM, defaults.visualThemePreference)
         assertEquals(VisualDensityPreference.DEFAULT, defaults.visualDensityPreference)
+        assertEquals(AccentSchemePreference.LILAC, defaults.accentSchemePreference)
     }
 
     @Test
@@ -40,6 +42,7 @@ class SettingsStoreVisualPreferencesTest {
         val settings = store.settingsFlow.first()
         assertEquals(VisualThemePreference.FOLLOW_SYSTEM, settings.visualThemePreference)
         assertEquals(VisualDensityPreference.DEFAULT, settings.visualDensityPreference)
+        assertEquals(AccentSchemePreference.LILAC, settings.accentSchemePreference)
     }
 
     @Test
@@ -57,6 +60,13 @@ class SettingsStoreVisualPreferencesTest {
     }
 
     @Test
+    fun saveAccentSchemePreference_roundTrips() = runBlocking {
+        store.saveAccentSchemePreference(AccentSchemePreference.FOREST)
+        val settings = store.settingsFlow.first()
+        assertEquals(AccentSchemePreference.FOREST, settings.accentSchemePreference)
+    }
+
+    @Test
     fun invalidStoredThemeString_fallsBackToFollowSystem() {
         assertEquals(
             VisualThemePreference.FOLLOW_SYSTEM,
@@ -69,6 +79,14 @@ class SettingsStoreVisualPreferencesTest {
         assertEquals(
             VisualDensityPreference.DEFAULT,
             store.parseVisualDensityPreference("not-a-density"),
+        )
+    }
+
+    @Test
+    fun invalidStoredAccentSchemeString_fallsBackToLilac() {
+        assertEquals(
+            AccentSchemePreference.LILAC,
+            store.parseAccentSchemePreference("not-an-accent"),
         )
     }
 
