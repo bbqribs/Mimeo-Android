@@ -196,6 +196,12 @@ class MimeoThemeTokensTest {
     }
 
     @Test
+    fun lilacScheme_usesLibraryChipPurpleInLightAndDark() {
+        assertEquals(Color(0xFF6B49CC), MimeoAccentSchemes.LilacLight.accent)
+        assertEquals(Color(0xFF6B49CC), MimeoAccentSchemes.LilacDark.accent)
+    }
+
+    @Test
     fun forestScheme_resolvesDifferentAccentFromEmber() {
         val light = colorTokensFor(MimeoThemeChoice.LIGHT, MimeoAccentScheme.FOREST)
         val dark  = colorTokensFor(MimeoThemeChoice.DARK,  MimeoAccentScheme.FOREST)

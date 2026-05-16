@@ -25,7 +25,7 @@ object MimeoAccentSchemes {
         nowTint = Color(0x0FB6A1FF),
     )
 
-    // Calm Lilac — web Direction A reference: dark accent #8D73FF, light #6B49CC
+    // Calm Lilac — use the quieter library chip label purple across light and dark.
     val LilacLight = MimeoAccentTokens(
         accent = Color(0xFF6B49CC),
         accentDim = Color(0x1A6B49CC),
@@ -33,10 +33,10 @@ object MimeoAccentSchemes {
         nowTint = Color(0x126B49CC),
     )
     val LilacDark = MimeoAccentTokens(
-        accent = Color(0xFF8D73FF),
-        accentDim = Color(0x248D73FF),
+        accent = Color(0xFF6B49CC),
+        accentDim = Color(0x246B49CC),
         accentOn = Color(0xFF0B0B0E),
-        nowTint = Color(0x0F8D73FF),
+        nowTint = Color(0x0F6B49CC),
     )
 
     val ForestLight = MimeoAccentTokens(
