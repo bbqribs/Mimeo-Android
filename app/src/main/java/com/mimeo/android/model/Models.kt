@@ -177,6 +177,7 @@ data class AuthTokenResponse(
 data class PlaybackQueueResponse(
     val count: Int,
     @SerialName("total_count") val totalCount: Int = 0,
+    @SerialName("active_scope_limit") val activeScopeLimit: Int? = null,
     @SerialName("reorder_allowed") val reorderAllowed: Boolean = false,
     @SerialName("reorder_unavailable_reason") val reorderUnavailableReason: String? = null,
     val items: List<PlaybackQueueItem>,

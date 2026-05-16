@@ -8,20 +8,33 @@ import org.junit.Test
 
 class SmartQueueReorderPolicyTest {
     @Test
-    fun enablesOnlyDefaultCompleteUnfilteredSmartQueue() {
+    fun boundedActiveScopeAllowsReorder() {
         assertTrue(
             smartQueueDragReorderEnabled(
                 backendReorderAllowed = true,
                 searchQuery = "",
                 sortOption = LibrarySortOption.SMART_QUEUE,
                 hasMorePages = false,
-                itemCount = 3,
+                itemCount = 100,
             ),
         )
     }
 
     @Test
-    fun disablesWhenSearchOrCustomSortOrPaginationIsActive() {
+    fun totalCountGreaterThanActiveScopeDoesNotBlockReorder() {
+        assertTrue(
+            smartQueueDragReorderEnabled(
+                backendReorderAllowed = true,
+                searchQuery = "",
+                sortOption = LibrarySortOption.SMART_QUEUE,
+                hasMorePages = false,
+                itemCount = 100,
+            ),
+        )
+    }
+
+    @Test
+    fun disablesWhenSearchOrCustomSortOrIncompleteResponseIsActive() {
         assertFalse(
             smartQueueDragReorderEnabled(
                 backendReorderAllowed = true,
@@ -108,30 +121,30 @@ class SmartQueueReorderPolicyTest {
     }
 
     @Test
-    fun disablesWhenQueueExceedsItemLimit() {
-        assertFalse(
+    fun noLegacyFiveHundredItemGateRemains() {
+        assertTrue(
             smartQueueDragReorderEnabled(
                 backendReorderAllowed = true,
                 searchQuery = "",
                 sortOption = LibrarySortOption.SMART_QUEUE,
                 hasMorePages = false,
-                itemCount = SMART_QUEUE_REORDER_ITEM_LIMIT + 1,
+                itemCount = 501,
             ),
         )
     }
 
     @Test
-    fun statusLabelReportsQueueTooLarge() {
+    fun statusLabelReportsIncompleteResponseWithoutFullQueueLoadingCopy() {
         assertEquals(
-            "Reorder: queue too large (limit is $SMART_QUEUE_REORDER_ITEM_LIMIT)",
+            "Reorder: unavailable until queue response is complete",
             smartQueueReorderStatusLabel(
                 dragReorderEnabled = false,
                 backendReorderAllowed = true,
                 unavailableReason = null,
                 searchQuery = "",
                 sortOption = LibrarySortOption.SMART_QUEUE,
-                hasMorePages = false,
-                itemCount = SMART_QUEUE_REORDER_ITEM_LIMIT + 1,
+                hasMorePages = true,
+                itemCount = 3,
                 loading = false,
                 reorderSaving = false,
             ),
@@ -152,6 +165,30 @@ class SmartQueueReorderPolicyTest {
                 itemCount = 3,
                 loading = false,
                 reorderSaving = false,
+            ),
+        )
+    }
+
+    @Test
+    fun scopeStatusLabelReportsActiveScope() {
+        assertEquals(
+            "First 100 of 930 items",
+            smartQueueScopeStatusLabel(
+                itemCount = 100,
+                totalCount = 930,
+                activeScopeLimit = 100,
+            ),
+        )
+    }
+
+    @Test
+    fun scopeStatusLabelHiddenWhenTotalFitsVisibleItems() {
+        assertEquals(
+            "",
+            smartQueueScopeStatusLabel(
+                itemCount = 42,
+                totalCount = 42,
+                activeScopeLimit = 100,
             ),
         )
     }

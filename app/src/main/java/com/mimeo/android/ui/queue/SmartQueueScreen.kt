@@ -47,10 +47,11 @@ fun SmartQueueScreen(
     val queueItems by vm.queueItems.collectAsState()
     val loading by vm.queueLoading.collectAsState()
     val hasMorePages by vm.queueHasMorePages.collectAsState()
+    val queueTotalCount by vm.queueTotalCount.collectAsState()
+    val activeScopeLimit by vm.queueActiveScopeLimit.collectAsState()
     val reorderAllowed by vm.smartQueueReorderAllowed.collectAsState()
     val reorderUnavailableReason by vm.smartQueueReorderUnavailableReason.collectAsState()
     val reorderSaving by vm.smartQueueReorderSaving.collectAsState()
-    val loadingMore by vm.queueLoadingMore.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val actionScope = rememberCoroutineScope()
@@ -67,6 +68,11 @@ fun SmartQueueScreen(
     val showReorderHandle = sortOption == LibrarySortOption.SMART_QUEUE &&
         searchQuery.isBlank() &&
         queueItems.size > 1
+    val scopeStatusLabel = smartQueueScopeStatusLabel(
+        itemCount = queueItems.size,
+        totalCount = queueTotalCount,
+        activeScopeLimit = activeScopeLimit,
+    )
     val reorderStatusLabel = if (dragReorderEnabled && !reorderSaving) {
         ""
     } else {
@@ -82,6 +88,9 @@ fun SmartQueueScreen(
             reorderSaving = reorderSaving,
         )
     }
+    val headerStatusLabel = listOf(scopeStatusLabel, reorderStatusLabel)
+        .filter { it.isNotBlank() }
+        .joinToString(" | ")
     LaunchedEffect(Unit) {
         if (settings.selectedPlaylistId == null) {
             vm.loadQueueIfNotRecent()
@@ -99,7 +108,7 @@ fun SmartQueueScreen(
         } else {
             "No Smart Queue items match this search."
         },
-        header = { SmartQueueSourceHeader(statusLabel = reorderStatusLabel) },
+        header = { SmartQueueSourceHeader(statusLabel = headerStatusLabel) },
         showSourceListRule = true,
         sortOption = sortOption,
         availableSorts = emptyList(),
@@ -155,8 +164,6 @@ fun SmartQueueScreen(
                 sourceLabel = "Smart Queue",
             )
         },
-        onLoadMore = { vm.loadMoreQueueItems() },
-        loadingMore = loadingMore,
         jumpPillBottomClearance = jumpPillBottomClearance,
     )
 }
