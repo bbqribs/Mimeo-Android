@@ -302,7 +302,11 @@ fun LibraryItemsScreen(
         onDragReorder != null
     val showReorderHandle = showDragReorderHandle && !selectionActive && !isInbox && !isBin
 
-    LaunchedEffect(items.map { it.itemId }, dragReorderEnabled, sortOption, searchQuery, dragReorderUnavailableReason) {
+    // Keyed on item IDs, sort, search, and backend-unavailable reason — but NOT on
+    // dragReorderEnabled itself, because that goes false while reorderSaving=true (the VM sets
+    // _smartQueueReorderSaving synchronously before the network call). Keying on it here would
+    // fire this reset before the backend responds and revert the optimistic local order.
+    LaunchedEffect(items.map { it.itemId }, sortOption, searchQuery, dragReorderUnavailableReason) {
         localReorderItems = null
         draggingIndex = -1
         dragOffsetY = 0f
@@ -710,6 +714,7 @@ fun LibraryItemsScreen(
                                     else -> 0f
                                 }
                                 val ruleColor = if (isV1) mColors.fg4 else MaterialTheme.colorScheme.outlineVariant
+                                val dragBgColor = if (isV1) mColors.surfaceHi else MaterialTheme.colorScheme.surfaceContainerHigh
                                 val rowModifier = Modifier
                                     .onGloballyPositioned { coordinates ->
                                         itemTopOffsets = itemTopOffsets + (entry.item.itemId to coordinates.positionInParent().y)
@@ -718,13 +723,15 @@ fun LibraryItemsScreen(
                                     .graphicsLayer { translationY = visualOffset }
                                     .zIndex(if (isDragging) 1f else 0f)
                                     .then(
-                                        if (showSourceListRule) {
+                                        if (isDragging) {
+                                            Modifier.background(dragBgColor).drawBehind {
+                                                if (showSourceListRule) {
+                                                    drawRect(ruleColor, Offset.Zero, Size(3.dp.toPx(), size.height))
+                                                }
+                                            }
+                                        } else if (showSourceListRule) {
                                             Modifier.drawBehind {
-                                                drawRect(
-                                                    color = ruleColor,
-                                                    topLeft = Offset.Zero,
-                                                    size = Size(3.dp.toPx(), size.height),
-                                                )
+                                                drawRect(ruleColor, Offset.Zero, Size(3.dp.toPx(), size.height))
                                             }
                                         } else Modifier,
                                     )
