@@ -51,6 +51,8 @@ gated on the final QA matrix in
    (CONTRACT CHANGE). V1 search remains supported, but drag reorder should be
    disabled while search/filter is active unless filtered-reorder semantics
    are explicitly specified.
+   Smart Queue source idiom (accent left rule on header, reorder status,
+   per-row source-list rule) shipped in M-V2-03; drag reorder preserved.
 5. [ ] **Startup polish cluster.** No sign-in flash for restored sessions,
    neutral loading/splash state, and drawer closed on launch.
 6. [ ] **Instrumented tests cluster.** Startup/auth restoration coverage,

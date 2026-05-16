@@ -65,6 +65,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -159,6 +162,7 @@ fun LibraryItemsScreen(
     items: List<PlaybackQueueItem>,
     loading: Boolean,
     emptyMessage: String,
+    header: (@Composable () -> Unit)? = null,
     sortOption: LibrarySortOption,
     availableSorts: List<LibrarySortOption> = LibrarySortOption.entries,
     searchQuery: String,
@@ -166,6 +170,7 @@ fun LibraryItemsScreen(
     clientSideSearch: Boolean = false,
     isInbox: Boolean = false,
     isBin: Boolean = false,
+    showSourceListRule: Boolean = false,
     showDragReorderHandle: Boolean = false,
     dragReorderEnabled: Boolean = false,
     dragReorderUnavailableReason: String? = null,
@@ -424,6 +429,7 @@ fun LibraryItemsScreen(
 
     ListSurfaceScaffold(
         modifier = Modifier.fillMaxSize(),
+        header = header,
         selectionBar = if (selectionActive) {
             {
                 // Contextual action bar — replaces search/sort row while in selection mode.
@@ -703,6 +709,7 @@ fun LibraryItemsScreen(
                                     )
                                     else -> 0f
                                 }
+                                val ruleColor = if (isV1) mColors.fg4 else MaterialTheme.colorScheme.outlineVariant
                                 val rowModifier = Modifier
                                     .onGloballyPositioned { coordinates ->
                                         itemTopOffsets = itemTopOffsets + (entry.item.itemId to coordinates.positionInParent().y)
@@ -710,6 +717,17 @@ fun LibraryItemsScreen(
                                     }
                                     .graphicsLayer { translationY = visualOffset }
                                     .zIndex(if (isDragging) 1f else 0f)
+                                    .then(
+                                        if (showSourceListRule) {
+                                            Modifier.drawBehind {
+                                                drawRect(
+                                                    color = ruleColor,
+                                                    topLeft = Offset.Zero,
+                                                    size = Size(3.dp.toPx(), size.height),
+                                                )
+                                            }
+                                        } else Modifier,
+                                    )
                                 val dragHandleModifier = if (showReorderHandle && readyIndex >= 0) {
                                     if (reorderActive) {
                                         Modifier.pointerInput(entry.item.itemId, readyIndex) {

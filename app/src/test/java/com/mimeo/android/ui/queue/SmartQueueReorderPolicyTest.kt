@@ -74,4 +74,54 @@ class SmartQueueReorderPolicyTest {
             ),
         )
     }
+
+    @Test
+    fun disablesWhileReorderIsSaving() {
+        assertFalse(
+            smartQueueDragReorderEnabled(
+                backendReorderAllowed = true,
+                searchQuery = "",
+                sortOption = LibrarySortOption.SMART_QUEUE,
+                hasMorePages = false,
+                itemCount = 3,
+                reorderSaving = true,
+            ),
+        )
+    }
+
+    @Test
+    fun statusLabelReportsSavingState() {
+        assertEquals(
+            "Reorder: saving",
+            smartQueueReorderStatusLabel(
+                dragReorderEnabled = false,
+                backendReorderAllowed = true,
+                unavailableReason = null,
+                searchQuery = "",
+                sortOption = LibrarySortOption.SMART_QUEUE,
+                hasMorePages = false,
+                itemCount = 3,
+                loading = false,
+                reorderSaving = true,
+            ),
+        )
+    }
+
+    @Test
+    fun statusLabelReportsDisabledWhileSearching() {
+        assertEquals(
+            "Reorder: disabled while searching",
+            smartQueueReorderStatusLabel(
+                dragReorderEnabled = false,
+                backendReorderAllowed = true,
+                unavailableReason = null,
+                searchQuery = "hello",
+                sortOption = LibrarySortOption.SMART_QUEUE,
+                hasMorePages = false,
+                itemCount = 3,
+                loading = false,
+                reorderSaving = false,
+            ),
+        )
+    }
 }

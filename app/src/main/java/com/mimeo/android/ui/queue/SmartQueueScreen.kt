@@ -1,9 +1,16 @@
 package com.mimeo.android.ui.queue
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -12,6 +19,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.ACTION_KEY_UNDO_BATCH
@@ -20,6 +32,9 @@ import com.mimeo.android.SMART_QUEUE_SESSION_CONTEXT_ID
 import com.mimeo.android.ui.library.LibraryBatchAction
 import com.mimeo.android.ui.library.LibraryItemsScreen
 import com.mimeo.android.ui.library.LibrarySortOption
+import com.mimeo.android.ui.theme.LocalMimeoColorTokens
+import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
+import com.mimeo.android.ui.theme.LocalMimeoV1Active
 import kotlinx.coroutines.launch
 
 @Composable
@@ -51,6 +66,21 @@ fun SmartQueueScreen(
     val showReorderHandle = sortOption == LibrarySortOption.SMART_QUEUE &&
         searchQuery.isBlank() &&
         queueItems.size > 1
+    val reorderStatusLabel = if (dragReorderEnabled && !reorderSaving) {
+        ""
+    } else {
+        smartQueueReorderStatusLabel(
+            dragReorderEnabled = dragReorderEnabled,
+            backendReorderAllowed = reorderAllowed,
+            unavailableReason = reorderUnavailableReason,
+            searchQuery = searchQuery,
+            sortOption = sortOption,
+            hasMorePages = hasMorePages,
+            itemCount = queueItems.size,
+            loading = loading,
+            reorderSaving = reorderSaving,
+        )
+    }
     LaunchedEffect(Unit) {
         if (settings.selectedPlaylistId == null) {
             vm.loadQueueIfNotRecent()
@@ -68,6 +98,8 @@ fun SmartQueueScreen(
         } else {
             "No Smart Queue items match this search."
         },
+        header = { SmartQueueSourceHeader(statusLabel = reorderStatusLabel) },
+        showSourceListRule = true,
         sortOption = sortOption,
         availableSorts = emptyList(),
         searchQuery = searchQuery,
@@ -124,4 +156,41 @@ fun SmartQueueScreen(
         },
         jumpPillBottomClearance = jumpPillBottomClearance,
     )
+}
+
+@Composable
+private fun SmartQueueSourceHeader(statusLabel: String) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    val ruleColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(if (isV1) mColors.surface else MaterialTheme.colorScheme.surface)
+            .drawBehind {
+                drawRect(
+                    color = ruleColor,
+                    topLeft = Offset.Zero,
+                    size = Size(3.dp.toPx(), size.height),
+                )
+            }
+            .padding(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = "Smart Queue",
+            style = if (isV1) mTypography.section else MaterialTheme.typography.labelLarge,
+            color = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.onSurface,
+        )
+        if (statusLabel.isNotBlank()) {
+            Text(
+                text = statusLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+    }
 }
