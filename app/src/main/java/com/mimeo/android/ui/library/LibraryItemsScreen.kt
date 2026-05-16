@@ -399,8 +399,13 @@ fun LibraryItemsScreen(
         val persistReorder = onDragReorder
         actionScope.launch {
             val result = persistReorder(reorderedItems.map { it.itemId })
-            localReorderItems = null
             if (result.isFailure) {
+                // Revert on failure. On success we do NOT clear localReorderItems here —
+                // the LaunchedEffect (keyed on items.map { it.itemId }) will clear it when
+                // the ViewModel's _queueItems updates with the confirmed order. If the backend
+                // returns the same item IDs in the same order, the LaunchedEffect won't fire
+                // and localReorderItems stays non-null, preserving the user's drag order.
+                localReorderItems = null
                 refreshActionState = RefreshActionVisualState.Failure
                 delay(700)
                 if (refreshActionState == RefreshActionVisualState.Failure) {
