@@ -3319,10 +3319,37 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             throw e
         } catch (e: Exception) {
             if (handleAuthFailureIfNeeded(e)) return Result.failure(e)
-            _statusMessage.value = userFacingRequestErrorMessage(e, fallback = "Couldn't save Smart Queue order")
             if (e is ApiException && e.statusCode == 409) {
+                // Eligible set changed since the last GET (e.g., a new article became ready,
+                // or a pending action is still outstanding). Refresh then retry with a merged
+                // order: preserve the user's intended order for retained items and append any
+                // newly eligible items at the end.
                 loadQueueOnce(autoRetryPendingSaves = false)
+                val refreshedIds = _queueItems.value.map { it.itemId }
+                val requestedSet = orderedItemIds.toHashSet()
+                val refreshedSet = refreshedIds.toHashSet()
+                val merged = orderedItemIds.filter { it in refreshedSet } +
+                    refreshedIds.filterNot { it in requestedSet }
+                if (merged.size >= 2 &&
+                    merged.toHashSet() == refreshedSet &&
+                    merged.distinct().size == merged.size
+                ) {
+                    return try {
+                        repository.reorderSmartQueue(current.baseUrl, current.apiToken, merged)
+                        _statusMessage.value = "Smart Queue order saved"
+                        Result.success(Unit)
+                    } catch (retryEx: Exception) {
+                        if (retryEx is CancellationException) throw retryEx
+                        showSnackbar("Reorder failed — try again")
+                        Result.failure(retryEx)
+                    }
+                }
+                showSnackbar("Reorder failed — queue updated, try again")
+                return Result.failure(e)
             }
+            val errorMsg = userFacingRequestErrorMessage(e, fallback = "Couldn't save Smart Queue order")
+            _statusMessage.value = errorMsg
+            showSnackbar(errorMsg)
             Result.failure(e)
         } finally {
             _smartQueueReorderSaving.value = false
