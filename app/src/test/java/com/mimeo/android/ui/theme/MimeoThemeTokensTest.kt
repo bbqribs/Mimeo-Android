@@ -196,9 +196,9 @@ class MimeoThemeTokensTest {
     }
 
     @Test
-    fun lilacScheme_usesLibraryChipPurpleInLightAndDark() {
+    fun lilacScheme_usesChipPurpleInLightAndPastelPurpleInDark() {
         assertEquals(Color(0xFF6B49CC), MimeoAccentSchemes.LilacLight.accent)
-        assertEquals(Color(0xFF6B49CC), MimeoAccentSchemes.LilacDark.accent)
+        assertEquals(Color(0xFFC9B8FF), MimeoAccentSchemes.LilacDark.accent)
     }
 
     @Test
