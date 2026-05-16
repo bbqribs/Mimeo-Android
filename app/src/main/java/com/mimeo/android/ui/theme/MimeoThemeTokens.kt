@@ -25,17 +25,30 @@ fun resolveThemeChoice(
     VisualThemePreference.DARK -> MimeoThemeChoice.DARK
 }
 
-fun colorTokensFor(choice: MimeoThemeChoice): MimeoColorTokens = when (choice) {
-    MimeoThemeChoice.LIGHT -> MimeoColors.PaperLight
-    MimeoThemeChoice.DARK -> MimeoColors.EmberDark
+fun colorTokensFor(
+    choice: MimeoThemeChoice,
+    scheme: MimeoAccentScheme = MimeoAccentScheme.EMBER,
+): MimeoColorTokens {
+    val accent = accentTokensFor(scheme, choice)
+    val base = when (choice) {
+        MimeoThemeChoice.LIGHT -> MimeoColors.PaperLight
+        MimeoThemeChoice.DARK  -> MimeoColors.EmberDark
+    }
+    return base.copy(
+        accent    = accent.accent,
+        accentDim = accent.accentDim,
+        accentOn  = accent.accentOn,
+        nowTint   = accent.nowTint,
+    )
 }
 
 fun mimeoThemeTokens(
     preference: VisualThemePreference,
     systemIsDarkTheme: Boolean,
     density: MimeoDensityTokens,
+    scheme: MimeoAccentScheme = MimeoAccentScheme.EMBER,
 ): MimeoThemeTokens = MimeoThemeTokens(
-    colors = colorTokensFor(resolveThemeChoice(preference, systemIsDarkTheme)),
+    colors = colorTokensFor(resolveThemeChoice(preference, systemIsDarkTheme), scheme),
     typography = MimeoTypography.PaperEmber,
     spacing = MimeoSpacing,
     density = density,
@@ -48,3 +61,4 @@ val LocalMimeoSpacingTokens = staticCompositionLocalOf { MimeoSpacing }
 val LocalMimeoDensityTokens = staticCompositionLocalOf { MimeoDensityDefault }
 val LocalMimeoShapeTokens = staticCompositionLocalOf { MimeoShapes }
 val LocalMimeoV1Active = staticCompositionLocalOf { false }
+val LocalMimeoAccentScheme = staticCompositionLocalOf { MimeoAccentScheme.EMBER }

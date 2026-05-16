@@ -56,6 +56,7 @@ fun MimeoAppTheme(
     visualThemePreference: VisualThemePreference,
     visualDensityPreference: VisualDensityPreference,
     enableVisualDesignV1: Boolean = false,
+    accentScheme: MimeoAccentScheme = MimeoAccentScheme.EMBER,
     content: @Composable () -> Unit,
 ) {
     when (resolveThemeRuntimePath(enableVisualDesignV1 || VISUAL_DESIGN_V1_FORCE_ENABLED)) {
@@ -63,6 +64,7 @@ fun MimeoAppTheme(
         MimeoThemeRuntimePath.VISUAL_V1 -> MimeoThemeV1(
             visualThemePreference = visualThemePreference,
             visualDensityPreference = visualDensityPreference,
+            accentScheme = accentScheme,
             content = content,
         )
     }
@@ -80,17 +82,19 @@ fun MimeoTheme(content: @Composable () -> Unit) {
 private fun MimeoThemeV1(
     visualThemePreference: VisualThemePreference,
     visualDensityPreference: VisualDensityPreference,
+    accentScheme: MimeoAccentScheme = MimeoAccentScheme.EMBER,
     content: @Composable () -> Unit,
 ) {
     val systemIsDarkTheme = isSystemInDarkTheme()
     val densityTokens = remember(visualDensityPreference) {
         densityTokensFor(visualDensityPreference)
     }
-    val themeTokens = remember(visualThemePreference, systemIsDarkTheme, densityTokens) {
+    val themeTokens = remember(visualThemePreference, systemIsDarkTheme, densityTokens, accentScheme) {
         mimeoThemeTokens(
             preference = visualThemePreference,
             systemIsDarkTheme = systemIsDarkTheme,
             density = densityTokens,
+            scheme = accentScheme,
         )
     }
     val useDarkMaterialColors = remember(visualThemePreference, systemIsDarkTheme) {
@@ -120,6 +124,7 @@ private fun MimeoThemeV1(
         LocalMimeoDensityTokens provides themeTokens.density,
         LocalMimeoShapeTokens provides themeTokens.shapes,
         LocalMimeoV1Active provides true,
+        LocalMimeoAccentScheme provides accentScheme,
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
