@@ -8,20 +8,33 @@ import org.junit.Test
 
 class SmartQueueReorderPolicyTest {
     @Test
-    fun enablesOnlyDefaultCompleteUnfilteredSmartQueue() {
+    fun boundedActiveScopeAllowsReorder() {
         assertTrue(
             smartQueueDragReorderEnabled(
                 backendReorderAllowed = true,
                 searchQuery = "",
                 sortOption = LibrarySortOption.SMART_QUEUE,
                 hasMorePages = false,
-                itemCount = 3,
+                itemCount = 100,
             ),
         )
     }
 
     @Test
-    fun disablesWhenSearchOrCustomSortOrPaginationIsActive() {
+    fun totalCountGreaterThanActiveScopeDoesNotBlockReorder() {
+        assertTrue(
+            smartQueueDragReorderEnabled(
+                backendReorderAllowed = true,
+                searchQuery = "",
+                sortOption = LibrarySortOption.SMART_QUEUE,
+                hasMorePages = false,
+                itemCount = 100,
+            ),
+        )
+    }
+
+    @Test
+    fun disablesWhenSearchOrCustomSortOrIncompleteResponseIsActive() {
         assertFalse(
             smartQueueDragReorderEnabled(
                 backendReorderAllowed = true,
@@ -71,6 +84,111 @@ class SmartQueueReorderPolicyTest {
                 itemCount = 3,
                 loading = false,
                 reorderSaving = false,
+            ),
+        )
+    }
+
+    @Test
+    fun disablesWhileReorderIsSaving() {
+        assertFalse(
+            smartQueueDragReorderEnabled(
+                backendReorderAllowed = true,
+                searchQuery = "",
+                sortOption = LibrarySortOption.SMART_QUEUE,
+                hasMorePages = false,
+                itemCount = 3,
+                reorderSaving = true,
+            ),
+        )
+    }
+
+    @Test
+    fun statusLabelReportsSavingState() {
+        assertEquals(
+            "Reorder: saving",
+            smartQueueReorderStatusLabel(
+                dragReorderEnabled = false,
+                backendReorderAllowed = true,
+                unavailableReason = null,
+                searchQuery = "",
+                sortOption = LibrarySortOption.SMART_QUEUE,
+                hasMorePages = false,
+                itemCount = 3,
+                loading = false,
+                reorderSaving = true,
+            ),
+        )
+    }
+
+    @Test
+    fun noLegacyFiveHundredItemGateRemains() {
+        assertTrue(
+            smartQueueDragReorderEnabled(
+                backendReorderAllowed = true,
+                searchQuery = "",
+                sortOption = LibrarySortOption.SMART_QUEUE,
+                hasMorePages = false,
+                itemCount = 501,
+            ),
+        )
+    }
+
+    @Test
+    fun statusLabelReportsIncompleteResponseWithoutFullQueueLoadingCopy() {
+        assertEquals(
+            "Reorder: unavailable until queue response is complete",
+            smartQueueReorderStatusLabel(
+                dragReorderEnabled = false,
+                backendReorderAllowed = true,
+                unavailableReason = null,
+                searchQuery = "",
+                sortOption = LibrarySortOption.SMART_QUEUE,
+                hasMorePages = true,
+                itemCount = 3,
+                loading = false,
+                reorderSaving = false,
+            ),
+        )
+    }
+
+    @Test
+    fun statusLabelReportsDisabledWhileSearching() {
+        assertEquals(
+            "Reorder: disabled while searching",
+            smartQueueReorderStatusLabel(
+                dragReorderEnabled = false,
+                backendReorderAllowed = true,
+                unavailableReason = null,
+                searchQuery = "hello",
+                sortOption = LibrarySortOption.SMART_QUEUE,
+                hasMorePages = false,
+                itemCount = 3,
+                loading = false,
+                reorderSaving = false,
+            ),
+        )
+    }
+
+    @Test
+    fun scopeStatusLabelReportsActiveScope() {
+        assertEquals(
+            "First 100 of 930 items",
+            smartQueueScopeStatusLabel(
+                itemCount = 100,
+                totalCount = 930,
+                activeScopeLimit = 100,
+            ),
+        )
+    }
+
+    @Test
+    fun scopeStatusLabelHiddenWhenTotalFitsVisibleItems() {
+        assertEquals(
+            "",
+            smartQueueScopeStatusLabel(
+                itemCount = 42,
+                totalCount = 42,
+                activeScopeLimit = 100,
             ),
         )
     }

@@ -36,10 +36,22 @@ internal fun smartQueueReorderStatusLabel(
         searchQuery.isNotBlank() -> "Reorder: disabled while searching"
         sortOption != LibrarySortOption.SMART_QUEUE -> "Reorder: disabled for custom sort"
         itemCount <= 1 -> "Reorder: needs at least two items"
-        hasMorePages -> "Reorder: loading complete queue"
+        hasMorePages -> "Reorder: unavailable until queue response is complete"
         !backendReorderAllowed -> "Reorder: unavailable (${unavailableReason ?: "backend unavailable"})"
         else -> "Reorder: unavailable"
     }
+}
+
+internal fun smartQueueScopeStatusLabel(
+    itemCount: Int,
+    totalCount: Int,
+    activeScopeLimit: Int?,
+): String {
+    if (activeScopeLimit == null || itemCount <= 0 || totalCount <= itemCount) {
+        return ""
+    }
+    val visibleScopeCount = itemCount.coerceAtMost(activeScopeLimit)
+    return "First $visibleScopeCount of $totalCount items"
 }
 
 internal fun movedSmartQueueItemIds(itemIds: List<Int>, fromIndex: Int, toIndex: Int): List<Int> {

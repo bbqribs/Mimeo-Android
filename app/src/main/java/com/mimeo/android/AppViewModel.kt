@@ -323,6 +323,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val queueLoadingMore: StateFlow<Boolean> = _queueLoadingMore.asStateFlow()
     private val _queueTotalCount = MutableStateFlow(0)
     val queueTotalCount: StateFlow<Int> = _queueTotalCount.asStateFlow()
+    private val _queueActiveScopeLimit = MutableStateFlow<Int?>(null)
+    val queueActiveScopeLimit: StateFlow<Int?> = _queueActiveScopeLimit.asStateFlow()
     private val _queueHasMorePages = MutableStateFlow(false)
     val queueHasMorePages: StateFlow<Boolean> = _queueHasMorePages.asStateFlow()
     private var queueServerFetchedCount = 0
@@ -1821,18 +1823,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
             _queueItems.value = queueItems
             _queueTotalCount.value = queue.totalCount
+            _queueActiveScopeLimit.value = queue.activeScopeLimit
             queueServerFetchedCount = queueItems.size
-            // Fallback: if backend returns totalCount=0 but we received a full page, assume more exist.
-            _queueHasMorePages.value = if (queue.totalCount > 0) {
-                queueItems.size < queue.totalCount
-            } else {
-                queueItems.size >= ApiClient.QUEUE_LOAD_MORE_LIMIT
-            }
+            _queueHasMorePages.value = queueHasMorePagesForSurface(
+                playlistId = queuePlaylistId,
+                fetchedCount = queueItems.size,
+                totalCount = queue.totalCount,
+                activeScopeLimit = queue.activeScopeLimit,
+            )
             queueBackendReorderAllowed = queue.reorderAllowed
             queueBackendReorderUnavailableReason = queue.reorderUnavailableReason
             updateSmartQueueReorderAvailability(queuePlaylistId)
             if (BuildConfig.DEBUG) {
-                Log.d(QUEUE_DEBUG_TAG, "pagination reset: fetched=${queueItems.size} totalCount=${queue.totalCount} hasMore=${_queueHasMorePages.value}")
+                Log.d(QUEUE_DEBUG_TAG, "pagination reset: fetched=${queueItems.size} totalCount=${queue.totalCount} activeScopeLimit=${queue.activeScopeLimit} hasMore=${_queueHasMorePages.value}")
             }
             val appliedSnapshot = queueResult.debugSnapshot.copy(
                 appliedItemCount = _queueItems.value.size,
@@ -1915,8 +1918,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 _queueItems.value = refreshedQueueItems
                 _queueTotalCount.value = refreshedQueue.totalCount
+                _queueActiveScopeLimit.value = refreshedQueue.activeScopeLimit
                 queueServerFetchedCount = refreshedQueueItems.size
-                _queueHasMorePages.value = refreshedQueueItems.size < refreshedQueue.totalCount
+                _queueHasMorePages.value = queueHasMorePagesForSurface(
+                    playlistId = queuePlaylistId,
+                    fetchedCount = refreshedQueueItems.size,
+                    totalCount = refreshedQueue.totalCount,
+                    activeScopeLimit = refreshedQueue.activeScopeLimit,
+                )
                 queueBackendReorderAllowed = refreshedQueue.reorderAllowed
                 queueBackendReorderUnavailableReason = refreshedQueue.reorderUnavailableReason
                 updateSmartQueueReorderAvailability(queuePlaylistId)
@@ -2038,13 +2047,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun isDefaultSmartQueueSurface(playlistId: Int?): Boolean =
         playlistId == null && queueServerSortField.isBlank() && queueServerSortDir.isBlank()
 
+    private fun queueHasMorePagesForSurface(
+        playlistId: Int?,
+        fetchedCount: Int,
+        totalCount: Int,
+        activeScopeLimit: Int?,
+    ): Boolean {
+        if (isDefaultSmartQueueSurface(playlistId) && activeScopeLimit != null) {
+            val expectedActiveCount = minOf(totalCount.takeIf { it > 0 } ?: fetchedCount, activeScopeLimit)
+            return fetchedCount < expectedActiveCount
+        }
+        return if (totalCount > 0) {
+            fetchedCount < totalCount
+        } else {
+            fetchedCount >= ApiClient.QUEUE_LOAD_MORE_LIMIT
+        }
+    }
+
     private suspend fun loadQueueForCurrentSurface(
         baseUrl: String,
         token: String,
         playlistId: Int?,
         prefetchCount: Int = 0,
     ): QueueFetchResult {
-        val firstPage = repository.loadQueueAndPrefetch(
+        return repository.loadQueueAndPrefetch(
             baseUrl,
             token,
             playlistId = playlistId,
@@ -2052,43 +2078,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             sortField = queueServerSortField,
             sortDir = queueServerSortDir,
             includeDone = queueFetchIncludeDone(playlistId),
-        )
-        val firstPayload = firstPage.payload
-        if (!isDefaultSmartQueueSurface(playlistId) || firstPayload.totalCount <= firstPayload.items.size) {
-            return firstPage
-        }
-
-        val combined = firstPayload.items.toMutableList()
-        var totalCount = firstPayload.totalCount
-        var offset = combined.size
-        while (totalCount > 0 && offset < totalCount) {
-            val nextPage = apiClient.getQueue(
-                baseUrl = baseUrl,
-                token = token,
-                playlistId = null,
-                offset = offset,
-                limit = ApiClient.QUEUE_LOAD_MORE_LIMIT,
-                sortField = queueServerSortField,
-                sortDir = queueServerSortDir,
-                includeDone = false,
-            )
-            val fetched = nextPage.payload.items
-            if (fetched.isEmpty()) break
-            val existingIds = combined.mapTo(mutableSetOf()) { it.itemId }
-            combined += fetched.filterNot { it.itemId in existingIds }
-            offset += fetched.size
-            if (nextPage.payload.totalCount > 0) {
-                totalCount = nextPage.payload.totalCount
-            }
-        }
-
-        return firstPage.copy(
-            payload = firstPayload.copy(
-                count = combined.size,
-                totalCount = totalCount,
-                items = combined,
-            ),
-            debugSnapshot = firstPage.debugSnapshot.copy(responseItemCount = combined.size),
         )
     }
 
@@ -2098,7 +2087,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             selectedPlaylistId != null -> "playlist"
             queueServerSortField.isNotBlank() || queueServerSortDir.isNotBlank() -> "filtered_or_sorted"
             !queueBackendReorderAllowed -> queueBackendReorderUnavailableReason ?: "backend_unavailable"
-            _queueHasMorePages.value -> "paginated"
+            _queueHasMorePages.value -> "incomplete_response"
             itemIds.size <= 1 -> "not_enough_items"
             itemIds.distinct().size != itemIds.size -> "duplicate_items"
             else -> null
@@ -2108,6 +2097,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadMoreQueueItems() {
+        val selectedPlaylistId = manualPlaylistIdOrNull(settings.value.selectedPlaylistId)
+        if (isDefaultSmartQueueSurface(selectedPlaylistId)) {
+            if (BuildConfig.DEBUG) Log.d(QUEUE_DEBUG_TAG, "loadMore: skipped for bounded Smart Queue active scope")
+            return
+        }
         if (!_queueHasMorePages.value || _queueLoadingMore.value) {
             if (BuildConfig.DEBUG) Log.d(QUEUE_DEBUG_TAG, "loadMore: skipped hasMore=${_queueHasMorePages.value} loadingMore=${_queueLoadingMore.value}")
             return
@@ -2124,15 +2118,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val current = settings.value
                 if (current.apiToken.isBlank()) return@launch
                 val offset = queueServerFetchedCount
+                val queuePlaylistId = manualPlaylistIdOrNull(current.selectedPlaylistId)
                 val result = apiClient.getQueue(
                     baseUrl = current.baseUrl,
                     token = current.apiToken,
-                    playlistId = manualPlaylistIdOrNull(current.selectedPlaylistId),
+                    playlistId = queuePlaylistId,
                     offset = offset,
                     limit = ApiClient.QUEUE_LOAD_MORE_LIMIT,
                     sortField = queueServerSortField,
                     sortDir = queueServerSortDir,
-                    includeDone = queueFetchIncludeDone(manualPlaylistIdOrNull(current.selectedPlaylistId)),
+                    includeDone = queueFetchIncludeDone(queuePlaylistId),
                 )
                 val fetchedCount = result.payload.items.size
                 val newItems = applyFavoriteOverrides(result.payload.items)
@@ -2144,12 +2139,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 queueServerFetchedCount = offset + fetchedCount
                 _queueTotalCount.value = result.payload.totalCount
-                _queueHasMorePages.value = if (result.payload.totalCount > 0) {
-                    queueServerFetchedCount < result.payload.totalCount
-                } else {
-                    fetchedCount >= ApiClient.QUEUE_LOAD_MORE_LIMIT
-                }
-                updateSmartQueueReorderAvailability(manualPlaylistIdOrNull(current.selectedPlaylistId))
+                _queueActiveScopeLimit.value = result.payload.activeScopeLimit
+                _queueHasMorePages.value = queueHasMorePagesForSurface(
+                    playlistId = queuePlaylistId,
+                    fetchedCount = queueServerFetchedCount,
+                    totalCount = result.payload.totalCount,
+                    activeScopeLimit = result.payload.activeScopeLimit,
+                )
+                updateSmartQueueReorderAvailability(queuePlaylistId)
             } catch (e: Exception) {
                 if (BuildConfig.DEBUG) Log.e(QUEUE_DEBUG_TAG, "loadMore: failed", e)
             } finally {
@@ -2355,6 +2352,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }.getOrNull() ?: return false
 
         _queueItems.value = snapshot.items
+        _queueTotalCount.value = snapshot.totalCount
+        _queueActiveScopeLimit.value = snapshot.activeScopeLimit
+        queueServerFetchedCount = snapshot.items.size
+        _queueHasMorePages.value = false
         queueBackendReorderAllowed = false
         queueBackendReorderUnavailableReason = "offline_snapshot"
         updateSmartQueueReorderAvailability(selectedPlaylistId)
@@ -3304,8 +3305,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (!_smartQueueReorderAllowed.value) {
             return Result.failure(IllegalStateException("Smart Queue reorder is unavailable"))
         }
-        if (orderedItemIds.size <= 1 || orderedItemIds.distinct().size != orderedItemIds.size) {
-            return Result.failure(IllegalArgumentException("Smart Queue reorder requires a complete unique item list"))
+        val currentItemIds = _queueItems.value.map { it.itemId }
+        val activeScopeLimit = _queueActiveScopeLimit.value
+        if (
+            orderedItemIds.size <= 1 ||
+            orderedItemIds.distinct().size != orderedItemIds.size ||
+            orderedItemIds.size != currentItemIds.size ||
+            orderedItemIds.toSet() != currentItemIds.toSet() ||
+            (activeScopeLimit != null && orderedItemIds.size > activeScopeLimit)
+        ) {
+            return Result.failure(IllegalArgumentException("Smart Queue reorder requires the current active-scope item list"))
         }
         _smartQueueReorderSaving.value = true
         return try {
@@ -3319,10 +3328,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             throw e
         } catch (e: Exception) {
             if (handleAuthFailureIfNeeded(e)) return Result.failure(e)
-            _statusMessage.value = userFacingRequestErrorMessage(e, fallback = "Couldn't save Smart Queue order")
             if (e is ApiException && e.statusCode == 409) {
                 loadQueueOnce(autoRetryPendingSaves = false)
+                showSnackbar("Reorder failed — queue updated, try again")
+                return Result.failure(e)
             }
+            val errorMsg = userFacingRequestErrorMessage(e, fallback = "Couldn't save Smart Queue order")
+            _statusMessage.value = errorMsg
+            showSnackbar(errorMsg)
             Result.failure(e)
         } finally {
             _smartQueueReorderSaving.value = false
@@ -3593,12 +3606,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val queueItems = applyFavoriteOverrides(queue.items)
             _queueItems.value = queueItems
             _queueTotalCount.value = queue.totalCount
+            _queueActiveScopeLimit.value = queue.activeScopeLimit
             queueServerFetchedCount = queueItems.size
-            _queueHasMorePages.value = if (queue.totalCount > 0) {
-                queueItems.size < queue.totalCount
-            } else {
-                queueItems.size >= ApiClient.QUEUE_LOAD_MORE_LIMIT
-            }
+            _queueHasMorePages.value = queueHasMorePagesForSurface(
+                playlistId = queuePlaylistId,
+                fetchedCount = queueItems.size,
+                totalCount = queue.totalCount,
+                activeScopeLimit = queue.activeScopeLimit,
+            )
             queueBackendReorderAllowed = queue.reorderAllowed
             queueBackendReorderUnavailableReason = queue.reorderUnavailableReason
             updateSmartQueueReorderAvailability(queuePlaylistId)

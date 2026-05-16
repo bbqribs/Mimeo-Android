@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,6 +42,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -65,6 +67,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -159,6 +164,7 @@ fun LibraryItemsScreen(
     items: List<PlaybackQueueItem>,
     loading: Boolean,
     emptyMessage: String,
+    header: (@Composable () -> Unit)? = null,
     sortOption: LibrarySortOption,
     availableSorts: List<LibrarySortOption> = LibrarySortOption.entries,
     searchQuery: String,
@@ -166,6 +172,7 @@ fun LibraryItemsScreen(
     clientSideSearch: Boolean = false,
     isInbox: Boolean = false,
     isBin: Boolean = false,
+    showSourceListRule: Boolean = false,
     showDragReorderHandle: Boolean = false,
     dragReorderEnabled: Boolean = false,
     dragReorderUnavailableReason: String? = null,
@@ -187,11 +194,25 @@ fun LibraryItemsScreen(
     onPlayNext: ((itemId: Int) -> Unit)? = null,
     onPlayLast: ((itemId: Int) -> Unit)? = null,
     onPlayFromHere: ((itemsFromHere: List<PlaybackQueueItem>, selectedItemId: Int) -> Unit)? = null,
+    onLoadMore: (() -> Unit)? = null,
+    loadingMore: Boolean = false,
     jumpPillBottomClearance: Dp = 0.dp,
 ) {
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
     val listState = rememberLazyListState()
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            if (onLoadMore == null) return@derivedStateOf false
+            val layoutInfo = listState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            totalItems > 0 && lastVisible >= totalItems - 5
+        }
+    }
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) onLoadMore?.invoke()
+    }
     val showJumpToTop by remember {
         derivedStateOf {
             shouldShowJumpToTopLazy(
@@ -297,7 +318,11 @@ fun LibraryItemsScreen(
         onDragReorder != null
     val showReorderHandle = showDragReorderHandle && !selectionActive && !isInbox && !isBin
 
-    LaunchedEffect(items.map { it.itemId }, dragReorderEnabled, sortOption, searchQuery, dragReorderUnavailableReason) {
+    // Keyed on item IDs, sort, search, and backend-unavailable reason — but NOT on
+    // dragReorderEnabled itself, because that goes false while reorderSaving=true (the VM sets
+    // _smartQueueReorderSaving synchronously before the network call). Keying on it here would
+    // fire this reset before the backend responds and revert the optimistic local order.
+    LaunchedEffect(items.map { it.itemId }, sortOption, searchQuery, dragReorderUnavailableReason) {
         localReorderItems = null
         draggingIndex = -1
         dragOffsetY = 0f
@@ -308,7 +333,13 @@ fun LibraryItemsScreen(
 
     val pendingItems = if (isInbox) sortedItems.filter { it.status in PENDING_STATUSES } else emptyList()
     val baseReadyItems = if (isInbox) sortedItems.filter { it.status !in PENDING_STATUSES } else sortedItems
-    val readyItems = if (reorderActive) localReorderItems ?: baseReadyItems else baseReadyItems
+    val shouldShowLocalReorderItems = localReorderItems != null &&
+        !selectionActive &&
+        !isInbox &&
+        !isBin &&
+        searchQuery.isBlank() &&
+        sortOption == LibrarySortOption.SMART_QUEUE
+    val readyItems = if (shouldShowLocalReorderItems) localReorderItems ?: baseReadyItems else baseReadyItems
     val visiblePlaybackItems = remember(isInbox, pendingExpanded, pendingItems, readyItems, sortedItems) {
         if (isInbox) {
             buildList {
@@ -380,18 +411,26 @@ fun LibraryItemsScreen(
         } else {
             readyItems
         }
+        val firstVisibleIndex = listState.firstVisibleItemIndex
+        val firstVisibleOffset = listState.firstVisibleItemScrollOffset
         draggingIndex = -1
         dragOffsetY = 0f
         currentTargetIndex = -1
         dragStartTopOffsets = emptyMap()
         dragStartHeights = emptyMap()
         if (!shouldReorder) return
+        listState.requestScrollToItem(firstVisibleIndex, firstVisibleOffset)
         localReorderItems = reorderedItems
         val persistReorder = onDragReorder
         actionScope.launch {
             val result = persistReorder(reorderedItems.map { it.itemId })
-            localReorderItems = null
             if (result.isFailure) {
+                // Revert on failure. On success we do NOT clear localReorderItems here —
+                // the LaunchedEffect (keyed on items.map { it.itemId }) will clear it when
+                // the ViewModel's _queueItems updates with the confirmed order. If the backend
+                // returns the same item IDs in the same order, the LaunchedEffect won't fire
+                // and localReorderItems stays non-null, preserving the user's drag order.
+                localReorderItems = null
                 refreshActionState = RefreshActionVisualState.Failure
                 delay(700)
                 if (refreshActionState == RefreshActionVisualState.Failure) {
@@ -424,6 +463,7 @@ fun LibraryItemsScreen(
 
     ListSurfaceScaffold(
         modifier = Modifier.fillMaxSize(),
+        header = header,
         selectionBar = if (selectionActive) {
             {
                 // Contextual action bar — replaces search/sort row while in selection mode.
@@ -703,13 +743,29 @@ fun LibraryItemsScreen(
                                     )
                                     else -> 0f
                                 }
-                                val rowModifier = Modifier
+                                val ruleColor = if (isV1) mColors.fg4 else MaterialTheme.colorScheme.outlineVariant
+                                val dragBgColor = if (isV1) mColors.surfaceHi else MaterialTheme.colorScheme.surfaceContainerHigh
+                                val itemModifier = Modifier
                                     .onGloballyPositioned { coordinates ->
                                         itemTopOffsets = itemTopOffsets + (entry.item.itemId to coordinates.positionInParent().y)
                                         itemHeights = itemHeights + (entry.item.itemId to coordinates.size.height.toFloat())
                                     }
                                     .graphicsLayer { translationY = visualOffset }
                                     .zIndex(if (isDragging) 1f else 0f)
+                                val rowModifier = Modifier
+                                    .then(
+                                        if (isDragging) {
+                                            Modifier.background(dragBgColor).drawBehind {
+                                                if (showSourceListRule) {
+                                                    drawRect(ruleColor, Offset.Zero, Size(3.dp.toPx(), size.height))
+                                                }
+                                            }
+                                        } else if (showSourceListRule) {
+                                            Modifier.drawBehind {
+                                                drawRect(ruleColor, Offset.Zero, Size(3.dp.toPx(), size.height))
+                                            }
+                                        } else Modifier,
+                                    )
                                 val dragHandleModifier = if (showReorderHandle && readyIndex >= 0) {
                                     if (reorderActive) {
                                         Modifier.pointerInput(entry.item.itemId, readyIndex) {
@@ -721,7 +777,8 @@ fun LibraryItemsScreen(
                                                 dragOffsetY = 0f
                                                 currentTargetIndex = readyIndex
                                             },
-                                            onDrag = { _, dragAmount ->
+                                            onDrag = { change, dragAmount ->
+                                                change.consume()
                                                 dragOffsetY += dragAmount.y
                                                 val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
                                                 if (newTarget != currentTargetIndex) {
@@ -738,45 +795,59 @@ fun LibraryItemsScreen(
                                 } else {
                                     null
                                 }
-                                LibraryQueueItemRow(
-                                    item = entry.item,
-                                    isSelectionActive = selectionActive,
-                                    isSelected = entry.item.itemId in selectedIds,
-                                    modifier = rowModifier,
-                                    dragHandleModifier = dragHandleModifier,
-                                    dragHandleContentDescription = if (reorderActive) {
-                                        "Drag to reorder"
-                                    } else {
-                                        dragReorderUnavailableReason?.let { "Reorder unavailable: $it" }
-                                            ?: "Reorder unavailable"
-                                    },
-                                    onOpen = { onOpenItem(entry.item.itemId) },
-                                    onToggleSelect = { toggleSelection(entry.item.itemId) },
-                                    onEnterSelection = { enterSelectionMode(entry.item.itemId) },
-                                    onPlayNow = onPlayNow?.let { cb -> { cb(entry.item.itemId) } },
-                                    onPlayNext = onPlayNext?.let { cb -> { cb(entry.item.itemId) } },
-                                    onPlayLast = onPlayLast?.let { cb -> { cb(entry.item.itemId) } },
-                                    onPlayFromHere = onPlayFromHere?.let { { pendingPlayFromHereItemId = entry.item.itemId } },
-                                    onAddToPlaylist = if (!isBin) onBatchAddToPlaylist?.let {
-                                        {
-                                            batchPlaylistPickerIds = setOf(entry.item.itemId)
-                                            showBatchPlaylistPicker = true
-                                        }
-                                    } else null,
-                                    onFavoriteToggle = if (!isBin) ({
-                                        onBatchAction(if (entry.item.isFavorited) "unfavorite" else "favorite", setOf(entry.item.itemId))
-                                    }) else null,
-                                    onArchiveToggle = if (!isBin) ({
-                                        onBatchAction(if (title == "Archive") "unarchive" else "archive", setOf(entry.item.itemId))
-                                    }) else null,
-                                    archiveToggleLabel = if (title == "Archive") "Unarchive" else "Archive",
-                                    onBin = if (!isBin) ({ onBatchAction("bin", setOf(entry.item.itemId)) }) else null,
-                                )
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 12.dp),
-                                    color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
-                                )
+                                Column(modifier = itemModifier) {
+                                    LibraryQueueItemRow(
+                                        item = entry.item,
+                                        isSelectionActive = selectionActive,
+                                        isSelected = entry.item.itemId in selectedIds,
+                                        modifier = rowModifier,
+                                        dragHandleModifier = dragHandleModifier,
+                                        dragHandleContentDescription = if (reorderActive) {
+                                            "Drag to reorder"
+                                        } else {
+                                            dragReorderUnavailableReason?.let { "Reorder unavailable: $it" }
+                                                ?: "Reorder unavailable"
+                                        },
+                                        onOpen = { onOpenItem(entry.item.itemId) },
+                                        onToggleSelect = { toggleSelection(entry.item.itemId) },
+                                        onEnterSelection = { enterSelectionMode(entry.item.itemId) },
+                                        onPlayNow = onPlayNow?.let { cb -> { cb(entry.item.itemId) } },
+                                        onPlayNext = onPlayNext?.let { cb -> { cb(entry.item.itemId) } },
+                                        onPlayLast = onPlayLast?.let { cb -> { cb(entry.item.itemId) } },
+                                        onPlayFromHere = onPlayFromHere?.let { { pendingPlayFromHereItemId = entry.item.itemId } },
+                                        onAddToPlaylist = if (!isBin) onBatchAddToPlaylist?.let {
+                                            {
+                                                batchPlaylistPickerIds = setOf(entry.item.itemId)
+                                                showBatchPlaylistPicker = true
+                                            }
+                                        } else null,
+                                        onFavoriteToggle = if (!isBin) ({
+                                            onBatchAction(if (entry.item.isFavorited) "unfavorite" else "favorite", setOf(entry.item.itemId))
+                                        }) else null,
+                                        onArchiveToggle = if (!isBin) ({
+                                            onBatchAction(if (title == "Archive") "unarchive" else "archive", setOf(entry.item.itemId))
+                                        }) else null,
+                                        archiveToggleLabel = if (title == "Archive") "Unarchive" else "Archive",
+                                        onBin = if (!isBin) ({ onBatchAction("bin", setOf(entry.item.itemId)) }) else null,
+                                    )
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(horizontal = 12.dp),
+                                        color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                                    )
+                                }
                             }
+                        }
+                    }
+                }
+                if (loadingMore) {
+                    item(key = "load_more_spinner") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
                         }
                     }
                 }
