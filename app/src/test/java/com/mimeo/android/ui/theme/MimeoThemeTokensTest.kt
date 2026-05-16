@@ -115,7 +115,7 @@ class MimeoThemeTokensTest {
         )
     }
 
-    // Accent-token substrate — Ember scheme
+    // Accent-token substrate — Ember scheme (existing)
 
     @Test
     fun emberLightAccent_matchesColorTokens() {
@@ -153,5 +153,92 @@ class MimeoThemeTokensTest {
         assertEquals(Color(0x24B6A1FF), scheme.accentDim)
         assertEquals(Color(0xFF0B0B0E), scheme.accentOn)
         assertEquals(Color(0x0FB6A1FF), scheme.nowTint)
+    }
+
+    // Accent scheme variants
+
+    @Test
+    fun defaultAccentScheme_isEmber() {
+        // colorTokensFor with no explicit scheme must produce Ember accent values
+        val light = colorTokensFor(MimeoThemeChoice.LIGHT)
+        val dark  = colorTokensFor(MimeoThemeChoice.DARK)
+        assertEquals(MimeoAccentSchemes.EmberLight.accent, light.accent)
+        assertEquals(MimeoAccentSchemes.EmberDark.accent,  dark.accent)
+    }
+
+    @Test
+    fun defaultScheme_paperLightAndEmberDarkBindingsUnchanged() {
+        // Passing EMBER explicitly must produce identical accent fields to the static objects
+        val light = colorTokensFor(MimeoThemeChoice.LIGHT, MimeoAccentScheme.EMBER)
+        val dark  = colorTokensFor(MimeoThemeChoice.DARK,  MimeoAccentScheme.EMBER)
+
+        assertEquals(MimeoColors.PaperLight.accent,    light.accent)
+        assertEquals(MimeoColors.PaperLight.accentDim, light.accentDim)
+        assertEquals(MimeoColors.PaperLight.accentOn,  light.accentOn)
+        assertEquals(MimeoColors.PaperLight.nowTint,   light.nowTint)
+
+        assertEquals(MimeoColors.EmberDark.accent,    dark.accent)
+        assertEquals(MimeoColors.EmberDark.accentDim, dark.accentDim)
+        assertEquals(MimeoColors.EmberDark.accentOn,  dark.accentOn)
+        assertEquals(MimeoColors.EmberDark.nowTint,   dark.nowTint)
+    }
+
+    @Test
+    fun lilacScheme_resolvesDifferentAccentFromEmber() {
+        val light = colorTokensFor(MimeoThemeChoice.LIGHT, MimeoAccentScheme.LILAC)
+        val dark  = colorTokensFor(MimeoThemeChoice.DARK,  MimeoAccentScheme.LILAC)
+        assertEquals(MimeoAccentSchemes.LilacLight.accent, light.accent)
+        assertEquals(MimeoAccentSchemes.LilacDark.accent,  dark.accent)
+        // Must differ from Ember
+        assert(light.accent != colorTokensFor(MimeoThemeChoice.LIGHT, MimeoAccentScheme.EMBER).accent)
+        assert(dark.accent  != colorTokensFor(MimeoThemeChoice.DARK,  MimeoAccentScheme.EMBER).accent)
+    }
+
+    @Test
+    fun forestScheme_resolvesDifferentAccentFromEmber() {
+        val light = colorTokensFor(MimeoThemeChoice.LIGHT, MimeoAccentScheme.FOREST)
+        val dark  = colorTokensFor(MimeoThemeChoice.DARK,  MimeoAccentScheme.FOREST)
+        assertEquals(MimeoAccentSchemes.ForestLight.accent, light.accent)
+        assertEquals(MimeoAccentSchemes.ForestDark.accent,  dark.accent)
+        assert(light.accent != colorTokensFor(MimeoThemeChoice.LIGHT, MimeoAccentScheme.EMBER).accent)
+        assert(dark.accent  != colorTokensFor(MimeoThemeChoice.DARK,  MimeoAccentScheme.EMBER).accent)
+    }
+
+    @Test
+    fun slateScheme_resolvesDifferentAccentFromEmber() {
+        val light = colorTokensFor(MimeoThemeChoice.LIGHT, MimeoAccentScheme.SLATE)
+        val dark  = colorTokensFor(MimeoThemeChoice.DARK,  MimeoAccentScheme.SLATE)
+        assertEquals(MimeoAccentSchemes.SlateLight.accent, light.accent)
+        assertEquals(MimeoAccentSchemes.SlateDark.accent,  dark.accent)
+        assert(light.accent != colorTokensFor(MimeoThemeChoice.LIGHT, MimeoAccentScheme.EMBER).accent)
+        assert(dark.accent  != colorTokensFor(MimeoThemeChoice.DARK,  MimeoAccentScheme.EMBER).accent)
+    }
+
+    @Test
+    fun allSchemes_haveDistinctLightAccents() {
+        val schemes = MimeoAccentScheme.entries
+        val lightAccents = schemes.map { colorTokensFor(MimeoThemeChoice.LIGHT, it).accent }
+        assertEquals(schemes.size, lightAccents.toSet().size)
+    }
+
+    @Test
+    fun allSchemes_haveDistinctDarkAccents() {
+        val schemes = MimeoAccentScheme.entries
+        val darkAccents = schemes.map { colorTokensFor(MimeoThemeChoice.DARK, it).accent }
+        assertEquals(schemes.size, darkAccents.toSet().size)
+    }
+
+    @Test
+    fun nonAccentFields_unchangedAcrossSchemes() {
+        // bg, fg, line, etc. come from the base palette and must not vary with scheme
+        val emberLight = colorTokensFor(MimeoThemeChoice.LIGHT, MimeoAccentScheme.EMBER)
+        for (scheme in MimeoAccentScheme.entries) {
+            val tokens = colorTokensFor(MimeoThemeChoice.LIGHT, scheme)
+            assertEquals(emberLight.bg,        tokens.bg)
+            assertEquals(emberLight.surface,   tokens.surface)
+            assertEquals(emberLight.fg,        tokens.fg)
+            assertEquals(emberLight.success,   tokens.success)
+            assertEquals(emberLight.danger,    tokens.danger)
+        }
     }
 }

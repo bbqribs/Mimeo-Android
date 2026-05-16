@@ -9,7 +9,8 @@ data class MimeoAccentTokens(
     val nowTint: Color,
 )
 
-// Named accent schemes. Only Ember ships now; Lilac, Forest, Slate are reserved for later.
+enum class MimeoAccentScheme { EMBER, LILAC, FOREST, SLATE }
+
 object MimeoAccentSchemes {
     val EmberLight = MimeoAccentTokens(
         accent = Color(0xFFC25B2E),
@@ -23,4 +24,52 @@ object MimeoAccentSchemes {
         accentOn = Color(0xFF0B0B0E),
         nowTint = Color(0x0FB6A1FF),
     )
+
+    // Calm Lilac — web Direction A reference: dark accent #8D73FF, light #6B49CC
+    val LilacLight = MimeoAccentTokens(
+        accent = Color(0xFF6B49CC),
+        accentDim = Color(0x1A6B49CC),
+        accentOn = Color(0xFFFFFFFF),
+        nowTint = Color(0x126B49CC),
+    )
+    val LilacDark = MimeoAccentTokens(
+        accent = Color(0xFF8D73FF),
+        accentDim = Color(0x248D73FF),
+        accentOn = Color(0xFF0B0B0E),
+        nowTint = Color(0x0F8D73FF),
+    )
+
+    val ForestLight = MimeoAccentTokens(
+        accent = Color(0xFF2E7A4F),
+        accentDim = Color(0x1A2E7A4F),
+        accentOn = Color(0xFFFFFFFF),
+        nowTint = Color(0x122E7A4F),
+    )
+    val ForestDark = MimeoAccentTokens(
+        accent = Color(0xFF72C99A),
+        accentDim = Color(0x2472C99A),
+        accentOn = Color(0xFF0B0B0E),
+        nowTint = Color(0x0F72C99A),
+    )
+
+    val SlateLight = MimeoAccentTokens(
+        accent = Color(0xFF3A6080),
+        accentDim = Color(0x1A3A6080),
+        accentOn = Color(0xFFFFFFFF),
+        nowTint = Color(0x123A6080),
+    )
+    val SlateDark = MimeoAccentTokens(
+        accent = Color(0xFF7BB8D4),
+        accentDim = Color(0x247BB8D4),
+        accentOn = Color(0xFF0B0B0E),
+        nowTint = Color(0x0F7BB8D4),
+    )
 }
+
+fun accentTokensFor(scheme: MimeoAccentScheme, choice: MimeoThemeChoice): MimeoAccentTokens =
+    when (scheme) {
+        MimeoAccentScheme.EMBER  -> if (choice == MimeoThemeChoice.LIGHT) MimeoAccentSchemes.EmberLight  else MimeoAccentSchemes.EmberDark
+        MimeoAccentScheme.LILAC  -> if (choice == MimeoThemeChoice.LIGHT) MimeoAccentSchemes.LilacLight  else MimeoAccentSchemes.LilacDark
+        MimeoAccentScheme.FOREST -> if (choice == MimeoThemeChoice.LIGHT) MimeoAccentSchemes.ForestLight else MimeoAccentSchemes.ForestDark
+        MimeoAccentScheme.SLATE  -> if (choice == MimeoThemeChoice.LIGHT) MimeoAccentSchemes.SlateLight  else MimeoAccentSchemes.SlateDark
+    }
