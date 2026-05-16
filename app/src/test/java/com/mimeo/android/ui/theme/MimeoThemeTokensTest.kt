@@ -2,6 +2,7 @@ package com.mimeo.android.ui.theme
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.VisualDensityPreference
 import com.mimeo.android.model.VisualThemePreference
 import org.junit.Assert.assertEquals
@@ -212,6 +213,13 @@ class MimeoThemeTokensTest {
         assertEquals(MimeoAccentSchemes.SlateDark.accent,  dark.accent)
         assert(light.accent != colorTokensFor(MimeoThemeChoice.LIGHT, MimeoAccentScheme.EMBER).accent)
         assert(dark.accent  != colorTokensFor(MimeoThemeChoice.DARK,  MimeoAccentScheme.EMBER).accent)
+    }
+
+    @Test
+    fun accentPreferenceMapping_feedsThemeTokenResolution() {
+        val selectedScheme = AccentSchemePreference.SLATE.toMimeoAccentScheme()
+        val tokens = colorTokensFor(MimeoThemeChoice.LIGHT, selectedScheme)
+        assertEquals(MimeoAccentSchemes.SlateLight.accent, tokens.accent)
     }
 
     @Test

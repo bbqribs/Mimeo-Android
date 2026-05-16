@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.DEFAULT_LAN_BASE_URL
@@ -112,6 +113,8 @@ class SettingsStore(private val context: Context) {
         stringPreferencesKey("visual_theme_preference")
     private val visualDensityPreferenceKey: Preferences.Key<String> =
         stringPreferencesKey("visual_density_preference")
+    private val accentSchemePreferenceKey: Preferences.Key<String> =
+        stringPreferencesKey("accent_scheme_preference")
     private val visualDesignV1EnabledKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("visual_design_v1_enabled")
     private val playerControlsModeKey: Preferences.Key<String> =
@@ -201,6 +204,7 @@ class SettingsStore(private val context: Context) {
                 ?: ParagraphSpacingOption.MEDIUM,
             visualThemePreference = parseVisualThemePreference(prefs[visualThemePreferenceKey]),
             visualDensityPreference = parseVisualDensityPreference(prefs[visualDensityPreferenceKey]),
+            accentSchemePreference = parseAccentSchemePreference(prefs[accentSchemePreferenceKey]),
             visualDesignV1Enabled = prefs[visualDesignV1EnabledKey] ?: DEFAULT_VISUAL_DESIGN_V1_ENABLED,
             playerControlsMode = prefs[playerControlsModeKey]
                 ?.let { runCatching { PlayerControlsMode.valueOf(it) }.getOrNull() }
@@ -374,6 +378,12 @@ class SettingsStore(private val context: Context) {
     suspend fun saveVisualDensityPreference(visualDensityPreference: VisualDensityPreference) {
         context.dataStore.edit { prefs ->
             prefs[visualDensityPreferenceKey] = visualDensityPreference.name
+        }
+    }
+
+    suspend fun saveAccentSchemePreference(accentSchemePreference: AccentSchemePreference) {
+        context.dataStore.edit { prefs ->
+            prefs[accentSchemePreferenceKey] = accentSchemePreference.name
         }
     }
 
@@ -965,6 +975,12 @@ class SettingsStore(private val context: Context) {
         return raw
             ?.let { runCatching { VisualDensityPreference.valueOf(it) }.getOrNull() }
             ?: VisualDensityPreference.DEFAULT
+    }
+
+    internal fun parseAccentSchemePreference(raw: String?): AccentSchemePreference {
+        return raw
+            ?.let { runCatching { AccentSchemePreference.valueOf(it) }.getOrNull() }
+            ?: AccentSchemePreference.EMBER
     }
 
     companion object {

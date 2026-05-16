@@ -4,8 +4,10 @@ import android.app.Application
 import android.content.Intent
 import android.speech.tts.TextToSpeech
 import android.speech.tts.Voice
+import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -69,6 +71,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material.icons.outlined.Info
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.BuildConfig
+import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
@@ -103,6 +106,9 @@ import androidx.compose.ui.graphics.Color
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
 import com.mimeo.android.ui.theme.LocalMimeoV1Active
+import com.mimeo.android.ui.theme.MimeoThemeChoice
+import com.mimeo.android.ui.theme.accentTokensFor
+import com.mimeo.android.ui.theme.toMimeoAccentScheme
 import kotlinx.coroutines.launch
 
 private const val PREVIEW_PARAGRAPH_1 = "Mimeo now remembers your reading layout so Locus feels like a calm, bookish surface instead of a raw text dump."
@@ -218,8 +224,12 @@ fun SettingsScreen(
     var visualDensityPreference by remember(settings.visualDensityPreference) {
         mutableStateOf(settings.visualDensityPreference)
     }
+    var accentSchemePreference by remember(settings.accentSchemePreference) {
+        mutableStateOf(settings.accentSchemePreference)
+    }
     var showVisualThemeMenu by remember { mutableStateOf(false) }
     var showVisualDensityMenu by remember { mutableStateOf(false) }
+    var showAccentSchemeMenu by remember { mutableStateOf(false) }
     var ttsVoiceName by remember(settings.ttsVoiceName) {
         mutableStateOf(settings.ttsVoiceName)
     }
@@ -1837,6 +1847,55 @@ fun SettingsScreen(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
+                            Text("Accent")
+                            Text(
+                                text = "Saved now; changes the Paper & Ember accent colors while visual v1 is active.",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Box {
+                            Button(onClick = { showAccentSchemeMenu = true }) {
+                                AccentSchemeSwatch(accentSchemePreference)
+                                Text(
+                                    text = accentSchemePreference.displayName(),
+                                    modifier = Modifier.padding(start = 8.dp),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showAccentSchemeMenu,
+                                onDismissRequest = { showAccentSchemeMenu = false },
+                            ) {
+                                AccentSchemePreference.entries.forEach { preference ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                AccentSchemeSwatch(preference)
+                                                Text(
+                                                    text = preference.displayName(),
+                                                    modifier = Modifier.padding(start = 8.dp),
+                                                )
+                                            }
+                                        },
+                                        onClick = {
+                                            showAccentSchemeMenu = false
+                                            accentSchemePreference = preference
+                                            vm.saveAccentSchemePreference(preference)
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
                             Text("Visual density mode")
                             Text(
                                 text = "Saved now; applied to Paper & Ember density tokens while visual v1 is active.",
@@ -2313,6 +2372,26 @@ private fun VisualThemePreference.displayName(): String = when (this) {
 private fun VisualDensityPreference.displayName(): String = when (this) {
     VisualDensityPreference.DEFAULT -> "Default"
     VisualDensityPreference.COMPACT -> "Compact"
+}
+
+private fun AccentSchemePreference.displayName(): String = when (this) {
+    AccentSchemePreference.EMBER -> "Ember"
+    AccentSchemePreference.LILAC -> "Lilac"
+    AccentSchemePreference.FOREST -> "Forest"
+    AccentSchemePreference.SLATE -> "Slate"
+}
+
+@Composable
+private fun AccentSchemeSwatch(preference: AccentSchemePreference) {
+    val accentColor = accentTokensFor(
+        scheme = preference.toMimeoAccentScheme(),
+        choice = MimeoThemeChoice.LIGHT,
+    ).accent
+    Box(
+        modifier = Modifier
+            .size(12.dp)
+            .background(accentColor, CircleShape),
+    )
 }
 
 private fun LocusContentMode.displayName(): String = when (this) {

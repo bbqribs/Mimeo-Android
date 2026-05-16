@@ -19,6 +19,7 @@ import androidx.core.view.WindowCompat
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
+import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.VisualDensityPreference
 import com.mimeo.android.model.VisualThemePreference
 
@@ -33,6 +34,13 @@ internal enum class MimeoThemeRuntimePath {
 
 internal fun resolveThemeRuntimePath(enableVisualDesignV1: Boolean): MimeoThemeRuntimePath =
     if (enableVisualDesignV1) MimeoThemeRuntimePath.VISUAL_V1 else MimeoThemeRuntimePath.LEGACY
+
+fun AccentSchemePreference.toMimeoAccentScheme(): MimeoAccentScheme = when (this) {
+    AccentSchemePreference.EMBER -> MimeoAccentScheme.EMBER
+    AccentSchemePreference.LILAC -> MimeoAccentScheme.LILAC
+    AccentSchemePreference.FOREST -> MimeoAccentScheme.FOREST
+    AccentSchemePreference.SLATE -> MimeoAccentScheme.SLATE
+}
 
 private val MimeoDarkColors = darkColorScheme(
     primary = Color(0xFFC6A7FF),

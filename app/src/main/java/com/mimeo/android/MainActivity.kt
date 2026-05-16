@@ -173,6 +173,7 @@ import com.mimeo.android.ui.signin.buildAuthDeviceName
 import com.mimeo.android.ui.signin.inferConnectionModeForBaseUrl
 import com.mimeo.android.ui.signin.resolveSignInErrorMessage
 import com.mimeo.android.ui.theme.MimeoAppTheme
+import com.mimeo.android.ui.theme.toMimeoAccentScheme
 import com.mimeo.android.work.WorkScheduler
 import java.io.IOException
 import java.text.SimpleDateFormat
@@ -488,6 +489,7 @@ class MainActivity : ComponentActivity() {
             MimeoAppTheme(
                 visualThemePreference = settings.visualThemePreference,
                 visualDensityPreference = settings.visualDensityPreference,
+                accentScheme = settings.accentSchemePreference.toMimeoAccentScheme(),
                 enableVisualDesignV1 = settings.visualDesignV1Enabled,
             ) {
                 MimeoApp(vm)

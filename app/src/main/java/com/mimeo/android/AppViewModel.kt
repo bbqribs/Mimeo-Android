@@ -99,6 +99,7 @@ import com.mimeo.android.data.AppDatabase
 import com.mimeo.android.data.NoActiveContentStore
 import com.mimeo.android.data.QueueFetchResult
 import com.mimeo.android.data.SettingsStore
+import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.AutoDownloadDiagnostics
 import com.mimeo.android.model.ArticleSummary
@@ -3150,6 +3151,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _settings.update { current -> current.copy(visualDensityPreference = preference) }
             settingsStore.saveVisualDensityPreference(preference)
+        }
+    }
+
+    fun saveAccentSchemePreference(preference: AccentSchemePreference) {
+        viewModelScope.launch {
+            _settings.update { current -> current.copy(accentSchemePreference = preference) }
+            settingsStore.saveAccentSchemePreference(preference)
         }
     }
 
