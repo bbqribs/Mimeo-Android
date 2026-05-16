@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -410,12 +411,15 @@ fun LibraryItemsScreen(
         } else {
             readyItems
         }
+        val firstVisibleIndex = listState.firstVisibleItemIndex
+        val firstVisibleOffset = listState.firstVisibleItemScrollOffset
         draggingIndex = -1
         dragOffsetY = 0f
         currentTargetIndex = -1
         dragStartTopOffsets = emptyMap()
         dragStartHeights = emptyMap()
         if (!shouldReorder) return
+        listState.requestScrollToItem(firstVisibleIndex, firstVisibleOffset)
         localReorderItems = reorderedItems
         val persistReorder = onDragReorder
         actionScope.launch {
@@ -741,13 +745,14 @@ fun LibraryItemsScreen(
                                 }
                                 val ruleColor = if (isV1) mColors.fg4 else MaterialTheme.colorScheme.outlineVariant
                                 val dragBgColor = if (isV1) mColors.surfaceHi else MaterialTheme.colorScheme.surfaceContainerHigh
-                                val rowModifier = Modifier
+                                val itemModifier = Modifier
                                     .onGloballyPositioned { coordinates ->
                                         itemTopOffsets = itemTopOffsets + (entry.item.itemId to coordinates.positionInParent().y)
                                         itemHeights = itemHeights + (entry.item.itemId to coordinates.size.height.toFloat())
                                     }
                                     .graphicsLayer { translationY = visualOffset }
                                     .zIndex(if (isDragging) 1f else 0f)
+                                val rowModifier = Modifier
                                     .then(
                                         if (isDragging) {
                                             Modifier.background(dragBgColor).drawBehind {
@@ -772,7 +777,8 @@ fun LibraryItemsScreen(
                                                 dragOffsetY = 0f
                                                 currentTargetIndex = readyIndex
                                             },
-                                            onDrag = { _, dragAmount ->
+                                            onDrag = { change, dragAmount ->
+                                                change.consume()
                                                 dragOffsetY += dragAmount.y
                                                 val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
                                                 if (newTarget != currentTargetIndex) {
@@ -789,44 +795,46 @@ fun LibraryItemsScreen(
                                 } else {
                                     null
                                 }
-                                LibraryQueueItemRow(
-                                    item = entry.item,
-                                    isSelectionActive = selectionActive,
-                                    isSelected = entry.item.itemId in selectedIds,
-                                    modifier = rowModifier,
-                                    dragHandleModifier = dragHandleModifier,
-                                    dragHandleContentDescription = if (reorderActive) {
-                                        "Drag to reorder"
-                                    } else {
-                                        dragReorderUnavailableReason?.let { "Reorder unavailable: $it" }
-                                            ?: "Reorder unavailable"
-                                    },
-                                    onOpen = { onOpenItem(entry.item.itemId) },
-                                    onToggleSelect = { toggleSelection(entry.item.itemId) },
-                                    onEnterSelection = { enterSelectionMode(entry.item.itemId) },
-                                    onPlayNow = onPlayNow?.let { cb -> { cb(entry.item.itemId) } },
-                                    onPlayNext = onPlayNext?.let { cb -> { cb(entry.item.itemId) } },
-                                    onPlayLast = onPlayLast?.let { cb -> { cb(entry.item.itemId) } },
-                                    onPlayFromHere = onPlayFromHere?.let { { pendingPlayFromHereItemId = entry.item.itemId } },
-                                    onAddToPlaylist = if (!isBin) onBatchAddToPlaylist?.let {
-                                        {
-                                            batchPlaylistPickerIds = setOf(entry.item.itemId)
-                                            showBatchPlaylistPicker = true
-                                        }
-                                    } else null,
-                                    onFavoriteToggle = if (!isBin) ({
-                                        onBatchAction(if (entry.item.isFavorited) "unfavorite" else "favorite", setOf(entry.item.itemId))
-                                    }) else null,
-                                    onArchiveToggle = if (!isBin) ({
-                                        onBatchAction(if (title == "Archive") "unarchive" else "archive", setOf(entry.item.itemId))
-                                    }) else null,
-                                    archiveToggleLabel = if (title == "Archive") "Unarchive" else "Archive",
-                                    onBin = if (!isBin) ({ onBatchAction("bin", setOf(entry.item.itemId)) }) else null,
-                                )
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 12.dp),
-                                    color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
-                                )
+                                Column(modifier = itemModifier) {
+                                    LibraryQueueItemRow(
+                                        item = entry.item,
+                                        isSelectionActive = selectionActive,
+                                        isSelected = entry.item.itemId in selectedIds,
+                                        modifier = rowModifier,
+                                        dragHandleModifier = dragHandleModifier,
+                                        dragHandleContentDescription = if (reorderActive) {
+                                            "Drag to reorder"
+                                        } else {
+                                            dragReorderUnavailableReason?.let { "Reorder unavailable: $it" }
+                                                ?: "Reorder unavailable"
+                                        },
+                                        onOpen = { onOpenItem(entry.item.itemId) },
+                                        onToggleSelect = { toggleSelection(entry.item.itemId) },
+                                        onEnterSelection = { enterSelectionMode(entry.item.itemId) },
+                                        onPlayNow = onPlayNow?.let { cb -> { cb(entry.item.itemId) } },
+                                        onPlayNext = onPlayNext?.let { cb -> { cb(entry.item.itemId) } },
+                                        onPlayLast = onPlayLast?.let { cb -> { cb(entry.item.itemId) } },
+                                        onPlayFromHere = onPlayFromHere?.let { { pendingPlayFromHereItemId = entry.item.itemId } },
+                                        onAddToPlaylist = if (!isBin) onBatchAddToPlaylist?.let {
+                                            {
+                                                batchPlaylistPickerIds = setOf(entry.item.itemId)
+                                                showBatchPlaylistPicker = true
+                                            }
+                                        } else null,
+                                        onFavoriteToggle = if (!isBin) ({
+                                            onBatchAction(if (entry.item.isFavorited) "unfavorite" else "favorite", setOf(entry.item.itemId))
+                                        }) else null,
+                                        onArchiveToggle = if (!isBin) ({
+                                            onBatchAction(if (title == "Archive") "unarchive" else "archive", setOf(entry.item.itemId))
+                                        }) else null,
+                                        archiveToggleLabel = if (title == "Archive") "Unarchive" else "Archive",
+                                        onBin = if (!isBin) ({ onBatchAction("bin", setOf(entry.item.itemId)) }) else null,
+                                    )
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(horizontal = 12.dp),
+                                        color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                                    )
+                                }
                             }
                         }
                     }
