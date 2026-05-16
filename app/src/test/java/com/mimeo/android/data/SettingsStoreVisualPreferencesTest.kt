@@ -34,7 +34,7 @@ class SettingsStoreVisualPreferencesTest {
         val defaults = AppSettings()
         assertEquals(VisualThemePreference.FOLLOW_SYSTEM, defaults.visualThemePreference)
         assertEquals(VisualDensityPreference.DEFAULT, defaults.visualDensityPreference)
-        assertEquals(AccentSchemePreference.EMBER, defaults.accentSchemePreference)
+        assertEquals(AccentSchemePreference.LILAC, defaults.accentSchemePreference)
     }
 
     @Test
@@ -42,7 +42,7 @@ class SettingsStoreVisualPreferencesTest {
         val settings = store.settingsFlow.first()
         assertEquals(VisualThemePreference.FOLLOW_SYSTEM, settings.visualThemePreference)
         assertEquals(VisualDensityPreference.DEFAULT, settings.visualDensityPreference)
-        assertEquals(AccentSchemePreference.EMBER, settings.accentSchemePreference)
+        assertEquals(AccentSchemePreference.LILAC, settings.accentSchemePreference)
     }
 
     @Test
@@ -83,9 +83,9 @@ class SettingsStoreVisualPreferencesTest {
     }
 
     @Test
-    fun invalidStoredAccentSchemeString_fallsBackToEmber() {
+    fun invalidStoredAccentSchemeString_fallsBackToLilac() {
         assertEquals(
-            AccentSchemePreference.EMBER,
+            AccentSchemePreference.LILAC,
             store.parseAccentSchemePreference("not-an-accent"),
         )
     }

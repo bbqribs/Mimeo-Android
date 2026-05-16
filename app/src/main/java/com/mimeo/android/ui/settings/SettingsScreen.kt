@@ -1629,6 +1629,129 @@ fun SettingsScreen(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text("Visual theme mode")
+                        Text(
+                            text = "Saved now; applied to Paper & Ember tokens while visual v1 is active.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Box {
+                        Button(onClick = { showVisualThemeMenu = true }) {
+                            Text(visualThemePreference.displayName())
+                        }
+                        DropdownMenu(
+                            expanded = showVisualThemeMenu,
+                            onDismissRequest = { showVisualThemeMenu = false },
+                        ) {
+                            VisualThemePreference.entries.forEach { preference ->
+                                DropdownMenuItem(
+                                    text = { Text(preference.displayName()) },
+                                    onClick = {
+                                        showVisualThemeMenu = false
+                                        visualThemePreference = preference
+                                        vm.saveVisualThemePreference(preference)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text("Accent")
+                        Text(
+                            text = "Saved now; changes the Paper & Ember accent colors while visual v1 is active.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Box {
+                        Button(onClick = { showAccentSchemeMenu = true }) {
+                            AccentSchemeSwatch(accentSchemePreference)
+                            Text(
+                                text = accentSchemePreference.displayName(),
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showAccentSchemeMenu,
+                            onDismissRequest = { showAccentSchemeMenu = false },
+                        ) {
+                            AccentSchemePreference.entries.forEach { preference ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            AccentSchemeSwatch(preference)
+                                            Text(
+                                                text = preference.displayName(),
+                                                modifier = Modifier.padding(start = 8.dp),
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        showAccentSchemeMenu = false
+                                        accentSchemePreference = preference
+                                        vm.saveAccentSchemePreference(preference)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text("Visual density mode")
+                        Text(
+                            text = "Saved now; applied to Paper & Ember density tokens while visual v1 is active.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Box {
+                        Button(onClick = { showVisualDensityMenu = true }) {
+                            Text(visualDensityPreference.displayName())
+                        }
+                        DropdownMenu(
+                            expanded = showVisualDensityMenu,
+                            onDismissRequest = { showVisualDensityMenu = false },
+                        ) {
+                            VisualDensityPreference.entries.forEach { preference ->
+                                DropdownMenuItem(
+                                    text = { Text(preference.displayName()) },
+                                    onClick = {
+                                        showVisualDensityMenu = false
+                                        visualDensityPreference = preference
+                                        vm.saveVisualDensityPreference(preference)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
                 Text(
                     text = "Reading",
                     style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
@@ -1800,129 +1923,6 @@ fun SettingsScreen(
                                 vm.saveShowPendingOutcomeSimulator(it)
                             },
                         )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text("Visual theme mode")
-                            Text(
-                                text = "Saved now; applied to Paper & Ember tokens while visual v1 is active.",
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Box {
-                            Button(onClick = { showVisualThemeMenu = true }) {
-                                Text(visualThemePreference.displayName())
-                            }
-                            DropdownMenu(
-                                expanded = showVisualThemeMenu,
-                                onDismissRequest = { showVisualThemeMenu = false },
-                            ) {
-                                VisualThemePreference.entries.forEach { preference ->
-                                    DropdownMenuItem(
-                                        text = { Text(preference.displayName()) },
-                                        onClick = {
-                                            showVisualThemeMenu = false
-                                            visualThemePreference = preference
-                                            vm.saveVisualThemePreference(preference)
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text("Accent")
-                            Text(
-                                text = "Saved now; changes the Paper & Ember accent colors while visual v1 is active.",
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Box {
-                            Button(onClick = { showAccentSchemeMenu = true }) {
-                                AccentSchemeSwatch(accentSchemePreference)
-                                Text(
-                                    text = accentSchemePreference.displayName(),
-                                    modifier = Modifier.padding(start = 8.dp),
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = showAccentSchemeMenu,
-                                onDismissRequest = { showAccentSchemeMenu = false },
-                            ) {
-                                AccentSchemePreference.entries.forEach { preference ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                AccentSchemeSwatch(preference)
-                                                Text(
-                                                    text = preference.displayName(),
-                                                    modifier = Modifier.padding(start = 8.dp),
-                                                )
-                                            }
-                                        },
-                                        onClick = {
-                                            showAccentSchemeMenu = false
-                                            accentSchemePreference = preference
-                                            vm.saveAccentSchemePreference(preference)
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text("Visual density mode")
-                            Text(
-                                text = "Saved now; applied to Paper & Ember density tokens while visual v1 is active.",
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Box {
-                            Button(onClick = { showVisualDensityMenu = true }) {
-                                Text(visualDensityPreference.displayName())
-                            }
-                            DropdownMenu(
-                                expanded = showVisualDensityMenu,
-                                onDismissRequest = { showVisualDensityMenu = false },
-                            ) {
-                                VisualDensityPreference.entries.forEach { preference ->
-                                    DropdownMenuItem(
-                                        text = { Text(preference.displayName()) },
-                                        onClick = {
-                                            showVisualDensityMenu = false
-                                            visualDensityPreference = preference
-                                            vm.saveVisualDensityPreference(preference)
-                                        },
-                                    )
-                                }
-                            }
-                        }
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),

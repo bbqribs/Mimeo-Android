@@ -64,7 +64,7 @@ fun MimeoAppTheme(
     visualThemePreference: VisualThemePreference,
     visualDensityPreference: VisualDensityPreference,
     enableVisualDesignV1: Boolean = false,
-    accentScheme: MimeoAccentScheme = MimeoAccentScheme.EMBER,
+    accentScheme: MimeoAccentScheme = MimeoAccentScheme.LILAC,
     content: @Composable () -> Unit,
 ) {
     when (resolveThemeRuntimePath(enableVisualDesignV1 || VISUAL_DESIGN_V1_FORCE_ENABLED)) {
@@ -90,7 +90,7 @@ fun MimeoTheme(content: @Composable () -> Unit) {
 private fun MimeoThemeV1(
     visualThemePreference: VisualThemePreference,
     visualDensityPreference: VisualDensityPreference,
-    accentScheme: MimeoAccentScheme = MimeoAccentScheme.EMBER,
+    accentScheme: MimeoAccentScheme = MimeoAccentScheme.LILAC,
     content: @Composable () -> Unit,
 ) {
     val systemIsDarkTheme = isSystemInDarkTheme()

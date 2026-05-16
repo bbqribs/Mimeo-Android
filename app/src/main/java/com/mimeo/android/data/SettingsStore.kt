@@ -980,7 +980,7 @@ class SettingsStore(private val context: Context) {
     internal fun parseAccentSchemePreference(raw: String?): AccentSchemePreference {
         return raw
             ?.let { runCatching { AccentSchemePreference.valueOf(it) }.getOrNull() }
-            ?: AccentSchemePreference.EMBER
+            ?: AccentSchemePreference.LILAC
     }
 
     companion object {

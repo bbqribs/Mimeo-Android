@@ -159,16 +159,16 @@ class MimeoThemeTokensTest {
     // Accent scheme variants
 
     @Test
-    fun defaultAccentScheme_isEmber() {
-        // colorTokensFor with no explicit scheme must produce Ember accent values
+    fun defaultAccentScheme_isLilac() {
+        // colorTokensFor with no explicit scheme must produce Lilac accent values
         val light = colorTokensFor(MimeoThemeChoice.LIGHT)
         val dark  = colorTokensFor(MimeoThemeChoice.DARK)
-        assertEquals(MimeoAccentSchemes.EmberLight.accent, light.accent)
-        assertEquals(MimeoAccentSchemes.EmberDark.accent,  dark.accent)
+        assertEquals(MimeoAccentSchemes.LilacLight.accent, light.accent)
+        assertEquals(MimeoAccentSchemes.LilacDark.accent,  dark.accent)
     }
 
     @Test
-    fun defaultScheme_paperLightAndEmberDarkBindingsUnchanged() {
+    fun emberScheme_paperLightAndEmberDarkBindingsUnchanged() {
         // Passing EMBER explicitly must produce identical accent fields to the static objects
         val light = colorTokensFor(MimeoThemeChoice.LIGHT, MimeoAccentScheme.EMBER)
         val dark  = colorTokensFor(MimeoThemeChoice.DARK,  MimeoAccentScheme.EMBER)

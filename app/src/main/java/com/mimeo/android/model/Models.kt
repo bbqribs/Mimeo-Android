@@ -481,7 +481,7 @@ data class AppSettings(
     val readingParagraphSpacing: ParagraphSpacingOption = ParagraphSpacingOption.MEDIUM,
     val visualThemePreference: VisualThemePreference = VisualThemePreference.FOLLOW_SYSTEM,
     val visualDensityPreference: VisualDensityPreference = VisualDensityPreference.DEFAULT,
-    val accentSchemePreference: AccentSchemePreference = AccentSchemePreference.EMBER,
+    val accentSchemePreference: AccentSchemePreference = AccentSchemePreference.LILAC,
     val visualDesignV1Enabled: Boolean = DEFAULT_VISUAL_DESIGN_V1_ENABLED,
     val playerControlsMode: PlayerControlsMode = PlayerControlsMode.FULL,
     val playerLastNonNubMode: PlayerControlsMode = PlayerControlsMode.FULL,
