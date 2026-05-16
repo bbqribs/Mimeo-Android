@@ -41,6 +41,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -192,11 +193,25 @@ fun LibraryItemsScreen(
     onPlayNext: ((itemId: Int) -> Unit)? = null,
     onPlayLast: ((itemId: Int) -> Unit)? = null,
     onPlayFromHere: ((itemsFromHere: List<PlaybackQueueItem>, selectedItemId: Int) -> Unit)? = null,
+    onLoadMore: (() -> Unit)? = null,
+    loadingMore: Boolean = false,
     jumpPillBottomClearance: Dp = 0.dp,
 ) {
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
     val listState = rememberLazyListState()
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            if (onLoadMore == null) return@derivedStateOf false
+            val layoutInfo = listState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            totalItems > 0 && lastVisible >= totalItems - 5
+        }
+    }
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) onLoadMore?.invoke()
+    }
     val showJumpToTop by remember {
         derivedStateOf {
             shouldShowJumpToTopLazy(
@@ -807,6 +822,18 @@ fun LibraryItemsScreen(
                                     color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
                                 )
                             }
+                        }
+                    }
+                }
+                if (loadingMore) {
+                    item(key = "load_more_spinner") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
                         }
                     }
                 }

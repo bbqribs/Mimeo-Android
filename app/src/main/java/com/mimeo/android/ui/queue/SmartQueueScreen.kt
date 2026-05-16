@@ -50,6 +50,7 @@ fun SmartQueueScreen(
     val reorderAllowed by vm.smartQueueReorderAllowed.collectAsState()
     val reorderUnavailableReason by vm.smartQueueReorderUnavailableReason.collectAsState()
     val reorderSaving by vm.smartQueueReorderSaving.collectAsState()
+    val loadingMore by vm.queueLoadingMore.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val actionScope = rememberCoroutineScope()
@@ -154,6 +155,8 @@ fun SmartQueueScreen(
                 sourceLabel = "Smart Queue",
             )
         },
+        onLoadMore = { vm.loadMoreQueueItems() },
+        loadingMore = loadingMore,
         jumpPillBottomClearance = jumpPillBottomClearance,
     )
 }

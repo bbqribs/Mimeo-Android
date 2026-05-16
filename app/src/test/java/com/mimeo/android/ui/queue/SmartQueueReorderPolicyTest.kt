@@ -108,6 +108,37 @@ class SmartQueueReorderPolicyTest {
     }
 
     @Test
+    fun disablesWhenQueueExceedsItemLimit() {
+        assertFalse(
+            smartQueueDragReorderEnabled(
+                backendReorderAllowed = true,
+                searchQuery = "",
+                sortOption = LibrarySortOption.SMART_QUEUE,
+                hasMorePages = false,
+                itemCount = SMART_QUEUE_REORDER_ITEM_LIMIT + 1,
+            ),
+        )
+    }
+
+    @Test
+    fun statusLabelReportsQueueTooLarge() {
+        assertEquals(
+            "Reorder: queue too large (limit is $SMART_QUEUE_REORDER_ITEM_LIMIT)",
+            smartQueueReorderStatusLabel(
+                dragReorderEnabled = false,
+                backendReorderAllowed = true,
+                unavailableReason = null,
+                searchQuery = "",
+                sortOption = LibrarySortOption.SMART_QUEUE,
+                hasMorePages = false,
+                itemCount = SMART_QUEUE_REORDER_ITEM_LIMIT + 1,
+                loading = false,
+                reorderSaving = false,
+            ),
+        )
+    }
+
+    @Test
     fun statusLabelReportsDisabledWhileSearching() {
         assertEquals(
             "Reorder: disabled while searching",

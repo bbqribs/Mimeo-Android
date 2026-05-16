@@ -2044,7 +2044,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         playlistId: Int?,
         prefetchCount: Int = 0,
     ): QueueFetchResult {
-        val firstPage = repository.loadQueueAndPrefetch(
+        return repository.loadQueueAndPrefetch(
             baseUrl,
             token,
             playlistId = playlistId,
@@ -2052,43 +2052,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             sortField = queueServerSortField,
             sortDir = queueServerSortDir,
             includeDone = queueFetchIncludeDone(playlistId),
-        )
-        val firstPayload = firstPage.payload
-        if (!isDefaultSmartQueueSurface(playlistId) || firstPayload.totalCount <= firstPayload.items.size) {
-            return firstPage
-        }
-
-        val combined = firstPayload.items.toMutableList()
-        var totalCount = firstPayload.totalCount
-        var offset = combined.size
-        while (totalCount > 0 && offset < totalCount) {
-            val nextPage = apiClient.getQueue(
-                baseUrl = baseUrl,
-                token = token,
-                playlistId = null,
-                offset = offset,
-                limit = ApiClient.QUEUE_LOAD_MORE_LIMIT,
-                sortField = queueServerSortField,
-                sortDir = queueServerSortDir,
-                includeDone = false,
-            )
-            val fetched = nextPage.payload.items
-            if (fetched.isEmpty()) break
-            val existingIds = combined.mapTo(mutableSetOf()) { it.itemId }
-            combined += fetched.filterNot { it.itemId in existingIds }
-            offset += fetched.size
-            if (nextPage.payload.totalCount > 0) {
-                totalCount = nextPage.payload.totalCount
-            }
-        }
-
-        return firstPage.copy(
-            payload = firstPayload.copy(
-                count = combined.size,
-                totalCount = totalCount,
-                items = combined,
-            ),
-            debugSnapshot = firstPage.debugSnapshot.copy(responseItemCount = combined.size),
         )
     }
 
