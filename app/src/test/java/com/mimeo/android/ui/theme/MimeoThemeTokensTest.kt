@@ -114,4 +114,44 @@ class MimeoThemeTokensTest {
             resolveThemeRuntimePath(enableVisualDesignV1 = true),
         )
     }
+
+    // Accent-token substrate — Ember scheme
+
+    @Test
+    fun emberLightAccent_matchesColorTokens() {
+        val scheme = MimeoAccentSchemes.EmberLight
+        val colors = MimeoColors.PaperLight
+        assertEquals(scheme.accent, colors.accent)
+        assertEquals(scheme.accentDim, colors.accentDim)
+        assertEquals(scheme.accentOn, colors.accentOn)
+        assertEquals(scheme.nowTint, colors.nowTint)
+    }
+
+    @Test
+    fun emberDarkAccent_matchesColorTokens() {
+        val scheme = MimeoAccentSchemes.EmberDark
+        val colors = MimeoColors.EmberDark
+        assertEquals(scheme.accent, colors.accent)
+        assertEquals(scheme.accentDim, colors.accentDim)
+        assertEquals(scheme.accentOn, colors.accentOn)
+        assertEquals(scheme.nowTint, colors.nowTint)
+    }
+
+    @Test
+    fun emberLightAccent_rawValues() {
+        val scheme = MimeoAccentSchemes.EmberLight
+        assertEquals(Color(0xFFC25B2E), scheme.accent)
+        assertEquals(Color(0x1AC25B2E), scheme.accentDim)
+        assertEquals(Color(0xFFFFFCF6), scheme.accentOn)
+        assertEquals(Color(0x12C25B2E), scheme.nowTint)
+    }
+
+    @Test
+    fun emberDarkAccent_rawValues() {
+        val scheme = MimeoAccentSchemes.EmberDark
+        assertEquals(Color(0xFFB6A1FF), scheme.accent)
+        assertEquals(Color(0x24B6A1FF), scheme.accentDim)
+        assertEquals(Color(0xFF0B0B0E), scheme.accentOn)
+        assertEquals(Color(0x0FB6A1FF), scheme.nowTint)
+    }
 }
