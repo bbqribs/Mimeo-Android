@@ -43,10 +43,10 @@ class MimeoThemeTokensTest {
         assertEquals(Color(0xFF9A99A6), colors.fg2)
         assertEquals(Color(0xFF5E5D6B), colors.fg3)
         assertEquals(Color(0xFF3A3947), colors.fg4)
-        assertEquals(Color(0xFFF4B58A), colors.accent)
-        assertEquals(Color(0x24F4B58A), colors.accentDim)
-        assertEquals(Color(0xFF161311), colors.accentOn)
-        assertEquals(Color(0x0FF4B58A), colors.nowTint)
+        assertEquals(Color(0xFFFFC66D), colors.accent)
+        assertEquals(Color(0x24FFC66D), colors.accentDim)
+        assertEquals(Color(0xFF17120A), colors.accentOn)
+        assertEquals(Color(0x0FFFC66D), colors.nowTint)
         assertEquals(Color(0xFF7FD1A8), colors.success)
         assertEquals(Color(0xFFE8C26A), colors.warn)
         assertEquals(Color(0xFFF26E6E), colors.danger)
@@ -150,10 +150,10 @@ class MimeoThemeTokensTest {
     @Test
     fun emberDarkAccent_rawValues() {
         val scheme = MimeoAccentSchemes.EmberDark
-        assertEquals(Color(0xFFF4B58A), scheme.accent)
-        assertEquals(Color(0x24F4B58A), scheme.accentDim)
-        assertEquals(Color(0xFF161311), scheme.accentOn)
-        assertEquals(Color(0x0FF4B58A), scheme.nowTint)
+        assertEquals(Color(0xFFFFC66D), scheme.accent)
+        assertEquals(Color(0x24FFC66D), scheme.accentDim)
+        assertEquals(Color(0xFF17120A), scheme.accentOn)
+        assertEquals(Color(0x0FFFC66D), scheme.nowTint)
     }
 
     // Accent scheme variants
