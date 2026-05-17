@@ -1002,9 +1002,9 @@ private fun DateSectionHeader(label: String) {
     val mTypography = LocalMimeoTypographyTokens.current
     val densityTokens = LocalMimeoDensityTokens.current
     val chipShape = RoundedCornerShape(999.dp)
-    val containerColor = if (isV1) mColors.accentDim else MaterialTheme.colorScheme.secondaryContainer
-    val contentColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.onSecondaryContainer
-    val borderColor = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
+    val containerColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary
+    val contentColor = if (isV1) mColors.accentOn else MaterialTheme.colorScheme.onPrimary
+    val borderColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1018,14 +1018,14 @@ private fun DateSectionHeader(label: String) {
     ) {
         Text(
             text = label,
-            style = if (isV1) mTypography.section else MaterialTheme.typography.labelLarge,
+            style = if (isV1) mTypography.button else MaterialTheme.typography.labelLarge,
             color = contentColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
                 .background(containerColor, chipShape)
                 .border(1.dp, borderColor, chipShape)
-                .padding(horizontal = 10.dp, vertical = 4.dp),
+                .padding(horizontal = 14.dp, vertical = 6.dp),
         )
     }
 }
