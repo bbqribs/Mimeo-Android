@@ -1,6 +1,7 @@
 package com.mimeo.android
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -8,8 +9,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
@@ -20,7 +23,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Inbox
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.HorizontalDivider
@@ -37,6 +39,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -67,13 +73,13 @@ internal fun MimeoDrawerContent(
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
     val mShapes = LocalMimeoShapeTokens.current
-    var playlistsExpanded by rememberSaveable { mutableStateOf(true) }
-    var smartPlaylistsExpanded by rememberSaveable { mutableStateOf(true) }
+    var playlistsExpanded by rememberSaveable { mutableStateOf(false) }
+    var smartPlaylistsExpanded by rememberSaveable { mutableStateOf(false) }
     val drawerBackground = if (isV1) mColors.surface else MaterialTheme.colorScheme.surface
     val drawerItemColorsV1 = NavigationDrawerItemDefaults.colors(
-        selectedContainerColor = if (isV1) mColors.accentDim.copy(alpha = 0.94f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+        selectedContainerColor = Color.Transparent,
         unselectedContainerColor = Color.Transparent,
-        selectedTextColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
+        selectedTextColor = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
         unselectedTextColor = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.onSurface,
         selectedIconColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
         unselectedIconColor = if (isV1) mColors.accent.copy(alpha = 0.82f) else MaterialTheme.colorScheme.primary,
@@ -81,8 +87,8 @@ internal fun MimeoDrawerContent(
         unselectedBadgeColor = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
     )
     val drawerSelectedColorsLegacy = NavigationDrawerItemDefaults.colors(
-        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-        selectedTextColor = MaterialTheme.colorScheme.primary,
+        selectedContainerColor = Color.Transparent,
+        selectedTextColor = MaterialTheme.colorScheme.onSurface,
         selectedIconColor = MaterialTheme.colorScheme.primary,
         unselectedIconColor = MaterialTheme.colorScheme.primary,
     )
@@ -131,6 +137,11 @@ internal fun MimeoDrawerContent(
                                     style = rowTextStyle,
                                 )
                             },
+                            badge = if (destination.route == ROUTE_UP_NEXT) {
+                                { UpNextDrawerMarker(isV1 = isV1) }
+                            } else {
+                                null
+                            },
                             selected = selectedDrawerRoute == destination.route,
                             onClick = { onNavItemClick(destination.route) },
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
@@ -138,6 +149,7 @@ internal fun MimeoDrawerContent(
                             v1Shape = mShapes.item,
                             v1Colors = drawerItemColorsV1,
                             legacyColors = drawerSelectedColorsLegacy,
+                            selectedRailColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
                         )
                     }
                     HorizontalDivider(
@@ -180,7 +192,7 @@ internal fun MimeoDrawerContent(
                                             Text(
                                                 text = "($count)",
                                                 style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
-                                                color = if (isV1 && selected) mColors.accent else if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.padding(start = 4.dp),
                                             )
                                         }
@@ -193,99 +205,99 @@ internal fun MimeoDrawerContent(
                                 v1Shape = mShapes.item,
                                 v1Colors = drawerItemColorsV1,
                                 legacyColors = drawerSelectedColorsLegacy,
+                                selectedRailColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
                             )
                         }
-                    }
-                    if (smartPlaylists.isNotEmpty()) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant,
-                        )
-                        DrawerGroupHeader(
-                            title = "Smart Playlists",
-                            expanded = smartPlaylistsExpanded,
-                            onClick = { smartPlaylistsExpanded = !smartPlaylistsExpanded },
-                            isV1 = isV1,
-                            textStyle = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
-                            colors = drawerActionColorsV1,
-                            shape = mShapes.item,
-                        )
-                        if (smartPlaylistsExpanded) {
-                            smartPlaylists.forEach { playlist ->
-                                val selected = selectedDrawerRoute == "smartPlaylist/${playlist.id}"
-                                MimeoNavigationDrawerItem(
-                                    icon = {
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.PlaylistPlay,
-                                            contentDescription = null,
-                                        )
-                                    },
-                                    label = {
-                                        Column {
-                                            Text(
-                                                text = playlist.name,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                style = rowTextStyle,
-                                            )
-                                            Text(
-                                                text = "Live dynamic",
-                                                style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
-                                                color = if (isV1 && selected) mColors.accent else if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                    },
-                                    selected = selected,
-                                    onClick = { onSmartPlaylistClick(playlist.id) },
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                                    isV1 = isV1,
-                                    v1Shape = mShapes.item,
-                                    v1Colors = drawerItemColorsV1,
-                                    legacyColors = drawerSelectedColorsLegacy,
+                        MimeoNavigationDrawerItem(
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = null,
                                 )
-                            }
-                        }
+                            },
+                            label = {
+                                Text(
+                                    text = "New Playlist",
+                                    style = buttonTextStyle,
+                                )
+                            },
+                            selected = false,
+                            onClick = onNewPlaylistClick,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                            isV1 = isV1,
+                            v1Shape = mShapes.item,
+                            v1Colors = drawerActionColorsV1,
+                        )
                     }
-                    MimeoNavigationDrawerItem(
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = null,
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = "New Playlist",
-                                style = buttonTextStyle,
-                            )
-                        },
-                        selected = false,
-                        onClick = onNewPlaylistClick,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                        isV1 = isV1,
-                        v1Shape = mShapes.item,
-                        v1Colors = drawerActionColorsV1,
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant,
                     )
-                    MimeoNavigationDrawerItem(
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = null,
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = "New Smart Playlist",
-                                style = buttonTextStyle,
-                            )
-                        },
-                        selected = false,
-                        onClick = onNewSmartPlaylistClick,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    DrawerGroupHeader(
+                        title = "Smart Playlists",
+                        expanded = smartPlaylistsExpanded,
+                        onClick = { smartPlaylistsExpanded = !smartPlaylistsExpanded },
                         isV1 = isV1,
-                        v1Shape = mShapes.item,
-                        v1Colors = drawerActionColorsV1,
+                        textStyle = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
+                        colors = drawerActionColorsV1,
+                        shape = mShapes.item,
                     )
+                    if (smartPlaylistsExpanded) {
+                        smartPlaylists.forEach { playlist ->
+                            val selected = selectedDrawerRoute == "smartPlaylist/${playlist.id}"
+                            MimeoNavigationDrawerItem(
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.PlaylistPlay,
+                                        contentDescription = null,
+                                    )
+                                },
+                                label = {
+                                    Column {
+                                        Text(
+                                            text = playlist.name,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            style = rowTextStyle,
+                                        )
+                                        Text(
+                                            text = "Live dynamic",
+                                            style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                                            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                },
+                                selected = selected,
+                                onClick = { onSmartPlaylistClick(playlist.id) },
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                                isV1 = isV1,
+                                v1Shape = mShapes.item,
+                                v1Colors = drawerItemColorsV1,
+                                legacyColors = drawerSelectedColorsLegacy,
+                                selectedRailColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        MimeoNavigationDrawerItem(
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = null,
+                                )
+                            },
+                            label = {
+                                Text(
+                                    text = "New Smart Playlist",
+                                    style = buttonTextStyle,
+                                )
+                            },
+                            selected = false,
+                            onClick = onNewSmartPlaylistClick,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                            isV1 = isV1,
+                            v1Shape = mShapes.item,
+                            v1Colors = drawerActionColorsV1,
+                        )
+                    }
                 }
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -311,6 +323,7 @@ internal fun MimeoDrawerContent(
                     v1Shape = mShapes.item,
                     v1Colors = drawerItemColorsV1,
                     legacyColors = drawerSelectedColorsLegacy,
+                    selectedRailColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
                 )
             }
         }
@@ -321,8 +334,9 @@ internal fun MimeoDrawerContent(
 private fun DrawerDestinationIcon(route: String) {
     when (route) {
         ROUTE_UP_NEXT -> Icon(
-            imageVector = Icons.Default.PlayArrow,
+            painter = painterResource(id = R.drawable.msr_chevron_right_24),
             contentDescription = null,
+            modifier = Modifier.size(24.dp),
         )
 
         ROUTE_INBOX -> Icon(
@@ -353,8 +367,19 @@ private fun DrawerDestinationIcon(route: String) {
         ROUTE_BLUESKY_BROWSE -> Icon(
             painter = painterResource(id = R.drawable.ic_bluesky_butterfly_24),
             contentDescription = null,
+            tint = BlueskyBrandBlue,
         )
     }
+}
+
+@Composable
+private fun UpNextDrawerMarker(isV1: Boolean) {
+    val markerColor = if (isV1) LocalMimeoColorTokens.current.accent else MaterialTheme.colorScheme.primary
+    Box(
+        modifier = Modifier
+            .size(6.dp)
+            .background(markerColor, CircleShape),
+    )
 }
 
 @Composable
@@ -416,6 +441,7 @@ private fun MimeoModalDrawerSheet(
 private fun MimeoNavigationDrawerItem(
     icon: (@Composable () -> Unit)? = null,
     label: @Composable () -> Unit,
+    badge: (@Composable () -> Unit)? = null,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier,
@@ -423,14 +449,17 @@ private fun MimeoNavigationDrawerItem(
     v1Shape: androidx.compose.ui.graphics.Shape,
     v1Colors: NavigationDrawerItemColors,
     legacyColors: NavigationDrawerItemColors? = null,
+    selectedRailColor: Color = Color.Transparent,
 ) {
+    val itemModifier = modifier.selectedRail(selected, selectedRailColor)
     if (isV1) {
         NavigationDrawerItem(
             icon = icon,
             label = label,
+            badge = badge,
             selected = selected,
             onClick = onClick,
-            modifier = modifier,
+            modifier = itemModifier,
             shape = v1Shape,
             colors = v1Colors,
         )
@@ -438,18 +467,36 @@ private fun MimeoNavigationDrawerItem(
         NavigationDrawerItem(
             icon = icon,
             label = label,
+            badge = badge,
             selected = selected,
             onClick = onClick,
-            modifier = modifier,
+            modifier = itemModifier,
             colors = legacyColors,
         )
     } else {
         NavigationDrawerItem(
             icon = icon,
             label = label,
+            badge = badge,
             selected = selected,
             onClick = onClick,
-            modifier = modifier,
+            modifier = itemModifier,
         )
     }
 }
+
+private fun Modifier.selectedRail(selected: Boolean, color: Color): Modifier {
+    if (!selected || color == Color.Transparent) return this
+    return drawBehind {
+        val railWidth = 3.dp.toPx()
+        val railHeight = size.height * 0.58f
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(0f, (size.height - railHeight) / 2f),
+            size = Size(railWidth, railHeight),
+            cornerRadius = CornerRadius(railWidth, railWidth),
+        )
+    }
+}
+
+private val BlueskyBrandBlue = Color(0xFF1185FE)
