@@ -1619,8 +1619,8 @@ fun SettingsScreen(
         SettingsSectionSeparator()
 
         SettingsSectionHeader(
-            title = "Reader / Appearance",
-            subtitle = "Tune typography and layout for reading comfort.",
+            title = "Appearance & Reading",
+            subtitle = "Control app-wide appearance, then fine-tune reading layout.",
         )
         ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
             Column(
@@ -1629,6 +1629,11 @@ fun SettingsScreen(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                Text(
+                    text = "App appearance",
+                    style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    color = if (isV1) mColors.fg else Color.Unspecified,
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1638,9 +1643,9 @@ fun SettingsScreen(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        Text("Visual theme mode")
+                        Text("Theme")
                         Text(
-                            text = "Saved now; applied to visual design colors while visual v1 is active.",
+                            text = "Light, Dark, or follow the system setting.",
                             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                             color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1677,7 +1682,7 @@ fun SettingsScreen(
                     ) {
                         Text("Accent")
                         Text(
-                            text = "Saved now; changes accent colors while visual v1 is active.",
+                            text = "Sets the color used for interactive elements and highlights.",
                             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                             color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1724,9 +1729,9 @@ fun SettingsScreen(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        Text("Visual density mode")
+                        Text("Density")
                         Text(
-                            text = "Saved now; applied to Paper & Ember density tokens while visual v1 is active.",
+                            text = "Controls spacing in lists and cards. Compact reduces padding throughout.",
                             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                             color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1752,6 +1757,9 @@ fun SettingsScreen(
                         }
                     }
                 }
+                HorizontalDivider(
+                    color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                )
                 Text(
                     text = "Reading",
                     style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
@@ -2389,7 +2397,7 @@ private fun AccentSchemeSwatch(preference: AccentSchemePreference) {
     ).accent
     Box(
         modifier = Modifier
-            .size(12.dp)
+            .size(16.dp)
             .background(accentColor, CircleShape),
     )
 }
