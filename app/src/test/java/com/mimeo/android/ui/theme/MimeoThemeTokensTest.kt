@@ -43,10 +43,10 @@ class MimeoThemeTokensTest {
         assertEquals(Color(0xFF9A99A6), colors.fg2)
         assertEquals(Color(0xFF5E5D6B), colors.fg3)
         assertEquals(Color(0xFF3A3947), colors.fg4)
-        assertEquals(Color(0xFFB6A1FF), colors.accent)
-        assertEquals(Color(0x24B6A1FF), colors.accentDim)
-        assertEquals(Color(0xFF0B0B0E), colors.accentOn)
-        assertEquals(Color(0x0FB6A1FF), colors.nowTint)
+        assertEquals(Color(0xFFFFC66D), colors.accent)
+        assertEquals(Color(0x24FFC66D), colors.accentDim)
+        assertEquals(Color(0xFF17120A), colors.accentOn)
+        assertEquals(Color(0x0FFFC66D), colors.nowTint)
         assertEquals(Color(0xFF7FD1A8), colors.success)
         assertEquals(Color(0xFFE8C26A), colors.warn)
         assertEquals(Color(0xFFF26E6E), colors.danger)
@@ -150,10 +150,10 @@ class MimeoThemeTokensTest {
     @Test
     fun emberDarkAccent_rawValues() {
         val scheme = MimeoAccentSchemes.EmberDark
-        assertEquals(Color(0xFFB6A1FF), scheme.accent)
-        assertEquals(Color(0x24B6A1FF), scheme.accentDim)
-        assertEquals(Color(0xFF0B0B0E), scheme.accentOn)
-        assertEquals(Color(0x0FB6A1FF), scheme.nowTint)
+        assertEquals(Color(0xFFFFC66D), scheme.accent)
+        assertEquals(Color(0x24FFC66D), scheme.accentDim)
+        assertEquals(Color(0xFF17120A), scheme.accentOn)
+        assertEquals(Color(0x0FFFC66D), scheme.nowTint)
     }
 
     // Accent scheme variants
@@ -199,6 +199,36 @@ class MimeoThemeTokensTest {
     fun lilacScheme_usesChipPurpleInLightAndPastelPurpleInDark() {
         assertEquals(Color(0xFF6B49CC), MimeoAccentSchemes.LilacLight.accent)
         assertEquals(Color(0xFFC9B8FF), MimeoAccentSchemes.LilacDark.accent)
+    }
+
+    @Test
+    fun nonEmberAccentSchemes_rawValuesUnchanged() {
+        assertEquals(Color(0xFF6B49CC), MimeoAccentSchemes.LilacLight.accent)
+        assertEquals(Color(0x1A6B49CC), MimeoAccentSchemes.LilacLight.accentDim)
+        assertEquals(Color(0xFFFFFFFF), MimeoAccentSchemes.LilacLight.accentOn)
+        assertEquals(Color(0x126B49CC), MimeoAccentSchemes.LilacLight.nowTint)
+        assertEquals(Color(0xFFC9B8FF), MimeoAccentSchemes.LilacDark.accent)
+        assertEquals(Color(0x24C9B8FF), MimeoAccentSchemes.LilacDark.accentDim)
+        assertEquals(Color(0xFF0B0B0E), MimeoAccentSchemes.LilacDark.accentOn)
+        assertEquals(Color(0x0FC9B8FF), MimeoAccentSchemes.LilacDark.nowTint)
+
+        assertEquals(Color(0xFF2E7A4F), MimeoAccentSchemes.ForestLight.accent)
+        assertEquals(Color(0x1A2E7A4F), MimeoAccentSchemes.ForestLight.accentDim)
+        assertEquals(Color(0xFFFFFFFF), MimeoAccentSchemes.ForestLight.accentOn)
+        assertEquals(Color(0x122E7A4F), MimeoAccentSchemes.ForestLight.nowTint)
+        assertEquals(Color(0xFF72C99A), MimeoAccentSchemes.ForestDark.accent)
+        assertEquals(Color(0x2472C99A), MimeoAccentSchemes.ForestDark.accentDim)
+        assertEquals(Color(0xFF0B0B0E), MimeoAccentSchemes.ForestDark.accentOn)
+        assertEquals(Color(0x0F72C99A), MimeoAccentSchemes.ForestDark.nowTint)
+
+        assertEquals(Color(0xFF3A6080), MimeoAccentSchemes.SlateLight.accent)
+        assertEquals(Color(0x1A3A6080), MimeoAccentSchemes.SlateLight.accentDim)
+        assertEquals(Color(0xFFFFFFFF), MimeoAccentSchemes.SlateLight.accentOn)
+        assertEquals(Color(0x123A6080), MimeoAccentSchemes.SlateLight.nowTint)
+        assertEquals(Color(0xFF7BB8D4), MimeoAccentSchemes.SlateDark.accent)
+        assertEquals(Color(0x247BB8D4), MimeoAccentSchemes.SlateDark.accentDim)
+        assertEquals(Color(0xFF0B0B0E), MimeoAccentSchemes.SlateDark.accentOn)
+        assertEquals(Color(0x0F7BB8D4), MimeoAccentSchemes.SlateDark.nowTint)
     }
 
     @Test
