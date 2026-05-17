@@ -109,7 +109,6 @@ fun SmartQueueScreen(
             "No Smart Queue items match this search."
         },
         header = { SmartQueueSourceHeader(statusLabel = headerStatusLabel) },
-        showSourceListRule = true,
         sortOption = sortOption,
         availableSorts = emptyList(),
         searchQuery = searchQuery,
