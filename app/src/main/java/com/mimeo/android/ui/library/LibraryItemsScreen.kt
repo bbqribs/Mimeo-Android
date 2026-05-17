@@ -1005,13 +1005,18 @@ private fun DateSectionHeader(label: String) {
     val containerColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary
     val contentColor = if (isV1) mColors.accentOn else MaterialTheme.colorScheme.onPrimary
     val borderColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary
+    val headerTopPadding = if (isV1) {
+        (densityTokens.sectionGap - 12.dp).coerceAtLeast(2.dp)
+    } else {
+        0.dp
+    }
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(
                 start = 12.dp,
                 end = 12.dp,
-                top = if (isV1) densityTokens.sectionGap else 8.dp,
+                top = headerTopPadding,
                 bottom = 6.dp,
             ),
         contentAlignment = Alignment.CenterStart,
