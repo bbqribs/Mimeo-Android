@@ -114,6 +114,7 @@ import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.ArchiveActionSource
 import com.mimeo.android.BuildConfig
@@ -181,7 +182,7 @@ private const val PLAYBACK_SPEED_MIN = 0.5f
 private const val PLAYBACK_SPEED_MAX = 4.0f
 private const val PLAYBACK_SPEED_STEP = 0.05f
 private const val PLAYBACK_SPEED_STEPS = 69
-private val PLAYBACK_SPEED_PILLS = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
+private val PLAYBACK_SPEED_PILLS = listOf(1.0f, 1.25f, 1.4f, 1.75f, 2.0f)
 private const val LOCUS_CONTINUATION_DEBUG_TAG = "MimeoLocusContinue"
 private const val MANUAL_OPEN_DEBUG_TAG = "MimeoManualOpen"
 private const val ACTION_KEY_UNDO_ARCHIVE = "undo_archive"
@@ -3536,6 +3537,7 @@ private fun FullPlayerDock(
                         },
                     )
                     .padding(horizontal = CHEVRON_DOCK_HORIZONTAL_PADDING)
+                    .zIndex(1f)
                     .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET),
             )
         }
@@ -3599,6 +3601,7 @@ private fun MinimalPlayerDock(
                         },
                     )
                     .padding(horizontal = CHEVRON_DOCK_HORIZONTAL_PADDING)
+                    .zIndex(1f)
                     .offset(y = CHEVRON_DOCK_VERTICAL_OFFSET),
             )
         }
@@ -3656,6 +3659,7 @@ private fun NubPlayerDock(
                         end = CHEVRON_DOCK_HORIZONTAL_PADDING,
                         bottom = NUB_CHEVRON_BOTTOM_MARGIN,
                     )
+                    .zIndex(1f)
             )
         }
     }
@@ -3796,7 +3800,6 @@ private fun PlayerControlBar(
                     text = "❯ ",
                     style = MaterialTheme.typography.labelMedium.copy(
                         fontWeight = FontWeight.SemiBold,
-                        fontStyle = FontStyle.Italic,
                         fontSize = (MaterialTheme.typography.labelMedium.fontSize.value + 1f).sp,
                     ),
                     color = if (isV1) mColors.accent else Color.Unspecified,
@@ -3814,6 +3817,7 @@ private fun PlayerControlBar(
                     style = if (isV1) mTypography.meta.copy(
                         fontWeight = FontWeight.SemiBold,
                         fontStyle = FontStyle.Italic,
+                        fontSize = 13.sp,
                     ) else MaterialTheme.typography.labelMedium.copy(
                         fontWeight = FontWeight.SemiBold,
                         fontStyle = FontStyle.Italic,

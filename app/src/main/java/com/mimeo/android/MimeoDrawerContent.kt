@@ -1,6 +1,7 @@
 package com.mimeo.android
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -36,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -100,6 +102,8 @@ internal fun MimeoDrawerContent(
     BoxWithConstraints {
         val drawerWidth = maxWidth * (2f / 3f)
         val drawerScrollState = rememberScrollState()
+        val primaryDrawerItems = drawerItems.filterNot { it.route == ROUTE_BIN }
+        val binDestination = drawerItems.firstOrNull { it.route == ROUTE_BIN }
         MimeoModalDrawerSheet(
             isV1 = isV1,
             modifier = Modifier.width(drawerWidth),
@@ -126,35 +130,17 @@ internal fun MimeoDrawerContent(
                         style = if (isV1) mTypography.title else MaterialTheme.typography.titleMedium,
                         color = if (isV1) mColors.fg else Color.Unspecified,
                     )
-                    drawerItems.forEach { destination ->
-                        val isUpNext = destination.route == ROUTE_UP_NEXT
-                        MimeoNavigationDrawerItem(
-                            icon = { DrawerDestinationIcon(destination.route) },
-                            label = {
-                                Text(
-                                    text = destination.label,
-                                    style = rowTextStyle,
-                                )
-                            },
-                            selected = selectedDrawerRoute == destination.route,
+                    primaryDrawerItems.forEach { destination ->
+                        DrawerDestinationItem(
+                            destination = destination,
+                            selectedDrawerRoute = selectedDrawerRoute,
                             onClick = { onNavItemClick(destination.route) },
-                            modifier = Modifier
-                                .padding(horizontal = 12.dp, vertical = 2.dp)
-                                .then(
-                                    if (isUpNext) {
-                                        Modifier.background(
-                                            color = (if (isV1) mColors.accent else MaterialTheme.colorScheme.primary).copy(alpha = 0.055f),
-                                            shape = mShapes.item,
-                                        )
-                                    } else {
-                                        Modifier
-                                    },
-                                ),
                             isV1 = isV1,
-                            v1Shape = mShapes.item,
-                            v1Colors = drawerItemColorsV1,
+                            rowTextStyle = rowTextStyle,
+                            itemShape = mShapes.item,
+                            itemColors = drawerItemColorsV1,
                             legacyColors = drawerSelectedColorsLegacy,
-                            selectedRailColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
+                            accentColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
                         )
                     }
                     HorizontalDivider(
@@ -303,6 +289,23 @@ internal fun MimeoDrawerContent(
                             v1Colors = drawerActionColorsV1,
                         )
                     }
+                    binDestination?.let { destination ->
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant,
+                        )
+                        DrawerDestinationItem(
+                            destination = destination,
+                            selectedDrawerRoute = selectedDrawerRoute,
+                            onClick = { onNavItemClick(destination.route) },
+                            isV1 = isV1,
+                            rowTextStyle = rowTextStyle,
+                            itemShape = mShapes.item,
+                            itemColors = drawerItemColorsV1,
+                            legacyColors = drawerSelectedColorsLegacy,
+                            accentColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -333,6 +336,49 @@ internal fun MimeoDrawerContent(
             }
         }
     }
+}
+
+@Composable
+private fun DrawerDestinationItem(
+    destination: DrawerDestination,
+    selectedDrawerRoute: String,
+    onClick: () -> Unit,
+    isV1: Boolean,
+    rowTextStyle: TextStyle,
+    itemShape: androidx.compose.ui.graphics.Shape,
+    itemColors: NavigationDrawerItemColors,
+    legacyColors: NavigationDrawerItemColors,
+    accentColor: Color,
+) {
+    val isUpNext = destination.route == ROUTE_UP_NEXT
+    MimeoNavigationDrawerItem(
+        icon = { DrawerDestinationIcon(destination.route) },
+        label = {
+            Text(
+                text = destination.label,
+                style = rowTextStyle,
+            )
+        },
+        selected = selectedDrawerRoute == destination.route,
+        onClick = onClick,
+        modifier = Modifier
+            .padding(horizontal = 12.dp, vertical = 2.dp)
+            .then(
+                if (isUpNext) {
+                    Modifier.background(
+                        color = accentColor.copy(alpha = 0.055f),
+                        shape = itemShape,
+                    )
+                } else {
+                    Modifier
+                },
+            ),
+        isV1 = isV1,
+        v1Shape = itemShape,
+        v1Colors = itemColors,
+        legacyColors = legacyColors,
+        selectedRailColor = accentColor,
+    )
 }
 
 @Composable
@@ -447,9 +493,17 @@ private fun MimeoNavigationDrawerItem(
     selectedRailColor: Color = Color.Transparent,
 ) {
     val itemModifier = modifier.selectedRail(selected, selectedRailColor)
+    val alignedIcon: @Composable () -> Unit = {
+        Box(
+            modifier = Modifier.width(28.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            icon?.invoke()
+        }
+    }
     if (isV1) {
         NavigationDrawerItem(
-            icon = icon,
+            icon = alignedIcon,
             label = label,
             badge = badge,
             selected = selected,
@@ -460,7 +514,7 @@ private fun MimeoNavigationDrawerItem(
         )
     } else if (legacyColors != null) {
         NavigationDrawerItem(
-            icon = icon,
+            icon = alignedIcon,
             label = label,
             badge = badge,
             selected = selected,
@@ -470,7 +524,7 @@ private fun MimeoNavigationDrawerItem(
         )
     } else {
         NavigationDrawerItem(
-            icon = icon,
+            icon = alignedIcon,
             label = label,
             badge = badge,
             selected = selected,
