@@ -1,7 +1,6 @@
 package com.mimeo.android
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
@@ -129,6 +127,7 @@ internal fun MimeoDrawerContent(
                         color = if (isV1) mColors.fg else Color.Unspecified,
                     )
                     drawerItems.forEach { destination ->
+                        val isUpNext = destination.route == ROUTE_UP_NEXT
                         MimeoNavigationDrawerItem(
                             icon = { DrawerDestinationIcon(destination.route) },
                             label = {
@@ -137,14 +136,20 @@ internal fun MimeoDrawerContent(
                                     style = rowTextStyle,
                                 )
                             },
-                            badge = if (destination.route == ROUTE_UP_NEXT) {
-                                { UpNextDrawerMarker(isV1 = isV1) }
-                            } else {
-                                null
-                            },
                             selected = selectedDrawerRoute == destination.route,
                             onClick = { onNavItemClick(destination.route) },
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                            modifier = Modifier
+                                .padding(horizontal = 12.dp, vertical = 2.dp)
+                                .then(
+                                    if (isUpNext) {
+                                        Modifier.background(
+                                            color = (if (isV1) mColors.accent else MaterialTheme.colorScheme.primary).copy(alpha = 0.055f),
+                                            shape = mShapes.item,
+                                        )
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
                             isV1 = isV1,
                             v1Shape = mShapes.item,
                             v1Colors = drawerItemColorsV1,
@@ -161,8 +166,8 @@ internal fun MimeoDrawerContent(
                         expanded = playlistsExpanded,
                         onClick = { playlistsExpanded = !playlistsExpanded },
                         isV1 = isV1,
-                        textStyle = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
-                        colors = drawerActionColorsV1,
+                        textStyle = rowTextStyle,
+                        colors = drawerItemColorsV1,
                         shape = mShapes.item,
                     )
                     if (playlistsExpanded) {
@@ -238,8 +243,8 @@ internal fun MimeoDrawerContent(
                         expanded = smartPlaylistsExpanded,
                         onClick = { smartPlaylistsExpanded = !smartPlaylistsExpanded },
                         isV1 = isV1,
-                        textStyle = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
-                        colors = drawerActionColorsV1,
+                        textStyle = rowTextStyle,
+                        colors = drawerItemColorsV1,
                         shape = mShapes.item,
                     )
                     if (smartPlaylistsExpanded) {
@@ -336,7 +341,7 @@ private fun DrawerDestinationIcon(route: String) {
         ROUTE_UP_NEXT -> Icon(
             painter = painterResource(id = R.drawable.msr_chevron_right_24),
             contentDescription = null,
-            modifier = Modifier.size(24.dp),
+            modifier = Modifier.size(28.dp),
         )
 
         ROUTE_INBOX -> Icon(
@@ -373,16 +378,6 @@ private fun DrawerDestinationIcon(route: String) {
 }
 
 @Composable
-private fun UpNextDrawerMarker(isV1: Boolean) {
-    val markerColor = if (isV1) LocalMimeoColorTokens.current.accent else MaterialTheme.colorScheme.primary
-    Box(
-        modifier = Modifier
-            .size(6.dp)
-            .background(markerColor, CircleShape),
-    )
-}
-
-@Composable
 private fun DrawerGroupHeader(
     title: String,
     expanded: Boolean,
@@ -393,16 +388,16 @@ private fun DrawerGroupHeader(
     shape: androidx.compose.ui.graphics.Shape,
 ) {
     MimeoNavigationDrawerItem(
-        icon = {
-            Icon(
-                imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                contentDescription = if (expanded) "Collapse $title" else "Expand $title",
-            )
-        },
         label = {
             Text(
                 text = title,
                 style = textStyle,
+            )
+        },
+        badge = {
+            Icon(
+                imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = if (expanded) "Collapse $title" else "Expand $title",
             )
         },
         selected = false,
