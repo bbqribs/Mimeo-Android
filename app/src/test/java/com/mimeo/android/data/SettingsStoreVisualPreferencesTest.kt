@@ -67,6 +67,13 @@ class SettingsStoreVisualPreferencesTest {
     }
 
     @Test
+    fun storedEmberAccentSchemePreference_roundTrips() = runBlocking {
+        store.saveAccentSchemePreference(AccentSchemePreference.EMBER)
+        val settings = store.settingsFlow.first()
+        assertEquals(AccentSchemePreference.EMBER, settings.accentSchemePreference)
+    }
+
+    @Test
     fun invalidStoredThemeString_fallsBackToFollowSystem() {
         assertEquals(
             VisualThemePreference.FOLLOW_SYSTEM,

@@ -19,10 +19,10 @@ object MimeoAccentSchemes {
         nowTint = Color(0x12C25B2E),
     )
     val EmberDark = MimeoAccentTokens(
-        accent = Color(0xFFB6A1FF),
-        accentDim = Color(0x24B6A1FF),
-        accentOn = Color(0xFF0B0B0E),
-        nowTint = Color(0x0FB6A1FF),
+        accent = Color(0xFFF4B58A),
+        accentDim = Color(0x24F4B58A),
+        accentOn = Color(0xFF161311),
+        nowTint = Color(0x0FF4B58A),
     )
 
     // Calm Lilac — quieter chip purple in light mode, softer pastel purple in dark mode.
