@@ -75,6 +75,7 @@ fun LibraryItemRow(
     isSelected: Boolean = false,
     containerColor: Color? = null,
     titleColor: Color = MaterialTheme.colorScheme.onSurface,
+    titleMaxLines: Int? = null,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     leadingContent: (@Composable RowScope.() -> Unit)? = null,
@@ -86,6 +87,13 @@ fun LibraryItemRow(
     val mTypography = LocalMimeoTypographyTokens.current
     val densityTokens = LocalMimeoDensityTokens.current
     val readerClickLabel = "Opens $title in reader"
+    val baseStartPadding = if (isV1) 12.dp else 8.dp
+    val startPadding = if (leadingContent != null) {
+        (baseStartPadding - 4.dp).coerceAtLeast(4.dp)
+    } else {
+        baseStartPadding
+    }
+    val resolvedTitleMaxLines = titleMaxLines ?: densityTokens.itemRowTitleMaxLines
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -104,13 +112,13 @@ fun LibraryItemRow(
                 onLongClick = onLongClick,
             )
             .padding(
-                start = if (isV1) 12.dp else 8.dp,
+                start = startPadding,
                 end = 2.dp,
                 top = if (isV1) densityTokens.rowPadV else 8.dp,
                 bottom = if (isV1) densityTokens.rowPadV else 8.dp,
             ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         leadingContent?.invoke(this)
         Column(
@@ -121,7 +129,7 @@ fun LibraryItemRow(
                 text = title,
                 style = if (isV1) mTypography.row else MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
                 color = if (isV1) mColors.fg else titleColor,
-                maxLines = 2,
+                maxLines = resolvedTitleMaxLines,
                 overflow = TextOverflow.Ellipsis,
             )
             if (!metadata.isNullOrBlank()) {
