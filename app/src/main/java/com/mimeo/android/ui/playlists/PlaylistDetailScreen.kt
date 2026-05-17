@@ -870,6 +870,11 @@ private fun PlaylistDetailRow(
     val metadata = presentation?.sourceLabel ?: queueItem?.host?.takeIf { queueItem.title != null } ?: queueItem?.url
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
+    val dragContainerColor = if (isDragging) {
+        if (isV1) mColors.surfaceHi else MaterialTheme.colorScheme.surfaceContainerHigh
+    } else {
+        null
+    }
     val menuEntries = if (queueItem != null) {
         buildList {
             add(ItemActionMenuEntry.Action("Play Next") { onPlayNext() })
@@ -891,7 +896,7 @@ private fun PlaylistDetailRow(
         status = status,
         isSelectionActive = isSelectionActive,
         isSelected = isSelected,
-        containerColor = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
+        containerColor = dragContainerColor,
         titleColor = if (queueItem == null) {
             MaterialTheme.colorScheme.onSurfaceVariant
         } else {

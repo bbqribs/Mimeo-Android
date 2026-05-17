@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
@@ -111,6 +112,9 @@ import com.mimeo.android.share.extractFirstHttpUrl
 import com.mimeo.android.share.isRetryablePendingSaveResult
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
+import com.mimeo.android.ui.common.ItemActionMenuEntry
+import com.mimeo.android.ui.common.ItemRow
+import com.mimeo.android.ui.common.ItemRowPlayRemoveActions
 import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
@@ -1860,113 +1864,38 @@ private fun SessionStaticItemRow(
     showArchivedIndicator: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val isV1 = LocalMimeoV1Active.current
-    val mColors = LocalMimeoColorTokens.current
-    val mTypography = LocalMimeoTypographyTokens.current
-    val mShapes = LocalMimeoShapeTokens.current
-    val densityTokens = LocalMimeoDensityTokens.current
+    val title = item.title?.ifBlank { null } ?: item.url
     val sourceLabel = item.host
         ?: item.sourceLabel?.takeIf { it.isNotBlank() }
         ?: item.sourceType?.takeIf { it.isNotBlank() }
-    var showMenu by remember { mutableStateOf(false) }
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable { onOpenItem(item.itemId) }
-            .background(
-                color = MaterialTheme.colorScheme.surface,
-                shape = if (isV1) mShapes.item else RoundedCornerShape(6.dp),
-            )
-            .padding(start = 12.dp, end = 12.dp, top = densityTokens.rowPadV, bottom = densityTokens.rowPadV),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(densityTokens.rowGap),
-        ) {
-            Text(
-                text = item.title?.ifBlank { null } ?: item.url,
-                style = if (isV1) mTypography.row else MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (sourceLabel != null) {
-                Text(
-                    text = sourceLabel,
-                    style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
-                    color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (showArchivedIndicator) {
-                Text(
-                    text = "Archived",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+    val metadata = listOfNotNull(
+        sourceLabel,
+        "Archived".takeIf { showArchivedIndicator },
+    ).joinToString(" · ").takeIf { it.isNotBlank() }
+    val menuEntries = buildList {
+        if (showArchivedIndicator && onUnarchiveItem != null) {
+            add(ItemActionMenuEntry.Action("Unarchive") { onUnarchiveItem(item.itemId) })
+        } else if (!showArchivedIndicator && onArchiveItem != null) {
+            add(ItemActionMenuEntry.Action("Archive") { onArchiveItem(item.itemId) })
         }
-        IconButton(
-            onClick = { onJumpToItem(item.itemId) },
-            modifier = Modifier.size(32.dp),
-        ) {
-            Icon(
-                painter = painterResource(id = R.drawable.msr_play_arrow_24),
-                contentDescription = "Jump/Play ${item.title?.ifBlank { null } ?: item.url}",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-        if (onArchiveItem != null || onBinItem != null) {
-            Box {
-                IconButton(
-                    onClick = { showMenu = true },
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.msr_more_vert_24),
-                        contentDescription = "More actions for ${item.title?.ifBlank { null } ?: item.url}",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false },
-                ) {
-                    if (showArchivedIndicator && onUnarchiveItem != null) {
-                        DropdownMenuItem(
-                            text = { Text("Unarchive") },
-                            onClick = {
-                                showMenu = false
-                                onUnarchiveItem(item.itemId)
-                            },
-                        )
-                    } else if (!showArchivedIndicator && onArchiveItem != null) {
-                        DropdownMenuItem(
-                            text = { Text("Archive") },
-                            onClick = {
-                                showMenu = false
-                                onArchiveItem(item.itemId)
-                            },
-                        )
-                    }
-                    if (onBinItem != null) {
-                        DropdownMenuItem(
-                            text = { Text("Move to Bin") },
-                            onClick = {
-                                showMenu = false
-                                onBinItem(item.itemId)
-                            },
-                        )
-                    }
-                }
-            }
+        if (onBinItem != null) {
+            add(ItemActionMenuEntry.Action("Move to Bin") { onBinItem(item.itemId) })
         }
     }
+    ItemRow(
+        title = title,
+        metadata = metadata,
+        status = null,
+        isSelectionActive = false,
+        isSelected = false,
+        modifier = modifier,
+        selectionEnabled = false,
+        onOpen = { onOpenItem(item.itemId) },
+        onToggleSelect = {},
+        onEnterSelection = {},
+        onPlayNow = { onJumpToItem(item.itemId) },
+        menuEntries = menuEntries,
+    )
 }
 
 @Composable
@@ -2472,6 +2401,12 @@ private fun NowPlayingSessionPanel(
                         val sourceLabel = item.host
                             ?: item.sourceLabel?.takeIf { it.isNotBlank() }
                             ?: item.sourceType?.takeIf { it.isNotBlank() }
+                        val rowTitle = item.title?.ifBlank { null } ?: item.url
+                        val dragContainerColor = if (isDragging) {
+                            if (isV1) mColors.surfaceHi else MaterialTheme.colorScheme.surfaceContainerHigh
+                        } else {
+                            null
+                        }
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -2485,98 +2420,66 @@ private fun NowPlayingSessionPanel(
                                         .coerceAtLeast(upcomingSectionBottomOffset ?: top)
                                 },
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onOpenItem(item.itemId) }
-                                    .background(
-                                        color = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
-                                        shape = if (isV1) mShapes.item else RoundedCornerShape(6.dp),
-                                    )
-                                    .padding(start = 12.dp, end = 12.dp, top = densityTokens.rowPadV, bottom = densityTokens.rowPadV)
-                                    .semantics {
-                                        customActions = buildList {
-                                            if (index > 0) add(CustomAccessibilityAction("Move up") {
-                                                onReorderItem(absoluteIndex, absoluteIndex - 1); true
-                                            })
-                                            if (index < upcomingItems.lastIndex) add(CustomAccessibilityAction("Move down") {
-                                                onReorderItem(absoluteIndex, absoluteIndex + 1); true
-                                            })
-                                        }
-                                    },
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.DragHandle,
-                                    contentDescription = "Drag to reorder",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .pointerInput(item.itemId, index) {
-                                            detectDragGestures(
-                                                onDragStart = {
-                                                    dragStartTopOffsets = itemTopOffsets.toMap()
-                                                    dragStartHeights = itemHeights.toMap()
-                                                    draggingIndex = index
-                                                    dragOffsetY = 0f
-                                                    currentTargetIndex = index
-                                                },
-                                                onDrag = { _, dragAmount ->
-                                                    dragOffsetY += dragAmount.y
-                                                    scrollDraggedItemNearEdge(draggingIndex)
-                                                    val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
-                                                    if (newTarget != currentTargetIndex) currentTargetIndex = newTarget
-                                                },
-                                                onDragEnd = { onDragEnd() },
-                                                onDragCancel = { onDragEnd() },
-                                            )
-                                        },
-                                )
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(densityTokens.rowGap),
-                                ) {
-                                    Text(
-                                        text = item.title?.ifBlank { null } ?: item.url,
-                                        style = if (isV1) mTypography.row else MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    if (sourceLabel != null) {
-                                        Text(
-                                            text = sourceLabel,
-                                            style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
-                                            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
+                            ItemRow(
+                                title = rowTitle,
+                                metadata = sourceLabel,
+                                status = null,
+                                isSelectionActive = false,
+                                isSelected = false,
+                                modifier = Modifier.semantics {
+                                    customActions = buildList {
+                                        if (index > 0) add(CustomAccessibilityAction("Move up") {
+                                            onReorderItem(absoluteIndex, absoluteIndex - 1); true
+                                        })
+                                        if (index < upcomingItems.lastIndex) add(CustomAccessibilityAction("Move down") {
+                                            onReorderItem(absoluteIndex, absoluteIndex + 1); true
+                                        })
                                     }
-                                }
-                                IconButton(
-                                    onClick = { onJumpToQueueItem(item.itemId) },
-                                    modifier = Modifier.size(32.dp),
-                                ) {
+                                },
+                                containerColor = dragContainerColor,
+                                selectionEnabled = false,
+                                onOpen = { onOpenItem(item.itemId) },
+                                onToggleSelect = {},
+                                onEnterSelection = {},
+                                leadingContent = {
                                     Icon(
-                                        painter = painterResource(id = R.drawable.msr_play_arrow_24),
-                                        contentDescription = "Jump/Play ${item.title?.ifBlank { null } ?: item.url}",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp),
+                                        imageVector = Icons.Default.DragHandle,
+                                        contentDescription = "Drag to reorder",
+                                        tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier
+                                            .offset(x = (-4).dp)
+                                            .size(24.dp)
+                                            .pointerInput(item.itemId, index) {
+                                                detectDragGestures(
+                                                    onDragStart = {
+                                                        dragStartTopOffsets = itemTopOffsets.toMap()
+                                                        dragStartHeights = itemHeights.toMap()
+                                                        draggingIndex = index
+                                                        dragOffsetY = 0f
+                                                        currentTargetIndex = index
+                                                    },
+                                                    onDrag = { _, dragAmount ->
+                                                        dragOffsetY += dragAmount.y
+                                                        scrollDraggedItemNearEdge(draggingIndex)
+                                                        val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
+                                                        if (newTarget != currentTargetIndex) currentTargetIndex = newTarget
+                                                    },
+                                                    onDragEnd = { onDragEnd() },
+                                                    onDragCancel = { onDragEnd() },
+                                                )
+                                            },
                                     )
-                                }
-                                IconButton(
-                                    onClick = { onRemoveItem(item.itemId) },
-                                    modifier = Modifier.size(32.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Remove from session",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(16.dp),
+                                },
+                                trailingContent = {
+                                    ItemRowPlayRemoveActions(
+                                        title = rowTitle,
+                                        onPlayNow = { onJumpToQueueItem(item.itemId) },
+                                        onRemove = { onRemoveItem(item.itemId) },
+                                        playContentDescription = "Jump/Play $rowTitle",
+                                        removeContentDescription = "Remove from session",
                                     )
-                                }
-                            }
+                                },
+                            )
                             if (index < upcomingItems.lastIndex) {
                                 HorizontalDivider(
                                     modifier = Modifier.padding(horizontal = 12.dp),

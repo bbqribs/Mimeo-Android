@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.DropdownMenu
@@ -54,7 +55,9 @@ fun ItemRow(
     containerColor: Color? = null,
     titleColor: Color = MaterialTheme.colorScheme.onSurface,
     titleMaxLines: Int? = null,
+    selectionEnabled: Boolean = true,
     leadingContent: (@Composable RowScope.() -> Unit)? = null,
+    trailingContent: (@Composable RowScope.() -> Unit)? = null,
     onPlayNow: (() -> Unit)? = null,
     menuEntries: List<ItemActionMenuEntry> = emptyList(),
 ) {
@@ -67,23 +70,24 @@ fun ItemRow(
         titleColor = titleColor,
         titleMaxLines = titleMaxLines,
         onClick = if (isSelectionActive) onToggleSelect else onOpen,
-        onLongClick = if (!isSelectionActive) onEnterSelection else null,
+        onLongClick = if (selectionEnabled && !isSelectionActive) onEnterSelection else null,
         leadingContent = if (isSelectionActive) {
             { SelectionAffordance(isSelected = isSelected) }
         } else {
             leadingContent
         },
         progressStateLine = itemStatusPillLine(status),
-        trailingContent = if (!isSelectionActive && (onPlayNow != null || menuEntries.isNotEmpty())) {
-            {
+        trailingContent = when {
+            isSelectionActive -> null
+            trailingContent != null -> trailingContent
+            onPlayNow != null || menuEntries.isNotEmpty() -> ({
                 ItemActionMenu(
                     title = title,
                     onPlayNow = onPlayNow,
                     entries = menuEntries,
                 )
-            }
-        } else {
-            null
+            })
+            else -> null
         },
     )
 }
@@ -157,6 +161,47 @@ fun ItemRowTrailingActions(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
                     content = { menuContent() },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ItemRowPlayRemoveActions(
+    title: String,
+    onPlayNow: () -> Unit,
+    onRemove: () -> Unit,
+    playContentDescription: String = "Play $title",
+    removeContentDescription: String = "Remove $title",
+) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides ItemRowActionSize) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
+            IconButton(
+                onClick = onPlayNow,
+                modifier = Modifier.size(ItemRowActionSize),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = playContentDescription,
+                    tint = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            IconButton(
+                onClick = onRemove,
+                modifier = Modifier.size(ItemRowActionSize),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = removeContentDescription,
+                    tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
                 )
             }
         }
