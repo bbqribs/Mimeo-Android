@@ -2234,7 +2234,7 @@ private fun NowPlayingSessionPanel(
                             if (index < historyItems.lastIndex) {
                                 HorizontalDivider(
                                     modifier = Modifier.padding(horizontal = 12.dp),
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                                    color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
                                 )
                             }
                         }
@@ -2278,7 +2278,7 @@ private fun NowPlayingSessionPanel(
                             if (index < earlierItems.lastIndex) {
                                 HorizontalDivider(
                                     modifier = Modifier.padding(horizontal = 12.dp),
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                                    color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
                                 )
                             }
                         }
@@ -2483,7 +2483,7 @@ private fun NowPlayingSessionPanel(
                             if (index < upcomingItems.lastIndex) {
                                 HorizontalDivider(
                                     modifier = Modifier.padding(horizontal = 12.dp),
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                                    color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
                                 )
                             }
                         }
