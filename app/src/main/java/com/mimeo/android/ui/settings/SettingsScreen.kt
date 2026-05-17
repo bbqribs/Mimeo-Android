@@ -102,12 +102,16 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.Color
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
+import com.mimeo.android.ui.theme.MimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoV1Active
 import com.mimeo.android.ui.theme.MimeoThemeChoice
 import com.mimeo.android.ui.theme.accentTokensFor
+import com.mimeo.android.ui.theme.densityTokensFor
+import com.mimeo.android.ui.theme.resolveThemeChoice
 import com.mimeo.android.ui.theme.toMimeoAccentScheme
 import kotlinx.coroutines.launch
 
@@ -487,6 +491,8 @@ fun SettingsScreen(
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
+    val systemIsDark = isSystemInDarkTheme()
+    val resolvedThemeChoice = resolveThemeChoice(visualThemePreference, systemIsDark)
 
     val previewTextStyle = TextStyle(
         fontFamily = readingFontOption.toFontFamily(),
@@ -1652,7 +1658,7 @@ fun SettingsScreen(
                     }
                     Box {
                         Button(onClick = { showVisualThemeMenu = true }) {
-                            Text(visualThemePreference.displayName())
+                            Text(visualThemePreference.resolvedDisplayName(systemIsDark))
                         }
                         DropdownMenu(
                             expanded = showVisualThemeMenu,
@@ -1689,7 +1695,7 @@ fun SettingsScreen(
                     }
                     Box {
                         Button(onClick = { showAccentSchemeMenu = true }) {
-                            AccentSchemeSwatch(accentSchemePreference)
+                            AccentSchemeSwatch(accentSchemePreference, resolvedThemeChoice)
                             Text(
                                 text = accentSchemePreference.displayName(),
                                 modifier = Modifier.padding(start = 8.dp),
@@ -1703,7 +1709,7 @@ fun SettingsScreen(
                                 DropdownMenuItem(
                                     text = {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            AccentSchemeSwatch(preference)
+                                            AccentSchemeSwatch(preference, resolvedThemeChoice)
                                             Text(
                                                 text = preference.displayName(),
                                                 modifier = Modifier.padding(start = 8.dp),
@@ -1757,6 +1763,7 @@ fun SettingsScreen(
                         }
                     }
                 }
+                DensityPreviewCard(visualDensityPreference, isV1, mColors)
                 HorizontalDivider(
                     color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                 )
@@ -2377,6 +2384,12 @@ private fun VisualThemePreference.displayName(): String = when (this) {
     VisualThemePreference.DARK -> "Dark"
 }
 
+private fun VisualThemePreference.resolvedDisplayName(isDark: Boolean): String = when (this) {
+    VisualThemePreference.FOLLOW_SYSTEM -> "Follow system (currently ${if (isDark) "Dark" else "Light"})"
+    VisualThemePreference.LIGHT -> "Light"
+    VisualThemePreference.DARK -> "Dark"
+}
+
 private fun VisualDensityPreference.displayName(): String = when (this) {
     VisualDensityPreference.DEFAULT -> "Default"
     VisualDensityPreference.COMPACT -> "Compact"
@@ -2390,10 +2403,51 @@ private fun AccentSchemePreference.displayName(): String = when (this) {
 }
 
 @Composable
-private fun AccentSchemeSwatch(preference: AccentSchemePreference) {
+private fun DensityPreviewCard(
+    density: VisualDensityPreference,
+    isV1: Boolean,
+    mColors: MimeoColorTokens,
+) {
+    val tokens = densityTokensFor(density)
+    val dividerColor = if (isV1) mColors.lineSoft else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+    val labelColor = if (isV1) mColors.fg2 else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "Preview",
+                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                color = labelColor,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+            HorizontalDivider(color = dividerColor)
+            listOf("Long article about climate change", "Short podcast episode recap").forEach { title ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = tokens.rowPadV),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = title,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                HorizontalDivider(color = dividerColor)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccentSchemeSwatch(preference: AccentSchemePreference, themeChoice: MimeoThemeChoice) {
     val accentColor = accentTokensFor(
         scheme = preference.toMimeoAccentScheme(),
-        choice = MimeoThemeChoice.LIGHT,
+        choice = themeChoice,
     ).accent
     Box(
         modifier = Modifier
