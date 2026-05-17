@@ -3733,7 +3733,7 @@ private fun PlayerChromeChevron(
             painter = painterResource(id = R.drawable.msr_chevron_right_24),
             contentDescription = contentDescription,
             modifier = Modifier
-                .size(24.dp)
+                .size(28.dp)
                 .graphicsLayer(scaleX = if (pointLeft) -1f else 1f),
             tint = highlightColor,
         )
