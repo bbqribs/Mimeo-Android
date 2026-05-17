@@ -3,6 +3,7 @@ package com.mimeo.android.ui.library
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -1000,20 +1001,38 @@ private fun DateSectionHeader(label: String) {
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
     val densityTokens = LocalMimeoDensityTokens.current
-    Text(
-        text = label,
-        style = if (isV1) mTypography.section else MaterialTheme.typography.labelLarge,
-        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.primary,
+    val chipShape = RoundedCornerShape(999.dp)
+    val containerColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary
+    val contentColor = if (isV1) mColors.accentOn else MaterialTheme.colorScheme.onPrimary
+    val borderColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary
+    val headerTopPadding = if (isV1) {
+        (densityTokens.sectionGap - 12.dp).coerceAtLeast(2.dp)
+    } else {
+        0.dp
+    }
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (isV1) mColors.surface else MaterialTheme.colorScheme.surface)
             .padding(
-                start = 16.dp,
-                end = 16.dp,
-                top = if (isV1) densityTokens.sectionGap else 8.dp,
+                start = 12.dp,
+                end = 12.dp,
+                top = headerTopPadding,
                 bottom = 6.dp,
             ),
-    )
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            text = label,
+            style = if (isV1) mTypography.button else MaterialTheme.typography.labelLarge,
+            color = contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .background(containerColor, chipShape)
+                .border(1.dp, borderColor, chipShape)
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+        )
+    }
 }
 
 @Composable
