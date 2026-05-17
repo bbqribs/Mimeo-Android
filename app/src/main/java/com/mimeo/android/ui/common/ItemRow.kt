@@ -53,6 +53,7 @@ fun ItemRow(
     modifier: Modifier = Modifier,
     containerColor: Color? = null,
     titleColor: Color = MaterialTheme.colorScheme.onSurface,
+    titleMaxLines: Int? = null,
     leadingContent: (@Composable RowScope.() -> Unit)? = null,
     onPlayNow: (() -> Unit)? = null,
     menuEntries: List<ItemActionMenuEntry> = emptyList(),
@@ -64,6 +65,7 @@ fun ItemRow(
         isSelected = isSelected,
         containerColor = containerColor,
         titleColor = titleColor,
+        titleMaxLines = titleMaxLines,
         onClick = if (isSelectionActive) onToggleSelect else onOpen,
         onLongClick = if (!isSelectionActive) onEnterSelection else null,
         leadingContent = if (isSelectionActive) {
@@ -121,15 +123,15 @@ fun ItemRowTrailingActions(
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
     var menuExpanded by remember { mutableStateOf(false) }
-    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 40.dp) {
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides ItemRowActionSize) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            horizontalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             if (onPlayNow != null) {
                 IconButton(
                     onClick = onPlayNow,
-                    modifier = Modifier.size(40.dp),
+                    modifier = Modifier.size(ItemRowActionSize),
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
@@ -142,7 +144,7 @@ fun ItemRowTrailingActions(
             Box {
                 IconButton(
                     onClick = { menuExpanded = true },
-                    modifier = Modifier.size(40.dp),
+                    modifier = Modifier.size(ItemRowActionSize),
                 ) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
@@ -160,6 +162,8 @@ fun ItemRowTrailingActions(
         }
     }
 }
+
+private val ItemRowActionSize = 36.dp
 
 /**
  * Returns the standard status-pill [progressStateLine] lambda for [LibraryItemRow],

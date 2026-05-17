@@ -58,6 +58,7 @@ class MimeoThemeTokensTest {
         assertEquals(14.dp, density.rowPadV)
         assertEquals(4.dp, density.rowGap)
         assertEquals(18.dp, density.sectionGap)
+        assertEquals(3, density.itemRowTitleMaxLines)
     }
 
     @Test
@@ -66,6 +67,7 @@ class MimeoThemeTokensTest {
         assertEquals(10.dp, density.rowPadV)
         assertEquals(2.dp, density.rowGap)
         assertEquals(14.dp, density.sectionGap)
+        assertEquals(2, density.itemRowTitleMaxLines)
     }
 
     @Test
