@@ -116,6 +116,8 @@ import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
 import com.mimeo.android.ui.common.ItemRowPlayRemoveActions
 import com.mimeo.android.ui.common.JumpPill
+import com.mimeo.android.ui.common.RowDivider
+import com.mimeo.android.ui.common.dragContainerColorFor
 import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.resolveSessionSeedSourcePresentation as resolveSessionSeedSourcePresentationCommon
@@ -2232,10 +2234,7 @@ private fun NowPlayingSessionPanel(
                                 showArchivedIndicator = item.itemId in archivedHistoryItemIds,
                             )
                             if (index < historyItems.lastIndex) {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 12.dp),
-                                    color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
-                                )
+                                RowDivider()
                             }
                         }
                     }
@@ -2276,10 +2275,7 @@ private fun NowPlayingSessionPanel(
                                 },
                             )
                             if (index < earlierItems.lastIndex) {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 12.dp),
-                                    color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
-                                )
+                                RowDivider()
                             }
                         }
                     }
@@ -2402,11 +2398,7 @@ private fun NowPlayingSessionPanel(
                             ?: item.sourceLabel?.takeIf { it.isNotBlank() }
                             ?: item.sourceType?.takeIf { it.isNotBlank() }
                         val rowTitle = item.title?.ifBlank { null } ?: item.url
-                        val dragContainerColor = if (isDragging) {
-                            if (isV1) mColors.surfaceHi else MaterialTheme.colorScheme.surfaceContainerHigh
-                        } else {
-                            null
-                        }
+                        val dragContainerColor = dragContainerColorFor(isDragging)
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -2481,10 +2473,7 @@ private fun NowPlayingSessionPanel(
                                 },
                             )
                             if (index < upcomingItems.lastIndex) {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 12.dp),
-                                    color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
-                                )
+                                RowDivider()
                             }
                         }
                     }

@@ -45,7 +45,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -88,6 +87,8 @@ import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
 import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.ListSurfaceScaffold
+import com.mimeo.android.ui.common.RowDivider
+import com.mimeo.android.ui.common.rowDragContainerColor
 import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.queueCapturePresentation
@@ -716,10 +717,7 @@ fun LibraryItemsScreen(
                                 archiveToggleLabel = if (title == "Archive") "Unarchive" else "Archive",
                                 onBin = if (!isBin) ({ onBatchAction("bin", setOf(item.itemId)) }) else null,
                             )
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 12.dp),
-                                color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
-                            )
+                            RowDivider()
                         }
                     }
                 }
@@ -746,7 +744,7 @@ fun LibraryItemsScreen(
                                     else -> 0f
                                 }
                                 val ruleColor = if (isV1) mColors.fg4 else MaterialTheme.colorScheme.outlineVariant
-                                val dragBgColor = if (isV1) mColors.surfaceHi else MaterialTheme.colorScheme.surfaceContainerHigh
+                                val dragBgColor = rowDragContainerColor()
                                 val itemModifier = Modifier
                                     .onGloballyPositioned { coordinates ->
                                         itemTopOffsets = itemTopOffsets + (entry.item.itemId to coordinates.positionInParent().y)
@@ -832,10 +830,7 @@ fun LibraryItemsScreen(
                                         archiveToggleLabel = if (title == "Archive") "Unarchive" else "Archive",
                                         onBin = if (!isBin) ({ onBatchAction("bin", setOf(entry.item.itemId)) }) else null,
                                     )
-                                    HorizontalDivider(
-                                        modifier = Modifier.padding(horizontal = 12.dp),
-                                        color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
-                                    )
+                                    RowDivider()
                                 }
                             }
                         }
