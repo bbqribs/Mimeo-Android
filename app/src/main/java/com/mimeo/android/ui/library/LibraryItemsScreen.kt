@@ -86,6 +86,7 @@ import com.mimeo.android.ui.common.DefaultListSurfaceMessage
 import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
 import com.mimeo.android.ui.common.JumpPill
+import com.mimeo.android.ui.common.DragHandleIcon
 import com.mimeo.android.ui.common.ListSurfaceScaffold
 import com.mimeo.android.ui.common.RowDivider
 import com.mimeo.android.ui.common.rowDragContainerColor
@@ -1112,17 +1113,9 @@ private fun LibraryQueueItemRow(
         onEnterSelection = onEnterSelection,
         leadingContent = dragHandleModifier?.let { handleModifier ->
             {
-                Icon(
-                    imageVector = Icons.Default.DragHandle,
+                DragHandleIcon(
                     contentDescription = dragHandleContentDescription,
-                    tint = if (LocalMimeoV1Active.current) {
-                        LocalMimeoColorTokens.current.fg3
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    modifier = handleModifier
-                        .offset(x = (-4).dp)
-                        .size(24.dp),
+                    modifier = handleModifier,
                 )
             }
         },

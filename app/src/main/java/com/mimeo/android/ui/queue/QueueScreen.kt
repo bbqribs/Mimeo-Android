@@ -116,6 +116,7 @@ import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
 import com.mimeo.android.ui.common.ItemRowPlayRemoveActions
 import com.mimeo.android.ui.common.JumpPill
+import com.mimeo.android.ui.common.DragHandleIcon
 import com.mimeo.android.ui.common.RowDivider
 import com.mimeo.android.ui.common.buildItemMetadata
 import com.mimeo.android.ui.common.dragContainerColorFor
@@ -2432,32 +2433,27 @@ private fun NowPlayingSessionPanel(
                                 onToggleSelect = {},
                                 onEnterSelection = {},
                                 leadingContent = {
-                                    Icon(
-                                        imageVector = Icons.Default.DragHandle,
+                                    DragHandleIcon(
                                         contentDescription = "Drag to reorder",
-                                        tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier
-                                            .offset(x = (-4).dp)
-                                            .size(24.dp)
-                                            .pointerInput(item.itemId, index) {
-                                                detectDragGestures(
-                                                    onDragStart = {
-                                                        dragStartTopOffsets = itemTopOffsets.toMap()
-                                                        dragStartHeights = itemHeights.toMap()
-                                                        draggingIndex = index
-                                                        dragOffsetY = 0f
-                                                        currentTargetIndex = index
-                                                    },
-                                                    onDrag = { _, dragAmount ->
-                                                        dragOffsetY += dragAmount.y
-                                                        scrollDraggedItemNearEdge(draggingIndex)
-                                                        val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
-                                                        if (newTarget != currentTargetIndex) currentTargetIndex = newTarget
-                                                    },
-                                                    onDragEnd = { onDragEnd() },
-                                                    onDragCancel = { onDragEnd() },
-                                                )
-                                            },
+                                        modifier = Modifier.pointerInput(item.itemId, index) {
+                                            detectDragGestures(
+                                                onDragStart = {
+                                                    dragStartTopOffsets = itemTopOffsets.toMap()
+                                                    dragStartHeights = itemHeights.toMap()
+                                                    draggingIndex = index
+                                                    dragOffsetY = 0f
+                                                    currentTargetIndex = index
+                                                },
+                                                onDrag = { _, dragAmount ->
+                                                    dragOffsetY += dragAmount.y
+                                                    scrollDraggedItemNearEdge(draggingIndex)
+                                                    val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
+                                                    if (newTarget != currentTargetIndex) currentTargetIndex = newTarget
+                                                },
+                                                onDragEnd = { onDragEnd() },
+                                                onDragCancel = { onDragEnd() },
+                                            )
+                                        },
                                     )
                                 },
                                 trailingContent = {

@@ -1,7 +1,12 @@
 package com.mimeo.android.ui.common
 
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -36,6 +41,24 @@ fun rowDragContainerColor(): Color {
 @Composable
 fun dragContainerColorFor(isDragging: Boolean): Color? =
     if (isDragging) rowDragContainerColor() else null
+
+@Composable
+fun DragHandleIcon(
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    Icon(
+        imageVector = Icons.Default.DragHandle,
+        contentDescription = contentDescription,
+        tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .offset(x = (-4).dp)
+            .size(24.dp)
+            .then(modifier),
+    )
+}
 
 fun buildItemMetadata(
     source: String?,

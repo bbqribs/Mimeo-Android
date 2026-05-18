@@ -69,6 +69,7 @@ import com.mimeo.android.ACTION_KEY_UNDO_PLAYLIST_REMOVE
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.ui.common.DragHandleIcon
 import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
 import com.mimeo.android.ui.common.JumpPill
@@ -863,8 +864,6 @@ private fun PlaylistDetailRow(
     val title = presentation?.title ?: "Loading..."
     val status = queueItem?.status
     val metadata = presentation?.sourceLabel ?: queueItem?.host?.takeIf { queueItem.title != null } ?: queueItem?.url
-    val isV1 = LocalMimeoV1Active.current
-    val mColors = LocalMimeoColorTokens.current
     val dragContainerColor = dragContainerColorFor(isDragging)
     val menuEntries = if (queueItem != null) {
         buildList {
@@ -897,21 +896,16 @@ private fun PlaylistDetailRow(
         onToggleSelect = onToggleSelect,
         onEnterSelection = onEnterSelection,
         leadingContent = {
-            Icon(
-                imageVector = Icons.Default.DragHandle,
+            DragHandleIcon(
                 contentDescription = "Drag to reorder",
-                tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .offset(x = (-4).dp)
-                    .size(24.dp)
-                    .pointerInput(index) {
-                        detectDragGestures(
-                            onDragStart = { onDragStart(index) },
-                            onDrag = { _, dragAmount -> onDrag(dragAmount.y) },
-                            onDragEnd = { onDragEnd() },
-                            onDragCancel = { onDragEnd() },
-                        )
-                    },
+                modifier = Modifier.pointerInput(index) {
+                    detectDragGestures(
+                        onDragStart = { onDragStart(index) },
+                        onDrag = { _, dragAmount -> onDrag(dragAmount.y) },
+                        onDragEnd = { onDragEnd() },
+                        onDragCancel = { onDragEnd() },
+                    )
+                },
             )
         },
         onPlayNow = if (queueItem != null) onPlayNow else null,
