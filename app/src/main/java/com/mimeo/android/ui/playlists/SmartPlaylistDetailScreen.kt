@@ -70,6 +70,7 @@ import com.mimeo.android.model.SmartPlaylistDetail
 import com.mimeo.android.ui.common.DefaultListSurfaceMessage
 import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
+import com.mimeo.android.ui.common.SelectionState
 import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.ListSurfaceScaffold
 import com.mimeo.android.ui.common.RowDivider
@@ -373,14 +374,16 @@ fun SmartPlaylistDetailScreen(
                         SmartPlaylistItemRow(
                             item = item,
                             isPinned = true,
-                            isSelectionActive = selectionActive,
-                            isSelected = item.itemId in selectedIds,
+                            selection = SelectionState.Available(
+                                isActive = selectionActive,
+                                isSelected = item.itemId in selectedIds,
+                                onToggle = { toggleSelection(item.itemId) },
+                                onEnter = { enterSelectionMode(item.itemId) },
+                            ),
                             pinActionEnabled = !pinActionInProgress,
                             canMoveUp = index > 0,
                             canMoveDown = index >= 0 && index < pinnedItems.lastIndex,
                             onOpen = { onOpenPlayer(item.itemId) },
-                            onToggleSelect = { toggleSelection(item.itemId) },
-                            onEnterSelection = { enterSelectionMode(item.itemId) },
                             onPlayNow = { vm.playNow(item.itemId) },
                             onPlayNext = { vm.playNext(item.itemId) },
                             onPlayLast = { vm.playLast(item.itemId) },
@@ -439,14 +442,16 @@ fun SmartPlaylistDetailScreen(
                     SmartPlaylistItemRow(
                         item = item,
                         isPinned = false,
-                        isSelectionActive = selectionActive,
-                        isSelected = item.itemId in selectedIds,
+                        selection = SelectionState.Available(
+                            isActive = selectionActive,
+                            isSelected = item.itemId in selectedIds,
+                            onToggle = { toggleSelection(item.itemId) },
+                            onEnter = { enterSelectionMode(item.itemId) },
+                        ),
                         pinActionEnabled = !pinActionInProgress,
                         canMoveUp = false,
                         canMoveDown = false,
                         onOpen = { onOpenPlayer(item.itemId) },
-                        onToggleSelect = { toggleSelection(item.itemId) },
-                        onEnterSelection = { enterSelectionMode(item.itemId) },
                         onPlayNow = { vm.playNow(item.itemId) },
                         onPlayNext = { vm.playNext(item.itemId) },
                         onPlayLast = { vm.playLast(item.itemId) },
@@ -876,14 +881,11 @@ private fun SmartPlaylistSectionHeader(
 private fun SmartPlaylistItemRow(
     item: PlaybackQueueItem,
     isPinned: Boolean,
-    isSelectionActive: Boolean,
-    isSelected: Boolean,
+    selection: SelectionState,
     pinActionEnabled: Boolean,
     canMoveUp: Boolean,
     canMoveDown: Boolean,
     onOpen: () -> Unit,
-    onToggleSelect: () -> Unit,
-    onEnterSelection: () -> Unit,
     onPlayNow: () -> Unit,
     onPlayNext: () -> Unit,
     onPlayLast: () -> Unit,
@@ -908,11 +910,8 @@ private fun SmartPlaylistItemRow(
         title = presentation.title,
         metadata = presentation.sourceLabel ?: item.host ?: item.url,
         status = item.status,
-        isSelectionActive = isSelectionActive,
-        isSelected = isSelected,
+        selection = selection,
         onOpen = onOpen,
-        onToggleSelect = onToggleSelect,
-        onEnterSelection = onEnterSelection,
         onPlayNow = onPlayNow,
         menuEntries = menuEntries,
     )

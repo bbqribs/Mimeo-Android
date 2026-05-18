@@ -86,6 +86,7 @@ import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.ui.common.DefaultListSurfaceMessage
 import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
+import com.mimeo.android.ui.common.SelectionState
 import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.DragHandleIcon
 import com.mimeo.android.ui.common.ListSurfaceScaffold
@@ -695,11 +696,13 @@ fun LibraryItemsScreen(
                         items(items = pendingItems, key = { "p_${it.itemId}" }) { item ->
                             LibraryQueueItemRow(
                                 item = item,
-                                isSelectionActive = selectionActive,
-                                isSelected = item.itemId in selectedIds,
+                                selection = SelectionState.Available(
+                                    isActive = selectionActive,
+                                    isSelected = item.itemId in selectedIds,
+                                    onToggle = { toggleSelection(item.itemId) },
+                                    onEnter = { enterSelectionMode(item.itemId) },
+                                ),
                                 onOpen = { onOpenItem(item.itemId) },
-                                onToggleSelect = { toggleSelection(item.itemId) },
-                                onEnterSelection = { enterSelectionMode(item.itemId) },
                                 onPlayNow = onPlayNow?.let { cb -> { cb(item.itemId) } },
                                 onPlayNext = onPlayNext?.let { cb -> { cb(item.itemId) } },
                                 onPlayLast = onPlayLast?.let { cb -> { cb(item.itemId) } },
@@ -800,8 +803,12 @@ fun LibraryItemsScreen(
                                 Column(modifier = itemModifier) {
                                     LibraryQueueItemRow(
                                         item = entry.item,
-                                        isSelectionActive = selectionActive,
-                                        isSelected = entry.item.itemId in selectedIds,
+                                        selection = SelectionState.Available(
+                                            isActive = selectionActive,
+                                            isSelected = entry.item.itemId in selectedIds,
+                                            onToggle = { toggleSelection(entry.item.itemId) },
+                                            onEnter = { enterSelectionMode(entry.item.itemId) },
+                                        ),
                                         modifier = rowModifier,
                                         dragHandleModifier = dragHandleModifier,
                                         dragHandleContentDescription = if (reorderActive) {
@@ -811,8 +818,6 @@ fun LibraryItemsScreen(
                                                 ?: "Reorder unavailable"
                                         },
                                         onOpen = { onOpenItem(entry.item.itemId) },
-                                        onToggleSelect = { toggleSelection(entry.item.itemId) },
-                                        onEnterSelection = { enterSelectionMode(entry.item.itemId) },
                                         onPlayNow = onPlayNow?.let { cb -> { cb(entry.item.itemId) } },
                                         onPlayNext = onPlayNext?.let { cb -> { cb(entry.item.itemId) } },
                                         onPlayLast = onPlayLast?.let { cb -> { cb(entry.item.itemId) } },
@@ -1036,14 +1041,11 @@ private fun DateSectionHeader(label: String) {
 @Composable
 private fun LibraryQueueItemRow(
     item: PlaybackQueueItem,
-    isSelectionActive: Boolean,
-    isSelected: Boolean,
+    selection: SelectionState,
     modifier: Modifier = Modifier,
     dragHandleModifier: Modifier? = null,
     dragHandleContentDescription: String = "Drag to reorder",
     onOpen: () -> Unit,
-    onToggleSelect: () -> Unit,
-    onEnterSelection: () -> Unit,
     onPlayNow: (() -> Unit)? = null,
     onPlayNext: (() -> Unit)? = null,
     onPlayLast: (() -> Unit)? = null,
@@ -1059,6 +1061,7 @@ private fun LibraryQueueItemRow(
     val source = presentation.sourceLabel ?: item.url
     val status = item.status
 
+    val isSelectionActive = (selection as? SelectionState.Available)?.isActive == true
     val hasTrailingActions = !isSelectionActive && (
         onPlayNow != null ||
             onPlayNext != null ||
@@ -1106,12 +1109,9 @@ private fun LibraryQueueItemRow(
         title = title,
         metadata = source,
         status = status,
-        isSelectionActive = isSelectionActive,
-        isSelected = isSelected,
+        selection = selection,
         modifier = modifier,
         onOpen = onOpen,
-        onToggleSelect = onToggleSelect,
-        onEnterSelection = onEnterSelection,
         leadingContent = dragHandleModifier?.let { handleModifier ->
             {
                 DragHandleIcon(

@@ -41,26 +41,42 @@ sealed interface ItemActionMenuEntry {
     data object Divider : ItemActionMenuEntry
 }
 
+sealed interface SelectionState {
+    /** Selection is not supported on this row. Tap opens; no long-press affordance. */
+    data object None : SelectionState
+
+    /**
+     * Selection is supported. [isActive] tracks whether the screen is currently in
+     * selection mode. When inactive, long-press calls [onEnter] to begin selection.
+     * When active, tap calls [onToggle] to toggle this row's selection.
+     */
+    data class Available(
+        val isActive: Boolean,
+        val isSelected: Boolean,
+        val onToggle: () -> Unit,
+        val onEnter: () -> Unit,
+    ) : SelectionState
+}
+
 @Composable
 fun ItemRow(
     title: String,
     metadata: String?,
     status: String?,
-    isSelectionActive: Boolean,
-    isSelected: Boolean,
     onOpen: () -> Unit,
-    onToggleSelect: () -> Unit,
-    onEnterSelection: () -> Unit,
+    selection: SelectionState = SelectionState.None,
     modifier: Modifier = Modifier,
     containerColor: Color? = null,
     titleColor: Color = MaterialTheme.colorScheme.onSurface,
     titleMaxLines: Int? = null,
-    selectionEnabled: Boolean = true,
     leadingContent: (@Composable RowScope.() -> Unit)? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
     onPlayNow: (() -> Unit)? = null,
     menuEntries: List<ItemActionMenuEntry> = emptyList(),
 ) {
+    val available = selection as? SelectionState.Available
+    val isActive = available?.isActive == true
+    val isSelected = available?.isSelected == true
     LibraryItemRow(
         title = title,
         metadata = metadata,
@@ -69,16 +85,16 @@ fun ItemRow(
         containerColor = containerColor,
         titleColor = titleColor,
         titleMaxLines = titleMaxLines,
-        onClick = if (isSelectionActive) onToggleSelect else onOpen,
-        onLongClick = if (selectionEnabled && !isSelectionActive) onEnterSelection else null,
-        leadingContent = if (isSelectionActive) {
+        onClick = if (isActive && available != null) available.onToggle else onOpen,
+        onLongClick = if (available != null && !isActive) available.onEnter else null,
+        leadingContent = if (isActive) {
             { SelectionAffordance(isSelected = isSelected) }
         } else {
             leadingContent
         },
         progressStateLine = itemStatusPillLine(status),
         trailingContent = when {
-            isSelectionActive -> null
+            isActive -> null
             trailingContent != null -> trailingContent
             onPlayNow != null || menuEntries.isNotEmpty() -> ({
                 ItemActionMenu(
