@@ -1887,13 +1887,8 @@ private fun SessionStaticItemRow(
         title = title,
         metadata = metadata,
         status = null,
-        isSelectionActive = false,
-        isSelected = false,
         modifier = modifier,
-        selectionEnabled = false,
         onOpen = { onOpenItem(item.itemId) },
-        onToggleSelect = {},
-        onEnterSelection = {},
         onPlayNow = { onJumpToItem(item.itemId) },
         menuEntries = menuEntries,
     )
@@ -2415,8 +2410,6 @@ private fun NowPlayingSessionPanel(
                                 title = rowTitle,
                                 metadata = sourceLabel,
                                 status = null,
-                                isSelectionActive = false,
-                                isSelected = false,
                                 modifier = Modifier.semantics {
                                     customActions = buildList {
                                         if (index > 0) add(CustomAccessibilityAction("Move up") {
@@ -2428,10 +2421,7 @@ private fun NowPlayingSessionPanel(
                                     }
                                 },
                                 containerColor = dragContainerColor,
-                                selectionEnabled = false,
                                 onOpen = { onOpenItem(item.itemId) },
-                                onToggleSelect = {},
-                                onEnterSelection = {},
                                 leadingContent = {
                                     DragHandleIcon(
                                         contentDescription = "Drag to reorder",

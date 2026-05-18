@@ -72,6 +72,7 @@ import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.ui.common.DragHandleIcon
 import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
+import com.mimeo.android.ui.common.SelectionState
 import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.ListSurfaceScaffold
 import com.mimeo.android.ui.common.RowDivider
@@ -629,8 +630,12 @@ fun PlaylistDetailScreen(
                             PlaylistDetailRow(
                                 queueItem = queueItem,
                                 isDragging = isDragging,
-                                isSelectionActive = selectionActive,
-                                isSelected = entry.id in selectedEntryIds,
+                                selection = SelectionState.Available(
+                                    isActive = selectionActive,
+                                    isSelected = entry.id in selectedEntryIds,
+                                    onToggle = { toggleSelection(entry.id) },
+                                    onEnter = { enterSelectionMode(entry.id) },
+                                ),
                                 onDragStart = { idx ->
                                     dragStartTopOffsets = itemTopOffsets.toMap()
                                     dragStartHeights = itemHeights.toMap()
@@ -649,8 +654,6 @@ fun PlaylistDetailScreen(
                                 onDragEnd = { onDragEnd() },
                                 index = index,
                                 onTap = { onOpenPlayer(entry.articleId) },
-                                onToggleSelect = { toggleSelection(entry.id) },
-                                onEnterSelection = { enterSelectionMode(entry.id) },
                                 onPlayNow = { vm.playNow(entry.articleId) },
                                 onPlayNext = { vm.playNext(entry.articleId) },
                                 onPlayLast = { vm.playLast(entry.articleId) },
@@ -843,15 +846,12 @@ private fun PlaylistSelectionIconButton(
 private fun PlaylistDetailRow(
     queueItem: PlaybackQueueItem?,
     isDragging: Boolean,
-    isSelectionActive: Boolean,
-    isSelected: Boolean,
+    selection: SelectionState,
     onDragStart: (index: Int) -> Unit,
     onDrag: (dy: Float) -> Unit,
     onDragEnd: () -> Unit,
     index: Int,
     onTap: () -> Unit,
-    onToggleSelect: () -> Unit,
-    onEnterSelection: () -> Unit,
     onPlayNow: () -> Unit,
     onPlayNext: () -> Unit,
     onPlayLast: () -> Unit,
@@ -884,8 +884,7 @@ private fun PlaylistDetailRow(
         title = title,
         metadata = metadata,
         status = status,
-        isSelectionActive = isSelectionActive,
-        isSelected = isSelected,
+        selection = selection,
         containerColor = dragContainerColor,
         titleColor = if (queueItem == null) {
             MaterialTheme.colorScheme.onSurfaceVariant
@@ -893,8 +892,6 @@ private fun PlaylistDetailRow(
             MaterialTheme.colorScheme.onSurface
         },
         onOpen = onTap,
-        onToggleSelect = onToggleSelect,
-        onEnterSelection = onEnterSelection,
         leadingContent = {
             DragHandleIcon(
                 contentDescription = "Drag to reorder",
