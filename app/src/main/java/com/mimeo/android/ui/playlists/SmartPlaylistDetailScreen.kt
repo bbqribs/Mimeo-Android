@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
@@ -35,7 +36,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -72,6 +72,7 @@ import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
 import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.ListSurfaceScaffold
+import com.mimeo.android.ui.common.RowDivider
 import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.queueCapturePresentation
@@ -417,10 +418,9 @@ fun SmartPlaylistDetailScreen(
                                 }
                             },
                         )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 12.dp),
-                            color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
-                        )
+                        if (index < pinnedItems.lastIndex) {
+                            RowDivider()
+                        }
                     }
                 }
 
@@ -435,7 +435,7 @@ fun SmartPlaylistDetailScreen(
                         DefaultListSurfaceMessage("No additional live results below pinned items.")
                     }
                 }
-                items(items = liveItems, key = { "live-${it.itemId}" }) { item ->
+                itemsIndexed(items = liveItems, key = { _, item -> "live-${item.itemId}" }) { index, item ->
                     SmartPlaylistItemRow(
                         item = item,
                         isPinned = false,
@@ -462,10 +462,9 @@ fun SmartPlaylistDetailScreen(
                         onMoveUp = {},
                         onMoveDown = {},
                     )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                        color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
-                    )
+                    if (index < liveItems.lastIndex) {
+                        RowDivider()
+                    }
                 }
             }
             if (showJumpToTop) {

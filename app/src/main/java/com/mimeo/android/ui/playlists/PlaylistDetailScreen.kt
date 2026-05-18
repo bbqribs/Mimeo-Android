@@ -30,7 +30,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -74,6 +73,8 @@ import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
 import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.ListSurfaceScaffold
+import com.mimeo.android.ui.common.RowDivider
+import com.mimeo.android.ui.common.dragContainerColorFor
 import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.queueCapturePresentation
@@ -662,14 +663,7 @@ fun PlaylistDetailScreen(
                                 onRemoveFromPlaylist = { removeArticleFromPlaylist(entry.articleId) },
                             )
                             if (!isDragging) {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 12.dp),
-                                    color = if (isV1) {
-                                        mColors.line
-                                    } else {
-                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
-                                    },
-                                )
+                                RowDivider()
                             }
                         }
                     }
@@ -871,11 +865,7 @@ private fun PlaylistDetailRow(
     val metadata = presentation?.sourceLabel ?: queueItem?.host?.takeIf { queueItem.title != null } ?: queueItem?.url
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
-    val dragContainerColor = if (isDragging) {
-        if (isV1) mColors.surfaceHi else MaterialTheme.colorScheme.surfaceContainerHigh
-    } else {
-        null
-    }
+    val dragContainerColor = dragContainerColorFor(isDragging)
     val menuEntries = if (queueItem != null) {
         buildList {
             add(ItemActionMenuEntry.Action("Play Next") { onPlayNext() })
