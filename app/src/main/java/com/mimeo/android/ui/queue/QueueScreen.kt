@@ -117,6 +117,7 @@ import com.mimeo.android.ui.common.ItemRow
 import com.mimeo.android.ui.common.ItemRowPlayRemoveActions
 import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.RowDivider
+import com.mimeo.android.ui.common.buildItemMetadata
 import com.mimeo.android.ui.common.dragContainerColorFor
 import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
@@ -1867,13 +1868,10 @@ private fun SessionStaticItemRow(
     modifier: Modifier = Modifier,
 ) {
     val title = item.title?.ifBlank { null } ?: item.url
-    val sourceLabel = item.host
+    val source = item.host
         ?: item.sourceLabel?.takeIf { it.isNotBlank() }
         ?: item.sourceType?.takeIf { it.isNotBlank() }
-    val metadata = listOfNotNull(
-        sourceLabel,
-        "Archived".takeIf { showArchivedIndicator },
-    ).joinToString(" · ").takeIf { it.isNotBlank() }
+    val metadata = buildItemMetadata(source, showArchived = showArchivedIndicator)
     val menuEntries = buildList {
         if (showArchivedIndicator && onUnarchiveItem != null) {
             add(ItemActionMenuEntry.Action("Unarchive") { onUnarchiveItem(item.itemId) })
