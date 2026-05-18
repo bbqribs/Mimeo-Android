@@ -36,3 +36,11 @@ fun rowDragContainerColor(): Color {
 @Composable
 fun dragContainerColorFor(isDragging: Boolean): Color? =
     if (isDragging) rowDragContainerColor() else null
+
+fun buildItemMetadata(
+    source: String?,
+    showArchived: Boolean = false,
+): String? = listOfNotNull(
+    source?.takeIf { it.isNotBlank() },
+    "Archived".takeIf { showArchived },
+).joinToString(" · ").takeIf { it.isNotBlank() }
