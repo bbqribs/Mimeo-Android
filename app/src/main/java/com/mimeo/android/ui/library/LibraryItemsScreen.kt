@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -690,7 +690,7 @@ fun LibraryItemsScreen(
                         )
                     }
                     if (pendingExpanded) {
-                        itemsIndexed(items = pendingItems, key = { _, item -> "p_${item.itemId}" }) { index, item ->
+                        items(items = pendingItems, key = { "p_${it.itemId}" }) { item ->
                             LibraryQueueItemRow(
                                 item = item,
                                 isSelectionActive = selectionActive,
@@ -717,9 +717,7 @@ fun LibraryItemsScreen(
                                 archiveToggleLabel = if (title == "Archive") "Unarchive" else "Archive",
                                 onBin = if (!isBin) ({ onBatchAction("bin", setOf(item.itemId)) }) else null,
                             )
-                            if (index < pendingItems.lastIndex) {
-                                RowDivider()
-                            }
+                            RowDivider()
                         }
                     }
                 }
@@ -832,9 +830,7 @@ fun LibraryItemsScreen(
                                         archiveToggleLabel = if (title == "Archive") "Unarchive" else "Archive",
                                         onBin = if (!isBin) ({ onBatchAction("bin", setOf(entry.item.itemId)) }) else null,
                                     )
-                                    if (readyIndex < readyItems.lastIndex) {
-                                        RowDivider()
-                                    }
+                                    RowDivider()
                                 }
                             }
                         }
