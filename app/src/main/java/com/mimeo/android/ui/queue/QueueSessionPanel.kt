@@ -61,6 +61,7 @@ import com.mimeo.android.ui.common.ItemRow
 import com.mimeo.android.ui.common.ItemRowPlayRemoveActions
 import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.RowDivider
+import com.mimeo.android.ui.common.SectionLabelChip
 import com.mimeo.android.ui.common.buildItemMetadata
 import com.mimeo.android.ui.common.dragContainerColorFor
 import com.mimeo.android.ui.common.jumpPillBottomPadding
@@ -150,28 +151,10 @@ private fun SessionSectionHeader(
     count: Int,
     modifier: Modifier = Modifier,
 ) {
-    val isV1 = LocalMimeoV1Active.current
-    val mColors = LocalMimeoColorTokens.current
-    val mTypography = LocalMimeoTypographyTokens.current
-    val densityTokens = LocalMimeoDensityTokens.current
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(
-                start = 12.dp,
-                end = 12.dp,
-                top = if (isV1) densityTokens.sectionGap else 10.dp,
-                bottom = 4.dp,
-            ),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "$title · $count",
-            style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
-            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.primary,
-        )
-    }
+    SectionLabelChip(
+        label = "$title · $count",
+        modifier = modifier,
+    )
 }
 
 @Composable

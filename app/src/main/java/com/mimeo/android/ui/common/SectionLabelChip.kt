@@ -1,0 +1,61 @@
+package com.mimeo.android.ui.common
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.mimeo.android.ui.theme.LocalMimeoColorTokens
+import com.mimeo.android.ui.theme.LocalMimeoDensityTokens
+import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
+import com.mimeo.android.ui.theme.LocalMimeoV1Active
+
+/**
+ * Compact floating accent chip used for list section headers — Library temporal
+ * groupings and the Up Next History / Earlier in queue sections.
+ */
+@Composable
+fun SectionLabelChip(
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    val densityTokens = LocalMimeoDensityTokens.current
+    val chipShape = RoundedCornerShape(999.dp)
+    val containerColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary
+    val contentColor = if (isV1) mColors.accentOn else MaterialTheme.colorScheme.onPrimary
+    val borderColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary
+    val headerTopPadding = if (isV1) {
+        (densityTokens.sectionGap - 12.dp).coerceAtLeast(2.dp)
+    } else {
+        0.dp
+    }
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, end = 12.dp, top = headerTopPadding, bottom = 6.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            text = label,
+            style = if (isV1) mTypography.button else MaterialTheme.typography.labelLarge,
+            color = contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .background(containerColor, chipShape)
+                .border(1.dp, borderColor, chipShape)
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+        )
+    }
+}

@@ -34,8 +34,8 @@ import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,8 +73,12 @@ internal fun MimeoDrawerContent(
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
     val mShapes = LocalMimeoShapeTokens.current
-    var playlistsExpanded by rememberSaveable { mutableStateOf(false) }
-    var smartPlaylistsExpanded by rememberSaveable { mutableStateOf(false) }
+    // Expansion is local-only and not persisted: it re-derives from the current
+    // destination so opening the drawer on a playlist detail reveals that section.
+    val onPlaylistDetail = selectedDrawerRoute.startsWith("playlist/")
+    val onSmartPlaylistDetail = selectedDrawerRoute.startsWith("smartPlaylist/")
+    var playlistsExpanded by remember(selectedDrawerRoute) { mutableStateOf(onPlaylistDetail) }
+    var smartPlaylistsExpanded by remember(selectedDrawerRoute) { mutableStateOf(onSmartPlaylistDetail) }
     val drawerBackground = if (isV1) mColors.surface else MaterialTheme.colorScheme.surface
     val drawerItemColorsV1 = NavigationDrawerItemDefaults.colors(
         selectedContainerColor = Color.Transparent,
