@@ -542,7 +542,21 @@ private fun MimeoApp(vm: AppViewModel) {
     val navBackStack by nav.currentBackStackEntryAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val currentRoute = navBackStack?.destination?.route.orEmpty()
+    // Resolve playlist / smart-playlist detail routes to their concrete id
+    // (e.g. "playlist/5") rather than the registered pattern
+    // ("playlist/{playlistId}"), so route-equality checks — the drawer active
+    // marker and the drawer title label — match the current destination.
+    val currentRoute = run {
+        val pattern = navBackStack?.destination?.route.orEmpty()
+        val playlistId = navBackStack?.arguments?.let { args ->
+            if (args.containsKey("playlistId")) args.getInt("playlistId") else null
+        }
+        when {
+            pattern == ROUTE_PLAYLIST_DETAIL && playlistId != null -> "playlist/$playlistId"
+            pattern == ROUTE_SMART_PLAYLIST_DETAIL && playlistId != null -> "smartPlaylist/$playlistId"
+            else -> pattern
+        }
+    }
     val settings by vm.settings.collectAsState()
     val startupAuthState by vm.startupAuthState.collectAsState()
     val startupReady = startupAuthState as? StartupAuthState.Ready
