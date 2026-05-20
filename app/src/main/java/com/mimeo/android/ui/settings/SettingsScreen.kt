@@ -75,12 +75,15 @@ import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
+import com.mimeo.android.model.DEFAULT_PLAYBACK_SPEED_PRESETS
 import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
 import com.mimeo.android.model.DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL
 import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PendingManualSaveItem
+import com.mimeo.android.model.formatPlaybackSpeedPresets
+import com.mimeo.android.model.parsePlaybackSpeedPresets
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.VisualDensityPreference
@@ -237,6 +240,9 @@ fun SettingsScreen(
     var showAccentSchemeMenu by remember { mutableStateOf(false) }
     var ttsVoiceName by remember(settings.ttsVoiceName) {
         mutableStateOf(settings.ttsVoiceName)
+    }
+    var speedPresetsInput by remember(settings.playbackSpeedPresets) {
+        mutableStateOf(formatPlaybackSpeedPresets(settings.playbackSpeedPresets))
     }
     var ttsEngineReady by remember { mutableStateOf(false) }
     var ttsVoiceOptions by remember { mutableStateOf<List<TtsVoiceOption>>(emptyList()) }
@@ -1285,6 +1291,48 @@ fun SettingsScreen(
                             vm.saveAutoAdvanceOnCompletion(it)
                         },
                     )
+                }
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text("Speed presets")
+                    Text(
+                        text = "Speeds shown as quick-tap buttons in the player speed panel. " +
+                            "Comma-separated; values are clamped to 0.5×–4.0×, de-duplicated, and sorted.",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = speedPresetsInput,
+                        onValueChange = { speedPresetsInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Preset speeds") },
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Button(
+                            onClick = {
+                                val applied = parsePlaybackSpeedPresets(speedPresetsInput)
+                                vm.savePlaybackSpeedPresets(applied)
+                                speedPresetsInput = formatPlaybackSpeedPresets(applied)
+                            },
+                        ) {
+                            Text("Apply")
+                        }
+                        TextButton(
+                            onClick = {
+                                vm.savePlaybackSpeedPresets(DEFAULT_PLAYBACK_SPEED_PRESETS)
+                                speedPresetsInput =
+                                    formatPlaybackSpeedPresets(DEFAULT_PLAYBACK_SPEED_PRESETS)
+                            },
+                        ) {
+                            Text("Reset to defaults")
+                        }
+                    }
                 }
                 SettingsDescribedRow(
                     title = "Auto-archive at end of article",

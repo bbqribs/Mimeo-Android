@@ -101,6 +101,8 @@ import com.mimeo.android.data.QueueFetchResult
 import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.AppSettings
+import com.mimeo.android.model.DEFAULT_PLAYBACK_SPEED_PRESETS
+import com.mimeo.android.model.sanitizePlaybackSpeedPresets
 import com.mimeo.android.model.AutoDownloadDiagnostics
 import com.mimeo.android.model.ArticleSummary
 import com.mimeo.android.model.BlueskyAccountConnectionResponse
@@ -3158,6 +3160,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _settings.update { current -> current.copy(accentSchemePreference = preference) }
             settingsStore.saveAccentSchemePreference(preference)
+        }
+    }
+
+    fun savePlaybackSpeedPresets(presets: List<Float>) {
+        val sanitized = sanitizePlaybackSpeedPresets(presets)
+            .ifEmpty { DEFAULT_PLAYBACK_SPEED_PRESETS }
+        _settings.update { current -> current.copy(playbackSpeedPresets = sanitized) }
+        viewModelScope.launch {
+            settingsStore.savePlaybackSpeedPresets(sanitized)
         }
     }
 
