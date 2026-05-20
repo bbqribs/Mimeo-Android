@@ -62,6 +62,7 @@ import com.mimeo.android.ui.common.ItemRowPlayRemoveActions
 import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.RowDivider
 import com.mimeo.android.ui.common.SectionLabelChip
+import com.mimeo.android.ui.common.SectionLabelHeader
 import com.mimeo.android.ui.common.buildItemMetadata
 import com.mimeo.android.ui.common.dragContainerColorFor
 import com.mimeo.android.ui.common.jumpPillBottomPadding
@@ -151,7 +152,7 @@ private fun SessionSectionHeader(
     count: Int,
     modifier: Modifier = Modifier,
 ) {
-    SectionLabelChip(
+    SectionLabelHeader(
         label = "$title · $count",
         modifier = modifier,
     )
@@ -592,11 +593,7 @@ internal fun NowPlayingSessionPanel(
                             },
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Text(
-                            text = NOW_PLAYING_SECTION_TITLE,
-                            style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
-                            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.primary,
-                        )
+                        SectionLabelChip(label = NOW_PLAYING_SECTION_TITLE)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -651,11 +648,7 @@ internal fun NowPlayingSessionPanel(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = "Up Next · ${upcomingItems.size}",
-                        style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
-                        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.primary,
-                    )
+                    SectionLabelChip(label = "Up Next · ${upcomingItems.size}")
                     TextButton(
                         enabled = upcomingItems.isNotEmpty(),
                         onClick = onClearUpcoming,

@@ -91,7 +91,7 @@ import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.DragHandleIcon
 import com.mimeo.android.ui.common.ListSurfaceScaffold
 import com.mimeo.android.ui.common.RowDivider
-import com.mimeo.android.ui.common.SectionLabelChip
+import com.mimeo.android.ui.common.SectionLabelHeader
 import com.mimeo.android.ui.common.rowDragContainerColor
 import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
@@ -1015,7 +1015,7 @@ private fun PendingSectionHeader(
 
 @Composable
 private fun DateSectionHeader(label: String) {
-    SectionLabelChip(label = label)
+    SectionLabelHeader(label = label)
 }
 
 @Composable
