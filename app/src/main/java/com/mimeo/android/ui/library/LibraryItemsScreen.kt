@@ -308,8 +308,13 @@ fun LibraryItemsScreen(
     }
 
     var localReorderItems by remember { mutableStateOf<List<PlaybackQueueItem>?>(null) }
-    var itemTopOffsets by remember { mutableStateOf<Map<Int, Float>>(emptyMap()) }
-    var itemHeights by remember { mutableStateOf<Map<Int, Float>>(emptyMap()) }
+    // Live drag measurement maps. Plain mutable (non-snapshot) maps mutated in place so
+    // onGloballyPositioned does not copy a full immutable map every layout pass on long
+    // lists — that copy churned per-frame allocations/GC during scroll. Reads happen only
+    // in drag-computation helpers invoked from event handlers / LaunchedEffect (never as
+    // composition state reads), and drag snapshots are taken via .toMap() at onDragStart.
+    val itemTopOffsets = remember { mutableMapOf<Int, Float>() }
+    val itemHeights = remember { mutableMapOf<Int, Float>() }
     var dragStartTopOffsets by remember { mutableStateOf<Map<Int, Float>>(emptyMap()) }
     var dragStartHeights by remember { mutableStateOf<Map<Int, Float>>(emptyMap()) }
     var draggingIndex by remember { mutableIntStateOf(-1) }
@@ -761,8 +766,8 @@ fun LibraryItemsScreen(
                                 val dragBgColor = rowDragContainerColor()
                                 val itemModifier = Modifier
                                     .onGloballyPositioned { coordinates ->
-                                        itemTopOffsets = itemTopOffsets + (entry.item.itemId to coordinates.positionInParent().y)
-                                        itemHeights = itemHeights + (entry.item.itemId to coordinates.size.height.toFloat())
+                                        itemTopOffsets[entry.item.itemId] = coordinates.positionInParent().y
+                                        itemHeights[entry.item.itemId] = coordinates.size.height.toFloat()
                                     }
                                     .graphicsLayer { translationY = visualOffset }
                                     .zIndex(if (isDragging) 1f else 0f)
