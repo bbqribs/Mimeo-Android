@@ -61,6 +61,8 @@ import com.mimeo.android.ui.common.ItemRow
 import com.mimeo.android.ui.common.ItemRowPlayRemoveActions
 import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.RowDivider
+import com.mimeo.android.ui.common.SectionLabelChip
+import com.mimeo.android.ui.common.SectionLabelHeader
 import com.mimeo.android.ui.common.buildItemMetadata
 import com.mimeo.android.ui.common.dragContainerColorFor
 import com.mimeo.android.ui.common.jumpPillBottomPadding
@@ -150,28 +152,10 @@ private fun SessionSectionHeader(
     count: Int,
     modifier: Modifier = Modifier,
 ) {
-    val isV1 = LocalMimeoV1Active.current
-    val mColors = LocalMimeoColorTokens.current
-    val mTypography = LocalMimeoTypographyTokens.current
-    val densityTokens = LocalMimeoDensityTokens.current
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(
-                start = 12.dp,
-                end = 12.dp,
-                top = if (isV1) densityTokens.sectionGap else 10.dp,
-                bottom = 4.dp,
-            ),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "$title · $count",
-            style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
-            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.primary,
-        )
-    }
+    SectionLabelHeader(
+        label = "$title · $count",
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -609,11 +593,7 @@ internal fun NowPlayingSessionPanel(
                             },
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Text(
-                            text = NOW_PLAYING_SECTION_TITLE,
-                            style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
-                            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.primary,
-                        )
+                        SectionLabelChip(label = NOW_PLAYING_SECTION_TITLE)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -668,11 +648,7 @@ internal fun NowPlayingSessionPanel(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = "Up Next · ${upcomingItems.size}",
-                        style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
-                        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.primary,
-                    )
+                    SectionLabelChip(label = "Up Next · ${upcomingItems.size}")
                     TextButton(
                         enabled = upcomingItems.isNotEmpty(),
                         onClick = onClearUpcoming,
@@ -794,8 +770,7 @@ internal fun NowPlayingSessionPanel(
                         .align(Alignment.TopStart)
                         .fillMaxWidth()
                         .zIndex(2f)
-                        .graphicsLayer { translationY = stickyHeader.offsetYPx }
-                        .background(if (isV1) mColors.surface else MaterialTheme.colorScheme.surface),
+                        .graphicsLayer { translationY = stickyHeader.offsetYPx },
                 )
             }
             val showSnapToActive = activeItem != null &&
