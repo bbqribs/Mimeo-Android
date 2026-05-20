@@ -379,10 +379,12 @@ fun LibraryItemsScreen(
     fun avgItemHeight(): Float =
         if (itemHeights.isEmpty()) 72f else itemHeights.values.average().toFloat()
 
-    // Auto-scroll the list while a dragged row is held near the top/bottom edge,
-    // mirroring the playlist drag surface. dispatchRawDelta is fed back into
-    // dragOffsetY so the dragged row stays under the finger, and into
-    // dragAccumScroll so computeTargetIndex can place rows revealed by scrolling.
+    // Auto-scroll the list while a dragged row is held near the top/bottom edge.
+    // Speed ramps with how deep the row has pushed into the 96px edge band, so it
+    // stays gentle and controllable. Driven solely by the drag loop below (not
+    // onDrag) so the rate cannot compound with finger movement. dispatchRawDelta
+    // is fed back into dragOffsetY (row stays under the finger) and dragAccumScroll
+    // (so computeTargetIndex can place rows revealed by the scroll).
     fun scrollDraggedItemNearEdge(from: Int) {
         if (from !in readyItems.indices) return
         val viewportHeight = listState.layoutInfo.viewportSize.height
@@ -393,10 +395,12 @@ fun LibraryItemsScreen(
         val itemTop = frozenTop + dragOffsetY - dragAccumScroll
         val itemBottom = itemTop + height
         val edgeSize = 96f
-        val maxStep = 28f
+        val maxStep = 14f
+        val topOverlap = edgeSize - itemTop
+        val bottomOverlap = itemBottom - (viewportHeight - edgeSize)
         val desiredDelta = when {
-            itemTop < edgeSize -> -maxStep
-            itemBottom > viewportHeight - edgeSize -> maxStep
+            topOverlap > 0f -> -maxStep * (topOverlap / edgeSize).coerceIn(0f, 1f)
+            bottomOverlap > 0f -> maxStep * (bottomOverlap / edgeSize).coerceIn(0f, 1f)
             else -> 0f
         }
         if (desiredDelta == 0f) return
@@ -840,7 +844,6 @@ fun LibraryItemsScreen(
                                             onDrag = { change, dragAmount ->
                                                 change.consume()
                                                 dragOffsetY += dragAmount.y
-                                                scrollDraggedItemNearEdge(draggingIndex)
                                                 val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
                                                 if (newTarget != currentTargetIndex) {
                                                     currentTargetIndex = newTarget
