@@ -495,12 +495,14 @@ data class AppSettings(
 /** Default playback speed quick-tap presets shown in the player speed panel. */
 val DEFAULT_PLAYBACK_SPEED_PRESETS: List<Float> = listOf(1.0f, 1.25f, 1.4f, 1.75f, 2.0f)
 
-/** Inclusive bounds (in hundredths of x) for a valid playback speed preset — 0.5x to 4.0x. */
-private const val PLAYBACK_SPEED_PRESET_MIN_HUNDREDTHS = 50
-private const val PLAYBACK_SPEED_PRESET_MAX_HUNDREDTHS = 400
+/** Inclusive bounds for a single playback speed preset. */
+const val PLAYBACK_SPEED_PRESET_MIN: Float = 0.5f
+const val PLAYBACK_SPEED_PRESET_MAX: Float = 4.0f
+private val PLAYBACK_SPEED_PRESET_MIN_HUNDREDTHS = (PLAYBACK_SPEED_PRESET_MIN * 100f).roundToInt()
+private val PLAYBACK_SPEED_PRESET_MAX_HUNDREDTHS = (PLAYBACK_SPEED_PRESET_MAX * 100f).roundToInt()
 
-/** Maximum number of presets retained, keeping the player speed panel compact. */
-const val MAX_PLAYBACK_SPEED_PRESETS = 6
+/** Number of playback speed preset slots — one editable box per preset in Settings. */
+const val MAX_PLAYBACK_SPEED_PRESETS = 5
 
 /**
  * Normalize candidate speeds into a valid preset list: drop non-finite and
@@ -526,6 +528,17 @@ fun parsePlaybackSpeedPresets(raw: String?): List<Float> {
     if (raw.isNullOrBlank()) return DEFAULT_PLAYBACK_SPEED_PRESETS
     val parsed = raw.split(',').mapNotNull { it.trim().toFloatOrNull() }
     return sanitizePlaybackSpeedPresets(parsed).ifEmpty { DEFAULT_PLAYBACK_SPEED_PRESETS }
+}
+
+/**
+ * True when [text] is a blank slot or a finite number within the valid preset
+ * bounds. Used for per-box validation in the Settings speed-preset editor.
+ */
+fun isPlaybackSpeedPresetEntryValid(text: String): Boolean {
+    val trimmed = text.trim()
+    if (trimmed.isEmpty()) return true
+    val value = trimmed.toFloatOrNull() ?: return false
+    return value.isFinite() && value in PLAYBACK_SPEED_PRESET_MIN..PLAYBACK_SPEED_PRESET_MAX
 }
 
 /** Format a preset list as a compact comma-separated string, e.g. "1, 1.25, 1.4". */

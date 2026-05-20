@@ -1,6 +1,8 @@
 package com.mimeo.android.model
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.roundToInt
 
@@ -44,7 +46,25 @@ class PlaybackSpeedPresetsTest {
             listOf(0.6f, 0.7f, 0.8f, 0.9f, 1.0f, 1.1f, 1.2f, 1.3f),
         )
         assertEquals(MAX_PLAYBACK_SPEED_PRESETS, result.size)
-        assertSpeeds(listOf(0.6f, 0.7f, 0.8f, 0.9f, 1.0f, 1.1f), result)
+        assertSpeeds(listOf(0.6f, 0.7f, 0.8f, 0.9f, 1.0f), result)
+    }
+
+    @Test
+    fun entryValid_acceptsBlankAndInBoundsNumbers() {
+        assertTrue(isPlaybackSpeedPresetEntryValid(""))
+        assertTrue(isPlaybackSpeedPresetEntryValid("   "))
+        assertTrue(isPlaybackSpeedPresetEntryValid("0.5"))
+        assertTrue(isPlaybackSpeedPresetEntryValid("4.0"))
+        assertTrue(isPlaybackSpeedPresetEntryValid(" 1.25 "))
+    }
+
+    @Test
+    fun entryValid_rejectsOutOfBoundsAndNonNumericInput() {
+        assertFalse(isPlaybackSpeedPresetEntryValid("0.4"))
+        assertFalse(isPlaybackSpeedPresetEntryValid("4.5"))
+        assertFalse(isPlaybackSpeedPresetEntryValid("fast"))
+        assertFalse(isPlaybackSpeedPresetEntryValid("1.2.3"))
+        assertFalse(isPlaybackSpeedPresetEntryValid("-1"))
     }
 
     @Test
