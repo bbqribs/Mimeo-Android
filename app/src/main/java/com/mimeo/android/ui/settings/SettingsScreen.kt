@@ -87,6 +87,7 @@ import com.mimeo.android.model.PLAYBACK_SPEED_PRESET_MIN
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.formatPlaybackSpeedPresetValue
 import com.mimeo.android.model.isPlaybackSpeedPresetEntryValid
+import com.mimeo.android.model.sanitizePlaybackSpeedPresets
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.VisualDensityPreference
@@ -1308,6 +1309,14 @@ fun SettingsScreen(
                     val presetBoxesValid =
                         speedPresetBoxes.all { isPlaybackSpeedPresetEntryValid(it) }
                     val presetBoxesAllBlank = speedPresetBoxes.all { it.isBlank() }
+                    // The preset list Apply would persist, compared against the
+                    // operative list so Apply stays disabled with no real change.
+                    val wouldBePresets = sanitizePlaybackSpeedPresets(
+                        speedPresetBoxes.mapNotNull { it.trim().toFloatOrNull() },
+                    ).ifEmpty { DEFAULT_PLAYBACK_SPEED_PRESETS }
+                    val presetBoxesDirty =
+                        wouldBePresets.map { formatPlaybackSpeedPresetValue(it) } !=
+                            settings.playbackSpeedPresets.map { formatPlaybackSpeedPresetValue(it) }
                     Text("Speed presets")
                     Text(
                         text = "One box per quick-tap speed in the player panel. Each box takes " +
@@ -1342,6 +1351,7 @@ fun SettingsScreen(
                             !presetBoxesValid ->
                                 "Each box must be empty or a number from ${minLabel}× to ${maxLabel}×."
                             presetBoxesAllBlank -> "Enter at least one preset speed."
+                            !presetBoxesDirty -> "These speeds are already saved."
                             else -> "Apply saves these speeds to the player; Reset restores the defaults."
                         },
                         style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
@@ -1356,7 +1366,7 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Button(
-                            enabled = presetBoxesValid && !presetBoxesAllBlank,
+                            enabled = presetBoxesValid && !presetBoxesAllBlank && presetBoxesDirty,
                             onClick = {
                                 val values = speedPresetBoxes
                                     .mapNotNull { it.trim().toFloatOrNull() }
