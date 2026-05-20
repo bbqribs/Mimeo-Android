@@ -320,6 +320,10 @@ fun LibraryItemsScreen(
     var draggingIndex by remember { mutableIntStateOf(-1) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var currentTargetIndex by remember { mutableIntStateOf(-1) }
+    // Total px the list has been edge-auto-scrolled during the current drag.
+    // Item offsets are viewport-relative (LazyColumn), so this is used to keep
+    // target computation correct for rows revealed by the auto-scroll.
+    var dragAccumScroll by remember { mutableFloatStateOf(0f) }
     val reorderActive = dragReorderEnabled &&
         !selectionActive &&
         !isInbox &&
@@ -337,6 +341,7 @@ fun LibraryItemsScreen(
         localReorderItems = null
         draggingIndex = -1
         dragOffsetY = 0f
+        dragAccumScroll = 0f
         currentTargetIndex = -1
         dragStartTopOffsets = emptyMap()
         dragStartHeights = emptyMap()
@@ -374,6 +379,34 @@ fun LibraryItemsScreen(
     fun avgItemHeight(): Float =
         if (itemHeights.isEmpty()) 72f else itemHeights.values.average().toFloat()
 
+    // Auto-scroll the list while a dragged row is held near the top/bottom edge,
+    // mirroring the playlist drag surface. dispatchRawDelta is fed back into
+    // dragOffsetY so the dragged row stays under the finger, and into
+    // dragAccumScroll so computeTargetIndex can place rows revealed by scrolling.
+    fun scrollDraggedItemNearEdge(from: Int) {
+        if (from !in readyItems.indices) return
+        val viewportHeight = listState.layoutInfo.viewportSize.height
+        if (viewportHeight <= 0) return
+        val fromItemId = readyItems[from].itemId
+        val frozenTop = dragStartTopOffsets[fromItemId] ?: itemTopOffsets[fromItemId] ?: return
+        val height = dragStartHeights[fromItemId] ?: itemHeights[fromItemId] ?: avgItemHeight()
+        val itemTop = frozenTop + dragOffsetY - dragAccumScroll
+        val itemBottom = itemTop + height
+        val edgeSize = 96f
+        val maxStep = 28f
+        val desiredDelta = when {
+            itemTop < edgeSize -> -maxStep
+            itemBottom > viewportHeight - edgeSize -> maxStep
+            else -> 0f
+        }
+        if (desiredDelta == 0f) return
+        val consumed = listState.dispatchRawDelta(desiredDelta)
+        if (consumed != 0f) {
+            dragOffsetY += consumed
+            dragAccumScroll += consumed
+        }
+    }
+
     fun computeTargetIndex(from: Int, offsetY: Float): Int {
         if (readyItems.size <= 1 || from !in readyItems.indices) return from
         val tops = dragStartTopOffsets.takeIf { it.isNotEmpty() } ?: itemTopOffsets
@@ -387,8 +420,13 @@ fun LibraryItemsScreen(
         readyItems.indices.forEach { index ->
             if (index == from) return@forEach
             val itemId = readyItems[index].itemId
-            val itemTop = tops[itemId] ?: (index * avgItemHeight())
-            val itemHeight = heights[itemId] ?: avgItemHeight()
+            // Rows revealed by edge auto-scroll are absent from the frozen drag
+            // snapshot; recover their snapshot-frame offset from the live
+            // viewport-relative map by undoing the accumulated scroll.
+            val itemTop = tops[itemId]
+                ?: itemTopOffsets[itemId]?.let { it + dragAccumScroll }
+                ?: (index * avgItemHeight())
+            val itemHeight = heights[itemId] ?: itemHeights[itemId] ?: avgItemHeight()
             val itemMidY = itemTop + itemHeight / 2f
             if (from < index && draggedBottomY > itemMidY) target = index
             if (from > index && draggedTopY < itemMidY && index < target) target = index
@@ -410,6 +448,7 @@ fun LibraryItemsScreen(
 
     LaunchedEffect(draggingIndex) {
         while (draggingIndex >= 0) {
+            scrollDraggedItemNearEdge(draggingIndex)
             val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
             if (newTarget != currentTargetIndex) currentTargetIndex = newTarget
             delay(16)
@@ -435,6 +474,7 @@ fun LibraryItemsScreen(
         val firstVisibleOffset = listState.firstVisibleItemScrollOffset
         draggingIndex = -1
         dragOffsetY = 0f
+        dragAccumScroll = 0f
         currentTargetIndex = -1
         dragStartTopOffsets = emptyMap()
         dragStartHeights = emptyMap()
@@ -794,11 +834,13 @@ fun LibraryItemsScreen(
                                                 dragStartHeights = itemHeights.toMap()
                                                 draggingIndex = readyIndex
                                                 dragOffsetY = 0f
+                                                dragAccumScroll = 0f
                                                 currentTargetIndex = readyIndex
                                             },
                                             onDrag = { change, dragAmount ->
                                                 change.consume()
                                                 dragOffsetY += dragAmount.y
+                                                scrollDraggedItemNearEdge(draggingIndex)
                                                 val newTarget = computeTargetIndex(draggingIndex, dragOffsetY)
                                                 if (newTarget != currentTargetIndex) {
                                                     currentTargetIndex = newTarget
