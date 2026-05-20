@@ -10,6 +10,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
@@ -19,9 +20,11 @@ import com.mimeo.android.ui.theme.LocalMimeoV1Active
 
 /**
  * Bare compact chip used for list section labels — Library temporal groupings
- * and the Up Next Now Playing / Up Next / History / Earlier sections. A faint
- * neutral wash of the foreground colour with accent text, no border. Callers
- * position it; [SectionLabelHeader] wraps it as a full-width section header.
+ * and the Up Next Now Playing / Up Next / History / Earlier sections. A soft,
+ * opaque wash of the foreground colour with accent text, no border. The fill is
+ * opaque so the chip reads cleanly when floating over scrolling content as a
+ * sticky header. Callers position it; [SectionLabelHeader] wraps it as a
+ * full-width section header.
  */
 @Composable
 fun SectionLabelChip(
@@ -33,9 +36,9 @@ fun SectionLabelChip(
     val mTypography = LocalMimeoTypographyTokens.current
     val chipShape = RoundedCornerShape(999.dp)
     val containerColor = if (isV1) {
-        mColors.fg.copy(alpha = 0.10f)
+        lerp(mColors.surface, mColors.fg, 0.10f)
     } else {
-        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+        lerp(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.onSurface, 0.10f)
     }
     val contentColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary
     Text(

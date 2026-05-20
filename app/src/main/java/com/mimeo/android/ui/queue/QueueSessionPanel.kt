@@ -770,8 +770,7 @@ internal fun NowPlayingSessionPanel(
                         .align(Alignment.TopStart)
                         .fillMaxWidth()
                         .zIndex(2f)
-                        .graphicsLayer { translationY = stickyHeader.offsetYPx }
-                        .background(if (isV1) mColors.surface else MaterialTheme.colorScheme.surface),
+                        .graphicsLayer { translationY = stickyHeader.offsetYPx },
                 )
             }
             val showSnapToActive = activeItem != null &&
