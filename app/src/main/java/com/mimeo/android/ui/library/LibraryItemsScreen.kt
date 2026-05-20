@@ -398,9 +398,17 @@ fun LibraryItemsScreen(
         val maxStep = 14f
         val topOverlap = edgeSize - itemTop
         val bottomOverlap = itemBottom - (viewportHeight - edgeSize)
+        // The dragged row is a LazyColumn item: if its natural slot scrolls off
+        // the composed range the row is disposed and the gesture detaches. Gate
+        // auto-scroll so the slot stays on screen — the scroll then stops
+        // gracefully at the list extent instead of detaching the drag.
+        val slotTop = frozenTop - dragAccumScroll
+        val slotBottom = slotTop + height
         val desiredDelta = when {
-            topOverlap > 0f -> -maxStep * (topOverlap / edgeSize).coerceIn(0f, 1f)
-            bottomOverlap > 0f -> maxStep * (bottomOverlap / edgeSize).coerceIn(0f, 1f)
+            topOverlap > 0f && slotBottom < viewportHeight ->
+                -maxStep * (topOverlap / edgeSize).coerceIn(0f, 1f)
+            bottomOverlap > 0f && slotTop > 0f ->
+                maxStep * (bottomOverlap / edgeSize).coerceIn(0f, 1f)
             else -> 0f
         }
         if (desiredDelta == 0f) return
