@@ -337,8 +337,12 @@ fun LibraryItemsScreen(
         dragStartHeights = emptyMap()
     }
 
-    val pendingItems = if (isInbox) sortedItems.filter { it.status in PENDING_STATUSES } else emptyList()
-    val baseReadyItems = if (isInbox) sortedItems.filter { it.status !in PENDING_STATUSES } else sortedItems
+    val pendingItems = remember(sortedItems, isInbox) {
+        if (isInbox) sortedItems.filter { it.status in PENDING_STATUSES } else emptyList()
+    }
+    val baseReadyItems = remember(sortedItems, isInbox) {
+        if (isInbox) sortedItems.filter { it.status !in PENDING_STATUSES } else sortedItems
+    }
     val shouldShowLocalReorderItems = localReorderItems != null &&
         !selectionActive &&
         !isInbox &&
@@ -346,6 +350,11 @@ fun LibraryItemsScreen(
         searchQuery.isBlank() &&
         sortOption == LibrarySortOption.SMART_QUEUE
     val readyItems = if (shouldShowLocalReorderItems) localReorderItems ?: baseReadyItems else baseReadyItems
+    // O(1) itemId -> index lookup for the ready list. Replaces a per-row O(n)
+    // indexOfFirst inside the LazyColumn item body that made rendering O(n^2).
+    val readyIndexById = remember(readyItems) {
+        readyItems.withIndex().associate { (index, item) -> item.itemId to index }
+    }
     val visiblePlaybackItems = remember(isInbox, pendingExpanded, pendingItems, readyItems, sortedItems) {
         if (isInbox) {
             buildList {
@@ -737,7 +746,7 @@ fun LibraryItemsScreen(
                         }
                         is LibraryListEntry.Item -> {
                             item(key = entry.item.itemId) {
-                                val readyIndex = readyItems.indexOfFirst { it.itemId == entry.item.itemId }
+                                val readyIndex = readyIndexById[entry.item.itemId] ?: -1
                                 val isDragging = reorderActive && draggingIndex == readyIndex
                                 val visualOffset = when {
                                     isDragging -> dragOffsetY
