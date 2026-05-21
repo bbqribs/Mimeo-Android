@@ -34,6 +34,7 @@ import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.ReaderFontOption
+import com.mimeo.android.model.ReaderTextAlignOption
 import com.mimeo.android.model.VisualDensityPreference
 import com.mimeo.android.model.VisualThemePreference
 import com.mimeo.android.model.decodeSelectedPlaylistId
@@ -115,6 +116,8 @@ class SettingsStore(private val context: Context) {
         intPreferencesKey("reading_max_width_dp")
     private val readingParagraphSpacingKey: Preferences.Key<String> =
         stringPreferencesKey("reading_paragraph_spacing")
+    private val readingTextAlignKey: Preferences.Key<String> =
+        stringPreferencesKey("reading_text_align")
     private val visualThemePreferenceKey: Preferences.Key<String> =
         stringPreferencesKey("visual_theme_preference")
     private val visualDensityPreferenceKey: Preferences.Key<String> =
@@ -209,6 +212,9 @@ class SettingsStore(private val context: Context) {
             readingParagraphSpacing = prefs[readingParagraphSpacingKey]
                 ?.let { runCatching { ParagraphSpacingOption.valueOf(it) }.getOrNull() }
                 ?: ParagraphSpacingOption.MEDIUM,
+            readingTextAlign = prefs[readingTextAlignKey]
+                ?.let { runCatching { ReaderTextAlignOption.valueOf(it) }.getOrNull() }
+                ?: ReaderTextAlignOption.LEFT,
             visualThemePreference = parseVisualThemePreference(prefs[visualThemePreferenceKey]),
             visualDensityPreference = parseVisualDensityPreference(prefs[visualDensityPreferenceKey]),
             accentSchemePreference = parseAccentSchemePreference(prefs[accentSchemePreferenceKey]),
@@ -373,6 +379,12 @@ class SettingsStore(private val context: Context) {
             prefs[readingLineHeightPercentKey] = readingLineHeightPercent
             prefs[readingMaxWidthDpKey] = readingMaxWidthDp
             prefs[readingParagraphSpacingKey] = readingParagraphSpacing.name
+        }
+    }
+
+    suspend fun saveReadingTextAlign(readingTextAlign: ReaderTextAlignOption) {
+        context.dataStore.edit { prefs ->
+            prefs[readingTextAlignKey] = readingTextAlign.name
         }
     }
 

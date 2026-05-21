@@ -40,12 +40,16 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.AlertDialog
@@ -54,6 +58,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
@@ -123,11 +128,16 @@ import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.LocusContentMode
+import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.ProblemReportCategory
+import com.mimeo.android.model.ReaderAppearanceDefaults
+import com.mimeo.android.model.ReaderAppearanceState
+import com.mimeo.android.model.ReaderFontOption
+import com.mimeo.android.model.ReaderTextAlignOption
 import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.model.absoluteCharOffset
 import com.mimeo.android.model.calculateCanonicalPercent
@@ -155,6 +165,7 @@ import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
 import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
 import com.mimeo.android.ui.theme.LocalMimeoV1Active
+import com.mimeo.android.ui.theme.toFontFamily
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -2092,6 +2103,7 @@ fun PlayerScreen(
                                     readingFontOption = settings.readingFontOption,
                                     readingLineHeightPercent = settings.readingLineHeightPercent,
                                     readingMaxWidthDp = settings.readingMaxWidthDp,
+                                    readingTextAlign = settings.readingTextAlign,
                                     paragraphSpacing = settings.readingParagraphSpacing,
                                     selectionResetSignal = readerSelectionResetSignal,
                                     scrollState = readerScrollState,
@@ -2133,8 +2145,15 @@ fun PlayerScreen(
                                     titleDomain = capturePresentation.sourceLabel,
                                     titleSourceUrl = capturePresentation.sourceUrl,
                                     continuousMarquee = settings.continuousNowPlayingMarquee,
-                                    playbackSpeed = settings.playbackSpeed,
-                                    speedPresets = settings.playbackSpeedPresets,
+                                    readerAppearance = ReaderAppearanceState(
+                                        fontSizeSp = settings.readingFontSizeSp,
+                                        fontOption = settings.readingFontOption,
+                                        lineHeightPercent = settings.readingLineHeightPercent,
+                                        maxWidthDp = settings.readingMaxWidthDp,
+                                        paragraphSpacing = settings.readingParagraphSpacing,
+                                        textAlign = settings.readingTextAlign,
+                                    ),
+                                    onReaderAppearanceChange = { vm.saveReaderAppearance(it) },
                                     overflowExpanded = overflowExpanded,
                                     showTopBar = !actionBarHiddenByMode || locusSearchActive,
                                     canMarkDone = displayPayload != null,
@@ -2200,7 +2219,6 @@ fun PlayerScreen(
                                             }
                                         }
                                     },
-                                    onSpeedChange = { speed -> vm.savePlaybackSpeed(speed) },
                                     searchActive = locusSearchActive,
                                     searchQuery = locusSearchQuery,
                                     searchSummary = locusSearchSummary,
@@ -2522,8 +2540,8 @@ private fun ExpandedPlayerTopBar(
     titleDomain: String?,
     titleSourceUrl: String?,
     continuousMarquee: Boolean,
-    playbackSpeed: Float,
-    speedPresets: List<Float>,
+    readerAppearance: ReaderAppearanceState,
+    onReaderAppearanceChange: (ReaderAppearanceState) -> Unit,
     overflowExpanded: Boolean,
     showTopBar: Boolean = true,
     canMarkDone: Boolean,
@@ -2534,7 +2552,6 @@ private fun ExpandedPlayerTopBar(
     isArchived: Boolean,
     onRefresh: () -> Unit,
     onMarkDone: () -> Unit,
-    onSpeedChange: (Float) -> Unit,
     searchActive: Boolean,
     searchQuery: String,
     searchSummary: String?,
@@ -2590,7 +2607,8 @@ private fun ExpandedPlayerTopBar(
                         }
                     },
                 maxLines = if (titleExpanded) 3 else 1,
-                style = if (isV1) mTypography.title else MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                style = (if (isV1) mTypography.title else MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
+                    .copy(fontFamily = readerAppearance.fontOption.toFontFamily()),
                 color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
             )
             if (!titleDomain.isNullOrBlank()) {
@@ -2668,11 +2686,10 @@ private fun ExpandedPlayerTopBar(
                             )
                         }
                     }
-                    ActionHintTooltip(label = "Speed") {
-                        SpeedControlButton(
-                            speed = playbackSpeed,
-                            onSpeedChange = onSpeedChange,
-                            speedPresets = speedPresets,
+                    ActionHintTooltip(label = "Reading appearance") {
+                        ReaderAppearanceButton(
+                            appearance = readerAppearance,
+                            onAppearanceChange = onReaderAppearanceChange,
                         )
                     }
                     ActionHintTooltip(label = if (isFavorited) "Unfavourite" else "Favourite") {
@@ -2680,14 +2697,15 @@ private fun ExpandedPlayerTopBar(
                             checked = isFavorited,
                             onCheckedChange = { onToggleFavorite() },
                         ) {
-                            Text(
-                                text = if (isFavorited) "\u2665" else "\u2661",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = if (isFavorited) {
+                            Icon(
+                                imageVector = if (isFavorited) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                                contentDescription = if (isFavorited) "Unfavourite" else "Favourite",
+                                tint = if (isFavorited) {
                                     if (isV1) mColors.accent else MaterialTheme.colorScheme.primary
                                 } else {
                                     if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant
                                 },
+                                modifier = Modifier.size(22.dp),
                             )
                         }
                     }
@@ -2808,6 +2826,159 @@ private fun ActionHintTooltip(
     ) {
         content()
     }
+}
+
+@Composable
+private fun ReaderAppearanceButton(
+    appearance: ReaderAppearanceState,
+    onAppearanceChange: (ReaderAppearanceState) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(
+            onClick = { expanded = !expanded },
+            modifier = Modifier.semantics { contentDescription = "Reading appearance" },
+        ) {
+            Text(
+                text = "Aa",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.requiredWidth(300.dp),
+        ) {
+            ReaderAppearancePanel(
+                appearance = appearance,
+                onAppearanceChange = onAppearanceChange,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReaderAppearancePanel(
+    appearance: ReaderAppearanceState,
+    onAppearanceChange: (ReaderAppearanceState) -> Unit,
+) {
+    var draft by remember { mutableStateOf(appearance) }
+    fun update(next: ReaderAppearanceState) {
+        draft = next
+        onAppearanceChange(next)
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = "Reading appearance",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            TextButton(
+                onClick = { update(ReaderAppearanceState.DEFAULTS) },
+                enabled = !draft.isDefault(),
+            ) {
+                Text("Reset")
+            }
+        }
+
+        ReaderAppearanceFieldLabel("Font")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ReaderFontOption.entries.forEach { option ->
+                FilterChip(
+                    selected = draft.fontOption == option,
+                    onClick = { update(draft.copy(fontOption = option)) },
+                    label = { Text(readerFontOptionLabel(option)) },
+                )
+            }
+        }
+
+        ReaderAppearanceFieldLabel("Text size: ${draft.fontSizeSp}sp")
+        Slider(
+            value = draft.fontSizeSp.toFloat(),
+            onValueChange = { update(draft.copy(fontSizeSp = it.toInt())) },
+            valueRange = ReaderAppearanceDefaults.FONT_SIZE_MIN_SP.toFloat()..
+                ReaderAppearanceDefaults.FONT_SIZE_MAX_SP.toFloat(),
+            steps = ReaderAppearanceDefaults.FONT_SIZE_MAX_SP -
+                ReaderAppearanceDefaults.FONT_SIZE_MIN_SP - 1,
+        )
+
+        ReaderAppearanceFieldLabel("Line spacing: ${draft.lineHeightPercent}%")
+        Slider(
+            value = draft.lineHeightPercent.toFloat(),
+            onValueChange = { update(draft.copy(lineHeightPercent = it.toInt())) },
+            valueRange = ReaderAppearanceDefaults.LINE_HEIGHT_MIN_PERCENT.toFloat()..
+                ReaderAppearanceDefaults.LINE_HEIGHT_MAX_PERCENT.toFloat(),
+            steps = 5,
+        )
+
+        ReaderAppearanceFieldLabel("Paragraph spacing")
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ParagraphSpacingOption.entries.forEach { option ->
+                FilterChip(
+                    selected = draft.paragraphSpacing == option,
+                    onClick = { update(draft.copy(paragraphSpacing = option)) },
+                    label = { Text(paragraphSpacingLabel(option)) },
+                )
+            }
+        }
+
+        ReaderAppearanceFieldLabel("Content width: ${draft.maxWidthDp}dp")
+        Slider(
+            value = draft.maxWidthDp.toFloat(),
+            onValueChange = { update(draft.copy(maxWidthDp = it.toInt())) },
+            valueRange = ReaderAppearanceDefaults.MAX_WIDTH_MIN_DP.toFloat()..
+                ReaderAppearanceDefaults.MAX_WIDTH_MAX_DP.toFloat(),
+            steps = 16,
+        )
+
+        ReaderAppearanceFieldLabel("Alignment")
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ReaderTextAlignOption.entries.forEach { option ->
+                FilterChip(
+                    selected = draft.textAlign == option,
+                    onClick = { update(draft.copy(textAlign = option)) },
+                    label = { Text(readerTextAlignLabel(option)) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReaderAppearanceFieldLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+private fun readerFontOptionLabel(option: ReaderFontOption): String = when (option) {
+    ReaderFontOption.LITERATA -> "Literata"
+    ReaderFontOption.SERIF -> "Serif"
+    ReaderFontOption.SANS_SERIF -> "Sans"
+    ReaderFontOption.MONOSPACE -> "Mono"
+}
+
+private fun paragraphSpacingLabel(option: ParagraphSpacingOption): String = when (option) {
+    ParagraphSpacingOption.SMALL -> "Small"
+    ParagraphSpacingOption.MEDIUM -> "Medium"
+    ParagraphSpacingOption.LARGE -> "Large"
+}
+
+private fun readerTextAlignLabel(option: ReaderTextAlignOption): String = when (option) {
+    ReaderTextAlignOption.LEFT -> "Left"
+    ReaderTextAlignOption.JUSTIFIED -> "Justified"
 }
 
 @Composable
