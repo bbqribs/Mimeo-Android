@@ -2875,9 +2875,9 @@ private fun ReaderAppearanceButton(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            // Nudge the panel down so its top edge clears the title/action bar,
-            // keeping the article visible below as appearance controls change.
-            offset = DpOffset(0.dp, 8.dp),
+            // Lift the panel by ~the action bar height so its top edge sits just
+            // below the title bar (~2dp gap), maximizing the article visible below.
+            offset = DpOffset(0.dp, (-46).dp),
             modifier = Modifier.requiredWidth(300.dp),
         ) {
             ReaderAppearancePanel(
@@ -2898,9 +2898,9 @@ private fun ReaderAppearancePanel(
         draft = next
         onAppearanceChange(next)
     }
-    // Cap the panel to roughly half the screen and scroll the overflow, so the
+    // Cap the panel to ~40% of the screen and scroll the overflow, so the
     // article stays visible below and changes are visible as controls move.
-    val maxPanelHeight = (LocalConfiguration.current.screenHeightDp / 2).dp
+    val maxPanelHeight = (LocalConfiguration.current.screenHeightDp * 2 / 5).dp
     Column(
         modifier = Modifier
             .fillMaxWidth()
