@@ -53,7 +53,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
@@ -329,7 +328,7 @@ fun ReaderBody(
     }
     val readingTextStyle = MaterialTheme.typography.bodyMedium.merge(
         TextStyle(
-            fontFamily = if (isV1) FontFamily.Serif else readingFontOption.toFontFamily(),
+            fontFamily = readingFontOption.toFontFamily(),
             fontSize = readingFontSizeSp.sp,
             lineHeight = (readingFontSizeSp * (readingLineHeightPercent / 100f)).sp,
             color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
