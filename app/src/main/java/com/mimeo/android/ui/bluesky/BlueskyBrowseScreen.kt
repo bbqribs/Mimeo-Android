@@ -285,7 +285,7 @@ private fun SourcePicker(
             ) {
                 Column(
                     modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     if (!error.isNullOrBlank()) {
                         Text(
@@ -296,16 +296,20 @@ private fun SourcePicker(
                     }
                     val connected = picker?.connection?.connected == true
                     val connectedHandle = picker?.connection?.handle ?: "Bluesky"
-                    Text(
-                        text = sourcePickerConnectionCopy(
-                            picker = picker,
-                            pickerError = error,
-                            connected = connected,
-                            connectedHandle = connectedHandle,
-                        ),
-                        style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
-                        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    // Only surface the connection line when it carries error/status
+                    // signal; a healthy connected account stays implicit to cut bulk.
+                    if (!connected) {
+                        Text(
+                            text = sourcePickerConnectionCopy(
+                                picker = picker,
+                                pickerError = error,
+                                connected = connected,
+                                connectedHandle = connectedHandle,
+                            ),
+                            style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
 
                     if (pinnedOptions.isNotEmpty()) {
                         FlowRow(
@@ -326,9 +330,12 @@ private fun SourcePicker(
                                     },
                                     enabled = !loading,
                                     colors = if (isV1) FilterChipDefaults.filterChipColors(
+                                        labelColor = mColors.fg3,
                                         selectedContainerColor = mColors.accentDim,
                                         selectedLabelColor = mColors.accent,
-                                    ) else FilterChipDefaults.filterChipColors(),
+                                    ) else FilterChipDefaults.filterChipColors(
+                                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    ),
                                 )
                             }
                         }
