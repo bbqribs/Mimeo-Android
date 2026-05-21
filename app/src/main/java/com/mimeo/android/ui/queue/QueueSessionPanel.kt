@@ -366,6 +366,12 @@ internal fun NowPlayingSessionPanel(
         ?: session.currentIndex.coerceIn(0, (localItems.size - 1).coerceAtLeast(0))
     val activeItem = localItems.getOrNull(currentIndex)
     val historyItems = session.historyItems
+    // Session history is stored most-recent-first (each newly passed item is
+    // prepended). Display it oldest-first so the section reads chronologically:
+    // first item added to History at the top, most recent at the bottom.
+    val historyItemsForDisplay = historyItems.asReversed()
+    // Earlier-in-queue items already sit in play order (oldest at the top,
+    // most recently passed nearest Now Playing), so they need no reordering.
     val earlierItems = localItems.take(currentIndex)
     val hasRowsBeforeActive = historyItems.isNotEmpty() || earlierItems.isNotEmpty()
     val upcomingStartIndex = (currentIndex + 1).coerceIn(0, localItems.size)
@@ -518,7 +524,7 @@ internal fun NowPlayingSessionPanel(
                                 historyHeaderHeightPx = size.height.toFloat()
                             },
                         )
-                        historyItems.forEachIndexed { index, item ->
+                        historyItemsForDisplay.forEachIndexed { index, item ->
                             SessionStaticItemRow(
                                 item = item,
                                 onOpenItem = onOpenItem,
@@ -528,7 +534,7 @@ internal fun NowPlayingSessionPanel(
                                 onBinItem = onBinSessionHistoryItem,
                                 showArchivedIndicator = item.itemId in archivedHistoryItemIds,
                             )
-                            if (index < historyItems.lastIndex) {
+                            if (index < historyItemsForDisplay.lastIndex) {
                                 RowDivider()
                             }
                         }

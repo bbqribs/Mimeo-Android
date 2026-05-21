@@ -4012,7 +4012,7 @@ private fun PlayerControlBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 2.dp, vertical = 2.dp)
+                    .padding(horizontal = 2.dp, vertical = 6.dp)
                     .clickable(onClick = onOpenLocusForItem),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -4177,8 +4177,9 @@ private fun PlayerControlBar(
                             id = if (isPlaying) R.drawable.msr_pause_24 else R.drawable.msr_play_arrow_24,
                         ),
                         contentDescription = if (isPlaying) "Pause playback" else "Play",
+                        tint = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
                         modifier = Modifier
-                            .size(if (!minimal && showSpeedPill) 30.dp else 32.dp)
+                            .size(if (!minimal && showSpeedPill) 36.dp else 40.dp)
                             .then(
                                 if (isPlaying) {
                                     Modifier
