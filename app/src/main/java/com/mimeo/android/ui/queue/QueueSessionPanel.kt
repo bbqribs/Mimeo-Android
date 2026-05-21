@@ -620,7 +620,7 @@ internal fun NowPlayingSessionPanel(
                                     style = if (isV1) mTypography.row else MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
                                     color = if (isV1) mColors.fg else MaterialTheme.colorScheme.primary,
-                                    maxLines = 2,
+                                    maxLines = densityTokens.itemRowTitleMaxLines,
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 if (sourceLabel != null) {
