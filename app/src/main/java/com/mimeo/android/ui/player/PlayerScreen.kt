@@ -12,6 +12,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -102,6 +104,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalTextToolbar
@@ -119,6 +122,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -2871,6 +2875,9 @@ private fun ReaderAppearanceButton(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
+            // Nudge the panel down so its top edge clears the title/action bar,
+            // keeping the article visible below as appearance controls change.
+            offset = DpOffset(0.dp, 8.dp),
             modifier = Modifier.requiredWidth(300.dp),
         ) {
             ReaderAppearancePanel(
@@ -2891,9 +2898,14 @@ private fun ReaderAppearancePanel(
         draft = next
         onAppearanceChange(next)
     }
+    // Cap the panel to roughly half the screen and scroll the overflow, so the
+    // article stays visible below and changes are visible as controls move.
+    val maxPanelHeight = (LocalConfiguration.current.screenHeightDp / 2).dp
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(max = maxPanelHeight)
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
