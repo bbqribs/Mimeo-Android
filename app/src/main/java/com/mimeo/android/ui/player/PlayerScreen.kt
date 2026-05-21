@@ -165,6 +165,7 @@ import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
 import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
 import com.mimeo.android.ui.theme.LocalMimeoV1Active
+import com.mimeo.android.ui.theme.toFontFamily
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -2606,7 +2607,8 @@ private fun ExpandedPlayerTopBar(
                         }
                     },
                 maxLines = if (titleExpanded) 3 else 1,
-                style = if (isV1) mTypography.title else MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                style = (if (isV1) mTypography.title else MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
+                    .copy(fontFamily = readerAppearance.fontOption.toFontFamily()),
                 color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
             )
             if (!titleDomain.isNullOrBlank()) {
