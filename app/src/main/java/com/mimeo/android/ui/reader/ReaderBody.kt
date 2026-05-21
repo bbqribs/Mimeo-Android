@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.ClickableText
@@ -49,7 +48,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
@@ -104,11 +102,6 @@ fun ReaderBody(
     val context = LocalContext.current
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
-    val paragraphSpacingDp = when (paragraphSpacing) {
-        ParagraphSpacingOption.SMALL -> 12.dp
-        ParagraphSpacingOption.MEDIUM -> 18.dp
-        ParagraphSpacingOption.LARGE -> 24.dp
-    }
     val safeChunkIndex = currentChunkIndex.coerceIn(0, (chunks.lastIndex).coerceAtLeast(0))
     val highlightBg = if (isV1) mColors.accent.copy(alpha = 0.24f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
     val searchHighlightBg = if (isV1) mColors.accentDim else MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
@@ -425,152 +418,6 @@ fun ReaderBody(
                             }
                         },
                     )
-                } else if (chunks.isNotEmpty()) {
-                    Column(
-                        modifier = Modifier
-                            .widthIn(max = readingMaxWidthDp.dp)
-                            .fillMaxWidth(),
-                    ) {
-                        chunks.forEachIndexed { index, chunk ->
-                            val isHighlighted = index == safeChunkIndex
-                            val isSearchFocused = searchFocusChunkIndex == index
-                            val passiveSearchRanges = searchHighlightRangesByChunk[index].orEmpty()
-                            val effectiveHighlightRange = if (isHighlighted) {
-                                resolveReaderHighlightRange(
-                                    textLength = chunk.text.length,
-                                    activeRange = activeRangeInChunk,
-                                    sentenceRange = highlightedSentenceRange,
-                                )
-                            } else {
-                                null
-                            }
-                            val effectiveSearchRange = if (isSearchFocused) {
-                                resolveReaderHighlightRange(
-                                    textLength = chunk.text.length,
-                                    activeRange = searchFocusRangeInChunk,
-                                    sentenceRange = null,
-                                )
-                            } else {
-                                null
-                            }
-                            val chunkText = buildAnnotatedString {
-                                append(chunk.text)
-                                extractReaderHttpLinks(chunk.text).forEach { link ->
-                                    val start = link.start.coerceIn(0, chunk.text.length)
-                                    val endExclusive = link.endExclusive.coerceIn(start, chunk.text.length)
-                                    if (start < endExclusive) {
-                                        addStringAnnotation(
-                                            tag = URL_ANNOTATION_TAG,
-                                            annotation = link.url,
-                                            start = start,
-                                            end = endExclusive,
-                                        )
-                                        addStyle(
-                                            style = SpanStyle(
-                                                color = READER_LINK_BLUE,
-                                                textDecoration = TextDecoration.Underline,
-                                            ),
-                                            start = start,
-                                            end = endExclusive,
-                                        )
-                                    }
-                                }
-                                passiveSearchRanges.forEach { range ->
-                                    val start = range.first.coerceIn(0, chunk.text.length)
-                                    val endExclusive = (range.last + 1).coerceIn(start, chunk.text.length)
-                                    if (start < endExclusive) {
-                                        addStyle(
-                                            style = SpanStyle(
-                                                background = searchHighlightBg,
-                                            ),
-                                            start = start,
-                                            end = endExclusive,
-                                        )
-                                    }
-                                }
-                                if (effectiveHighlightRange != null) {
-                                    addStyle(
-                                        style = SpanStyle(
-                                            background = highlightBg,
-                                        ),
-                                        start = effectiveHighlightRange.first,
-                                        end = (effectiveHighlightRange.last + 1).coerceAtMost(chunk.text.length),
-                                    )
-                                }
-                                if (effectiveSearchRange != null) {
-                                    addStyle(
-                                        style = SpanStyle(
-                                            background = searchActiveHighlightBg,
-                                        ),
-                                        start = effectiveSearchRange.first,
-                                        end = (effectiveSearchRange.last + 1).coerceAtMost(chunk.text.length),
-                                    )
-                                }
-                            }
-                            ClickableText(
-                                text = chunkText,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .let { base ->
-                                        if (isHighlighted || isSearchFocused) {
-                                            base.onGloballyPositioned { coordinates ->
-                                                if (isHighlighted) {
-                                                    activeChunkTopInRootPx = coordinates.positionInRoot().y
-                                                }
-                                                if (isSearchFocused) {
-                                                    searchChunkTopInRootPx = coordinates.positionInRoot().y
-                                                }
-                                            }
-                                        } else {
-                                            base
-                                        }
-                                    }
-                                    .background(
-                                        color = Color.Black,
-                                        shape = MaterialTheme.shapes.medium,
-                                    )
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                style = readingTextStyle,
-                                onTextLayout = { layout ->
-                                    if (isHighlighted) {
-                                        activeTextLayout = layout
-                                    }
-                                    if (isSearchFocused) {
-                                        searchTextLayout = layout
-                                    }
-                                },
-                                onClick = { offset ->
-                                    val url = chunkText.getStringAnnotations(
-                                        tag = URL_ANNOTATION_TAG,
-                                        start = offset,
-                                        end = offset,
-                                    ).firstOrNull()?.item
-                                    if (!url.isNullOrBlank()) {
-                                        val opened = try {
-                                            val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                            context.startActivity(viewIntent)
-                                            true
-                                        } catch (_: ActivityNotFoundException) {
-                                            false
-                                        } catch (_: SecurityException) {
-                                            false
-                                        } catch (_: IllegalArgumentException) {
-                                            false
-                                        }
-                                        if (!opened) {
-                                            onNonLinkTap?.invoke()
-                                        }
-                                    } else {
-                                        onNonLinkTap?.invoke()
-                                    }
-                                },
-                            )
-                            if (index < chunks.lastIndex) {
-                                ParagraphSpacer(height = paragraphSpacingDp)
-                            }
-                        }
-                    }
                 } else {
                     if (showEmptyPlaceholder) {
                         Text(
@@ -870,11 +717,6 @@ fun ReaderBody(
         lastAnchorRange = anchor
         lastAnchorWasFullyVisible = true
     }
-}
-
-@Composable
-private fun ParagraphSpacer(height: Dp) {
-    Spacer(modifier = Modifier.height(height))
 }
 
 internal fun mapChunkRangeToFullText(
