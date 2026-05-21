@@ -160,6 +160,7 @@ import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import com.mimeo.android.ui.reader.ReaderBody
 import com.mimeo.android.ui.reader.extractReaderPreservedLinks
+import com.mimeo.android.ui.reader.readerChunkSeparator
 import com.mimeo.android.ui.reader.segmentSentences
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
@@ -1502,9 +1503,11 @@ fun PlayerScreen(
         previewModeActive -> emptyList()
         else -> chunks
     }
-    val displayReaderText = remember(displayPayload?.text, displayChunks) {
+    val displayReaderText = remember(displayPayload?.text, displayChunks, settings.readingParagraphSpacing) {
         if (displayChunks.isNotEmpty()) {
-            displayChunks.joinToString(separator = "\n\n") { it.text }
+            displayChunks.joinToString(
+                separator = readerChunkSeparator(settings.readingParagraphSpacing),
+            ) { it.text }
         } else {
             displayPayload?.text.orEmpty()
         }
