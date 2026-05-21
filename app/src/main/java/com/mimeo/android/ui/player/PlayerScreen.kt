@@ -155,6 +155,7 @@ import com.mimeo.android.player.TtsController
 import com.mimeo.android.ui.common.locusCapturePresentation
 import com.mimeo.android.ui.common.copyItemText
 import com.mimeo.android.ui.common.openItemInBrowser
+import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.shareItemText
 import com.mimeo.android.ui.common.shareItemUrl
 import com.mimeo.android.ui.common.shareSelectedText
@@ -2901,11 +2902,16 @@ private fun ReaderAppearancePanel(
     // Cap the panel to ~40% of the screen and scroll the overflow, so the
     // article stays visible below and changes are visible as controls move.
     val maxPanelHeight = (LocalConfiguration.current.screenHeightDp * 2 / 5).dp
+    val panelScrollState = rememberScrollState()
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(max = maxPanelHeight)
-            .verticalScroll(rememberScrollState())
+            .passiveVerticalScrollIndicator(
+                scrollState = panelScrollState,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            )
+            .verticalScroll(panelScrollState)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
