@@ -171,18 +171,19 @@ fun ReaderBody(
             ) ?: if (chunk.text.isNotEmpty()) SentenceRange(0, chunk.text.length) else null
         }
     }
-    val effectiveFullText = remember(fullText, chunks) {
+    val chunkSeparator = readerChunkSeparator(paragraphSpacing)
+    val effectiveFullText = remember(fullText, chunks, chunkSeparator) {
         if (chunks.isNotEmpty()) {
-            chunks.joinToString(separator = "\n\n") { it.text }
+            chunks.joinToString(separator = chunkSeparator) { it.text }
         } else {
             fullText.orEmpty()
         }
     }
-    val fullTextChunkStartOffsets = remember(useFullTextLayout, chunks, effectiveFullText) {
+    val fullTextChunkStartOffsets = remember(useFullTextLayout, chunks, effectiveFullText, chunkSeparator) {
         if (!useFullTextLayout || effectiveFullText.isBlank() || chunks.isEmpty()) {
             emptyList()
         } else {
-            buildChunkStartOffsetsForJoinedText(chunks)
+            buildChunkStartOffsetsForJoinedText(chunks, chunkSeparator.length)
         }
     }
     val fullTextHighlightRange = remember(
@@ -899,7 +900,22 @@ internal fun mapChunkRangeToFullText(
     return if (start < endExclusive) start until endExclusive else null
 }
 
-internal fun buildChunkStartOffsetsForJoinedText(chunks: List<PlaybackChunk>): List<Int> {
+/**
+ * Inter-chunk separator for the joined full-text reader layout. The newline
+ * count tracks the reader's paragraph-spacing preference so the rendered gap
+ * between chunks is visibly tighter or looser. Character offsets stay in sync
+ * because [buildChunkStartOffsetsForJoinedText] is given the same length.
+ */
+internal fun readerChunkSeparator(spacing: ParagraphSpacingOption): String = when (spacing) {
+    ParagraphSpacingOption.SMALL -> "\n"
+    ParagraphSpacingOption.MEDIUM -> "\n\n"
+    ParagraphSpacingOption.LARGE -> "\n\n\n"
+}
+
+internal fun buildChunkStartOffsetsForJoinedText(
+    chunks: List<PlaybackChunk>,
+    separatorLength: Int = 2,
+): List<Int> {
     if (chunks.isEmpty()) return emptyList()
     var cursor = 0
     return buildList(chunks.size) {
@@ -907,7 +923,7 @@ internal fun buildChunkStartOffsetsForJoinedText(chunks: List<PlaybackChunk>): L
             add(cursor)
             cursor += chunk.text.length
             if (index < chunks.lastIndex) {
-                cursor += 2 // "\n\n" separator used by joined full-text layout
+                cursor += separatorLength.coerceAtLeast(0)
             }
         }
     }

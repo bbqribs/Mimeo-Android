@@ -1,5 +1,6 @@
 package com.mimeo.android.ui.reader
 
+import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -18,6 +19,40 @@ class ReaderFullTextRangeMappingTest {
         val starts = buildChunkStartOffsetsForJoinedText(chunks)
 
         assertEquals(listOf(0, 7, 13), starts)
+    }
+
+    @Test
+    fun readerChunkSeparatorTracksParagraphSpacing() {
+        assertEquals("\n", readerChunkSeparator(ParagraphSpacingOption.SMALL))
+        assertEquals("\n\n", readerChunkSeparator(ParagraphSpacingOption.MEDIUM))
+        assertEquals("\n\n\n", readerChunkSeparator(ParagraphSpacingOption.LARGE))
+    }
+
+    @Test
+    fun joinedChunkStartOffsetsHonorSeparatorLength() {
+        val chunks = listOf(
+            PlaybackChunk(index = 0, text = "Alpha", startChar = 0, endChar = 5),
+            PlaybackChunk(index = 1, text = "Beta", startChar = 5, endChar = 9),
+            PlaybackChunk(index = 2, text = "Gamma", startChar = 9, endChar = 14),
+        )
+
+        assertEquals(listOf(0, 6, 11), buildChunkStartOffsetsForJoinedText(chunks, separatorLength = 1))
+        assertEquals(listOf(0, 8, 15), buildChunkStartOffsetsForJoinedText(chunks, separatorLength = 3))
+    }
+
+    @Test
+    fun joinedOffsetsStayConsistentWithEachParagraphSpacingSeparator() {
+        val chunks = listOf(
+            PlaybackChunk(index = 0, text = "first", startChar = 0, endChar = 5),
+            PlaybackChunk(index = 1, text = "second", startChar = 5, endChar = 11),
+        )
+        ParagraphSpacingOption.entries.forEach { spacing ->
+            val separator = readerChunkSeparator(spacing)
+            val joined = chunks.joinToString(separator = separator) { it.text }
+            val starts = buildChunkStartOffsetsForJoinedText(chunks, separator.length)
+            // The computed start of the second chunk must index its real position in the joined text.
+            assertEquals(chunks[1].text, joined.substring(starts[1], starts[1] + chunks[1].text.length))
+        }
     }
 
     @Test
