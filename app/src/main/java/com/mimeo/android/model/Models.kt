@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlin.math.roundToInt
 
 enum class ParagraphSpacingOption {
     SMALL,
@@ -472,6 +473,7 @@ data class AppSettings(
     val autoDownloadSavedArticles: Boolean = true,
     val autoCacheFavoritedItems: Boolean = true,
     val playbackSpeed: Float = 1.0f,
+    val playbackSpeedPresets: List<Float> = DEFAULT_PLAYBACK_SPEED_PRESETS,
     val selectedPlaylistId: Int? = null,
     val defaultSavePlaylistId: Int? = null,
     val readingFontSizeSp: Int = 16,
@@ -489,6 +491,71 @@ data class AppSettings(
     val playerChevronEdgeOffset: Float = 0.5f,
     val drawerPanelSide: DrawerPanelSide = DrawerPanelSide.LEFT,
 )
+
+/** Default playback speed quick-tap presets shown in the player speed panel. */
+val DEFAULT_PLAYBACK_SPEED_PRESETS: List<Float> = listOf(1.0f, 1.25f, 1.4f, 1.75f, 2.0f)
+
+/** Inclusive bounds for a single playback speed preset. */
+const val PLAYBACK_SPEED_PRESET_MIN: Float = 0.5f
+const val PLAYBACK_SPEED_PRESET_MAX: Float = 4.0f
+private val PLAYBACK_SPEED_PRESET_MIN_HUNDREDTHS = (PLAYBACK_SPEED_PRESET_MIN * 100f).roundToInt()
+private val PLAYBACK_SPEED_PRESET_MAX_HUNDREDTHS = (PLAYBACK_SPEED_PRESET_MAX * 100f).roundToInt()
+
+/** Number of playback speed preset slots — one editable box per preset in Settings. */
+const val MAX_PLAYBACK_SPEED_PRESETS = 5
+
+/**
+ * Normalize candidate speeds into a valid preset list: drop non-finite and
+ * out-of-range values, round to 0.01x, de-duplicate, sort ascending, and cap the
+ * count. May return an empty list when no input value is valid.
+ */
+fun sanitizePlaybackSpeedPresets(values: List<Float>): List<Float> =
+    values
+        .filter { it.isFinite() }
+        .map { (it * 100f).roundToInt() }
+        .filter { it in PLAYBACK_SPEED_PRESET_MIN_HUNDREDTHS..PLAYBACK_SPEED_PRESET_MAX_HUNDREDTHS }
+        .distinct()
+        .sorted()
+        .take(MAX_PLAYBACK_SPEED_PRESETS)
+        .map { it / 100f }
+
+/**
+ * Parse a stored or user-entered comma-separated speed list. Falls back to
+ * [DEFAULT_PLAYBACK_SPEED_PRESETS] when the input is blank or yields no valid
+ * value, so a corrupt stored value can never produce an empty player panel.
+ */
+fun parsePlaybackSpeedPresets(raw: String?): List<Float> {
+    if (raw.isNullOrBlank()) return DEFAULT_PLAYBACK_SPEED_PRESETS
+    val parsed = raw.split(',').mapNotNull { it.trim().toFloatOrNull() }
+    return sanitizePlaybackSpeedPresets(parsed).ifEmpty { DEFAULT_PLAYBACK_SPEED_PRESETS }
+}
+
+/**
+ * True when [text] is a blank slot or a finite number within the valid preset
+ * bounds. Used for per-box validation in the Settings speed-preset editor.
+ */
+fun isPlaybackSpeedPresetEntryValid(text: String): Boolean {
+    val trimmed = text.trim()
+    if (trimmed.isEmpty()) return true
+    val value = trimmed.toFloatOrNull() ?: return false
+    return value.isFinite() && value in PLAYBACK_SPEED_PRESET_MIN..PLAYBACK_SPEED_PRESET_MAX
+}
+
+/** Format a preset list as a compact comma-separated string, e.g. "1, 1.25, 1.4". */
+fun formatPlaybackSpeedPresets(values: List<Float>): String =
+    values.joinToString(", ") { formatPlaybackSpeedPresetValue(it) }
+
+/** Format a single preset speed, trimming trailing zeros (1.0 -> "1", 1.40 -> "1.4"). */
+fun formatPlaybackSpeedPresetValue(value: Float): String {
+    val hundredths = (value * 100f).roundToInt()
+    val whole = hundredths / 100
+    val frac = hundredths % 100
+    return when {
+        frac == 0 -> whole.toString()
+        frac % 10 == 0 -> "$whole.${frac / 10}"
+        else -> "$whole.${frac.toString().padStart(2, '0')}"
+    }
+}
 
 @Serializable
 data class DebugPythonResponse(

@@ -75,12 +75,19 @@ import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
+import com.mimeo.android.model.DEFAULT_PLAYBACK_SPEED_PRESETS
 import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
 import com.mimeo.android.model.DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL
 import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.ParagraphSpacingOption
+import com.mimeo.android.model.MAX_PLAYBACK_SPEED_PRESETS
+import com.mimeo.android.model.PLAYBACK_SPEED_PRESET_MAX
+import com.mimeo.android.model.PLAYBACK_SPEED_PRESET_MIN
 import com.mimeo.android.model.PendingManualSaveItem
+import com.mimeo.android.model.formatPlaybackSpeedPresetValue
+import com.mimeo.android.model.isPlaybackSpeedPresetEntryValid
+import com.mimeo.android.model.sanitizePlaybackSpeedPresets
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.VisualDensityPreference
@@ -237,6 +244,13 @@ fun SettingsScreen(
     var showAccentSchemeMenu by remember { mutableStateOf(false) }
     var ttsVoiceName by remember(settings.ttsVoiceName) {
         mutableStateOf(settings.ttsVoiceName)
+    }
+    var speedPresetBoxes by remember(settings.playbackSpeedPresets) {
+        mutableStateOf(
+            (settings.playbackSpeedPresets.map { formatPlaybackSpeedPresetValue(it) } +
+                List(MAX_PLAYBACK_SPEED_PRESETS) { "" })
+                .take(MAX_PLAYBACK_SPEED_PRESETS),
+        )
     }
     var ttsEngineReady by remember { mutableStateOf(false) }
     var ttsVoiceOptions by remember { mutableStateOf<List<TtsVoiceOption>>(emptyList()) }
@@ -1285,6 +1299,90 @@ fun SettingsScreen(
                             vm.saveAutoAdvanceOnCompletion(it)
                         },
                     )
+                }
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    val minLabel = formatPlaybackSpeedPresetValue(PLAYBACK_SPEED_PRESET_MIN)
+                    val maxLabel = formatPlaybackSpeedPresetValue(PLAYBACK_SPEED_PRESET_MAX)
+                    val presetBoxesValid =
+                        speedPresetBoxes.all { isPlaybackSpeedPresetEntryValid(it) }
+                    val presetBoxesAllBlank = speedPresetBoxes.all { it.isBlank() }
+                    // The preset list Apply would persist, compared against the
+                    // operative list so Apply stays disabled with no real change.
+                    val wouldBePresets = sanitizePlaybackSpeedPresets(
+                        speedPresetBoxes.mapNotNull { it.trim().toFloatOrNull() },
+                    ).ifEmpty { DEFAULT_PLAYBACK_SPEED_PRESETS }
+                    val presetBoxesDirty =
+                        wouldBePresets.map { formatPlaybackSpeedPresetValue(it) } !=
+                            settings.playbackSpeedPresets.map { formatPlaybackSpeedPresetValue(it) }
+                    Text("Speed presets")
+                    Text(
+                        text = "One box per quick-tap speed in the player panel. Each box takes " +
+                            "a number from ${minLabel}× to ${maxLabel}×, or leave it blank. " +
+                            "Duplicates are merged and the list is sorted ascending.",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        speedPresetBoxes.forEachIndexed { index, boxValue ->
+                            OutlinedTextField(
+                                value = boxValue,
+                                onValueChange = { entered ->
+                                    speedPresetBoxes = speedPresetBoxes
+                                        .toMutableList()
+                                        .also { it[index] = entered }
+                                },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                isError = !isPlaybackSpeedPresetEntryValid(boxValue),
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Decimal,
+                                ),
+                            )
+                        }
+                    }
+                    Text(
+                        text = when {
+                            !presetBoxesValid ->
+                                "Each box must be empty or a number from ${minLabel}× to ${maxLabel}×."
+                            presetBoxesAllBlank -> "Enter at least one preset speed."
+                            !presetBoxesDirty -> "These speeds are already saved."
+                            else -> "Apply saves these speeds to the player; Reset restores the defaults."
+                        },
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = if (!presetBoxesValid || presetBoxesAllBlank) {
+                            androidx.compose.material3.MaterialTheme.colorScheme.error
+                        } else {
+                            androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Button(
+                            enabled = presetBoxesValid && !presetBoxesAllBlank && presetBoxesDirty,
+                            onClick = {
+                                val values = speedPresetBoxes
+                                    .mapNotNull { it.trim().toFloatOrNull() }
+                                vm.savePlaybackSpeedPresets(values)
+                            },
+                        ) {
+                            Text("Apply")
+                        }
+                        TextButton(
+                            onClick = {
+                                vm.savePlaybackSpeedPresets(DEFAULT_PLAYBACK_SPEED_PRESETS)
+                            },
+                        ) {
+                            Text("Reset to defaults")
+                        }
+                    }
                 }
                 SettingsDescribedRow(
                     title = "Auto-archive at end of article",

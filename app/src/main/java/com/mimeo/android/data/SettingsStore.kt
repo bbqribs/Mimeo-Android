@@ -11,6 +11,10 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectionMode
+import com.mimeo.android.model.DEFAULT_PLAYBACK_SPEED_PRESETS
+import com.mimeo.android.model.formatPlaybackSpeedPresets
+import com.mimeo.android.model.parsePlaybackSpeedPresets
+import com.mimeo.android.model.sanitizePlaybackSpeedPresets
 import com.mimeo.android.model.DEFAULT_LAN_BASE_URL
 import com.mimeo.android.model.DEFAULT_LOCAL_BASE_URL
 import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
@@ -95,6 +99,8 @@ class SettingsStore(private val context: Context) {
         booleanPreferencesKey("auto_cache_favorited_items")
     private val playbackSpeedKey: Preferences.Key<Float> =
         floatPreferencesKey("playback_speed")
+    private val playbackSpeedPresetsKey: Preferences.Key<String> =
+        stringPreferencesKey("playback_speed_presets")
     private val selectedPlaylistIdKey: Preferences.Key<Int> =
         intPreferencesKey("selected_playlist_id")
     private val defaultSavePlaylistIdKey: Preferences.Key<Int> =
@@ -191,6 +197,7 @@ class SettingsStore(private val context: Context) {
             autoDownloadSavedArticles = prefs[autoDownloadSavedArticlesKey] ?: true,
             autoCacheFavoritedItems = prefs[autoCacheFavoritedItemsKey] ?: true,
             playbackSpeed = prefs[playbackSpeedKey] ?: 1.0f,
+            playbackSpeedPresets = parsePlaybackSpeedPresets(prefs[playbackSpeedPresetsKey]),
             selectedPlaylistId = decodeSelectedPlaylistId(prefs[selectedPlaylistIdKey]),
             defaultSavePlaylistId = decodeSelectedPlaylistId(prefs[defaultSavePlaylistIdKey]),
             readingFontSizeSp = prefs[readingFontSizeSpKey] ?: 16,
@@ -396,6 +403,14 @@ class SettingsStore(private val context: Context) {
     suspend fun savePlaybackSpeed(playbackSpeed: Float) {
         context.dataStore.edit { prefs ->
             prefs[playbackSpeedKey] = playbackSpeed
+        }
+    }
+
+    suspend fun savePlaybackSpeedPresets(presets: List<Float>) {
+        val sanitized = sanitizePlaybackSpeedPresets(presets)
+            .ifEmpty { DEFAULT_PLAYBACK_SPEED_PRESETS }
+        context.dataStore.edit { prefs ->
+            prefs[playbackSpeedPresetsKey] = formatPlaybackSpeedPresets(sanitized)
         }
     }
 
