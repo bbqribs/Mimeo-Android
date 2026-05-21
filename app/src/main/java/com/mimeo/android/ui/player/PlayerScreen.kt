@@ -117,6 +117,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -2611,7 +2612,17 @@ private fun ExpandedPlayerTopBar(
                     },
                 maxLines = if (titleExpanded) 3 else 1,
                 style = (if (isV1) mTypography.title else MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
-                    .copy(fontFamily = readerAppearance.fontOption.toFontFamily()),
+                    .copy(
+                        fontFamily = readerAppearance.fontOption.toFontFamily(),
+                        // Pin the title line box so swapping the reader font cannot change the
+                        // title strip height — otherwise the action bar (and the Aa dropdown
+                        // anchored to it) shifts whenever a font is selected.
+                        lineHeightStyle = LineHeightStyle(
+                            alignment = LineHeightStyle.Alignment.Center,
+                            trim = LineHeightStyle.Trim.None,
+                        ),
+                        platformStyle = PlatformTextStyle(includeFontPadding = false),
+                    ),
                 color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
             )
             if (!titleDomain.isNullOrBlank()) {
