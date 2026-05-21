@@ -12,6 +12,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -102,6 +104,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalTextToolbar
@@ -117,7 +120,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -150,6 +155,7 @@ import com.mimeo.android.player.TtsController
 import com.mimeo.android.ui.common.locusCapturePresentation
 import com.mimeo.android.ui.common.copyItemText
 import com.mimeo.android.ui.common.openItemInBrowser
+import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.shareItemText
 import com.mimeo.android.ui.common.shareItemUrl
 import com.mimeo.android.ui.common.shareSelectedText
@@ -179,6 +185,8 @@ private const val DEBUG_PLAYBACK = false
 private const val PROGRESS_SYNC_DEBOUNCE_MS = 2_000L
 private const val PROGRESS_CHAR_STEP = 120
 private const val DONE_PERCENT_THRESHOLD = 98
+/** Fixed title line-height ratio; sits above the tallest reader font (Literata, ~1.485x). */
+private const val READER_TITLE_LINE_HEIGHT_RATIO = 1.55f
 private val CHEVRON_DOCK_HORIZONTAL_PADDING = 4.dp
 private val CHEVRON_DOCK_VERTICAL_OFFSET = (-7).dp
 private val CHEVRON_RESERVED_SPACE = 76.dp
@@ -2573,6 +2581,11 @@ private fun ExpandedPlayerTopBar(
     val mTypography = LocalMimeoTypographyTokens.current
     var titleExpanded by remember(title) { mutableStateOf(false) }
     val rootView = LocalView.current
+    val baseTitleStyle = if (isV1) {
+        mTypography.title
+    } else {
+        MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
+    }
     Column(
         modifier = Modifier.fillMaxWidth().layout { measurable, constraints ->
             val insetPerSide = maxOf(0, (rootView.width - constraints.maxWidth) / 2)
@@ -2610,8 +2623,20 @@ private fun ExpandedPlayerTopBar(
                         }
                     },
                 maxLines = if (titleExpanded) 3 else 1,
-                style = (if (isV1) mTypography.title else MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
-                    .copy(fontFamily = readerAppearance.fontOption.toFontFamily()),
+                style = baseTitleStyle.copy(
+                    fontFamily = readerAppearance.fontOption.toFontFamily(),
+                    // Pin the title line box so swapping the reader font cannot change the
+                    // title strip height — otherwise the action bar (and the Aa dropdown
+                    // anchored to it) shifts whenever a font is selected. The ratio sits above
+                    // the tallest reader font's intrinsic line height (Literata, ~1.485x), so
+                    // every font renders the title at the same fixed line height.
+                    lineHeight = baseTitleStyle.fontSize * READER_TITLE_LINE_HEIGHT_RATIO,
+                    lineHeightStyle = LineHeightStyle(
+                        alignment = LineHeightStyle.Alignment.Center,
+                        trim = LineHeightStyle.Trim.None,
+                    ),
+                    platformStyle = PlatformTextStyle(includeFontPadding = false),
+                ),
                 color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
             )
             if (!titleDomain.isNullOrBlank()) {
@@ -2851,6 +2876,9 @@ private fun ReaderAppearanceButton(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
+            // Lift the panel by ~the action bar height so its top edge sits just
+            // below the title bar (~2dp gap), maximizing the article visible below.
+            offset = DpOffset(0.dp, (-46).dp),
             modifier = Modifier.requiredWidth(300.dp),
         ) {
             ReaderAppearancePanel(
@@ -2871,9 +2899,19 @@ private fun ReaderAppearancePanel(
         draft = next
         onAppearanceChange(next)
     }
+    // Cap the panel to ~40% of the screen and scroll the overflow, so the
+    // article stays visible below and changes are visible as controls move.
+    val maxPanelHeight = (LocalConfiguration.current.screenHeightDp * 2 / 5).dp
+    val panelScrollState = rememberScrollState()
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(max = maxPanelHeight)
+            .passiveVerticalScrollIndicator(
+                scrollState = panelScrollState,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            )
+            .verticalScroll(panelScrollState)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
