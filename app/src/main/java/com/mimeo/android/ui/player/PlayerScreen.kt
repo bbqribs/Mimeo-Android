@@ -180,6 +180,8 @@ private const val DEBUG_PLAYBACK = false
 private const val PROGRESS_SYNC_DEBOUNCE_MS = 2_000L
 private const val PROGRESS_CHAR_STEP = 120
 private const val DONE_PERCENT_THRESHOLD = 98
+/** Fixed title line-height ratio; sits above the tallest reader font (Literata, ~1.485x). */
+private const val READER_TITLE_LINE_HEIGHT_RATIO = 1.55f
 private val CHEVRON_DOCK_HORIZONTAL_PADDING = 4.dp
 private val CHEVRON_DOCK_VERTICAL_OFFSET = (-7).dp
 private val CHEVRON_RESERVED_SPACE = 76.dp
@@ -2574,6 +2576,11 @@ private fun ExpandedPlayerTopBar(
     val mTypography = LocalMimeoTypographyTokens.current
     var titleExpanded by remember(title) { mutableStateOf(false) }
     val rootView = LocalView.current
+    val baseTitleStyle = if (isV1) {
+        mTypography.title
+    } else {
+        MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
+    }
     Column(
         modifier = Modifier.fillMaxWidth().layout { measurable, constraints ->
             val insetPerSide = maxOf(0, (rootView.width - constraints.maxWidth) / 2)
@@ -2611,18 +2618,20 @@ private fun ExpandedPlayerTopBar(
                         }
                     },
                 maxLines = if (titleExpanded) 3 else 1,
-                style = (if (isV1) mTypography.title else MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
-                    .copy(
-                        fontFamily = readerAppearance.fontOption.toFontFamily(),
-                        // Pin the title line box so swapping the reader font cannot change the
-                        // title strip height — otherwise the action bar (and the Aa dropdown
-                        // anchored to it) shifts whenever a font is selected.
-                        lineHeightStyle = LineHeightStyle(
-                            alignment = LineHeightStyle.Alignment.Center,
-                            trim = LineHeightStyle.Trim.None,
-                        ),
-                        platformStyle = PlatformTextStyle(includeFontPadding = false),
+                style = baseTitleStyle.copy(
+                    fontFamily = readerAppearance.fontOption.toFontFamily(),
+                    // Pin the title line box so swapping the reader font cannot change the
+                    // title strip height — otherwise the action bar (and the Aa dropdown
+                    // anchored to it) shifts whenever a font is selected. The ratio sits above
+                    // the tallest reader font's intrinsic line height (Literata, ~1.485x), so
+                    // every font renders the title at the same fixed line height.
+                    lineHeight = baseTitleStyle.fontSize * READER_TITLE_LINE_HEIGHT_RATIO,
+                    lineHeightStyle = LineHeightStyle(
+                        alignment = LineHeightStyle.Alignment.Center,
+                        trim = LineHeightStyle.Trim.None,
                     ),
+                    platformStyle = PlatformTextStyle(includeFontPadding = false),
+                ),
                 color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
             )
             if (!titleDomain.isNullOrBlank()) {
