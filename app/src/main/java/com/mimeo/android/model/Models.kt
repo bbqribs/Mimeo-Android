@@ -481,6 +481,7 @@ data class AppSettings(
     val readingLineHeightPercent: Int = 160,
     val readingMaxWidthDp: Int = 720,
     val readingParagraphSpacing: ParagraphSpacingOption = ParagraphSpacingOption.MEDIUM,
+    val readingTextAlign: ReaderTextAlignOption = ReaderAppearanceDefaults.TEXT_ALIGN,
     val visualThemePreference: VisualThemePreference = VisualThemePreference.FOLLOW_SYSTEM,
     val visualDensityPreference: VisualDensityPreference = VisualDensityPreference.DEFAULT,
     val accentSchemePreference: AccentSchemePreference = AccentSchemePreference.LILAC,

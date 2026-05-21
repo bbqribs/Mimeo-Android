@@ -6,6 +6,7 @@ import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.ReaderFontOption
+import com.mimeo.android.model.ReaderTextAlignOption
 import com.mimeo.android.model.VisualDensityPreference
 import com.mimeo.android.model.VisualThemePreference
 import kotlinx.coroutines.flow.first
@@ -113,5 +114,26 @@ class SettingsStoreVisualPreferencesTest {
         assertEquals(175, settings.readingLineHeightPercent)
         assertEquals(680, settings.readingMaxWidthDp)
         assertEquals(ParagraphSpacingOption.LARGE, settings.readingParagraphSpacing)
+    }
+
+    @Test
+    fun emptyDataStore_readsLeftTextAlignDefault() = runBlocking {
+        val settings = store.settingsFlow.first()
+        assertEquals(ReaderTextAlignOption.LEFT, settings.readingTextAlign)
+    }
+
+    @Test
+    fun saveReadingTextAlign_roundTrips() = runBlocking {
+        store.saveReadingTextAlign(ReaderTextAlignOption.JUSTIFIED)
+        val settings = store.settingsFlow.first()
+        assertEquals(ReaderTextAlignOption.JUSTIFIED, settings.readingTextAlign)
+    }
+
+    @Test
+    fun saveReadingTextAlign_leftRoundTripsAfterJustified() = runBlocking {
+        store.saveReadingTextAlign(ReaderTextAlignOption.JUSTIFIED)
+        store.saveReadingTextAlign(ReaderTextAlignOption.LEFT)
+        val settings = store.settingsFlow.first()
+        assertEquals(ReaderTextAlignOption.LEFT, settings.readingTextAlign)
     }
 }

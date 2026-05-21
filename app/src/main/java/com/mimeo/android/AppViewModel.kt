@@ -143,6 +143,7 @@ import com.mimeo.android.model.toProblemReportAttachmentText
 import com.mimeo.android.model.toProblemReportAttachmentTitle
 import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.model.QueueFetchDebugSnapshot
+import com.mimeo.android.model.ReaderAppearanceState
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.VisualDensityPreference
 import com.mimeo.android.model.VisualThemePreference
@@ -1119,6 +1120,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 playerChevronSnapEdge = settings.value.playerChevronSnapEdge,
                 playerChevronEdgeOffset = settings.value.playerChevronEdgeOffset,
             )
+        }
+    }
+
+    /** Persist all reader-local appearance controls from the reader Aa panel. */
+    fun saveReaderAppearance(appearance: ReaderAppearanceState) {
+        val sanitized = appearance.sanitized()
+        saveReadingPreferences(
+            readingFontSizeSp = sanitized.fontSizeSp,
+            readingFontOption = sanitized.fontOption,
+            readingLineHeightPercent = sanitized.lineHeightPercent,
+            readingMaxWidthDp = sanitized.maxWidthDp,
+            readingParagraphSpacing = sanitized.paragraphSpacing,
+        )
+        viewModelScope.launch {
+            settingsStore.saveReadingTextAlign(sanitized.textAlign)
         }
     }
 

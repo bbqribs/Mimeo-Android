@@ -43,6 +43,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -57,6 +58,7 @@ import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.ReaderFontOption
+import com.mimeo.android.model.ReaderTextAlignOption
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoV1Active
 import com.mimeo.android.ui.theme.toFontFamily
@@ -89,6 +91,7 @@ fun ReaderBody(
     readingFontOption: ReaderFontOption,
     readingLineHeightPercent: Int,
     readingMaxWidthDp: Int,
+    readingTextAlign: ReaderTextAlignOption,
     paragraphSpacing: ParagraphSpacingOption,
     selectionResetSignal: Int,
     scrollState: ScrollState,
@@ -330,6 +333,10 @@ fun ReaderBody(
             fontSize = readingFontSizeSp.sp,
             lineHeight = (readingFontSizeSp * (readingLineHeightPercent / 100f)).sp,
             color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
+            textAlign = when (readingTextAlign) {
+                ReaderTextAlignOption.JUSTIFIED -> TextAlign.Justify
+                ReaderTextAlignOption.LEFT -> TextAlign.Start
+            },
         ),
     )
     val density = androidx.compose.ui.platform.LocalDensity.current
