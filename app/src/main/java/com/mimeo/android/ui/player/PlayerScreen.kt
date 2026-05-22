@@ -2895,6 +2895,10 @@ private fun ReaderAppearancePanel(
     onAppearanceChange: (ReaderAppearanceState) -> Unit,
 ) {
     var draft by remember { mutableStateOf(appearance) }
+    // Discrete controls (font/spacing/alignment chips, Reset) commit immediately.
+    // Sliders update only the local draft while dragging and commit on drag end
+    // via onValueChangeFinished, so a drag persists one DataStore write, not one
+    // per tick.
     fun update(next: ReaderAppearanceState) {
         draft = next
         onAppearanceChange(next)
@@ -2906,17 +2910,14 @@ private fun ReaderAppearancePanel(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = maxPanelHeight)
-            .passiveVerticalScrollIndicator(
-                scrollState = panelScrollState,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-            )
-            .verticalScroll(panelScrollState)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .heightIn(max = maxPanelHeight),
     ) {
+        // Pinned header: stays anchored at the panel top while the controls
+        // below scroll, so the title and Reset action remain reachable.
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -2932,64 +2933,80 @@ private fun ReaderAppearancePanel(
             }
         }
 
-        ReaderAppearanceFieldLabel("Font")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ReaderFontOption.entries.forEach { option ->
-                FilterChip(
-                    selected = draft.fontOption == option,
-                    onClick = { update(draft.copy(fontOption = option)) },
-                    label = { Text(readerFontOptionLabel(option)) },
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false)
+                .passiveVerticalScrollIndicator(
+                    scrollState = panelScrollState,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 )
+                .verticalScroll(panelScrollState)
+                .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ReaderAppearanceFieldLabel("Font")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                ReaderFontOption.entries.forEach { option ->
+                    FilterChip(
+                        selected = draft.fontOption == option,
+                        onClick = { update(draft.copy(fontOption = option)) },
+                        label = { Text(readerFontOptionLabel(option)) },
+                    )
+                }
             }
-        }
 
-        ReaderAppearanceFieldLabel("Text size: ${draft.fontSizeSp}sp")
-        Slider(
-            value = draft.fontSizeSp.toFloat(),
-            onValueChange = { update(draft.copy(fontSizeSp = it.toInt())) },
-            valueRange = ReaderAppearanceDefaults.FONT_SIZE_MIN_SP.toFloat()..
-                ReaderAppearanceDefaults.FONT_SIZE_MAX_SP.toFloat(),
-            steps = ReaderAppearanceDefaults.FONT_SIZE_MAX_SP -
-                ReaderAppearanceDefaults.FONT_SIZE_MIN_SP - 1,
-        )
+            ReaderAppearanceFieldLabel("Text size: ${draft.fontSizeSp}sp")
+            Slider(
+                value = draft.fontSizeSp.toFloat(),
+                onValueChange = { draft = draft.copy(fontSizeSp = it.toInt()) },
+                onValueChangeFinished = { onAppearanceChange(draft) },
+                valueRange = ReaderAppearanceDefaults.FONT_SIZE_MIN_SP.toFloat()..
+                    ReaderAppearanceDefaults.FONT_SIZE_MAX_SP.toFloat(),
+                steps = ReaderAppearanceDefaults.FONT_SIZE_MAX_SP -
+                    ReaderAppearanceDefaults.FONT_SIZE_MIN_SP - 1,
+            )
 
-        ReaderAppearanceFieldLabel("Line spacing: ${draft.lineHeightPercent}%")
-        Slider(
-            value = draft.lineHeightPercent.toFloat(),
-            onValueChange = { update(draft.copy(lineHeightPercent = it.toInt())) },
-            valueRange = ReaderAppearanceDefaults.LINE_HEIGHT_MIN_PERCENT.toFloat()..
-                ReaderAppearanceDefaults.LINE_HEIGHT_MAX_PERCENT.toFloat(),
-            steps = 5,
-        )
+            ReaderAppearanceFieldLabel("Line spacing: ${draft.lineHeightPercent}%")
+            Slider(
+                value = draft.lineHeightPercent.toFloat(),
+                onValueChange = { draft = draft.copy(lineHeightPercent = it.toInt()) },
+                onValueChangeFinished = { onAppearanceChange(draft) },
+                valueRange = ReaderAppearanceDefaults.LINE_HEIGHT_MIN_PERCENT.toFloat()..
+                    ReaderAppearanceDefaults.LINE_HEIGHT_MAX_PERCENT.toFloat(),
+                steps = 5,
+            )
 
-        ReaderAppearanceFieldLabel("Paragraph spacing")
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ParagraphSpacingOption.entries.forEach { option ->
-                FilterChip(
-                    selected = draft.paragraphSpacing == option,
-                    onClick = { update(draft.copy(paragraphSpacing = option)) },
-                    label = { Text(paragraphSpacingLabel(option)) },
-                )
+            ReaderAppearanceFieldLabel("Paragraph spacing")
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                ParagraphSpacingOption.entries.forEach { option ->
+                    FilterChip(
+                        selected = draft.paragraphSpacing == option,
+                        onClick = { update(draft.copy(paragraphSpacing = option)) },
+                        label = { Text(paragraphSpacingLabel(option)) },
+                    )
+                }
             }
-        }
 
-        ReaderAppearanceFieldLabel("Content width: ${draft.maxWidthDp}dp")
-        Slider(
-            value = draft.maxWidthDp.toFloat(),
-            onValueChange = { update(draft.copy(maxWidthDp = it.toInt())) },
-            valueRange = ReaderAppearanceDefaults.MAX_WIDTH_MIN_DP.toFloat()..
-                ReaderAppearanceDefaults.MAX_WIDTH_MAX_DP.toFloat(),
-            steps = 16,
-        )
+            ReaderAppearanceFieldLabel("Content width: ${draft.maxWidthDp}dp")
+            Slider(
+                value = draft.maxWidthDp.toFloat(),
+                onValueChange = { draft = draft.copy(maxWidthDp = it.toInt()) },
+                onValueChangeFinished = { onAppearanceChange(draft) },
+                valueRange = ReaderAppearanceDefaults.MAX_WIDTH_MIN_DP.toFloat()..
+                    ReaderAppearanceDefaults.MAX_WIDTH_MAX_DP.toFloat(),
+                steps = 16,
+            )
 
-        ReaderAppearanceFieldLabel("Alignment")
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ReaderTextAlignOption.entries.forEach { option ->
-                FilterChip(
-                    selected = draft.textAlign == option,
-                    onClick = { update(draft.copy(textAlign = option)) },
-                    label = { Text(readerTextAlignLabel(option)) },
-                )
+            ReaderAppearanceFieldLabel("Alignment")
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                ReaderTextAlignOption.entries.forEach { option ->
+                    FilterChip(
+                        selected = draft.textAlign == option,
+                        onClick = { update(draft.copy(textAlign = option)) },
+                        label = { Text(readerTextAlignLabel(option)) },
+                    )
+                }
             }
         }
     }
