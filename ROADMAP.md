@@ -80,6 +80,27 @@ gated on the final QA matrix in
 12. [ ] **Roadmap hygiene pass** — identify duplicate/stale shipped entries;
    correct cross-repo shipping-state discrepancies. Coordinated with Mimeo
    repo.
+13. [ ] **Reader context menu expansion.** Four additions to the floating
+   selection toolbar and link long-press sheet:
+   - Share selected text (plain-text share of highlighted passage, no
+     citation block).
+   - Web search on selected text (fire implicit `ACTION_WEB_SEARCH`
+     intent with selected string).
+   - Long-press a link → share the link address (URL only, not article
+     share flow).
+   - Long-press a link → copy the link address to clipboard.
+   Depends on Compose BOM migration (item 21) to unlock
+   `onSelectAllRequested` on the selection toolbar API.
+14. [ ] **Playback / archive semantics audit.** Verify and correct two
+   routing cases that are currently unspecified or likely wrong:
+   - An archived item that reaches TTS completion should appear in History
+     (same as an unarchived completed item); confirm the archive flag does
+     not suppress the history entry.
+   - An archived-but-not-completed item should remain reachable in Earlier
+     in Queue or equivalent expected playback history — archiving must not
+     silently drop it from the queue history view. Audit `UpNextViewModel`
+     and playback-completion callbacks; no behavior change without a
+     confirming spec note.
 
 ### P2 — exploratory / deferred
 
@@ -98,6 +119,24 @@ gated on the final QA matrix in
 19. [ ] **Compose BOM migration to 1.10.x.** Bump from `2024.06.00`, fix
     any Material3/API deprecations. Standalone session. Unblocks
     `onSelectAllRequested` in the reader selection toolbar.
+20. [ ] **Up Next / Now Playing visual hierarchy — now-playing accent.**
+    The active now-playing item title in Up Next should be rendered at a
+    slightly larger size and/or in an accented color to immediately
+    distinguish it from upcoming rows. Coordinate with the Up Next layout
+    spec (`docs/ANDROID_UP_NEXT_LAYOUT_SPEC.md`); no structural changes
+    to session queue data.
+21. [ ] **Player / reader boundary polish.** The player title area needs
+    more breathing room and a clearer tap separation from the progress
+    bar and the reader text surface below it. Candidate treatments:
+    increased vertical padding, a subtle divider or surface elevation
+    change, or a shadow. Evaluate in Locus at typical font sizes before
+    deciding on approach; defer to a focused visual pass session.
+22. [ ] **Article summaries entry point (backend dependency).** Android
+    reader needs an entry point for per-article AI summaries once the
+    backend summary substrate and API design are settled. No Android work
+    until the Mimeo backend summary contract is defined and merged
+    (CONTRACT CHANGE). Track backend readiness in the Mimeo repo; this
+    line is a pointer only.
 
 ### Testing debt
 
