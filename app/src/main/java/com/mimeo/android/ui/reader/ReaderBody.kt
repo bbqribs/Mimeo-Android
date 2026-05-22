@@ -878,6 +878,16 @@ internal fun buildReaderBaseAnnotatedText(
                     start = start,
                     end = endExclusive,
                 )
+                // Shrink the separator glyph to ~nothing. A line cannot render
+                // shorter than its font's intrinsic height, so at the body font
+                // size every gap below ~one line clamped to the same minimum.
+                // A 1sp glyph lets lineHeight control the gap across the full
+                // preset range, including sub-line spacings.
+                addStyle(
+                    style = SpanStyle(fontSize = 1.sp),
+                    start = start,
+                    end = endExclusive,
+                )
             }
         }
     }
