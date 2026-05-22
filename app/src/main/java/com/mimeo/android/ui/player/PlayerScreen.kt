@@ -154,7 +154,7 @@ import com.mimeo.android.player.SOURCE_CUE_CHUNK_INDEX
 import com.mimeo.android.player.TITLE_INTRO_CHUNK_INDEX
 import com.mimeo.android.player.TtsController
 import com.mimeo.android.ui.common.locusCapturePresentation
-import com.mimeo.android.ui.common.copyItemText
+import com.mimeo.android.ui.common.copyArticleText
 import com.mimeo.android.ui.common.openItemInBrowser
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.shareItemText
@@ -168,6 +168,7 @@ import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import com.mimeo.android.ui.reader.ReaderBody
 import com.mimeo.android.ui.reader.extractReaderPreservedLinks
 import com.mimeo.android.ui.reader.READER_CHUNK_SEPARATOR
+import com.mimeo.android.ui.reader.readerTextWithPlainSeparators
 import com.mimeo.android.ui.reader.segmentSentences
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
@@ -2371,12 +2372,18 @@ fun PlayerScreen(
                                             hasArticleText = displayReaderText.isNotBlank(),
                                             onCopyArticleText = {
                                                 overflowExpanded = false
-                                                copyItemText(context, displayReaderText)
+                                                copyArticleText(
+                                                    context,
+                                                    readerTextWithPlainSeparators(displayReaderText),
+                                                    locusItemTitle,
+                                                    currentSourceLabel,
+                                                    locusItemUrl.takeIf { locusHasUrl },
+                                                )
                                                 onShowSnackbar("Article text copied", null, null)
                                             },
                                             onShareArticleText = {
                                                 overflowExpanded = false
-                                                shareItemText(context, displayReaderText, locusItemTitle, currentSourceLabel, locusItemUrl.takeIf { locusHasUrl })
+                                                shareItemText(context, readerTextWithPlainSeparators(displayReaderText), locusItemTitle, currentSourceLabel, locusItemUrl.takeIf { locusHasUrl })
                                             },
                                         )
                                     },

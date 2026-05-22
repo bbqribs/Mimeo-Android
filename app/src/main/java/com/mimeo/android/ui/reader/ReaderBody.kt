@@ -775,6 +775,15 @@ internal fun mapChunkRangeToFullText(
 internal const val READER_CHUNK_SEPARATOR: String = "\u200B"
 
 /**
+ * Plain blank-line separator substituted for [READER_CHUNK_SEPARATOR] in any
+ * reader text leaving the renderer \u2014 copy, share, export. The zero-width
+ * separator is a layout-only character; copied or shared text must not carry
+ * invisible characters, so it is swapped for the prior stable "\n\n" separator.
+ */
+internal fun readerTextWithPlainSeparators(text: String): String =
+    text.replace(READER_CHUNK_SEPARATOR, "\n\n")
+
+/**
  * Height, in sp, of the inter-chunk separator paragraph. [spacingMultiplier] is
  * the selected paragraph-spacing preset, expressed as a multiple of the body
  * line height so the gap scales with the reader's font-size and line-spacing

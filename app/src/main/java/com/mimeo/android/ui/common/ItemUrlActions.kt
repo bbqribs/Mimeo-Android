@@ -37,6 +37,14 @@ fun copyItemText(context: Context, text: String) {
     clipboard.setPrimaryClip(ClipData.newPlainText("article text", text))
 }
 
+/**
+ * Copy article text to the clipboard with the same title/source/url header as
+ * [shareItemText], so copied and shared article text stay consistent.
+ */
+fun copyArticleText(context: Context, articleText: String, title: String?, sourceLabel: String?, url: String?) {
+    copyItemText(context, buildArticleShareText(articleText, title, sourceLabel, url))
+}
+
 fun shareItemText(context: Context, articleText: String, title: String?, sourceLabel: String?, url: String?) {
     val fullText = buildArticleShareText(articleText, title, sourceLabel, url)
     val send = Intent(Intent.ACTION_SEND).apply {
@@ -52,6 +60,12 @@ private val GENERIC_SOURCE_LABELS = setOf(
     "unknown source", "android selection", "app share", "shared-text.mimeo.local",
 )
 
+/**
+ * Build the copied/shared article text: a title / domain / link header
+ * prepended above the article body. Generic source labels are dropped, and a
+ * missing header field is skipped. With no header fields, the body is returned
+ * unchanged.
+ */
 internal fun buildArticleShareText(
     articleText: String,
     title: String?,
@@ -61,9 +75,9 @@ internal fun buildArticleShareText(
     val effectiveSourceLabel = sourceLabel?.takeIf { label ->
         label.isNotBlank() && label.lowercase() !in GENERIC_SOURCE_LABELS
     }
-    val lines = mutableListOf<String>()
-    if (!title.isNullOrBlank()) lines.add("— \"$title\"")
-    if (!effectiveSourceLabel.isNullOrBlank()) lines.add(effectiveSourceLabel)
-    if (!url.isNullOrBlank()) lines.add(url)
-    return if (lines.isEmpty()) articleText else "$articleText\n\n${lines.joinToString("\n")}"
+    val header = mutableListOf<String>()
+    if (!title.isNullOrBlank()) header.add(title.trim())
+    if (!effectiveSourceLabel.isNullOrBlank()) header.add(effectiveSourceLabel.trim())
+    if (!url.isNullOrBlank()) header.add(url.trim())
+    return if (header.isEmpty()) articleText else "${header.joinToString("\n")}\n\n$articleText"
 }

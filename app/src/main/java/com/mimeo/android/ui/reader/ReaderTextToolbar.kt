@@ -1,5 +1,6 @@
 package com.mimeo.android.ui.reader
 
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.view.ActionMode
@@ -76,14 +77,13 @@ internal class ReaderTextToolbar(
                     return when (item.itemId) {
                         ITEM_COPY -> {
                             this@ReaderTextToolbar.onCopyRequested?.invoke()
+                            sanitizeReaderClipboard()
                             mode.finish()
                             true
                         }
                         ITEM_SHARE -> {
                             this@ReaderTextToolbar.onCopyRequested?.invoke()
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
-                                as ClipboardManager
-                            val text = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
+                            val text = sanitizeReaderClipboard()
                             if (!text.isNullOrBlank()) onShare(text)
                             mode.finish()
                             true
@@ -119,6 +119,21 @@ internal class ReaderTextToolbar(
     fun dispose() {
         scope.cancel(null)
         edgeScrollSpeed = 0f
+    }
+
+    /**
+     * Re-read the clipboard after Compose's copy and strip the reader's
+     * zero-width layout separators, so copied or shared selections never carry
+     * invisible characters. Returns the cleaned text (or null when empty).
+     */
+    private fun sanitizeReaderClipboard(): String? {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val raw = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: return null
+        val cleaned = readerTextWithPlainSeparators(raw)
+        if (cleaned != raw) {
+            clipboard.setPrimaryClip(ClipData.newPlainText("reader text", cleaned))
+        }
+        return cleaned
     }
 
     private fun updateEdgeScroll(rect: Rect) {

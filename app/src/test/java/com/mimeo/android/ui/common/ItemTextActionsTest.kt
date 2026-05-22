@@ -18,25 +18,25 @@ class ItemTextActionsTest {
     }
 
     @Test
-    fun `citation includes title line when title is present`() {
+    fun `header prepends title above body`() {
         val result = buildArticleShareText("Body text.", "My Article", null, null)
-        assertEquals("Body text.\n\n— \"My Article\"", result)
+        assertEquals("My Article\n\nBody text.", result)
     }
 
     @Test
-    fun `citation includes source label when non-generic`() {
+    fun `header prepends source label when non-generic`() {
         val result = buildArticleShareText("Body text.", null, "The Atlantic", null)
-        assertEquals("Body text.\n\nThe Atlantic", result)
+        assertEquals("The Atlantic\n\nBody text.", result)
     }
 
     @Test
-    fun `citation includes url line when url is present`() {
+    fun `header prepends url when present`() {
         val result = buildArticleShareText("Body text.", null, null, "https://example.com/article")
-        assertEquals("Body text.\n\nhttps://example.com/article", result)
+        assertEquals("https://example.com/article\n\nBody text.", result)
     }
 
     @Test
-    fun `citation includes all three lines when all present`() {
+    fun `header prepends title, source, and url in order when all present`() {
         val result = buildArticleShareText(
             articleText = "Body text.",
             title = "My Article",
@@ -44,13 +44,13 @@ class ItemTextActionsTest {
             url = "https://theatlantic.com/article",
         )
         assertEquals(
-            "Body text.\n\n— \"My Article\"\nThe Atlantic\nhttps://theatlantic.com/article",
+            "My Article\nThe Atlantic\nhttps://theatlantic.com/article\n\nBody text.",
             result,
         )
     }
 
     @Test
-    fun `citation includes title and url when source label is absent`() {
+    fun `header prepends title and url when source label is absent`() {
         val result = buildArticleShareText(
             articleText = "Body text.",
             title = "My Article",
@@ -58,7 +58,7 @@ class ItemTextActionsTest {
             url = "https://theatlantic.com/article",
         )
         assertEquals(
-            "Body text.\n\n— \"My Article\"\nhttps://theatlantic.com/article",
+            "My Article\nhttps://theatlantic.com/article\n\nBody text.",
             result,
         )
     }
@@ -66,7 +66,7 @@ class ItemTextActionsTest {
     @Test
     fun `generic label android selection is excluded`() {
         val result = buildArticleShareText("Body text.", "Title", "Android selection", "https://example.com")
-        assertEquals("Body text.\n\n— \"Title\"\nhttps://example.com", result)
+        assertEquals("Title\nhttps://example.com\n\nBody text.", result)
     }
 
     @Test
@@ -96,6 +96,6 @@ class ItemTextActionsTest {
     @Test
     fun `non-generic source label with dots is preserved`() {
         val result = buildArticleShareText("Body text.", null, "arstechnica.com", null)
-        assertEquals("Body text.\n\narstechnica.com", result)
+        assertEquals("arstechnica.com\n\nBody text.", result)
     }
 }
