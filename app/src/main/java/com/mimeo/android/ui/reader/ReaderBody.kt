@@ -43,6 +43,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.geometry.Offset
@@ -870,7 +871,18 @@ internal fun buildReaderBaseAnnotatedText(
             val endExclusive = (range.last + 1).coerceIn(start, text.length)
             if (start < endExclusive) {
                 addStyle(
-                    style = ParagraphStyle(lineHeight = separatorGapLineHeight),
+                    style = ParagraphStyle(
+                        lineHeight = separatorGapLineHeight,
+                        // The separator is a single-line paragraph. Without an
+                        // explicit LineHeightStyle, Compose does not apply
+                        // lineHeight to a paragraph's first (here, only) line,
+                        // so every spacing option rendered an identical gap.
+                        // Trim.None keeps the full lineHeight as the gap height.
+                        lineHeightStyle = LineHeightStyle(
+                            alignment = LineHeightStyle.Alignment.Center,
+                            trim = LineHeightStyle.Trim.None,
+                        ),
+                    ),
                     start = start,
                     end = endExclusive,
                 )
