@@ -29,6 +29,25 @@ class ReaderFullTextRangeMappingTest {
     }
 
     @Test
+    fun readerTextWithPlainSeparators_swapsZeroWidthSeparatorForBlankLine() {
+        val chunks = listOf(
+            PlaybackChunk(index = 0, text = "Alpha", startChar = 0, endChar = 5),
+            PlaybackChunk(index = 1, text = "Beta", startChar = 5, endChar = 9),
+            PlaybackChunk(index = 2, text = "Gamma", startChar = 9, endChar = 14),
+        )
+        val rendered = chunks.joinToString(separator = READER_CHUNK_SEPARATOR) { it.text }
+        // The expected string has no zero-width separator, so a passing
+        // assertion proves copied/shared text carries no invisible characters.
+        assertEquals("Alpha\n\nBeta\n\nGamma", readerTextWithPlainSeparators(rendered))
+    }
+
+    @Test
+    fun readerTextWithPlainSeparators_leavesSeparatorFreeTextUnchanged() {
+        val text = "A single paragraph with no chunk separators."
+        assertEquals(text, readerTextWithPlainSeparators(text))
+    }
+
+    @Test
     fun paragraphGapLineHeightScalesWithMultiplierAndBodyHeight() {
         val body = 25.6f
         val small = readerParagraphGapLineHeight(spacingMultiplier = 0.35f, bodyLineHeightSp = body)

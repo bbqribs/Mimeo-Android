@@ -168,6 +168,7 @@ import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import com.mimeo.android.ui.reader.ReaderBody
 import com.mimeo.android.ui.reader.extractReaderPreservedLinks
 import com.mimeo.android.ui.reader.READER_CHUNK_SEPARATOR
+import com.mimeo.android.ui.reader.readerTextWithPlainSeparators
 import com.mimeo.android.ui.reader.segmentSentences
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
@@ -2371,12 +2372,12 @@ fun PlayerScreen(
                                             hasArticleText = displayReaderText.isNotBlank(),
                                             onCopyArticleText = {
                                                 overflowExpanded = false
-                                                copyItemText(context, displayReaderText)
+                                                copyItemText(context, readerTextWithPlainSeparators(displayReaderText))
                                                 onShowSnackbar("Article text copied", null, null)
                                             },
                                             onShareArticleText = {
                                                 overflowExpanded = false
-                                                shareItemText(context, displayReaderText, locusItemTitle, currentSourceLabel, locusItemUrl.takeIf { locusHasUrl })
+                                                shareItemText(context, readerTextWithPlainSeparators(displayReaderText), locusItemTitle, currentSourceLabel, locusItemUrl.takeIf { locusHasUrl })
                                             },
                                         )
                                     },
