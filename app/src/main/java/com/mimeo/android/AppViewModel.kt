@@ -519,6 +519,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val pendingNavigationRoute: StateFlow<String?> = _pendingNavigationRoute.asStateFlow()
     private val _settingsScrollOffset = MutableStateFlow(0)
     val settingsScrollOffset: StateFlow<Int> = _settingsScrollOffset.asStateFlow()
+    // One-shot request to scroll the Settings screen to its reading section,
+    // raised when the reader Aa panel's "reading settings" shortcut is tapped.
+    private val _pendingSettingsReadingScroll = MutableStateFlow(false)
+    val pendingSettingsReadingScroll: StateFlow<Boolean> = _pendingSettingsReadingScroll.asStateFlow()
     private val authFailureMutex = Mutex()
     private var authFailureHandledThisSession = false
     private var lastArchiveUndoSnapshot: ArchiveUndoSnapshot? = null
@@ -3207,6 +3211,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setSettingsScrollOffset(offset: Int) {
         _settingsScrollOffset.value = offset.coerceAtLeast(0)
+    }
+
+    /** Ask the Settings screen to jump to its reading section on next open. */
+    fun requestSettingsReadingSection() {
+        _pendingSettingsReadingScroll.value = true
+    }
+
+    /** Clear the pending reading-section scroll once the Settings screen handles it. */
+    fun consumeSettingsReadingScroll() {
+        _pendingSettingsReadingScroll.value = false
     }
 
     fun createPlaylist(name: String) {

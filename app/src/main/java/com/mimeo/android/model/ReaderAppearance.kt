@@ -7,6 +7,8 @@ import kotlinx.serialization.Serializable
 enum class ReaderTextAlignOption {
     LEFT,
     JUSTIFIED,
+    /** Right-aligned body text — useful for right-to-left scripts such as Arabic. */
+    RIGHT,
 }
 
 /** Default values and valid bounds for the reader-local appearance controls. */

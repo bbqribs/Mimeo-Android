@@ -91,6 +91,7 @@ private data class PlayerRouteHandlers(
     val onOpenLocusForItem: (Int) -> Unit,
     val onRequestBack: () -> Unit,
     val onOpenDiagnostics: () -> Unit,
+    val onOpenReadingSettings: () -> Unit,
     val onChevronSnapChange: (PlayerChevronSnapEdge) -> Unit,
     val onChevronTap: () -> Unit,
 )
@@ -917,6 +918,7 @@ private fun LocusPlayerRoute(
         onOpenLocusForItem = playerHandlers.onOpenLocusForItem,
         onRequestBack = playerHandlers.onRequestBack,
         onOpenDiagnostics = playerHandlers.onOpenDiagnostics,
+        onOpenReadingSettings = playerHandlers.onOpenReadingSettings,
         onChevronTap = onChevronTap,
         drawerIsOpen = drawerIsOpen,
         onCloseDrawer = onCloseDrawer,
@@ -965,6 +967,10 @@ private fun buildPlayerRouteHandlers(
         },
         onOpenDiagnostics = {
             nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) { launchSingleTop = true }
+        },
+        onOpenReadingSettings = {
+            vm.requestSettingsReadingSection()
+            nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true }
         },
         onChevronSnapChange = { edge ->
             vm.savePlayerChevronSnap(edge, 0.5f)

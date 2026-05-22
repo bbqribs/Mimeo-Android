@@ -43,6 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +52,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -167,6 +170,14 @@ fun SettingsScreen(
     val playlists by vm.playlists.collectAsState()
     val scrollState = rememberScrollState()
     val actionScope = rememberCoroutineScope()
+    // Support the reader Aa panel's "All reading settings" shortcut: measure the
+    // reading section's scroll offset and jump to it when a request is pending.
+    val pendingReadingScroll by vm.pendingSettingsReadingScroll.collectAsState()
+    var settingsViewportTopRootY by remember { mutableFloatStateOf(Float.NaN) }
+    // scrollState.value + the header's root-Y is invariant under scrolling, so
+    // this anchor is stable once measured; the section offset is anchor minus
+    // the viewport top.
+    var readingHeaderAnchorY by remember { mutableFloatStateOf(Float.NaN) }
     val showJumpToTop by remember {
         derivedStateOf { shouldShowJumpToTopScroll(scrollState.value, thresholdPx = 220) }
     }
@@ -468,8 +479,22 @@ fun SettingsScreen(
 
     LaunchedEffect(settingsScrollOffset) {
         if (restoredScrollOffset) return@LaunchedEffect
+        // A queued reading-section jump should not be fought by a scroll restore.
+        if (vm.pendingSettingsReadingScroll.value) {
+            restoredScrollOffset = true
+            return@LaunchedEffect
+        }
         scrollState.scrollTo(settingsScrollOffset)
         restoredScrollOffset = true
+    }
+
+    LaunchedEffect(pendingReadingScroll, readingHeaderAnchorY, settingsViewportTopRootY) {
+        if (!pendingReadingScroll) return@LaunchedEffect
+        val anchor = readingHeaderAnchorY
+        val viewportTop = settingsViewportTopRootY
+        if (anchor.isNaN() || viewportTop.isNaN()) return@LaunchedEffect
+        scrollState.animateScrollTo((anchor - viewportTop).toInt().coerceAtLeast(0))
+        vm.consumeSettingsReadingScroll()
     }
 
     LaunchedEffect(scrollState) {
@@ -524,6 +549,7 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .onGloballyPositioned { settingsViewportTopRootY = it.positionInRoot().y }
                 .passiveVerticalScrollIndicator(
                     scrollState = scrollState,
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
@@ -1730,6 +1756,9 @@ fun SettingsScreen(
         SettingsSectionHeader(
             title = "Appearance & Reading",
             subtitle = "Control app-wide appearance, then fine-tune reading layout.",
+            modifier = Modifier.onGloballyPositioned { coords ->
+                readingHeaderAnchorY = scrollState.value + coords.positionInRoot().y
+            },
         )
         ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
             Column(
@@ -2502,12 +2531,13 @@ private fun BlueskySourceRow(
 private fun SettingsSectionHeader(
     title: String,
     subtitle: String? = null,
+    modifier: Modifier = Modifier,
 ) {
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(top = 4.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),

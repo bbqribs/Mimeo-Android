@@ -350,6 +350,7 @@ fun ReaderBody(
             textAlign = when (readingTextAlign) {
                 ReaderTextAlignOption.JUSTIFIED -> TextAlign.Justify
                 ReaderTextAlignOption.LEFT -> TextAlign.Start
+                ReaderTextAlignOption.RIGHT -> TextAlign.Right
             },
         ),
     )

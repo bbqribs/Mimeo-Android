@@ -51,6 +51,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -852,6 +853,7 @@ fun PlayerScreen(
     onOpenLocusForItem: (Int) -> Unit,
     onRequestBack: () -> Unit = {},
     onOpenDiagnostics: () -> Unit,
+    onOpenReadingSettings: () -> Unit = {},
     onChevronTap: () -> Unit = {},
     drawerIsOpen: Boolean = false,
     onCloseDrawer: () -> Unit = {},
@@ -2164,6 +2166,7 @@ fun PlayerScreen(
                                     ),
                                     paragraphSpacingPresets = settings.paragraphSpacingPresets,
                                     onReaderAppearanceChange = { vm.saveReaderAppearance(it) },
+                                    onOpenReadingSettings = onOpenReadingSettings,
                                     overflowExpanded = overflowExpanded,
                                     showTopBar = !actionBarHiddenByMode || locusSearchActive,
                                     canMarkDone = displayPayload != null,
@@ -2553,6 +2556,7 @@ private fun ExpandedPlayerTopBar(
     readerAppearance: ReaderAppearanceState,
     paragraphSpacingPresets: List<Float>,
     onReaderAppearanceChange: (ReaderAppearanceState) -> Unit,
+    onOpenReadingSettings: () -> Unit,
     overflowExpanded: Boolean,
     showTopBar: Boolean = true,
     canMarkDone: Boolean,
@@ -2719,6 +2723,7 @@ private fun ExpandedPlayerTopBar(
                             appearance = readerAppearance,
                             paragraphSpacingPresets = paragraphSpacingPresets,
                             onAppearanceChange = onReaderAppearanceChange,
+                            onOpenReadingSettings = onOpenReadingSettings,
                         )
                     }
                     ActionHintTooltip(label = if (isFavorited) "Unfavourite" else "Favourite") {
@@ -2862,6 +2867,7 @@ private fun ReaderAppearanceButton(
     appearance: ReaderAppearanceState,
     paragraphSpacingPresets: List<Float>,
     onAppearanceChange: (ReaderAppearanceState) -> Unit,
+    onOpenReadingSettings: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
@@ -2887,6 +2893,10 @@ private fun ReaderAppearanceButton(
                 appearance = appearance,
                 paragraphSpacingPresets = paragraphSpacingPresets,
                 onAppearanceChange = onAppearanceChange,
+                onOpenReadingSettings = {
+                    expanded = false
+                    onOpenReadingSettings()
+                },
             )
         }
     }
@@ -2897,6 +2907,7 @@ private fun ReaderAppearancePanel(
     appearance: ReaderAppearanceState,
     paragraphSpacingPresets: List<Float>,
     onAppearanceChange: (ReaderAppearanceState) -> Unit,
+    onOpenReadingSettings: () -> Unit,
 ) {
     var draft by remember { mutableStateOf(appearance) }
     // Discrete controls (font/spacing/alignment chips, Reset) commit immediately.
@@ -3004,13 +3015,34 @@ private fun ReaderAppearancePanel(
             )
 
             ReaderAppearanceFieldLabel("Alignment")
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 ReaderTextAlignOption.entries.forEach { option ->
                     FilterChip(
                         selected = draft.textAlign == option,
                         onClick = { update(draft.copy(textAlign = option)) },
                         label = { Text(readerTextAlignLabel(option)) },
                     )
+                }
+            }
+
+            // Shortcut from the quick panel to the full reading settings,
+            // including the paragraph-spacing preset editor.
+            TextButton(
+                onClick = onOpenReadingSettings,
+                modifier = Modifier.semantics {
+                    contentDescription = "Open reading settings"
+                },
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Settings,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text("All reading settings")
                 }
             }
         }
@@ -3036,6 +3068,7 @@ private fun readerFontOptionLabel(option: ReaderFontOption): String = when (opti
 private fun readerTextAlignLabel(option: ReaderTextAlignOption): String = when (option) {
     ReaderTextAlignOption.LEFT -> "Left"
     ReaderTextAlignOption.JUSTIFIED -> "Justified"
+    ReaderTextAlignOption.RIGHT -> "Right"
 }
 
 @Composable
