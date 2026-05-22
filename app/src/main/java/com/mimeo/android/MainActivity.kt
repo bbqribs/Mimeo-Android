@@ -102,7 +102,6 @@ import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.LocusContentMode
-import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackChunk

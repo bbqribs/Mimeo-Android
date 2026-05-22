@@ -11,9 +11,14 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectionMode
+import com.mimeo.android.model.DEFAULT_PARAGRAPH_SPACING_PRESETS
 import com.mimeo.android.model.DEFAULT_PLAYBACK_SPEED_PRESETS
+import com.mimeo.android.model.formatParagraphSpacingPresets
 import com.mimeo.android.model.formatPlaybackSpeedPresets
+import com.mimeo.android.model.parseParagraphSpacingPresets
 import com.mimeo.android.model.parsePlaybackSpeedPresets
+import com.mimeo.android.model.parseStoredParagraphSpacing
+import com.mimeo.android.model.sanitizeParagraphSpacingPresets
 import com.mimeo.android.model.sanitizePlaybackSpeedPresets
 import com.mimeo.android.model.DEFAULT_LAN_BASE_URL
 import com.mimeo.android.model.DEFAULT_LOCAL_BASE_URL
@@ -22,7 +27,6 @@ import com.mimeo.android.model.DEFAULT_VISUAL_DESIGN_V1_ENABLED
 import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.DrawerPanelSide
-import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PendingItemAction
 import com.mimeo.android.model.PendingItemActionType
 import com.mimeo.android.model.PendingManualSaveItem
@@ -116,6 +120,8 @@ class SettingsStore(private val context: Context) {
         intPreferencesKey("reading_max_width_dp")
     private val readingParagraphSpacingKey: Preferences.Key<String> =
         stringPreferencesKey("reading_paragraph_spacing")
+    private val paragraphSpacingPresetsKey: Preferences.Key<String> =
+        stringPreferencesKey("paragraph_spacing_presets")
     private val readingTextAlignKey: Preferences.Key<String> =
         stringPreferencesKey("reading_text_align")
     private val visualThemePreferenceKey: Preferences.Key<String> =
@@ -209,9 +215,8 @@ class SettingsStore(private val context: Context) {
                 ?: ReaderFontOption.SANS_SERIF,
             readingLineHeightPercent = prefs[readingLineHeightPercentKey] ?: 160,
             readingMaxWidthDp = prefs[readingMaxWidthDpKey] ?: 720,
-            readingParagraphSpacing = prefs[readingParagraphSpacingKey]
-                ?.let { runCatching { ParagraphSpacingOption.valueOf(it) }.getOrNull() }
-                ?: ParagraphSpacingOption.MEDIUM,
+            readingParagraphSpacing = parseStoredParagraphSpacing(prefs[readingParagraphSpacingKey]),
+            paragraphSpacingPresets = parseParagraphSpacingPresets(prefs[paragraphSpacingPresetsKey]),
             readingTextAlign = prefs[readingTextAlignKey]
                 ?.let { runCatching { ReaderTextAlignOption.valueOf(it) }.getOrNull() }
                 ?: ReaderTextAlignOption.LEFT,
@@ -293,7 +298,7 @@ class SettingsStore(private val context: Context) {
         readingFontOption: ReaderFontOption,
         readingLineHeightPercent: Int,
         readingMaxWidthDp: Int,
-        readingParagraphSpacing: ParagraphSpacingOption,
+        readingParagraphSpacing: Float,
         playerControlsMode: PlayerControlsMode,
         playerLastNonNubMode: PlayerControlsMode = PlayerControlsMode.FULL,
         playerChevronSnapEdge: PlayerChevronSnapEdge,
@@ -337,7 +342,7 @@ class SettingsStore(private val context: Context) {
             prefs[readingFontOptionKey] = readingFontOption.name
             prefs[readingLineHeightPercentKey] = readingLineHeightPercent
             prefs[readingMaxWidthDpKey] = readingMaxWidthDp
-            prefs[readingParagraphSpacingKey] = readingParagraphSpacing.name
+            prefs[readingParagraphSpacingKey] = readingParagraphSpacing.toString()
             prefs[playerControlsModeKey] = playerControlsMode.name
             prefs[playerLastNonNubModeKey] = playerLastNonNubMode
                 .takeIf { it != PlayerControlsMode.NUB }
@@ -371,14 +376,22 @@ class SettingsStore(private val context: Context) {
         readingFontOption: ReaderFontOption,
         readingLineHeightPercent: Int,
         readingMaxWidthDp: Int,
-        readingParagraphSpacing: ParagraphSpacingOption,
+        readingParagraphSpacing: Float,
     ) {
         context.dataStore.edit { prefs ->
             prefs[readingFontSizeSpKey] = readingFontSizeSp
             prefs[readingFontOptionKey] = readingFontOption.name
             prefs[readingLineHeightPercentKey] = readingLineHeightPercent
             prefs[readingMaxWidthDpKey] = readingMaxWidthDp
-            prefs[readingParagraphSpacingKey] = readingParagraphSpacing.name
+            prefs[readingParagraphSpacingKey] = readingParagraphSpacing.toString()
+        }
+    }
+
+    suspend fun saveParagraphSpacingPresets(presets: List<Float>) {
+        val sanitized = sanitizeParagraphSpacingPresets(presets)
+            .ifEmpty { DEFAULT_PARAGRAPH_SPACING_PRESETS }
+        context.dataStore.edit { prefs ->
+            prefs[paragraphSpacingPresetsKey] = formatParagraphSpacingPresets(sanitized)
         }
     }
 

@@ -101,7 +101,9 @@ import com.mimeo.android.data.QueueFetchResult
 import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.AppSettings
+import com.mimeo.android.model.DEFAULT_PARAGRAPH_SPACING_PRESETS
 import com.mimeo.android.model.DEFAULT_PLAYBACK_SPEED_PRESETS
+import com.mimeo.android.model.sanitizeParagraphSpacingPresets
 import com.mimeo.android.model.sanitizePlaybackSpeedPresets
 import com.mimeo.android.model.AutoDownloadDiagnostics
 import com.mimeo.android.model.ArticleSummary
@@ -121,7 +123,6 @@ import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.LocusContentMode
-import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackChunk
@@ -518,6 +519,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val pendingNavigationRoute: StateFlow<String?> = _pendingNavigationRoute.asStateFlow()
     private val _settingsScrollOffset = MutableStateFlow(0)
     val settingsScrollOffset: StateFlow<Int> = _settingsScrollOffset.asStateFlow()
+    // One-shot request to scroll the Settings screen to its reading section,
+    // raised when the reader Aa panel's "reading settings" shortcut is tapped.
+    private val _pendingSettingsReadingScroll = MutableStateFlow(false)
+    val pendingSettingsReadingScroll: StateFlow<Boolean> = _pendingSettingsReadingScroll.asStateFlow()
     private val authFailureMutex = Mutex()
     private var authFailureHandledThisSession = false
     private var lastArchiveUndoSnapshot: ArchiveUndoSnapshot? = null
@@ -1078,7 +1083,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         readingFontOption: ReaderFontOption,
         readingLineHeightPercent: Int,
         readingMaxWidthDp: Int,
-        readingParagraphSpacing: ParagraphSpacingOption,
+        readingParagraphSpacing: Float,
     ) {
         viewModelScope.launch {
             settingsStore.save(
@@ -3188,6 +3193,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun saveParagraphSpacingPresets(presets: List<Float>) {
+        val sanitized = sanitizeParagraphSpacingPresets(presets)
+            .ifEmpty { DEFAULT_PARAGRAPH_SPACING_PRESETS }
+        _settings.update { current -> current.copy(paragraphSpacingPresets = sanitized) }
+        viewModelScope.launch {
+            settingsStore.saveParagraphSpacingPresets(sanitized)
+        }
+    }
+
     fun saveTtsVoiceName(ttsVoiceName: String) {
         viewModelScope.launch {
             _settings.update { current -> current.copy(ttsVoiceName = ttsVoiceName.trim()) }
@@ -3197,6 +3211,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setSettingsScrollOffset(offset: Int) {
         _settingsScrollOffset.value = offset.coerceAtLeast(0)
+    }
+
+    /** Ask the Settings screen to jump to its reading section on next open. */
+    fun requestSettingsReadingSection() {
+        _pendingSettingsReadingScroll.value = true
+    }
+
+    /** Clear the pending reading-section scroll once the Settings screen handles it. */
+    fun consumeSettingsReadingScroll() {
+        _pendingSettingsReadingScroll.value = false
     }
 
     fun createPlaylist(name: String) {

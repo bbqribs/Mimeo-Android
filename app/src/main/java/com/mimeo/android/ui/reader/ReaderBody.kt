@@ -37,23 +37,26 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import com.mimeo.android.BuildConfig
-import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
+import com.mimeo.android.model.coerceParagraphSpacing
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.ReaderTextAlignOption
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
@@ -89,7 +92,7 @@ fun ReaderBody(
     readingLineHeightPercent: Int,
     readingMaxWidthDp: Int,
     readingTextAlign: ReaderTextAlignOption,
-    paragraphSpacing: ParagraphSpacingOption,
+    paragraphSpacing: Float,
     selectionResetSignal: Int,
     scrollState: ScrollState,
     topOverlayOcclusionPx: Int = 0,
@@ -164,21 +167,35 @@ fun ReaderBody(
             ) ?: if (chunk.text.isNotEmpty()) SentenceRange(0, chunk.text.length) else null
         }
     }
-    val chunkSeparator = readerChunkSeparator(paragraphSpacing)
-    val effectiveFullText = remember(fullText, chunks, chunkSeparator) {
+    val effectiveFullText = remember(fullText, chunks) {
         if (chunks.isNotEmpty()) {
-            chunks.joinToString(separator = chunkSeparator) { it.text }
+            chunks.joinToString(separator = READER_CHUNK_SEPARATOR) { it.text }
         } else {
             fullText.orEmpty()
         }
     }
-    val fullTextChunkStartOffsets = remember(useFullTextLayout, chunks, effectiveFullText, chunkSeparator) {
+    val fullTextChunkStartOffsets = remember(useFullTextLayout, chunks, effectiveFullText) {
         if (!useFullTextLayout || effectiveFullText.isBlank() || chunks.isEmpty()) {
             emptyList()
         } else {
-            buildChunkStartOffsetsForJoinedText(chunks, chunkSeparator.length)
+            buildChunkStartOffsetsForJoinedText(chunks, READER_CHUNK_SEPARATOR.length)
         }
     }
+    // Each inter-chunk separator is a zero-width character that forms its own
+    // paragraph; a ParagraphStyle gives that paragraph a height equal to the
+    // chosen paragraph-spacing gap. This makes spacing freely tunable (not
+    // quantized to whole blank lines) without changing any chunk offsets.
+    val separatorParagraphRanges = remember(useFullTextLayout, chunks, fullTextChunkStartOffsets) {
+        if (!useFullTextLayout) {
+            emptyList()
+        } else {
+            buildChunkSeparatorParagraphRanges(chunks, fullTextChunkStartOffsets, READER_CHUNK_SEPARATOR.length)
+        }
+    }
+    val separatorGapLineHeight = readerParagraphGapLineHeight(
+        spacingMultiplier = paragraphSpacing,
+        bodyLineHeightSp = readingFontSizeSp * (readingLineHeightPercent / 100f),
+    ).sp
     val fullTextHighlightRange = remember(
         useFullTextLayout,
         effectiveFullText,
@@ -287,6 +304,8 @@ fun ReaderBody(
         fullTextLinks,
         fullTextSearchRanges,
         searchHighlightBg,
+        separatorParagraphRanges,
+        separatorGapLineHeight,
     ) {
         if (!useFullTextLayout || effectiveFullText.isBlank()) {
             AnnotatedString("")
@@ -296,6 +315,8 @@ fun ReaderBody(
                 links = fullTextLinks,
                 passiveSearchRanges = fullTextSearchRanges,
                 passiveSearchHighlightBg = searchHighlightBg,
+                separatorParagraphRanges = separatorParagraphRanges,
+                separatorGapLineHeight = separatorGapLineHeight,
             )
         }
     }
@@ -329,6 +350,7 @@ fun ReaderBody(
             textAlign = when (readingTextAlign) {
                 ReaderTextAlignOption.JUSTIFIED -> TextAlign.Justify
                 ReaderTextAlignOption.LEFT -> TextAlign.Start
+                ReaderTextAlignOption.RIGHT -> TextAlign.Right
             },
         ),
     )
@@ -743,15 +765,49 @@ internal fun mapChunkRangeToFullText(
 }
 
 /**
- * Inter-chunk separator for the joined full-text reader layout. The newline
- * count tracks the reader's paragraph-spacing preference so the rendered gap
- * between chunks is visibly tighter or looser. Character offsets stay in sync
- * because [buildChunkStartOffsetsForJoinedText] is given the same length.
+ * Zero-width separator placed between chunks in the joined full-text reader
+ * layout. Each separator forms its own paragraph (see
+ * [buildChunkSeparatorParagraphRanges]) whose height is set by a [ParagraphStyle]
+ * to the chosen paragraph-spacing gap. Keeping it a single character means chunk
+ * character offsets stay in sync via [buildChunkStartOffsetsForJoinedText], and
+ * the rendered gap is freely tunable rather than quantized to whole blank lines.
  */
-internal fun readerChunkSeparator(spacing: ParagraphSpacingOption): String = when (spacing) {
-    ParagraphSpacingOption.SMALL -> "\n"
-    ParagraphSpacingOption.MEDIUM -> "\n\n"
-    ParagraphSpacingOption.LARGE -> "\n\n\n"
+internal const val READER_CHUNK_SEPARATOR: String = "\u200B"
+
+/**
+ * Height, in sp, of the inter-chunk separator paragraph. [spacingMultiplier] is
+ * the selected paragraph-spacing preset, expressed as a multiple of the body
+ * line height so the gap scales with the reader's font-size and line-spacing
+ * settings. The multiplier is clamped to the valid preset range.
+ */
+internal fun readerParagraphGapLineHeight(
+    spacingMultiplier: Float,
+    bodyLineHeightSp: Float,
+): Float = bodyLineHeightSp.coerceAtLeast(0f) * coerceParagraphSpacing(spacingMultiplier)
+
+/**
+ * Ranges (one per inter-chunk separator) covering the zero-width separator
+ * character in the joined full-text layout. Each separator is its own
+ * paragraph; applying a [ParagraphStyle] with the desired gap line height to
+ * these ranges renders the inter-paragraph spacing without altering any chunk
+ * character offsets.
+ */
+internal fun buildChunkSeparatorParagraphRanges(
+    chunks: List<PlaybackChunk>,
+    chunkStartOffsets: List<Int>,
+    separatorLength: Int,
+): List<IntRange> {
+    if (separatorLength < 1 || chunks.size < 2 || chunkStartOffsets.size != chunks.size) {
+        return emptyList()
+    }
+    return buildList {
+        chunks.forEachIndexed { index, chunk ->
+            if (index < chunks.lastIndex) {
+                val separatorStart = chunkStartOffsets[index] + chunk.text.length
+                add(separatorStart..(separatorStart + separatorLength - 1))
+            }
+        }
+    }
 }
 
 internal fun buildChunkStartOffsetsForJoinedText(
@@ -796,8 +852,46 @@ internal fun buildReaderBaseAnnotatedText(
     links: List<ReaderLinkRange>,
     passiveSearchRanges: List<IntRange>,
     passiveSearchHighlightBg: Color,
+    separatorParagraphRanges: List<IntRange> = emptyList(),
+    separatorGapLineHeight: TextUnit = TextUnit.Unspecified,
 ): AnnotatedString = buildAnnotatedString {
     append(text)
+    // Make each zero-width chunk separator its own paragraph with a fixed line
+    // height: that paragraph's height is the rendered inter-paragraph gap.
+    if (separatorGapLineHeight != TextUnit.Unspecified) {
+        separatorParagraphRanges.forEach { range ->
+            val start = range.first.coerceIn(0, text.length)
+            val endExclusive = (range.last + 1).coerceIn(start, text.length)
+            if (start < endExclusive) {
+                addStyle(
+                    style = ParagraphStyle(
+                        lineHeight = separatorGapLineHeight,
+                        // The separator is a single-line paragraph. Without an
+                        // explicit LineHeightStyle, Compose does not apply
+                        // lineHeight to a paragraph's first (here, only) line,
+                        // so every spacing option rendered an identical gap.
+                        // Trim.None keeps the full lineHeight as the gap height.
+                        lineHeightStyle = LineHeightStyle(
+                            alignment = LineHeightStyle.Alignment.Center,
+                            trim = LineHeightStyle.Trim.None,
+                        ),
+                    ),
+                    start = start,
+                    end = endExclusive,
+                )
+                // Shrink the separator glyph to ~nothing. A line cannot render
+                // shorter than its font's intrinsic height, so at the body font
+                // size every gap below ~one line clamped to the same minimum.
+                // A 1sp glyph lets lineHeight control the gap across the full
+                // preset range, including sub-line spacings.
+                addStyle(
+                    style = SpanStyle(fontSize = 1.sp),
+                    start = start,
+                    end = endExclusive,
+                )
+            }
+        }
+    }
     links.forEach { link ->
         val start = link.start.coerceIn(0, text.length)
         val endExclusive = link.endExclusive.coerceIn(start, text.length)

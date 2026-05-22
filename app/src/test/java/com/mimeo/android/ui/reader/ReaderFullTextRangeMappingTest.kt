@@ -1,6 +1,5 @@
 package com.mimeo.android.ui.reader
 
-import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -22,10 +21,62 @@ class ReaderFullTextRangeMappingTest {
     }
 
     @Test
-    fun readerChunkSeparatorTracksParagraphSpacing() {
-        assertEquals("\n", readerChunkSeparator(ParagraphSpacingOption.SMALL))
-        assertEquals("\n\n", readerChunkSeparator(ParagraphSpacingOption.MEDIUM))
-        assertEquals("\n\n\n", readerChunkSeparator(ParagraphSpacingOption.LARGE))
+    fun chunkSeparatorIsSingleZeroWidthCharacter() {
+        // A single zero-width char keeps chunk offsets stable; the visible gap
+        // comes from a ParagraphStyle, not from the separator string itself.
+        assertEquals(1, READER_CHUNK_SEPARATOR.length)
+        assertEquals('\u200B', READER_CHUNK_SEPARATOR[0])
+    }
+
+    @Test
+    fun paragraphGapLineHeightScalesWithMultiplierAndBodyHeight() {
+        val body = 25.6f
+        val small = readerParagraphGapLineHeight(spacingMultiplier = 0.35f, bodyLineHeightSp = body)
+        val full = readerParagraphGapLineHeight(spacingMultiplier = 1.0f, bodyLineHeightSp = body)
+        val double = readerParagraphGapLineHeight(spacingMultiplier = 2.0f, bodyLineHeightSp = body)
+
+        // The gap is the multiplier times the body line height.
+        assertEquals(body * 0.35f, small, 0.001f)
+        assertEquals(body, full, 0.001f)
+        assertEquals(body * 2.0f, double, 0.001f)
+        // A zero body height yields no gap regardless of the multiplier.
+        assertEquals(0f, readerParagraphGapLineHeight(spacingMultiplier = 2.0f, bodyLineHeightSp = 0f), 0.001f)
+        // Out-of-range multipliers are clamped to the valid preset range.
+        assertEquals(body * 4.0f, readerParagraphGapLineHeight(spacingMultiplier = 99f, bodyLineHeightSp = body), 0.001f)
+    }
+
+    @Test
+    fun chunkSeparatorParagraphRangesTargetSeparatorCharacters() {
+        val chunks = listOf(
+            PlaybackChunk(index = 0, text = "Alpha", startChar = 0, endChar = 5),
+            PlaybackChunk(index = 1, text = "Beta", startChar = 5, endChar = 9),
+            PlaybackChunk(index = 2, text = "Gamma", startChar = 9, endChar = 14),
+        )
+        val starts = buildChunkStartOffsetsForJoinedText(chunks, READER_CHUNK_SEPARATOR.length)
+        val joined = chunks.joinToString(separator = READER_CHUNK_SEPARATOR) { it.text }
+
+        val ranges = buildChunkSeparatorParagraphRanges(chunks, starts, READER_CHUNK_SEPARATOR.length)
+
+        // One single-character range per inter-chunk separator, each landing on
+        // the zero-width separator so it forms its own gap paragraph.
+        assertEquals(2, ranges.size)
+        ranges.forEach { range ->
+            assertEquals(range.first, range.last)
+            assertEquals('\u200B', joined[range.first])
+        }
+    }
+
+    @Test
+    fun chunkSeparatorParagraphRangesEmptyForSingleChunk() {
+        val chunks = listOf(
+            PlaybackChunk(index = 0, text = "Alpha", startChar = 0, endChar = 5),
+        )
+        val starts = buildChunkStartOffsetsForJoinedText(chunks, READER_CHUNK_SEPARATOR.length)
+
+        assertEquals(
+            emptyList<IntRange>(),
+            buildChunkSeparatorParagraphRanges(chunks, starts, READER_CHUNK_SEPARATOR.length),
+        )
     }
 
     @Test
@@ -41,18 +92,15 @@ class ReaderFullTextRangeMappingTest {
     }
 
     @Test
-    fun joinedOffsetsStayConsistentWithEachParagraphSpacingSeparator() {
+    fun joinedOffsetsIndexChunksWithinSeparatedText() {
         val chunks = listOf(
             PlaybackChunk(index = 0, text = "first", startChar = 0, endChar = 5),
             PlaybackChunk(index = 1, text = "second", startChar = 5, endChar = 11),
         )
-        ParagraphSpacingOption.entries.forEach { spacing ->
-            val separator = readerChunkSeparator(spacing)
-            val joined = chunks.joinToString(separator = separator) { it.text }
-            val starts = buildChunkStartOffsetsForJoinedText(chunks, separator.length)
-            // The computed start of the second chunk must index its real position in the joined text.
-            assertEquals(chunks[1].text, joined.substring(starts[1], starts[1] + chunks[1].text.length))
-        }
+        val joined = chunks.joinToString(separator = READER_CHUNK_SEPARATOR) { it.text }
+        val starts = buildChunkStartOffsetsForJoinedText(chunks, READER_CHUNK_SEPARATOR.length)
+        // The computed start of the second chunk must index its real position in the joined text.
+        assertEquals(chunks[1].text, joined.substring(starts[1], starts[1] + chunks[1].text.length))
     }
 
     @Test

@@ -43,6 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +52,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -80,13 +83,19 @@ import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
 import com.mimeo.android.model.DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL
 import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.LocusContentMode
-import com.mimeo.android.model.ParagraphSpacingOption
+import com.mimeo.android.model.DEFAULT_PARAGRAPH_SPACING_PRESETS
+import com.mimeo.android.model.MAX_PARAGRAPH_SPACING_PRESETS
 import com.mimeo.android.model.MAX_PLAYBACK_SPEED_PRESETS
+import com.mimeo.android.model.PARAGRAPH_SPACING_PRESET_MAX
+import com.mimeo.android.model.PARAGRAPH_SPACING_PRESET_MIN
 import com.mimeo.android.model.PLAYBACK_SPEED_PRESET_MAX
 import com.mimeo.android.model.PLAYBACK_SPEED_PRESET_MIN
 import com.mimeo.android.model.PendingManualSaveItem
+import com.mimeo.android.model.formatParagraphSpacingPresetValue
 import com.mimeo.android.model.formatPlaybackSpeedPresetValue
+import com.mimeo.android.model.isParagraphSpacingPresetEntryValid
 import com.mimeo.android.model.isPlaybackSpeedPresetEntryValid
+import com.mimeo.android.model.sanitizeParagraphSpacingPresets
 import com.mimeo.android.model.sanitizePlaybackSpeedPresets
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.ReaderFontOption
@@ -123,8 +132,6 @@ import com.mimeo.android.ui.theme.resolveThemeChoice
 import com.mimeo.android.ui.theme.toMimeoAccentScheme
 import kotlinx.coroutines.launch
 
-private const val PREVIEW_PARAGRAPH_1 = "Mimeo now remembers your reading layout so Locus feels like a calm, bookish surface instead of a raw text dump."
-private const val PREVIEW_PARAGRAPH_2 = "Use this preview to check rhythm, paragraph spacing, and readability before returning to long-form listening sessions."
 private const val TTS_PREVIEW_PHRASE = "The quick brown fox jumps over the lazy dog."
 
 @Composable
@@ -163,6 +170,14 @@ fun SettingsScreen(
     val playlists by vm.playlists.collectAsState()
     val scrollState = rememberScrollState()
     val actionScope = rememberCoroutineScope()
+    // Support the reader Aa panel's "All reading settings" shortcut: measure the
+    // reading section's scroll offset and jump to it when a request is pending.
+    val pendingReadingScroll by vm.pendingSettingsReadingScroll.collectAsState()
+    var settingsViewportTopRootY by remember { mutableFloatStateOf(Float.NaN) }
+    // scrollState.value + the header's root-Y is invariant under scrolling, so
+    // this anchor is stable once measured; the section offset is anchor minus
+    // the viewport top.
+    var readingHeaderAnchorY by remember { mutableFloatStateOf(Float.NaN) }
     val showJumpToTop by remember {
         derivedStateOf { shouldShowJumpToTopScroll(scrollState.value, thresholdPx = 220) }
     }
@@ -250,6 +265,13 @@ fun SettingsScreen(
             (settings.playbackSpeedPresets.map { formatPlaybackSpeedPresetValue(it) } +
                 List(MAX_PLAYBACK_SPEED_PRESETS) { "" })
                 .take(MAX_PLAYBACK_SPEED_PRESETS),
+        )
+    }
+    var paragraphPresetBoxes by remember(settings.paragraphSpacingPresets) {
+        mutableStateOf(
+            (settings.paragraphSpacingPresets.map { formatParagraphSpacingPresetValue(it) } +
+                List(MAX_PARAGRAPH_SPACING_PRESETS) { "" })
+                .take(MAX_PARAGRAPH_SPACING_PRESETS),
         )
     }
     var ttsEngineReady by remember { mutableStateOf(false) }
@@ -373,7 +395,7 @@ fun SettingsScreen(
         fontOption: ReaderFontOption = readingFontOption,
         lineHeightPercent: Int = readingLineHeightPercent,
         maxWidthDp: Int = readingMaxWidthDp,
-        paragraphSpacing: ParagraphSpacingOption = readingParagraphSpacing,
+        paragraphSpacing: Float = readingParagraphSpacing,
     ) {
         vm.saveReadingPreferences(
             readingFontSizeSp = fontSizeSp,
@@ -457,8 +479,22 @@ fun SettingsScreen(
 
     LaunchedEffect(settingsScrollOffset) {
         if (restoredScrollOffset) return@LaunchedEffect
+        // A queued reading-section jump should not be fought by a scroll restore.
+        if (vm.pendingSettingsReadingScroll.value) {
+            restoredScrollOffset = true
+            return@LaunchedEffect
+        }
         scrollState.scrollTo(settingsScrollOffset)
         restoredScrollOffset = true
+    }
+
+    LaunchedEffect(pendingReadingScroll, readingHeaderAnchorY, settingsViewportTopRootY) {
+        if (!pendingReadingScroll) return@LaunchedEffect
+        val anchor = readingHeaderAnchorY
+        val viewportTop = settingsViewportTopRootY
+        if (anchor.isNaN() || viewportTop.isNaN()) return@LaunchedEffect
+        scrollState.animateScrollTo((anchor - viewportTop).toInt().coerceAtLeast(0))
+        vm.consumeSettingsReadingScroll()
     }
 
     LaunchedEffect(scrollState) {
@@ -509,17 +545,11 @@ fun SettingsScreen(
     val systemIsDark = isSystemInDarkTheme()
     val resolvedThemeChoice = resolveThemeChoice(visualThemePreference, systemIsDark)
 
-    val previewTextStyle = TextStyle(
-        fontFamily = readingFontOption.toFontFamily(),
-        fontSize = readingFontSizeSp.sp,
-        lineHeight = (readingFontSizeSp * (readingLineHeightPercent / 100f)).sp,
-        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
-    )
-
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .onGloballyPositioned { settingsViewportTopRootY = it.positionInRoot().y }
                 .passiveVerticalScrollIndicator(
                     scrollState = scrollState,
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
@@ -1726,6 +1756,9 @@ fun SettingsScreen(
         SettingsSectionHeader(
             title = "Appearance & Reading",
             subtitle = "Control app-wide appearance, then fine-tune reading layout.",
+            modifier = Modifier.onGloballyPositioned { coords ->
+                readingHeaderAnchorY = scrollState.value + coords.positionInRoot().y
+            },
         )
         ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
             Column(
@@ -1932,41 +1965,94 @@ fun SettingsScreen(
                     steps = 16,
                 )
 
-                Text("Paragraph spacing")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ParagraphSpacingOption.entries.forEach { option ->
-                        FilterChip(
-                            selected = readingParagraphSpacing == option,
-                            onClick = {
-                                readingParagraphSpacing = option
-                                saveReading(paragraphSpacing = option)
-                            },
-                            label = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() }) },
-                        )
-                    }
-                }
-                ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(
-                            when (readingParagraphSpacing) {
-                                ParagraphSpacingOption.SMALL -> 8.dp
-                                ParagraphSpacingOption.MEDIUM -> 14.dp
-                                ParagraphSpacingOption.LARGE -> 20.dp
-                            },
-                        ),
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    val paragraphMinLabel =
+                        formatParagraphSpacingPresetValue(PARAGRAPH_SPACING_PRESET_MIN)
+                    val paragraphMaxLabel =
+                        formatParagraphSpacingPresetValue(PARAGRAPH_SPACING_PRESET_MAX)
+                    val paragraphBoxesValid =
+                        paragraphPresetBoxes.all { isParagraphSpacingPresetEntryValid(it) }
+                    val paragraphBoxesAllBlank = paragraphPresetBoxes.all { it.isBlank() }
+                    // The preset list Apply would persist, compared against the
+                    // operative list so Apply stays disabled with no real change.
+                    val wouldBeParagraphPresets = sanitizeParagraphSpacingPresets(
+                        paragraphPresetBoxes.mapNotNull { it.trim().toFloatOrNull() },
+                    ).ifEmpty { DEFAULT_PARAGRAPH_SPACING_PRESETS }
+                    val paragraphBoxesDirty =
+                        wouldBeParagraphPresets.map { formatParagraphSpacingPresetValue(it) } !=
+                            settings.paragraphSpacingPresets.map { formatParagraphSpacingPresetValue(it) }
+                    Text("Paragraph spacing presets")
+                    Text(
+                        text = "One box per quick-pick gap in the reader's Aa panel. Each value " +
+                            "is a multiple of the line height, from ${paragraphMinLabel}× to " +
+                            "${paragraphMaxLabel}×, or leave it blank. Duplicates are merged and " +
+                            "the list is sorted ascending.",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Text("Preview", style = androidx.compose.material3.MaterialTheme.typography.labelMedium)
-                        Text(
-                            text = PREVIEW_PARAGRAPH_1,
-                            style = previewTextStyle,
-                        )
-                        Text(
-                            text = PREVIEW_PARAGRAPH_2,
-                            style = previewTextStyle,
-                        )
+                        paragraphPresetBoxes.forEachIndexed { index, boxValue ->
+                            OutlinedTextField(
+                                value = boxValue,
+                                onValueChange = { entered ->
+                                    paragraphPresetBoxes = paragraphPresetBoxes
+                                        .toMutableList()
+                                        .also { it[index] = entered }
+                                },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                isError = !isParagraphSpacingPresetEntryValid(boxValue),
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Decimal,
+                                ),
+                            )
+                        }
+                    }
+                    Text(
+                        text = when {
+                            !paragraphBoxesValid ->
+                                "Each box must be empty or a number from ${paragraphMinLabel}× " +
+                                    "to ${paragraphMaxLabel}×."
+                            paragraphBoxesAllBlank -> "Enter at least one preset spacing."
+                            !paragraphBoxesDirty -> "These spacings are already saved."
+                            else -> "Apply saves these spacings to the reader; Reset restores " +
+                                "the defaults."
+                        },
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = if (!paragraphBoxesValid || paragraphBoxesAllBlank) {
+                            androidx.compose.material3.MaterialTheme.colorScheme.error
+                        } else {
+                            androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Button(
+                            enabled = paragraphBoxesValid && !paragraphBoxesAllBlank &&
+                                paragraphBoxesDirty,
+                            onClick = {
+                                val values = paragraphPresetBoxes
+                                    .mapNotNull { it.trim().toFloatOrNull() }
+                                vm.saveParagraphSpacingPresets(values)
+                            },
+                        ) {
+                            Text("Apply")
+                        }
+                        TextButton(
+                            onClick = {
+                                vm.saveParagraphSpacingPresets(DEFAULT_PARAGRAPH_SPACING_PRESETS)
+                            },
+                        ) {
+                            Text("Reset to defaults")
+                        }
                     }
                 }
             }
@@ -2445,12 +2531,13 @@ private fun BlueskySourceRow(
 private fun SettingsSectionHeader(
     title: String,
     subtitle: String? = null,
+    modifier: Modifier = Modifier,
 ) {
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(top = 4.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),

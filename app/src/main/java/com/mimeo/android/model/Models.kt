@@ -8,12 +8,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.math.roundToInt
 
-enum class ParagraphSpacingOption {
-    SMALL,
-    MEDIUM,
-    LARGE,
-}
-
 enum class ReaderFontOption {
     LITERATA,
     SERIF,
@@ -480,7 +474,8 @@ data class AppSettings(
     val readingFontOption: ReaderFontOption = ReaderFontOption.SANS_SERIF,
     val readingLineHeightPercent: Int = 160,
     val readingMaxWidthDp: Int = 720,
-    val readingParagraphSpacing: ParagraphSpacingOption = ParagraphSpacingOption.MEDIUM,
+    val readingParagraphSpacing: Float = DEFAULT_PARAGRAPH_SPACING,
+    val paragraphSpacingPresets: List<Float> = DEFAULT_PARAGRAPH_SPACING_PRESETS,
     val readingTextAlign: ReaderTextAlignOption = ReaderAppearanceDefaults.TEXT_ALIGN,
     val visualThemePreference: VisualThemePreference = VisualThemePreference.FOLLOW_SYSTEM,
     val visualDensityPreference: VisualDensityPreference = VisualDensityPreference.DEFAULT,
@@ -555,6 +550,101 @@ fun formatPlaybackSpeedPresetValue(value: Float): String {
         frac == 0 -> whole.toString()
         frac % 10 == 0 -> "$whole.${frac / 10}"
         else -> "$whole.${frac.toString().padStart(2, '0')}"
+    }
+}
+
+/**
+ * Default paragraph-spacing quick-pick presets, expressed as multiples of the
+ * reader body line height. Reproduce the historic Small/Medium/Large gaps.
+ */
+val DEFAULT_PARAGRAPH_SPACING_PRESETS: List<Float> = listOf(0.35f, 1.0f, 2.0f)
+
+/** Default selected paragraph spacing (a multiple of the body line height). */
+const val DEFAULT_PARAGRAPH_SPACING: Float = 1.0f
+
+/** Inclusive bounds for a single paragraph-spacing preset. */
+const val PARAGRAPH_SPACING_PRESET_MIN: Float = 0.0f
+const val PARAGRAPH_SPACING_PRESET_MAX: Float = 4.0f
+private val PARAGRAPH_SPACING_PRESET_MIN_HUNDREDTHS = (PARAGRAPH_SPACING_PRESET_MIN * 100f).roundToInt()
+private val PARAGRAPH_SPACING_PRESET_MAX_HUNDREDTHS = (PARAGRAPH_SPACING_PRESET_MAX * 100f).roundToInt()
+
+/** Number of paragraph-spacing preset slots — one editable box per preset in Settings. */
+const val MAX_PARAGRAPH_SPACING_PRESETS = 5
+
+/** Clamp a paragraph-spacing multiplier into its valid range. */
+fun coerceParagraphSpacing(value: Float): Float =
+    if (value.isFinite()) {
+        value.coerceIn(PARAGRAPH_SPACING_PRESET_MIN, PARAGRAPH_SPACING_PRESET_MAX)
+    } else {
+        DEFAULT_PARAGRAPH_SPACING
+    }
+
+/**
+ * Normalize candidate spacings into a valid preset list: drop non-finite and
+ * out-of-range values, round to 0.01, de-duplicate, sort ascending, and cap the
+ * count. May return an empty list when no input value is valid.
+ */
+fun sanitizeParagraphSpacingPresets(values: List<Float>): List<Float> =
+    values
+        .filter { it.isFinite() }
+        .map { (it * 100f).roundToInt() }
+        .filter { it in PARAGRAPH_SPACING_PRESET_MIN_HUNDREDTHS..PARAGRAPH_SPACING_PRESET_MAX_HUNDREDTHS }
+        .distinct()
+        .sorted()
+        .take(MAX_PARAGRAPH_SPACING_PRESETS)
+        .map { it / 100f }
+
+/**
+ * Parse a stored or user-entered comma-separated paragraph-spacing list. Falls
+ * back to [DEFAULT_PARAGRAPH_SPACING_PRESETS] when the input is blank or yields
+ * no valid value, so a corrupt stored value can never empty the reader panel.
+ */
+fun parseParagraphSpacingPresets(raw: String?): List<Float> {
+    if (raw.isNullOrBlank()) return DEFAULT_PARAGRAPH_SPACING_PRESETS
+    val parsed = raw.split(',').mapNotNull { it.trim().toFloatOrNull() }
+    return sanitizeParagraphSpacingPresets(parsed).ifEmpty { DEFAULT_PARAGRAPH_SPACING_PRESETS }
+}
+
+/**
+ * True when [text] is a blank slot or a finite number within the valid preset
+ * bounds. Used for per-box validation in the Settings paragraph-spacing editor.
+ */
+fun isParagraphSpacingPresetEntryValid(text: String): Boolean {
+    val trimmed = text.trim()
+    if (trimmed.isEmpty()) return true
+    val value = trimmed.toFloatOrNull() ?: return false
+    return value.isFinite() && value in PARAGRAPH_SPACING_PRESET_MIN..PARAGRAPH_SPACING_PRESET_MAX
+}
+
+/** Format a preset list as a compact comma-separated string, e.g. "0.35, 1, 2". */
+fun formatParagraphSpacingPresets(values: List<Float>): String =
+    values.joinToString(", ") { formatParagraphSpacingPresetValue(it) }
+
+/** Format a single spacing multiplier, trimming trailing zeros (1.0 -> "1", 0.35 -> "0.35"). */
+fun formatParagraphSpacingPresetValue(value: Float): String {
+    val hundredths = (value * 100f).roundToInt()
+    val whole = hundredths / 100
+    val frac = hundredths % 100
+    return when {
+        frac == 0 -> whole.toString()
+        frac % 10 == 0 -> "$whole.${frac / 10}"
+        else -> "$whole.${frac.toString().padStart(2, '0')}"
+    }
+}
+
+/**
+ * Parse the stored selected paragraph spacing. Accepts the current numeric
+ * format and migrates the legacy SMALL/MEDIUM/LARGE enum names to multiples of
+ * the body line height.
+ */
+fun parseStoredParagraphSpacing(raw: String?): Float {
+    if (raw.isNullOrBlank()) return DEFAULT_PARAGRAPH_SPACING
+    raw.trim().toFloatOrNull()?.let { return coerceParagraphSpacing(it) }
+    return when (raw.trim().uppercase()) {
+        "SMALL" -> 0.35f
+        "MEDIUM" -> 1.0f
+        "LARGE" -> 2.0f
+        else -> DEFAULT_PARAGRAPH_SPACING
     }
 }
 
