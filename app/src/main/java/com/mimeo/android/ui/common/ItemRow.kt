@@ -114,13 +114,18 @@ fun ItemActionMenu(
     onPlayNow: (() -> Unit)?,
     entries: List<ItemActionMenuEntry>,
 ) {
-    ItemRowTrailingActions(title = title, onPlayNow = onPlayNow) {
+    ItemRowTrailingActions(title = title, onPlayNow = onPlayNow) { dismissMenu ->
         entries.forEach { entry ->
             when (entry) {
                 is ItemActionMenuEntry.Action -> DropdownMenuItem(
                     enabled = entry.enabled,
                     text = { Text(entry.label) },
-                    onClick = entry.onClick,
+                    onClick = {
+                        // Always collapse the overflow menu before running the
+                        // action so the menu never lingers after a selection.
+                        dismissMenu()
+                        entry.onClick()
+                    },
                 )
                 ItemActionMenuEntry.Divider -> HorizontalDivider()
             }
@@ -132,13 +137,15 @@ fun ItemActionMenu(
  * Shared trailing-actions slot: visible Play button + MoreVert overflow button/menu.
  *
  * [onPlayNow] — if null the play button is omitted (e.g. item still loading).
- * [menuContent] — surface-specific DropdownMenuItem blocks go here.
+ * [menuContent] — surface-specific DropdownMenuItem blocks go here. It receives a
+ *   `dismiss` callback that collapses the overflow menu; invoke it when an item is
+ *   selected so the menu always closes after a choice.
  */
 @Composable
 fun ItemRowTrailingActions(
     title: String,
     onPlayNow: (() -> Unit)?,
-    menuContent: @Composable ColumnScope.() -> Unit,
+    menuContent: @Composable ColumnScope.(dismiss: () -> Unit) -> Unit,
 ) {
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
@@ -176,7 +183,7 @@ fun ItemRowTrailingActions(
                 DropdownMenu(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
-                    content = { menuContent() },
+                    content = { menuContent { menuExpanded = false } },
                 )
             }
         }
