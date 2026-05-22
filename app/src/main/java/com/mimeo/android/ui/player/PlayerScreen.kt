@@ -133,7 +133,6 @@ import com.mimeo.android.R
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.LocusContentMode
-import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlayerChevronSnapEdge
@@ -146,6 +145,7 @@ import com.mimeo.android.model.ReaderTextAlignOption
 import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.model.absoluteCharOffset
 import com.mimeo.android.model.calculateCanonicalPercent
+import com.mimeo.android.model.formatParagraphSpacingPresetValue
 import com.mimeo.android.model.positionFromAbsoluteOffset
 import com.mimeo.android.player.TtsChunkDoneEvent
 import com.mimeo.android.player.TtsChunkProgressEvent
@@ -2162,6 +2162,7 @@ fun PlayerScreen(
                                         paragraphSpacing = settings.readingParagraphSpacing,
                                         textAlign = settings.readingTextAlign,
                                     ),
+                                    paragraphSpacingPresets = settings.paragraphSpacingPresets,
                                     onReaderAppearanceChange = { vm.saveReaderAppearance(it) },
                                     overflowExpanded = overflowExpanded,
                                     showTopBar = !actionBarHiddenByMode || locusSearchActive,
@@ -2550,6 +2551,7 @@ private fun ExpandedPlayerTopBar(
     titleSourceUrl: String?,
     continuousMarquee: Boolean,
     readerAppearance: ReaderAppearanceState,
+    paragraphSpacingPresets: List<Float>,
     onReaderAppearanceChange: (ReaderAppearanceState) -> Unit,
     overflowExpanded: Boolean,
     showTopBar: Boolean = true,
@@ -2715,6 +2717,7 @@ private fun ExpandedPlayerTopBar(
                     ActionHintTooltip(label = "Reading appearance") {
                         ReaderAppearanceButton(
                             appearance = readerAppearance,
+                            paragraphSpacingPresets = paragraphSpacingPresets,
                             onAppearanceChange = onReaderAppearanceChange,
                         )
                     }
@@ -2857,6 +2860,7 @@ private fun ActionHintTooltip(
 @Composable
 private fun ReaderAppearanceButton(
     appearance: ReaderAppearanceState,
+    paragraphSpacingPresets: List<Float>,
     onAppearanceChange: (ReaderAppearanceState) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -2881,6 +2885,7 @@ private fun ReaderAppearanceButton(
         ) {
             ReaderAppearancePanel(
                 appearance = appearance,
+                paragraphSpacingPresets = paragraphSpacingPresets,
                 onAppearanceChange = onAppearanceChange,
             )
         }
@@ -2890,6 +2895,7 @@ private fun ReaderAppearanceButton(
 @Composable
 private fun ReaderAppearancePanel(
     appearance: ReaderAppearanceState,
+    paragraphSpacingPresets: List<Float>,
     onAppearanceChange: (ReaderAppearanceState) -> Unit,
 ) {
     var draft by remember { mutableStateOf(appearance) }
@@ -2976,12 +2982,13 @@ private fun ReaderAppearancePanel(
             )
 
             ReaderAppearanceFieldLabel("Paragraph spacing")
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                ParagraphSpacingOption.entries.forEach { option ->
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                paragraphSpacingPresets.forEach { preset ->
                     FilterChip(
-                        selected = draft.paragraphSpacing == option,
-                        onClick = { update(draft.copy(paragraphSpacing = option)) },
-                        label = { Text(paragraphSpacingLabel(option)) },
+                        selected = (draft.paragraphSpacing * 100f).roundToInt() ==
+                            (preset * 100f).roundToInt(),
+                        onClick = { update(draft.copy(paragraphSpacing = preset)) },
+                        label = { Text("${formatParagraphSpacingPresetValue(preset)}×") },
                     )
                 }
             }
@@ -3024,12 +3031,6 @@ private fun readerFontOptionLabel(option: ReaderFontOption): String = when (opti
     ReaderFontOption.SERIF -> "Serif"
     ReaderFontOption.SANS_SERIF -> "Sans"
     ReaderFontOption.MONOSPACE -> "Mono"
-}
-
-private fun paragraphSpacingLabel(option: ParagraphSpacingOption): String = when (option) {
-    ParagraphSpacingOption.SMALL -> "Small"
-    ParagraphSpacingOption.MEDIUM -> "Medium"
-    ParagraphSpacingOption.LARGE -> "Large"
 }
 
 private fun readerTextAlignLabel(option: ReaderTextAlignOption): String = when (option) {

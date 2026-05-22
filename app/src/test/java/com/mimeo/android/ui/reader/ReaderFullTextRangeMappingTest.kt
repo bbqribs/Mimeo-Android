@@ -1,10 +1,8 @@
 package com.mimeo.android.ui.reader
 
-import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReaderFullTextRangeMappingTest {
@@ -31,21 +29,20 @@ class ReaderFullTextRangeMappingTest {
     }
 
     @Test
-    fun paragraphGapLineHeightScalesAndOrdersBySpacing() {
+    fun paragraphGapLineHeightScalesWithMultiplierAndBodyHeight() {
         val body = 25.6f
-        val small = readerParagraphGapLineHeight(ParagraphSpacingOption.SMALL, body)
-        val medium = readerParagraphGapLineHeight(ParagraphSpacingOption.MEDIUM, body)
-        val large = readerParagraphGapLineHeight(ParagraphSpacingOption.LARGE, body)
+        val small = readerParagraphGapLineHeight(spacingMultiplier = 0.35f, bodyLineHeightSp = body)
+        val full = readerParagraphGapLineHeight(spacingMultiplier = 1.0f, bodyLineHeightSp = body)
+        val double = readerParagraphGapLineHeight(spacingMultiplier = 2.0f, bodyLineHeightSp = body)
 
-        // Sizes increase strictly with the spacing option, and Small is a
-        // genuine sub-line gap (smaller than a full body line).
-        assertTrue(small > 0f)
-        assertTrue(small < medium)
-        assertTrue(medium < large)
-        assertTrue(small < body)
-        // Medium reproduces a one-line gap; gaps scale linearly with body height.
-        assertEquals(body, medium, 0.001f)
-        assertEquals(0f, readerParagraphGapLineHeight(ParagraphSpacingOption.LARGE, 0f), 0.001f)
+        // The gap is the multiplier times the body line height.
+        assertEquals(body * 0.35f, small, 0.001f)
+        assertEquals(body, full, 0.001f)
+        assertEquals(body * 2.0f, double, 0.001f)
+        // A zero body height yields no gap regardless of the multiplier.
+        assertEquals(0f, readerParagraphGapLineHeight(spacingMultiplier = 2.0f, bodyLineHeightSp = 0f), 0.001f)
+        // Out-of-range multipliers are clamped to the valid preset range.
+        assertEquals(body * 4.0f, readerParagraphGapLineHeight(spacingMultiplier = 99f, bodyLineHeightSp = body), 0.001f)
     }
 
     @Test

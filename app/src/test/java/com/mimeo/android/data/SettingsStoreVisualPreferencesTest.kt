@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.AppSettings
-import com.mimeo.android.model.ParagraphSpacingOption
+import com.mimeo.android.model.DEFAULT_PARAGRAPH_SPACING_PRESETS
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.ReaderTextAlignOption
 import com.mimeo.android.model.VisualDensityPreference
@@ -105,7 +105,7 @@ class SettingsStoreVisualPreferencesTest {
             readingFontOption = ReaderFontOption.MONOSPACE,
             readingLineHeightPercent = 175,
             readingMaxWidthDp = 680,
-            readingParagraphSpacing = ParagraphSpacingOption.LARGE,
+            readingParagraphSpacing = 1.5f,
         )
 
         val settings = store.settingsFlow.first()
@@ -113,7 +113,22 @@ class SettingsStoreVisualPreferencesTest {
         assertEquals(ReaderFontOption.MONOSPACE, settings.readingFontOption)
         assertEquals(175, settings.readingLineHeightPercent)
         assertEquals(680, settings.readingMaxWidthDp)
-        assertEquals(ParagraphSpacingOption.LARGE, settings.readingParagraphSpacing)
+        assertEquals(1.5f, settings.readingParagraphSpacing, 0.0001f)
+    }
+
+    @Test
+    fun emptyDataStore_readsDefaultParagraphSpacingPresets() = runBlocking {
+        val settings = store.settingsFlow.first()
+        assertEquals(DEFAULT_PARAGRAPH_SPACING_PRESETS, settings.paragraphSpacingPresets)
+        assertEquals(1.0f, settings.readingParagraphSpacing, 0.0001f)
+    }
+
+    @Test
+    fun paragraphSpacingPresets_roundTripThroughDataStore() = runBlocking {
+        store.saveParagraphSpacingPresets(listOf(1.5f, 0.25f, 0.25f, 3.0f))
+        val settings = store.settingsFlow.first()
+        // De-duplicated and sorted ascending.
+        assertEquals(listOf(0.25f, 1.5f, 3.0f), settings.paragraphSpacingPresets)
     }
 
     @Test

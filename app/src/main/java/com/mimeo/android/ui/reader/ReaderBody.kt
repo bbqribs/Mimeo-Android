@@ -55,8 +55,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import com.mimeo.android.BuildConfig
-import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
+import com.mimeo.android.model.coerceParagraphSpacing
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.ReaderTextAlignOption
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
@@ -92,7 +92,7 @@ fun ReaderBody(
     readingLineHeightPercent: Int,
     readingMaxWidthDp: Int,
     readingTextAlign: ReaderTextAlignOption,
-    paragraphSpacing: ParagraphSpacingOption,
+    paragraphSpacing: Float,
     selectionResetSignal: Int,
     scrollState: ScrollState,
     topOverlayOcclusionPx: Int = 0,
@@ -193,7 +193,7 @@ fun ReaderBody(
         }
     }
     val separatorGapLineHeight = readerParagraphGapLineHeight(
-        spacing = paragraphSpacing,
+        spacingMultiplier = paragraphSpacing,
         bodyLineHeightSp = readingFontSizeSp * (readingLineHeightPercent / 100f),
     ).sp
     val fullTextHighlightRange = remember(
@@ -774,23 +774,15 @@ internal fun mapChunkRangeToFullText(
 internal const val READER_CHUNK_SEPARATOR: String = "\u200B"
 
 /**
- * Height, in sp, of the inter-chunk separator paragraph for each paragraph
- * spacing option. Expressed as a multiple of the body line height so the gap
- * scales with the reader's font-size and line-spacing settings. MEDIUM and LARGE
- * reproduce the previous one-/two-blank-line gaps; SMALL is a genuine tight gap
- * (roughly half a line) that a whole-blank-line approach could not express.
+ * Height, in sp, of the inter-chunk separator paragraph. [spacingMultiplier] is
+ * the selected paragraph-spacing preset, expressed as a multiple of the body
+ * line height so the gap scales with the reader's font-size and line-spacing
+ * settings. The multiplier is clamped to the valid preset range.
  */
 internal fun readerParagraphGapLineHeight(
-    spacing: ParagraphSpacingOption,
+    spacingMultiplier: Float,
     bodyLineHeightSp: Float,
-): Float {
-    val multiplier = when (spacing) {
-        ParagraphSpacingOption.SMALL -> 0.5f
-        ParagraphSpacingOption.MEDIUM -> 1.0f
-        ParagraphSpacingOption.LARGE -> 2.0f
-    }
-    return bodyLineHeightSp.coerceAtLeast(0f) * multiplier
-}
+): Float = bodyLineHeightSp.coerceAtLeast(0f) * coerceParagraphSpacing(spacingMultiplier)
 
 /**
  * Ranges (one per inter-chunk separator) covering the zero-width separator

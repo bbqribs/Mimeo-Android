@@ -15,7 +15,9 @@ object ReaderAppearanceDefaults {
     const val LINE_HEIGHT_PERCENT: Int = 160
     const val MAX_WIDTH_DP: Int = 720
     val FONT_OPTION: ReaderFontOption = ReaderFontOption.SANS_SERIF
-    val PARAGRAPH_SPACING: ParagraphSpacingOption = ParagraphSpacingOption.MEDIUM
+
+    /** Selected paragraph spacing, as a multiple of the reader body line height. */
+    const val PARAGRAPH_SPACING: Float = DEFAULT_PARAGRAPH_SPACING
     val TEXT_ALIGN: ReaderTextAlignOption = ReaderTextAlignOption.LEFT
 
     const val FONT_SIZE_MIN_SP: Int = 6
@@ -41,7 +43,7 @@ data class ReaderAppearanceState(
     val fontOption: ReaderFontOption = ReaderAppearanceDefaults.FONT_OPTION,
     val lineHeightPercent: Int = ReaderAppearanceDefaults.LINE_HEIGHT_PERCENT,
     val maxWidthDp: Int = ReaderAppearanceDefaults.MAX_WIDTH_DP,
-    val paragraphSpacing: ParagraphSpacingOption = ReaderAppearanceDefaults.PARAGRAPH_SPACING,
+    val paragraphSpacing: Float = ReaderAppearanceDefaults.PARAGRAPH_SPACING,
     val textAlign: ReaderTextAlignOption = ReaderAppearanceDefaults.TEXT_ALIGN,
 ) {
     /** Clamp numeric fields into their valid ranges. */
@@ -49,6 +51,7 @@ data class ReaderAppearanceState(
         fontSizeSp = coerceReaderFontSizeSp(fontSizeSp),
         lineHeightPercent = coerceReaderLineHeightPercent(lineHeightPercent),
         maxWidthDp = coerceReaderMaxWidthDp(maxWidthDp),
+        paragraphSpacing = coerceParagraphSpacing(paragraphSpacing),
     )
 
     /** True when every field already matches the reader appearance defaults. */

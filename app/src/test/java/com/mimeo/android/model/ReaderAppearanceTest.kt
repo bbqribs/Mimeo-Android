@@ -14,7 +14,7 @@ class ReaderAppearanceTest {
         assertEquals(ReaderFontOption.SANS_SERIF, defaults.fontOption)
         assertEquals(160, defaults.lineHeightPercent)
         assertEquals(720, defaults.maxWidthDp)
-        assertEquals(ParagraphSpacingOption.MEDIUM, defaults.paragraphSpacing)
+        assertEquals(DEFAULT_PARAGRAPH_SPACING, defaults.paragraphSpacing, 0.0001f)
         assertEquals(ReaderTextAlignOption.LEFT, defaults.textAlign)
     }
 
@@ -45,21 +45,21 @@ class ReaderAppearanceTest {
     }
 
     @Test
-    fun sanitized_clampsOutOfRangeNumericFieldsAndKeepsEnumFields() {
+    fun sanitized_clampsOutOfRangeNumericFieldsAndKeepsValidFields() {
         val raw = ReaderAppearanceState(
             fontSizeSp = 1000,
             fontOption = ReaderFontOption.MONOSPACE,
             lineHeightPercent = 1,
             maxWidthDp = 99999,
-            paragraphSpacing = ParagraphSpacingOption.LARGE,
+            paragraphSpacing = 99f,
             textAlign = ReaderTextAlignOption.JUSTIFIED,
         )
         val sanitized = raw.sanitized()
         assertEquals(ReaderAppearanceDefaults.FONT_SIZE_MAX_SP, sanitized.fontSizeSp)
         assertEquals(ReaderAppearanceDefaults.LINE_HEIGHT_MIN_PERCENT, sanitized.lineHeightPercent)
         assertEquals(ReaderAppearanceDefaults.MAX_WIDTH_MAX_DP, sanitized.maxWidthDp)
+        assertEquals(PARAGRAPH_SPACING_PRESET_MAX, sanitized.paragraphSpacing, 0.0001f)
         assertEquals(ReaderFontOption.MONOSPACE, sanitized.fontOption)
-        assertEquals(ParagraphSpacingOption.LARGE, sanitized.paragraphSpacing)
         assertEquals(ReaderTextAlignOption.JUSTIFIED, sanitized.textAlign)
     }
 

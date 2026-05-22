@@ -101,7 +101,9 @@ import com.mimeo.android.data.QueueFetchResult
 import com.mimeo.android.data.SettingsStore
 import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.AppSettings
+import com.mimeo.android.model.DEFAULT_PARAGRAPH_SPACING_PRESETS
 import com.mimeo.android.model.DEFAULT_PLAYBACK_SPEED_PRESETS
+import com.mimeo.android.model.sanitizeParagraphSpacingPresets
 import com.mimeo.android.model.sanitizePlaybackSpeedPresets
 import com.mimeo.android.model.AutoDownloadDiagnostics
 import com.mimeo.android.model.ArticleSummary
@@ -121,7 +123,6 @@ import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.LocusContentMode
-import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackChunk
@@ -1078,7 +1079,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         readingFontOption: ReaderFontOption,
         readingLineHeightPercent: Int,
         readingMaxWidthDp: Int,
-        readingParagraphSpacing: ParagraphSpacingOption,
+        readingParagraphSpacing: Float,
     ) {
         viewModelScope.launch {
             settingsStore.save(
@@ -3185,6 +3186,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _settings.update { current -> current.copy(playbackSpeedPresets = sanitized) }
         viewModelScope.launch {
             settingsStore.savePlaybackSpeedPresets(sanitized)
+        }
+    }
+
+    fun saveParagraphSpacingPresets(presets: List<Float>) {
+        val sanitized = sanitizeParagraphSpacingPresets(presets)
+            .ifEmpty { DEFAULT_PARAGRAPH_SPACING_PRESETS }
+        _settings.update { current -> current.copy(paragraphSpacingPresets = sanitized) }
+        viewModelScope.launch {
+            settingsStore.saveParagraphSpacingPresets(sanitized)
         }
     }
 
