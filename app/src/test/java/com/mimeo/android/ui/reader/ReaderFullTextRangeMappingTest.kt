@@ -23,9 +23,47 @@ class ReaderFullTextRangeMappingTest {
 
     @Test
     fun readerChunkSeparatorTracksParagraphSpacing() {
-        assertEquals("\n", readerChunkSeparator(ParagraphSpacingOption.SMALL))
+        // SMALL shares MEDIUM's blank separator line; its tighter gap comes from
+        // a short-height ParagraphStyle, not from a shorter separator string.
+        assertEquals("\n\n", readerChunkSeparator(ParagraphSpacingOption.SMALL))
         assertEquals("\n\n", readerChunkSeparator(ParagraphSpacingOption.MEDIUM))
         assertEquals("\n\n\n", readerChunkSeparator(ParagraphSpacingOption.LARGE))
+    }
+
+    @Test
+    fun compactSeparatorRangesTargetBlankSeparatorLines() {
+        val chunks = listOf(
+            PlaybackChunk(index = 0, text = "Alpha", startChar = 0, endChar = 5),
+            PlaybackChunk(index = 1, text = "Beta", startChar = 5, endChar = 9),
+            PlaybackChunk(index = 2, text = "Gamma", startChar = 9, endChar = 14),
+        )
+        val separator = readerChunkSeparator(ParagraphSpacingOption.SMALL)
+        val starts = buildChunkStartOffsetsForJoinedText(chunks, separator.length)
+        val joined = chunks.joinToString(separator = separator) { it.text }
+
+        val ranges = buildCompactSeparatorParagraphRanges(chunks, starts, separator.length)
+
+        // One blank-line range per inter-chunk gap, each a single newline that
+        // forms its own empty paragraph.
+        assertEquals(2, ranges.size)
+        ranges.forEach { range ->
+            assertEquals(range.first, range.last)
+            assertEquals('\n', joined[range.first])
+        }
+    }
+
+    @Test
+    fun compactSeparatorRangesEmptyWhenSeparatorHasNoBlankLine() {
+        val chunks = listOf(
+            PlaybackChunk(index = 0, text = "Alpha", startChar = 0, endChar = 5),
+            PlaybackChunk(index = 1, text = "Beta", startChar = 5, endChar = 9),
+        )
+        val starts = buildChunkStartOffsetsForJoinedText(chunks, separatorLength = 1)
+
+        assertEquals(
+            emptyList<IntRange>(),
+            buildCompactSeparatorParagraphRanges(chunks, starts, separatorLength = 1),
+        )
     }
 
     @Test

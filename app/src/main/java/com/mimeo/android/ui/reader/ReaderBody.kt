@@ -37,6 +37,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -48,6 +49,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
@@ -179,6 +181,20 @@ fun ReaderBody(
             buildChunkStartOffsetsForJoinedText(chunks, chunkSeparator.length)
         }
     }
+    // SMALL paragraph spacing keeps MEDIUM's blank separator line but shrinks it
+    // to a tight gap via a short-height ParagraphStyle on each blank line.
+    val compactSeparatorRanges = remember(useFullTextLayout, paragraphSpacing, chunks, fullTextChunkStartOffsets, chunkSeparator) {
+        if (!useFullTextLayout || paragraphSpacing != ParagraphSpacingOption.SMALL) {
+            emptyList()
+        } else {
+            buildCompactSeparatorParagraphRanges(chunks, fullTextChunkStartOffsets, chunkSeparator.length)
+        }
+    }
+    val compactSeparatorLineHeight = if (paragraphSpacing == ParagraphSpacingOption.SMALL) {
+        (readingFontSizeSp * 0.55f).sp
+    } else {
+        TextUnit.Unspecified
+    }
     val fullTextHighlightRange = remember(
         useFullTextLayout,
         effectiveFullText,
@@ -287,6 +303,8 @@ fun ReaderBody(
         fullTextLinks,
         fullTextSearchRanges,
         searchHighlightBg,
+        compactSeparatorRanges,
+        compactSeparatorLineHeight,
     ) {
         if (!useFullTextLayout || effectiveFullText.isBlank()) {
             AnnotatedString("")
@@ -296,6 +314,8 @@ fun ReaderBody(
                 links = fullTextLinks,
                 passiveSearchRanges = fullTextSearchRanges,
                 passiveSearchHighlightBg = searchHighlightBg,
+                compactSeparatorRanges = compactSeparatorRanges,
+                compactSeparatorLineHeight = compactSeparatorLineHeight,
             )
         }
     }
@@ -747,11 +767,41 @@ internal fun mapChunkRangeToFullText(
  * count tracks the reader's paragraph-spacing preference so the rendered gap
  * between chunks is visibly tighter or looser. Character offsets stay in sync
  * because [buildChunkStartOffsetsForJoinedText] is given the same length.
+ *
+ * SMALL shares MEDIUM's two-newline separator: body line height is fixed, so a
+ * single newline produced no visible paragraph break. SMALL instead keeps the
+ * blank line but shrinks it via [buildCompactSeparatorParagraphRanges] + a
+ * short-height ParagraphStyle, yielding a tight-but-visible gap.
  */
 internal fun readerChunkSeparator(spacing: ParagraphSpacingOption): String = when (spacing) {
-    ParagraphSpacingOption.SMALL -> "\n"
+    ParagraphSpacingOption.SMALL -> "\n\n"
     ParagraphSpacingOption.MEDIUM -> "\n\n"
     ParagraphSpacingOption.LARGE -> "\n\n\n"
+}
+
+/**
+ * Ranges (one per inter-chunk separator) covering the blank separator line in
+ * the joined full-text layout — each is the separator's trailing newline, which
+ * forms its own empty paragraph. Applying a short-height [ParagraphStyle] to
+ * these ranges renders the SMALL paragraph-spacing gap tighter than MEDIUM's
+ * full blank line without altering any character offsets.
+ */
+internal fun buildCompactSeparatorParagraphRanges(
+    chunks: List<PlaybackChunk>,
+    chunkStartOffsets: List<Int>,
+    separatorLength: Int,
+): List<IntRange> {
+    if (separatorLength < 2 || chunks.size < 2 || chunkStartOffsets.size != chunks.size) {
+        return emptyList()
+    }
+    return buildList {
+        chunks.forEachIndexed { index, chunk ->
+            if (index < chunks.lastIndex) {
+                val blankLine = chunkStartOffsets[index] + chunk.text.length + separatorLength - 1
+                add(blankLine..blankLine)
+            }
+        }
+    }
 }
 
 internal fun buildChunkStartOffsetsForJoinedText(
@@ -796,8 +846,23 @@ internal fun buildReaderBaseAnnotatedText(
     links: List<ReaderLinkRange>,
     passiveSearchRanges: List<IntRange>,
     passiveSearchHighlightBg: Color,
+    compactSeparatorRanges: List<IntRange> = emptyList(),
+    compactSeparatorLineHeight: TextUnit = TextUnit.Unspecified,
 ): AnnotatedString = buildAnnotatedString {
     append(text)
+    if (compactSeparatorLineHeight != TextUnit.Unspecified) {
+        compactSeparatorRanges.forEach { range ->
+            val start = range.first.coerceIn(0, text.length)
+            val endExclusive = (range.last + 1).coerceIn(start, text.length)
+            if (start < endExclusive) {
+                addStyle(
+                    style = ParagraphStyle(lineHeight = compactSeparatorLineHeight),
+                    start = start,
+                    end = endExclusive,
+                )
+            }
+        }
+    }
     links.forEach { link ->
         val start = link.start.coerceIn(0, text.length)
         val endExclusive = link.endExclusive.coerceIn(start, text.length)
