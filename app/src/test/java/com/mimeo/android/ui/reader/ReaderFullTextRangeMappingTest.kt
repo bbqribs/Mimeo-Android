@@ -4,6 +4,7 @@ import com.mimeo.android.model.ParagraphSpacingOption
 import com.mimeo.android.model.PlaybackChunk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReaderFullTextRangeMappingTest {
@@ -22,47 +23,62 @@ class ReaderFullTextRangeMappingTest {
     }
 
     @Test
-    fun readerChunkSeparatorTracksParagraphSpacing() {
-        // SMALL shares MEDIUM's blank separator line; its tighter gap comes from
-        // a short-height ParagraphStyle, not from a shorter separator string.
-        assertEquals("\n\n", readerChunkSeparator(ParagraphSpacingOption.SMALL))
-        assertEquals("\n\n", readerChunkSeparator(ParagraphSpacingOption.MEDIUM))
-        assertEquals("\n\n\n", readerChunkSeparator(ParagraphSpacingOption.LARGE))
+    fun chunkSeparatorIsSingleZeroWidthCharacter() {
+        // A single zero-width char keeps chunk offsets stable; the visible gap
+        // comes from a ParagraphStyle, not from the separator string itself.
+        assertEquals(1, READER_CHUNK_SEPARATOR.length)
+        assertEquals('\u200B', READER_CHUNK_SEPARATOR[0])
     }
 
     @Test
-    fun compactSeparatorRangesTargetBlankSeparatorLines() {
+    fun paragraphGapLineHeightScalesAndOrdersBySpacing() {
+        val body = 25.6f
+        val small = readerParagraphGapLineHeight(ParagraphSpacingOption.SMALL, body)
+        val medium = readerParagraphGapLineHeight(ParagraphSpacingOption.MEDIUM, body)
+        val large = readerParagraphGapLineHeight(ParagraphSpacingOption.LARGE, body)
+
+        // Sizes increase strictly with the spacing option, and Small is a
+        // genuine sub-line gap (smaller than a full body line).
+        assertTrue(small > 0f)
+        assertTrue(small < medium)
+        assertTrue(medium < large)
+        assertTrue(small < body)
+        // Medium reproduces a one-line gap; gaps scale linearly with body height.
+        assertEquals(body, medium, 0.001f)
+        assertEquals(0f, readerParagraphGapLineHeight(ParagraphSpacingOption.LARGE, 0f), 0.001f)
+    }
+
+    @Test
+    fun chunkSeparatorParagraphRangesTargetSeparatorCharacters() {
         val chunks = listOf(
             PlaybackChunk(index = 0, text = "Alpha", startChar = 0, endChar = 5),
             PlaybackChunk(index = 1, text = "Beta", startChar = 5, endChar = 9),
             PlaybackChunk(index = 2, text = "Gamma", startChar = 9, endChar = 14),
         )
-        val separator = readerChunkSeparator(ParagraphSpacingOption.SMALL)
-        val starts = buildChunkStartOffsetsForJoinedText(chunks, separator.length)
-        val joined = chunks.joinToString(separator = separator) { it.text }
+        val starts = buildChunkStartOffsetsForJoinedText(chunks, READER_CHUNK_SEPARATOR.length)
+        val joined = chunks.joinToString(separator = READER_CHUNK_SEPARATOR) { it.text }
 
-        val ranges = buildCompactSeparatorParagraphRanges(chunks, starts, separator.length)
+        val ranges = buildChunkSeparatorParagraphRanges(chunks, starts, READER_CHUNK_SEPARATOR.length)
 
-        // One blank-line range per inter-chunk gap, each a single newline that
-        // forms its own empty paragraph.
+        // One single-character range per inter-chunk separator, each landing on
+        // the zero-width separator so it forms its own gap paragraph.
         assertEquals(2, ranges.size)
         ranges.forEach { range ->
             assertEquals(range.first, range.last)
-            assertEquals('\n', joined[range.first])
+            assertEquals('\u200B', joined[range.first])
         }
     }
 
     @Test
-    fun compactSeparatorRangesEmptyWhenSeparatorHasNoBlankLine() {
+    fun chunkSeparatorParagraphRangesEmptyForSingleChunk() {
         val chunks = listOf(
             PlaybackChunk(index = 0, text = "Alpha", startChar = 0, endChar = 5),
-            PlaybackChunk(index = 1, text = "Beta", startChar = 5, endChar = 9),
         )
-        val starts = buildChunkStartOffsetsForJoinedText(chunks, separatorLength = 1)
+        val starts = buildChunkStartOffsetsForJoinedText(chunks, READER_CHUNK_SEPARATOR.length)
 
         assertEquals(
             emptyList<IntRange>(),
-            buildCompactSeparatorParagraphRanges(chunks, starts, separatorLength = 1),
+            buildChunkSeparatorParagraphRanges(chunks, starts, READER_CHUNK_SEPARATOR.length),
         )
     }
 
@@ -79,18 +95,15 @@ class ReaderFullTextRangeMappingTest {
     }
 
     @Test
-    fun joinedOffsetsStayConsistentWithEachParagraphSpacingSeparator() {
+    fun joinedOffsetsIndexChunksWithinSeparatedText() {
         val chunks = listOf(
             PlaybackChunk(index = 0, text = "first", startChar = 0, endChar = 5),
             PlaybackChunk(index = 1, text = "second", startChar = 5, endChar = 11),
         )
-        ParagraphSpacingOption.entries.forEach { spacing ->
-            val separator = readerChunkSeparator(spacing)
-            val joined = chunks.joinToString(separator = separator) { it.text }
-            val starts = buildChunkStartOffsetsForJoinedText(chunks, separator.length)
-            // The computed start of the second chunk must index its real position in the joined text.
-            assertEquals(chunks[1].text, joined.substring(starts[1], starts[1] + chunks[1].text.length))
-        }
+        val joined = chunks.joinToString(separator = READER_CHUNK_SEPARATOR) { it.text }
+        val starts = buildChunkStartOffsetsForJoinedText(chunks, READER_CHUNK_SEPARATOR.length)
+        // The computed start of the second chunk must index its real position in the joined text.
+        assertEquals(chunks[1].text, joined.substring(starts[1], starts[1] + chunks[1].text.length))
     }
 
     @Test
