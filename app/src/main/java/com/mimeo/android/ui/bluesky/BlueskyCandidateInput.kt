@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -19,6 +22,8 @@ import com.mimeo.android.ui.theme.LocalMimeoV1Active
 import com.mimeo.android.util.bluesky.normalizeBlueskyHandleInput
 import com.mimeo.android.util.bluesky.parseBlueskyListIdentifierInput
 
+private enum class BlueskyScanMode { Handle, ListUrl }
+
 @Composable
 internal fun BlueskyCandidateInputSection(
     loading: Boolean,
@@ -27,6 +32,8 @@ internal fun BlueskyCandidateInputSection(
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
+    var scanMode by remember { mutableStateOf(BlueskyScanMode.Handle) }
+    // Per-mode drafts so toggling Handle <-> List URL does not discard typed text.
     var handleDraft by remember { mutableStateOf("") }
     var listDraft by remember { mutableStateOf("") }
     var inputError by remember { mutableStateOf<String?>(null) }
@@ -52,22 +59,48 @@ internal fun BlueskyCandidateInputSection(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        BlueskyHandleField(
-            value = handleDraft,
-            onValueChange = { handleDraft = it },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !loading,
-            onSearch = submitHandle,
-        )
-        BlueskyListUriField(
-            value = listDraft,
-            onValueChange = { listDraft = it },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !loading,
-            onSearch = submitList,
-        )
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            SegmentedButton(
+                selected = scanMode == BlueskyScanMode.Handle,
+                onClick = {
+                    scanMode = BlueskyScanMode.Handle
+                    inputError = null
+                },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                enabled = !loading,
+            ) {
+                Text("Handle")
+            }
+            SegmentedButton(
+                selected = scanMode == BlueskyScanMode.ListUrl,
+                onClick = {
+                    scanMode = BlueskyScanMode.ListUrl
+                    inputError = null
+                },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                enabled = !loading,
+            ) {
+                Text("List URL")
+            }
+        }
+        when (scanMode) {
+            BlueskyScanMode.Handle -> BlueskyHandleField(
+                value = handleDraft,
+                onValueChange = { handleDraft = it },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !loading,
+                onSearch = submitHandle,
+            )
+            BlueskyScanMode.ListUrl -> BlueskyListUriField(
+                value = listDraft,
+                onValueChange = { listDraft = it },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !loading,
+                onSearch = submitList,
+            )
+        }
         if (!inputError.isNullOrBlank()) {
             Text(
                 inputError.orEmpty(),
