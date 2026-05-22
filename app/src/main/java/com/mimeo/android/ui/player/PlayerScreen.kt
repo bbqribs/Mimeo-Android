@@ -3025,25 +3025,19 @@ private fun ReaderAppearancePanel(
                 }
             }
 
-            // Shortcut from the quick panel to the full reading settings,
-            // including the paragraph-spacing preset editor.
-            TextButton(
+            // Icon-only shortcut to the full reading settings, anchored
+            // bottom-right of the panel.
+            IconButton(
                 onClick = onOpenReadingSettings,
-                modifier = Modifier.semantics {
-                    contentDescription = "Open reading settings"
-                },
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .semantics { contentDescription = "Open reading settings" },
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Settings,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Text("All reading settings")
-                }
+                Icon(
+                    imageVector = Icons.Outlined.Settings,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
             }
         }
     }
