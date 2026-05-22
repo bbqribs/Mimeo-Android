@@ -160,6 +160,7 @@ import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.shareItemText
 import com.mimeo.android.ui.common.shareItemUrl
 import com.mimeo.android.ui.common.shareSelectedText
+import com.mimeo.android.ui.common.webSearchText
 import com.mimeo.android.ui.reader.ReaderTextToolbar
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
@@ -987,9 +988,12 @@ fun PlayerScreen(
     val actionScope = rememberCoroutineScope()
     val view = LocalView.current
     val textToolbar = remember(view) {
-        ReaderTextToolbar(view, context) { selectedText ->
-            shareSelectedText(context, selectedText)
-        }
+        ReaderTextToolbar(
+            view = view,
+            context = context,
+            onShare = { text -> shareSelectedText(context, text) },
+            onWebSearch = { text -> webSearchText(context, text) },
+        )
     }
     val hasActiveSelection = textToolbar.status == TextToolbarStatus.Shown
     val chevronSide = remember(chevronSnapEdge) {
@@ -2131,6 +2135,9 @@ fun PlayerScreen(
                                     },
                                     onManualScrollGesture = {
                                         lastReaderManualScrollAtMs = SystemClock.elapsedRealtime()
+                                    },
+                                    onLinkLongPress = { linkUrl ->
+                                        textToolbar.currentLinkUrl = linkUrl
                                     },
                                     modifier = Modifier
                                         .fillMaxSize()

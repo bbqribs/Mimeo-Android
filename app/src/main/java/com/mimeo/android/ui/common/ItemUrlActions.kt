@@ -1,5 +1,7 @@
 package com.mimeo.android.ui.common
 
+import android.app.SearchManager
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -30,6 +32,33 @@ fun shareSelectedText(context: Context, text: String) {
     }
     val chooser = Intent.createChooser(send, "Share").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     ContextCompat.startActivity(context, chooser, null)
+}
+
+/**
+ * Run a web search for [query] using the standard implicit web-search intent.
+ * Falls back to opening a browser search URL when no activity handles
+ * [Intent.ACTION_WEB_SEARCH]. A blank query is a no-op.
+ */
+fun webSearchText(context: Context, query: String) {
+    val trimmed = query.trim()
+    if (trimmed.isEmpty()) return
+    val searchIntent = Intent(Intent.ACTION_WEB_SEARCH).apply {
+        putExtra(SearchManager.QUERY, trimmed)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    try {
+        ContextCompat.startActivity(context, searchIntent, null)
+    } catch (_: ActivityNotFoundException) {
+        val fallback = Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("https://www.google.com/search?q=" + Uri.encode(trimmed)),
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            ContextCompat.startActivity(context, fallback, null)
+        } catch (_: ActivityNotFoundException) {
+            // No browser available; nothing further to do.
+        }
+    }
 }
 
 fun copyItemText(context: Context, text: String) {

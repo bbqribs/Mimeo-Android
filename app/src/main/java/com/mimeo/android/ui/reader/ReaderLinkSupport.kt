@@ -14,6 +14,25 @@ data class ReaderLinkRange(
     val url: String,
 )
 
+/**
+ * The href of the single preserved/extracted link the current text selection
+ * lands on, or null when the selection touches zero links or more than one.
+ * Offsets are in the joined full-text coordinate space (the same space used by
+ * [ReaderLinkRange]). Returning null for a multi-link span keeps "copy/share
+ * link address" unambiguous: it is only offered when exactly one link applies.
+ */
+internal fun resolveSelectionLinkUrl(
+    selectionStart: Int,
+    selectionEndExclusive: Int,
+    links: List<ReaderLinkRange>,
+): String? {
+    if (selectionEndExclusive <= selectionStart) return null
+    val hits = links.filter { link ->
+        link.start < selectionEndExclusive && link.endExclusive > selectionStart
+    }
+    return hits.singleOrNull()?.url
+}
+
 internal fun extractReaderHttpLinks(text: String): List<ReaderLinkRange> {
     if (text.isBlank()) return emptyList()
     return HTTP_URL_REGEX.findAll(text).mapNotNull { match ->
