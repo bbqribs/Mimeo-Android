@@ -37,6 +37,14 @@ fun copyItemText(context: Context, text: String) {
     clipboard.setPrimaryClip(ClipData.newPlainText("article text", text))
 }
 
+/**
+ * Copy article text to the clipboard with the same title/source/url citation
+ * footer as [shareItemText], so copied and shared article text stay consistent.
+ */
+fun copyArticleText(context: Context, articleText: String, title: String?, sourceLabel: String?, url: String?) {
+    copyItemText(context, buildArticleShareText(articleText, title, sourceLabel, url))
+}
+
 fun shareItemText(context: Context, articleText: String, title: String?, sourceLabel: String?, url: String?) {
     val fullText = buildArticleShareText(articleText, title, sourceLabel, url)
     val send = Intent(Intent.ACTION_SEND).apply {
