@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -24,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
@@ -34,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
@@ -100,6 +105,7 @@ fun ReaderBody(
     showEmptyPlaceholder: Boolean = true,
     onNonLinkTap: (() -> Unit)? = null,
     onManualScrollGesture: (() -> Unit)? = null,
+    onLinkLongPress: ((String?) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -383,6 +389,8 @@ fun ReaderBody(
     }
     val scrollAnchorRange = followRange ?: anchorRange
     val scrollbarColor = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+    val latestOnNonLinkTap by rememberUpdatedState(onNonLinkTap)
+    val latestOnLinkLongPress by rememberUpdatedState(onLinkLongPress)
 
     Box(
         modifier = modifier
@@ -407,6 +415,31 @@ fun ReaderBody(
                                 val top = coordinates.positionInRoot().y
                                 activeChunkTopInRootPx = top
                                 searchChunkTopInRootPx = top
+                            }
+                            // Purely observing long-press detector: reports the
+                            // link (if any) under a long-press so the selection
+                            // toolbar can offer link-address actions. It never
+                            // consumes pointer events, so ClickableText's
+                            // tap-to-open and the SelectionContainer's
+                            // long-press text selection are both unaffected.
+                            .pointerInput(fullTextAnnotated) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    val longPress = awaitLongPressOrCancellation(down.id)
+                                    if (longPress != null) {
+                                        val layout = activeTextLayout
+                                        if (layout != null) {
+                                            val offset = layout.getOffsetForPosition(longPress.position)
+                                            latestOnLinkLongPress?.invoke(
+                                                resolveSelectionLinkUrl(
+                                                    selectionStart = offset,
+                                                    selectionEndExclusive = offset + 1,
+                                                    links = fullTextLinks,
+                                                ),
+                                            )
+                                        }
+                                    }
+                                }
                             },
                         style = readingTextStyle,
                         onTextLayout = { layout ->
@@ -433,10 +466,10 @@ fun ReaderBody(
                                     false
                                 }
                                 if (!opened) {
-                                    onNonLinkTap?.invoke()
+                                    latestOnNonLinkTap?.invoke()
                                 }
                             } else {
-                                onNonLinkTap?.invoke()
+                                latestOnNonLinkTap?.invoke()
                             }
                         },
                     )

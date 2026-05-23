@@ -3,10 +3,84 @@ package com.mimeo.android.ui.reader
 import com.mimeo.android.model.ItemTextContentBlock
 import com.mimeo.android.model.ItemTextContentLink
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReaderLinkSupportTest {
+
+    private val twoLinks = listOf(
+        ReaderLinkRange(start = 10, endExclusive = 20, url = "https://example.com/a"),
+        ReaderLinkRange(start = 40, endExclusive = 55, url = "https://example.com/b"),
+    )
+
+    @Test
+    fun resolveSelectionLinkUrl_returnsUrlWhenSelectionInsideOneLink() {
+        val url = resolveSelectionLinkUrl(
+            selectionStart = 12,
+            selectionEndExclusive = 18,
+            links = twoLinks,
+        )
+
+        assertEquals("https://example.com/a", url)
+    }
+
+    @Test
+    fun resolveSelectionLinkUrl_returnsUrlWhenSelectionPartiallyOverlapsLink() {
+        val url = resolveSelectionLinkUrl(
+            selectionStart = 5,
+            selectionEndExclusive = 14,
+            links = twoLinks,
+        )
+
+        assertEquals("https://example.com/a", url)
+    }
+
+    @Test
+    fun resolveSelectionLinkUrl_returnsNullWhenSelectionTouchesNoLink() {
+        val url = resolveSelectionLinkUrl(
+            selectionStart = 22,
+            selectionEndExclusive = 38,
+            links = twoLinks,
+        )
+
+        assertNull(url)
+    }
+
+    @Test
+    fun resolveSelectionLinkUrl_returnsNullWhenSelectionSpansTwoLinks() {
+        val url = resolveSelectionLinkUrl(
+            selectionStart = 12,
+            selectionEndExclusive = 50,
+            links = twoLinks,
+        )
+
+        assertNull(url)
+    }
+
+    @Test
+    fun resolveSelectionLinkUrl_returnsNullForEmptySelection() {
+        val url = resolveSelectionLinkUrl(
+            selectionStart = 15,
+            selectionEndExclusive = 15,
+            links = twoLinks,
+        )
+
+        assertNull(url)
+    }
+
+    @Test
+    fun resolveSelectionLinkUrl_ignoresAdjacentNonOverlappingLink() {
+        // Selection ends exactly where the link starts: half-open ranges do not
+        // overlap, so no link address is offered.
+        val url = resolveSelectionLinkUrl(
+            selectionStart = 4,
+            selectionEndExclusive = 10,
+            links = twoLinks,
+        )
+
+        assertNull(url)
+    }
 
     @Test
     fun extractReaderHttpLinksFindsMultipleLinks() {

@@ -474,8 +474,16 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission(),
     ) { }
 
+    @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Opt out of Compose 1.10's new text context-menu path, which
+        // bypasses LocalTextToolbar entirely (its public API doesn't expose
+        // the selected text to custom items, so we can't migrate cleanly).
+        // The reader's ReaderTextToolbar relies on LocalTextToolbar; the
+        // legacy menu path keeps that wiring intact. Flag is officially
+        // documented by Compose Foundation as a regression escape hatch.
+        androidx.compose.foundation.ComposeFoundationFlags.isNewContextMenuEnabled = false
         enableEdgeToEdge()
         vm = ViewModelProvider(
             this,

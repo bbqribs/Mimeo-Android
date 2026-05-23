@@ -160,7 +160,10 @@ import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.shareItemText
 import com.mimeo.android.ui.common.shareItemUrl
 import com.mimeo.android.ui.common.shareSelectedText
+import com.mimeo.android.ui.common.webSearchText
 import com.mimeo.android.ui.reader.ReaderTextToolbar
+import com.mimeo.android.ui.reader.translate.ReaderTranslator
+import com.mimeo.android.ui.reader.translate.TranslateSheet
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
@@ -986,10 +989,26 @@ fun PlayerScreen(
     val currentPosition = engineState.currentPosition
     val actionScope = rememberCoroutineScope()
     val view = LocalView.current
+    val readerTranslator = remember { ReaderTranslator() }
+    DisposableEffect(readerTranslator) {
+        onDispose { readerTranslator.close() }
+    }
+    var pendingTranslateText by rememberSaveable { mutableStateOf<String?>(null) }
     val textToolbar = remember(view) {
-        ReaderTextToolbar(view, context) { selectedText ->
-            shareSelectedText(context, selectedText)
-        }
+        ReaderTextToolbar(
+            view = view,
+            context = context,
+            onShare = { text -> shareSelectedText(context, text) },
+            onWebSearch = { text -> webSearchText(context, text) },
+            onTranslate = { text -> pendingTranslateText = text },
+        )
+    }
+    pendingTranslateText?.let { text ->
+        TranslateSheet(
+            sourceText = text,
+            translator = readerTranslator,
+            onDismiss = { pendingTranslateText = null },
+        )
     }
     val hasActiveSelection = textToolbar.status == TextToolbarStatus.Shown
     val chevronSide = remember(chevronSnapEdge) {
@@ -2131,6 +2150,9 @@ fun PlayerScreen(
                                     },
                                     onManualScrollGesture = {
                                         lastReaderManualScrollAtMs = SystemClock.elapsedRealtime()
+                                    },
+                                    onLinkLongPress = { linkUrl ->
+                                        textToolbar.currentLinkUrl = linkUrl
                                     },
                                     modifier = Modifier
                                         .fillMaxSize()

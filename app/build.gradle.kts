@@ -74,6 +74,11 @@ dependencies {
     implementation("androidx.media:media:1.7.0")
     ksp("androidx.room:room-compiler:2.8.4")
 
+    // On-device translation for the reader's selection toolbar. Models are
+    // downloaded once per language pair (~30 MB) and cached for offline use.
+    implementation("com.google.mlkit:translate:17.0.3")
+    implementation("com.google.mlkit:language-id:17.0.6")
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("androidx.test:core:1.6.1")
     testImplementation("org.robolectric:robolectric:4.13")
