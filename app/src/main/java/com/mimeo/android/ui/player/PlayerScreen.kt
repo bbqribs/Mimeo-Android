@@ -160,6 +160,7 @@ import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.shareItemText
 import com.mimeo.android.ui.common.shareItemUrl
 import com.mimeo.android.ui.common.shareSelectedText
+import com.mimeo.android.ui.common.translateText
 import com.mimeo.android.ui.common.webSearchText
 import com.mimeo.android.ui.reader.ReaderTextToolbar
 import com.mimeo.android.ui.components.RefreshActionButton
@@ -993,6 +994,7 @@ fun PlayerScreen(
             context = context,
             onShare = { text -> shareSelectedText(context, text) },
             onWebSearch = { text -> webSearchText(context, text) },
+            onTranslate = { text -> translateText(context, text) },
         )
     }
     val hasActiveSelection = textToolbar.status == TextToolbarStatus.Shown

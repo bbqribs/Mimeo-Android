@@ -61,6 +61,30 @@ fun webSearchText(context: Context, query: String) {
     }
 }
 
+/**
+ * Open [query] in a translator. Uses Google Translate's web URL, which resolves
+ * to the installed Google Translate app when available and falls back to the
+ * browser otherwise. Target language defaults to the device locale so the
+ * result is in the user's language. A blank query is a no-op.
+ */
+fun translateText(context: Context, query: String) {
+    val trimmed = query.trim()
+    if (trimmed.isEmpty()) return
+    val target = java.util.Locale.getDefault().language.ifBlank { "en" }
+    val url = "https://translate.google.com/?sl=auto&tl=" +
+        Uri.encode(target) +
+        "&text=" +
+        Uri.encode(trimmed) +
+        "&op=translate"
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        ContextCompat.startActivity(context, intent, null)
+    } catch (_: ActivityNotFoundException) {
+        // No browser/translator available; nothing further to do.
+    }
+}
+
 fun copyItemText(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText("article text", text))
