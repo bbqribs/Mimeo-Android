@@ -2425,7 +2425,18 @@ fun PlayerScreen(
                                         locusBottomOverlayHeightPx = size.height
                                     },
                             ) {
-                                renderPlayerDock()
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Spacer(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(1.dp)
+                                            .background(
+                                                if (isV1) mColors.line
+                                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)
+                                            ),
+                                    )
+                                    renderPlayerDock()
+                                }
                             }
                         }
                     }
@@ -4084,7 +4095,7 @@ private fun PlayerControlBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 2.dp, vertical = 6.dp)
+                    .padding(horizontal = 2.dp, vertical = 10.dp)
                     .clickable(onClick = onOpenLocusForItem),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -4130,6 +4141,7 @@ private fun PlayerControlBar(
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(4.dp))
         }
         if (!minimal) {
             Box(

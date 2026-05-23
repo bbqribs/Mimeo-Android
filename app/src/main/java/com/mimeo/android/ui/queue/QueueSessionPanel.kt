@@ -610,7 +610,7 @@ internal fun NowPlayingSessionPanel(
                                 )
                                 .border(
                                     width = 1.dp,
-                                    color = if (isV1) mColors.accent.copy(alpha = 0.6f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                                    color = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
                                     shape = if (isV1) mShapes.card else RoundedCornerShape(8.dp),
                                 )
                                 .padding(start = 12.dp, end = 12.dp, top = densityTokens.rowPadV, bottom = densityTokens.rowPadV),
@@ -619,11 +619,11 @@ internal fun NowPlayingSessionPanel(
                         ) {
                             Column(
                                 modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
                                 Text(
                                     text = item.title?.ifBlank { null } ?: item.url,
-                                    style = if (isV1) mTypography.row else MaterialTheme.typography.bodyLarge,
+                                    style = if (isV1) mTypography.title else MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
                                     color = if (isV1) mColors.fg else MaterialTheme.colorScheme.primary,
                                     maxLines = densityTokens.itemRowTitleMaxLines,
