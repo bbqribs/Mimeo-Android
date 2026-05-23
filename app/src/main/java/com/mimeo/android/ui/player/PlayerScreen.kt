@@ -994,7 +994,7 @@ fun PlayerScreen(
             context = context,
             onShare = { text -> shareSelectedText(context, text) },
             onWebSearch = { text -> webSearchText(context, text) },
-            onTranslate = { text -> translateText(context, text) },
+            onTranslate = { text -> translateText(context, text, actionScope) },
         )
     }
     val hasActiveSelection = textToolbar.status == TextToolbarStatus.Shown
