@@ -82,10 +82,10 @@ internal class ReaderTextToolbar(
                             .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
                     }
                     menu.add(Menu.NONE, ITEM_SHARE, 1, "Share")
-                        .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                        .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
                     if (canReadSelection) {
                         menu.add(Menu.NONE, ITEM_WEB_SEARCH, 2, "Web search")
-                            .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                            .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
                     }
                     // Link items are added unconditionally and toggled in
                     // onPrepareActionMode based on currentLinkUrl.
