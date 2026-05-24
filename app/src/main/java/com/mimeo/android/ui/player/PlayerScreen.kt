@@ -2425,7 +2425,18 @@ fun PlayerScreen(
                                         locusBottomOverlayHeightPx = size.height
                                     },
                             ) {
-                                renderPlayerDock()
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Spacer(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(1.dp)
+                                            .background(
+                                                if (isV1) mColors.line
+                                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)
+                                            ),
+                                    )
+                                    renderPlayerDock()
+                                }
                             }
                         }
                     }
@@ -2615,9 +2626,12 @@ private fun ExpandedPlayerTopBar(
     var titleExpanded by remember(title) { mutableStateOf(false) }
     val rootView = LocalView.current
     val baseTitleStyle = if (isV1) {
-        mTypography.title
+        mTypography.title.copy(fontFamily = readerAppearance.fontOption.toFontFamily())
     } else {
-        MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
+        MaterialTheme.typography.bodyLarge.copy(
+            fontWeight = FontWeight.Bold,
+            fontFamily = readerAppearance.fontOption.toFontFamily(),
+        )
     }
     Column(
         modifier = Modifier.fillMaxWidth().layout { measurable, constraints ->
@@ -4084,7 +4098,7 @@ private fun PlayerControlBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 2.dp, vertical = 6.dp)
+                    .padding(horizontal = 2.dp, vertical = 10.dp)
                     .clickable(onClick = onOpenLocusForItem),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -4130,6 +4144,7 @@ private fun PlayerControlBar(
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(4.dp))
         }
         if (!minimal) {
             Box(

@@ -33,7 +33,7 @@ object MimeoTypography {
             letterSpacing = (-0.012).em,
         ),
         title = TextStyle(
-            fontFamily = serif,
+            fontFamily = sans,
             fontWeight = FontWeight.Medium,
             fontSize = 20.sp,
             lineHeight = 25.sp,
