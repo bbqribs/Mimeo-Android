@@ -23,6 +23,8 @@ import com.mimeo.android.model.BlueskyConnectRequest
 import com.mimeo.android.model.BlueskyOperatorStatusResponse
 import com.mimeo.android.model.BlueskyPickerResponse
 import com.mimeo.android.model.BlueskySourceInfo
+import com.mimeo.android.model.ContentSummaryOut
+import com.mimeo.android.model.ContentSummaryRequest
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaybackQueueResponse
@@ -417,6 +419,35 @@ class ApiClient(
             .get()
             .build()
         executeJson(request) { payload -> json.decodeFromString<ArticleSummary>(payload) }
+    }
+
+    suspend fun getContentSummary(
+        baseUrl: String,
+        token: String,
+        itemId: Int,
+    ): ContentSummaryOut = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/items/$itemId/summary"))
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<ContentSummaryOut>(payload) }
+    }
+
+    suspend fun requestContentSummary(
+        baseUrl: String,
+        token: String,
+        itemId: Int,
+        force: Boolean = false,
+    ): ContentSummaryOut = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(ContentSummaryRequest(force = force))
+            .toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/items/$itemId/summary"))
+            .header("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<ContentSummaryOut>(payload) }
     }
 
     suspend fun getQueueExplain(baseUrl: String, token: String, itemId: Int): QueueExplainResponse = withContext(Dispatchers.IO) {

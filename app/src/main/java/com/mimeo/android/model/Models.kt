@@ -2,8 +2,10 @@
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.math.roundToInt
@@ -369,6 +371,114 @@ data class ArticleSummary(
     @SerialName("word_count") val wordCount: Int? = null,
     @SerialName("estimated_listen_minutes") val estimatedListenMinutes: Int? = null,
 )
+
+@Serializable
+data class ContentSummaryOut(
+    @SerialName("item_id") val itemId: Int,
+    @SerialName("active_content_version_id") val activeContentVersionId: Int? = null,
+    @SerialName("summary_content_version_id") val summaryContentVersionId: Int? = null,
+    val state: String,
+    @SerialName("summary_kind") val summaryKind: String = "abstract",
+    @SerialName("summary_text") val summaryText: String? = null,
+    val provider: String? = null,
+    val model: String? = null,
+    @SerialName("prompt_version") val promptVersion: String? = null,
+    @SerialName("generated_at") val generatedAt: String? = null,
+    @SerialName("failure_reason") val failureReason: String? = null,
+    @SerialName("can_request") val canRequest: Boolean = false,
+    val disclaimer: String? = null,
+)
+
+@Serializable
+data class ContentSummaryRequest(
+    val force: Boolean = false,
+)
+
+enum class ContentSummaryState {
+    MISSING,
+    PENDING,
+    READY,
+    FAILED,
+    STALE,
+    UNKNOWN,
+}
+
+enum class ContentSummaryFailureReason {
+    SUMMARIES_DISABLED,
+    PROVIDER_NOT_CONFIGURED,
+    NO_ACTIVE_CONTENT,
+    CONTENT_TOO_SHORT,
+    DAILY_LIMIT_REACHED,
+    UNAUTHORIZED,
+    NOT_FOUND,
+    NETWORK,
+    UNKNOWN,
+}
+
+sealed class ReaderSummaryState {
+    object Idle : ReaderSummaryState()
+    data class Loading(val itemId: Int, val previous: ContentSummaryOut? = null) : ReaderSummaryState()
+    data class Ready(val itemId: Int, val summary: ContentSummaryOut) : ReaderSummaryState()
+    data class Error(
+        val itemId: Int,
+        val reason: ContentSummaryFailureReason,
+        val message: String,
+    ) : ReaderSummaryState()
+}
+
+fun ContentSummaryOut.normalizedState(): ContentSummaryState = when (state.lowercase()) {
+    "missing" -> ContentSummaryState.MISSING
+    "pending" -> ContentSummaryState.PENDING
+    "ready" -> ContentSummaryState.READY
+    "failed" -> ContentSummaryState.FAILED
+    "stale" -> ContentSummaryState.STALE
+    else -> ContentSummaryState.UNKNOWN
+}
+
+fun ContentSummaryOut.canRequestGeneration(): Boolean {
+    if (!canRequest) return false
+    return normalizedState() in setOf(
+        ContentSummaryState.MISSING,
+        ContentSummaryState.FAILED,
+        ContentSummaryState.STALE,
+    )
+}
+
+fun contentSummaryFailureReasonFromCode(code: String?): ContentSummaryFailureReason? = when (code?.trim()?.lowercase()) {
+    "summaries_disabled" -> ContentSummaryFailureReason.SUMMARIES_DISABLED
+    "provider_not_configured" -> ContentSummaryFailureReason.PROVIDER_NOT_CONFIGURED
+    "no_active_content" -> ContentSummaryFailureReason.NO_ACTIVE_CONTENT
+    "content_too_short" -> ContentSummaryFailureReason.CONTENT_TOO_SHORT
+    "daily_limit_reached" -> ContentSummaryFailureReason.DAILY_LIMIT_REACHED
+    else -> null
+}
+
+fun contentSummaryFailureReasonFromApiMessage(message: String?): ContentSummaryFailureReason? {
+    val raw = message.orEmpty()
+    val bodyStart = raw.indexOf('{')
+    if (bodyStart < 0) return null
+    return runCatching {
+        val root = Json.parseToJsonElement(raw.substring(bodyStart)).jsonObject
+        val detail = root["detail"]
+        val reason = when (detail) {
+            is JsonObject -> detail["reason"]?.jsonPrimitive?.contentOrNull
+            else -> root["reason"]?.jsonPrimitive?.contentOrNull
+        }
+        contentSummaryFailureReasonFromCode(reason)
+    }.getOrNull()
+}
+
+fun contentSummaryFailureMessage(reason: ContentSummaryFailureReason): String = when (reason) {
+    ContentSummaryFailureReason.SUMMARIES_DISABLED -> "Summaries are not available right now."
+    ContentSummaryFailureReason.PROVIDER_NOT_CONFIGURED -> "Summaries are temporarily unavailable."
+    ContentSummaryFailureReason.NO_ACTIVE_CONTENT -> "This item does not have readable text to summarize."
+    ContentSummaryFailureReason.CONTENT_TOO_SHORT -> "This item is too short to summarize."
+    ContentSummaryFailureReason.DAILY_LIMIT_REACHED -> "Summary requests are paused for today. Try again later."
+    ContentSummaryFailureReason.UNAUTHORIZED -> "Sign in with a device token that can request summaries."
+    ContentSummaryFailureReason.NOT_FOUND -> "This item could not be found."
+    ContentSummaryFailureReason.NETWORK -> "Couldn't reach the server. Check connection and try again."
+    ContentSummaryFailureReason.UNKNOWN -> "Couldn't load the summary. Try again."
+}
 
 @Serializable
 enum class PlayerControlsMode {

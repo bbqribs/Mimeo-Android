@@ -120,6 +120,7 @@ import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.model.ConnectivityDiagnosticRow
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
+import com.mimeo.android.model.ContentSummaryFailureReason
 import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.LocusContentMode
@@ -146,8 +147,11 @@ import com.mimeo.android.model.ProgressSyncBadgeState
 import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.model.ReaderAppearanceState
 import com.mimeo.android.model.ReaderFontOption
+import com.mimeo.android.model.ReaderSummaryState
 import com.mimeo.android.model.VisualDensityPreference
 import com.mimeo.android.model.VisualThemePreference
+import com.mimeo.android.model.contentSummaryFailureMessage
+import com.mimeo.android.model.contentSummaryFailureReasonFromApiMessage
 import com.mimeo.android.repository.ItemTextResult
 import com.mimeo.android.repository.ItemTextPrefetchAttempt
 import com.mimeo.android.repository.NowPlayingSession
@@ -368,6 +372,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _progressSyncBadgeState = MutableStateFlow(ProgressSyncBadgeState.SYNCED)
     val progressSyncBadgeState: StateFlow<ProgressSyncBadgeState> = _progressSyncBadgeState.asStateFlow()
+    private val _readerSummaryState = MutableStateFlow<ReaderSummaryState>(ReaderSummaryState.Idle)
+    val readerSummaryState: StateFlow<ReaderSummaryState> = _readerSummaryState.asStateFlow()
 
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
@@ -3631,6 +3637,83 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    suspend fun loadReaderSummary(itemId: Int): Result<Unit> {
+        if (itemId <= 0) {
+            _readerSummaryState.value = ReaderSummaryState.Idle
+            return Result.success(Unit)
+        }
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            _readerSummaryState.value = ReaderSummaryState.Error(
+                itemId = itemId,
+                reason = ContentSummaryFailureReason.UNAUTHORIZED,
+                message = contentSummaryFailureMessage(ContentSummaryFailureReason.UNAUTHORIZED),
+            )
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        val previous = (_readerSummaryState.value as? ReaderSummaryState.Ready)
+            ?.takeIf { it.itemId == itemId }
+            ?.summary
+        _readerSummaryState.value = ReaderSummaryState.Loading(itemId = itemId, previous = previous)
+        return try {
+            val summary = repository.getContentSummary(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                itemId = itemId,
+            )
+            _readerSummaryState.value = ReaderSummaryState.Ready(itemId = itemId, summary = summary)
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            val reason = resolveReaderSummaryFailureReason(error)
+            _readerSummaryState.value = ReaderSummaryState.Error(
+                itemId = itemId,
+                reason = reason,
+                message = contentSummaryFailureMessage(reason),
+            )
+            Result.failure(error)
+        }
+    }
+
+    suspend fun requestReaderSummary(itemId: Int, force: Boolean = false): Result<Unit> {
+        if (itemId <= 0) return Result.failure(IllegalArgumentException("Item required"))
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            val reason = ContentSummaryFailureReason.UNAUTHORIZED
+            _readerSummaryState.value = ReaderSummaryState.Error(
+                itemId = itemId,
+                reason = reason,
+                message = contentSummaryFailureMessage(reason),
+            )
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        val previous = (_readerSummaryState.value as? ReaderSummaryState.Ready)
+            ?.takeIf { it.itemId == itemId }
+            ?.summary
+        _readerSummaryState.value = ReaderSummaryState.Loading(itemId = itemId, previous = previous)
+        return try {
+            val requested = repository.requestContentSummary(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                itemId = itemId,
+                force = force,
+            )
+            _readerSummaryState.value = ReaderSummaryState.Ready(itemId = itemId, summary = requested)
+            loadReaderSummary(itemId)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            val reason = resolveReaderSummaryFailureReason(error)
+            _readerSummaryState.value = ReaderSummaryState.Error(
+                itemId = itemId,
+                reason = reason,
+                message = contentSummaryFailureMessage(reason),
+            )
+            Result.failure(error)
+        }
+    }
+
     suspend fun downloadItemForOffline(itemId: Int): Result<Unit> {
         return fetchItemText(itemId, loadPolicyTag = "manual_download_offline").map { Unit }
     }
@@ -5863,6 +5946,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             cursor = cursor.cause
         }
         return false
+    }
+
+    private fun resolveReaderSummaryFailureReason(error: Throwable): ContentSummaryFailureReason {
+        if (error is ApiException) {
+            contentSummaryFailureReasonFromApiMessage(error.message)?.let { return it }
+            return when (error.statusCode) {
+                401, 403 -> ContentSummaryFailureReason.UNAUTHORIZED
+                404 -> ContentSummaryFailureReason.NOT_FOUND
+                else -> ContentSummaryFailureReason.UNKNOWN
+            }
+        }
+        return if (isNetworkError(error)) {
+            ContentSummaryFailureReason.NETWORK
+        } else {
+            ContentSummaryFailureReason.UNKNOWN
+        }
     }
 
     private fun userFacingRequestErrorMessage(error: Throwable, fallback: String): String {
