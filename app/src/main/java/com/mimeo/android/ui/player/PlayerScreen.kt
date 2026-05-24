@@ -2626,9 +2626,12 @@ private fun ExpandedPlayerTopBar(
     var titleExpanded by remember(title) { mutableStateOf(false) }
     val rootView = LocalView.current
     val baseTitleStyle = if (isV1) {
-        mTypography.title
+        mTypography.title.copy(fontFamily = readerAppearance.fontOption.toFontFamily())
     } else {
-        MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
+        MaterialTheme.typography.bodyLarge.copy(
+            fontWeight = FontWeight.Bold,
+            fontFamily = readerAppearance.fontOption.toFontFamily(),
+        )
     }
     Column(
         modifier = Modifier.fillMaxWidth().layout { measurable, constraints ->
