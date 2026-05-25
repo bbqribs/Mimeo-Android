@@ -169,6 +169,7 @@ import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import com.mimeo.android.ui.reader.ReaderBody
+import com.mimeo.android.ui.reader.SummarySheet
 import com.mimeo.android.ui.reader.extractReaderPreservedLinks
 import com.mimeo.android.ui.reader.READER_CHUNK_SEPARATOR
 import com.mimeo.android.ui.reader.readerTextWithPlainSeparators
@@ -914,6 +915,7 @@ fun PlayerScreen(
     var nearEndForcedForItemId by remember { mutableIntStateOf(-1) }
     val queueOffline by vm.queueOffline.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
+    val readerSummaryState by vm.readerSummaryState.collectAsState()
     val settings by vm.settings.collectAsState()
     val playbackResumeStateReady by vm.playbackResumeStateReady.collectAsState()
     val locusContentMode = settings.locusContentMode
@@ -1654,6 +1656,7 @@ fun PlayerScreen(
     val locusItemUrl = reportContext.url.orEmpty()
     val locusItemTitle = reportContext.articleTitle
     val locusHasUrl = locusItemUrl.isNotBlank()
+    var showSummarySheet by rememberSaveable { mutableStateOf(false) }
     var showProblemReportDialog by remember { mutableStateOf(false) }
     var reportCategory by remember { mutableStateOf(ProblemReportCategory.CONTENT_PROBLEM) }
     var reportUserNote by remember { mutableStateOf("") }
@@ -1681,6 +1684,11 @@ fun PlayerScreen(
 
     LaunchedEffect(isSpeaking, isAutoPlaying) {
         onPlaybackActiveChange(isSpeaking || isAutoPlaying)
+    }
+    LaunchedEffect(locusActionItemId) {
+        if (locusActionItemId > 0) {
+            vm.loadReaderSummary(locusActionItemId)
+        }
     }
     LaunchedEffect(readerModeEnabled, currentItemId, isSpeaking, isAutoPlaying, autoPlayAfterLoad) {
         val manualReadingActive =
@@ -2381,6 +2389,13 @@ fun PlayerScreen(
                                                 vm.refreshPlaylists()
                                                 showPlaylistPicker = true
                                             },
+                                            onOpenSummary = {
+                                                overflowExpanded = false
+                                                showSummarySheet = true
+                                                actionScope.launch {
+                                                    vm.loadReaderSummary(locusActionItemId)
+                                                }
+                                            },
                                             canReportProblem = settings.apiToken.isNotBlank(),
                                             hasUrl = locusHasUrl,
                                             onOpenInBrowser = {
@@ -2448,6 +2463,24 @@ fun PlayerScreen(
                 }
             }
         }
+    }
+
+    if (showSummarySheet) {
+        SummarySheet(
+            state = readerSummaryState,
+            itemId = locusActionItemId,
+            onDismiss = { showSummarySheet = false },
+            onRefresh = {
+                actionScope.launch {
+                    vm.loadReaderSummary(locusActionItemId)
+                }
+            },
+            onGenerate = { force ->
+                actionScope.launch {
+                    vm.requestReaderSummary(locusActionItemId, force = force)
+                }
+            },
+        )
     }
 
     if (showProblemReportDialog) {
@@ -3721,6 +3754,7 @@ private fun LocusOverflowMenuItems(
     onReportProblem: () -> Unit,
     onMoveToBin: () -> Unit,
     onOpenPlaylists: () -> Unit,
+    onOpenSummary: () -> Unit,
     canReportProblem: Boolean,
     hasUrl: Boolean,
     onOpenInBrowser: () -> Unit,
@@ -3744,6 +3778,10 @@ private fun LocusOverflowMenuItems(
     DropdownMenuItem(
         text = { Text("Playlists...") },
         onClick = onOpenPlaylists,
+    )
+    DropdownMenuItem(
+        text = { Text("Summary") },
+        onClick = onOpenSummary,
     )
     if (hasUrl) {
         DropdownMenuItem(

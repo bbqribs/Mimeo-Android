@@ -11,6 +11,7 @@ import com.mimeo.android.data.entities.NowPlayingEntity
 import com.mimeo.android.data.entities.CachedItemEntity
 import com.mimeo.android.data.entities.PendingProgressEntity
 import com.mimeo.android.model.ArticleSummary
+import com.mimeo.android.model.ContentSummaryOut
 import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.ItemTextContentBlock
@@ -357,6 +358,23 @@ class PlaybackRepository(
             )
         }
         return queueResult.copy(debugSnapshot = snapshot)
+    }
+
+    suspend fun getContentSummary(
+        baseUrl: String,
+        token: String,
+        itemId: Int,
+    ): ContentSummaryOut {
+        return apiClient.getContentSummary(baseUrl, token, itemId)
+    }
+
+    suspend fun requestContentSummary(
+        baseUrl: String,
+        token: String,
+        itemId: Int,
+        force: Boolean = false,
+    ): ContentSummaryOut {
+        return apiClient.requestContentSummary(baseUrl, token, itemId, force)
     }
 
     suspend fun prefetchItemTexts(
