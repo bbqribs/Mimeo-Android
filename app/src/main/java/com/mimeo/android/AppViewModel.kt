@@ -374,6 +374,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val progressSyncBadgeState: StateFlow<ProgressSyncBadgeState> = _progressSyncBadgeState.asStateFlow()
     private val _readerSummaryState = MutableStateFlow<ReaderSummaryState>(ReaderSummaryState.Idle)
     val readerSummaryState: StateFlow<ReaderSummaryState> = _readerSummaryState.asStateFlow()
+    private var readerSummaryRequestInFlightItemId: Int? = null
 
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
@@ -3678,6 +3679,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun requestReaderSummary(itemId: Int, force: Boolean = false): Result<Unit> {
         if (itemId <= 0) return Result.failure(IllegalArgumentException("Item required"))
+        if (readerSummaryRequestInFlightItemId == itemId) {
+            return Result.success(Unit)
+        }
         val current = settings.value
         if (current.apiToken.isBlank()) {
             val reason = ContentSummaryFailureReason.UNAUTHORIZED
@@ -3692,6 +3696,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ?.takeIf { it.itemId == itemId }
             ?.summary
         _readerSummaryState.value = ReaderSummaryState.Loading(itemId = itemId, previous = previous)
+        readerSummaryRequestInFlightItemId = itemId
         return try {
             val requested = repository.requestContentSummary(
                 baseUrl = current.baseUrl,
@@ -3711,6 +3716,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 message = contentSummaryFailureMessage(reason),
             )
             Result.failure(error)
+        } finally {
+            if (readerSummaryRequestInFlightItemId == itemId) {
+                readerSummaryRequestInFlightItemId = null
+            }
         }
     }
 
