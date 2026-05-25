@@ -115,7 +115,6 @@ fun ReaderBody(
     val highlightBg = if (isV1) mColors.accent.copy(alpha = 0.24f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
     val searchHighlightBg = if (isV1) mColors.accentDim else MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
     val searchActiveHighlightBg = if (isV1) mColors.accent.copy(alpha = 0.35f) else MaterialTheme.colorScheme.secondary.copy(alpha = 0.40f)
-    val useFullTextLayout = true
     val sentenceRangesByChunk = remember(chunks) {
         chunks.map { segmentSentences(it.text) }
     }
@@ -124,7 +123,6 @@ fun ReaderBody(
     var activeTextLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
     var activeChunkTopInRootPx by remember { mutableStateOf<Float?>(null) }
     var searchTextLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
-    var searchChunkTopInRootPx by remember { mutableStateOf<Float?>(null) }
     var lastHandledSearchTrigger by remember { mutableIntStateOf(searchFocusTriggerSignal) }
     var lastAnchorRange by remember { mutableStateOf<IntRange?>(null) }
     var lastAnchorWasFullyVisible by remember { mutableStateOf<Boolean?>(null) }
@@ -180,8 +178,8 @@ fun ReaderBody(
             fullText.orEmpty()
         }
     }
-    val fullTextChunkStartOffsets = remember(useFullTextLayout, chunks, effectiveFullText) {
-        if (!useFullTextLayout || effectiveFullText.isBlank() || chunks.isEmpty()) {
+    val fullTextChunkStartOffsets = remember(chunks, effectiveFullText) {
+        if (effectiveFullText.isBlank() || chunks.isEmpty()) {
             emptyList()
         } else {
             buildChunkStartOffsetsForJoinedText(chunks, READER_CHUNK_SEPARATOR.length)
@@ -191,26 +189,21 @@ fun ReaderBody(
     // paragraph; a ParagraphStyle gives that paragraph a height equal to the
     // chosen paragraph-spacing gap. This makes spacing freely tunable (not
     // quantized to whole blank lines) without changing any chunk offsets.
-    val separatorParagraphRanges = remember(useFullTextLayout, chunks, fullTextChunkStartOffsets) {
-        if (!useFullTextLayout) {
-            emptyList()
-        } else {
-            buildChunkSeparatorParagraphRanges(chunks, fullTextChunkStartOffsets, READER_CHUNK_SEPARATOR.length)
-        }
+    val separatorParagraphRanges = remember(chunks, fullTextChunkStartOffsets) {
+        buildChunkSeparatorParagraphRanges(chunks, fullTextChunkStartOffsets, READER_CHUNK_SEPARATOR.length)
     }
     val separatorGapLineHeight = readerParagraphGapLineHeight(
         spacingMultiplier = paragraphSpacing,
         bodyLineHeightSp = readingFontSizeSp * (readingLineHeightPercent / 100f),
     ).sp
     val fullTextHighlightRange = remember(
-        useFullTextLayout,
         effectiveFullText,
         chunks,
         safeChunkIndex,
         activeRangeInChunk,
         highlightedSentenceRange,
     ) {
-        if (!useFullTextLayout || effectiveFullText.isBlank()) return@remember null
+        if (effectiveFullText.isBlank()) return@remember null
         val chunk = chunks.getOrNull(safeChunkIndex) ?: return@remember null
         val baseRange = resolveReaderHighlightRange(
             textLength = chunk.text.length,
@@ -226,13 +219,12 @@ fun ReaderBody(
         )
     }
     val fullTextFollowRange = remember(
-        useFullTextLayout,
         effectiveFullText,
         chunks,
         safeChunkIndex,
         currentChunkOffsetInChars,
     ) {
-        if (!useFullTextLayout || effectiveFullText.isBlank()) return@remember null
+        if (effectiveFullText.isBlank()) return@remember null
         val chunk = chunks.getOrNull(safeChunkIndex) ?: return@remember null
         val chunkLength = chunk.text.length
         if (chunkLength <= 0) return@remember null
@@ -245,8 +237,8 @@ fun ReaderBody(
             fullTextLength = effectiveFullText.length,
         )
     }
-    val fullTextSearchRanges = remember(useFullTextLayout, effectiveFullText, chunks, searchHighlightRangesByChunk) {
-        if (!useFullTextLayout || effectiveFullText.isBlank()) return@remember emptyList()
+    val fullTextSearchRanges = remember(effectiveFullText, chunks, searchHighlightRangesByChunk) {
+        if (effectiveFullText.isBlank()) return@remember emptyList()
         chunks.flatMapIndexed { index, chunk ->
             searchHighlightRangesByChunk[index].orEmpty().mapNotNull { range ->
                 mapChunkRangeToFullText(
@@ -260,13 +252,12 @@ fun ReaderBody(
         }
     }
     val fullTextFocusedSearchRange = remember(
-        useFullTextLayout,
         effectiveFullText,
         chunks,
         searchFocusChunkIndex,
         searchFocusRangeInChunk,
     ) {
-        if (!useFullTextLayout || effectiveFullText.isBlank()) return@remember null
+        if (effectiveFullText.isBlank()) return@remember null
         val focusChunkIndex = searchFocusChunkIndex ?: return@remember null
         chunks.getOrNull(focusChunkIndex) ?: return@remember null
         val focusRange = searchFocusRangeInChunk ?: return@remember null
@@ -278,11 +269,7 @@ fun ReaderBody(
             fullTextLength = effectiveFullText.length,
         )
     }
-    val searchFocusRangeForScroll = if (useFullTextLayout) {
-        fullTextFocusedSearchRange
-    } else {
-        searchFocusRangeInChunk
-    }
+    val searchFocusRangeForScroll = fullTextFocusedSearchRange
     val fullTextLinks = remember(effectiveFullText, preservedLinks) {
         if (preservedLinks.isNotEmpty()) {
             preservedLinks
@@ -305,7 +292,6 @@ fun ReaderBody(
         }
     }
     val fullTextBaseAnnotated = remember(
-        useFullTextLayout,
         effectiveFullText,
         fullTextLinks,
         fullTextSearchRanges,
@@ -313,7 +299,7 @@ fun ReaderBody(
         separatorParagraphRanges,
         separatorGapLineHeight,
     ) {
-        if (!useFullTextLayout || effectiveFullText.isBlank()) {
+        if (effectiveFullText.isBlank()) {
             AnnotatedString("")
         } else {
             buildReaderBaseAnnotatedText(
@@ -334,7 +320,7 @@ fun ReaderBody(
         highlightBg,
         searchActiveHighlightBg,
     ) {
-        if (!useFullTextLayout || effectiveFullText.isBlank()) {
+        if (effectiveFullText.isBlank()) {
             AnnotatedString("")
         } else {
             withReaderHighlightOverlays(
@@ -366,27 +352,8 @@ fun ReaderBody(
     val searchFocusExtraTopPx = with(density) { READER_SEARCH_FOCUS_EXTRA_TOP_PADDING.roundToPx().toFloat() }
     val topOverlayPx = topOverlayOcclusionPx.coerceAtLeast(0).toFloat()
     val bottomOverlayPx = bottomOverlayOcclusionPx.coerceAtLeast(0).toFloat()
-    val anchorRange = if (useFullTextLayout) {
-        fullTextHighlightRange
-    } else {
-        resolveReaderHighlightRange(
-            textLength = chunks.getOrNull(safeChunkIndex)?.text?.length ?: 0,
-            activeRange = activeRangeInChunk,
-            sentenceRange = highlightedSentenceRange,
-        )
-    }
-    val followRange = if (useFullTextLayout) {
-        fullTextFollowRange
-    } else {
-        val chunk = chunks.getOrNull(safeChunkIndex)
-        val chunkLength = chunk?.text?.length ?: 0
-        if (chunkLength > 0) {
-            val clampedOffset = currentChunkOffsetInChars.coerceIn(0, chunkLength - 1)
-            clampedOffset..clampedOffset
-        } else {
-            null
-        }
-    }
+    val anchorRange = fullTextHighlightRange
+    val followRange = fullTextFollowRange
     val scrollAnchorRange = followRange ?: anchorRange
     val scrollbarColor = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
     val latestOnNonLinkTap by rememberUpdatedState(onNonLinkTap)
@@ -405,16 +372,14 @@ fun ReaderBody(
     ) {
         key(selectionResetSignal) {
             SelectionContainer {
-                if (useFullTextLayout && effectiveFullText.isNotBlank()) {
+                if (effectiveFullText.isNotBlank()) {
                     ClickableText(
                         text = fullTextAnnotated,
                         modifier = Modifier
                             .widthIn(max = readingMaxWidthDp.dp)
                             .fillMaxWidth()
                             .onGloballyPositioned { coordinates ->
-                                val top = coordinates.positionInRoot().y
-                                activeChunkTopInRootPx = top
-                                searchChunkTopInRootPx = top
+                                activeChunkTopInRootPx = coordinates.positionInRoot().y
                             }
                             // Purely observing long-press detector: reports the
                             // link (if any) under a long-press so the selection
@@ -532,31 +497,20 @@ fun ReaderBody(
         searchFocusChunkIndex,
         searchFocusRangeForScroll,
         searchTextLayout,
-        searchChunkTopInRootPx,
-        viewportTopInRootPx,
         viewportSize,
-        topOverlayOcclusionPx,
         scrollState.maxValue,
     ) {
         if (searchFocusTriggerSignal == lastHandledSearchTrigger) return@LaunchedEffect
         val range = searchFocusRangeForScroll ?: return@LaunchedEffect
         val layout = searchTextLayout ?: return@LaunchedEffect
-        val chunkTopInRoot = searchChunkTopInRootPx ?: return@LaunchedEffect
-        val viewportTopInRoot = viewportTopInRootPx ?: return@LaunchedEffect
         if (viewportSize.height <= 0) return@LaunchedEffect
 
         val maxOffset = layout.layoutInput.text.length.coerceAtLeast(0)
         val safeStart = range.first.coerceIn(0, maxOffset)
         val startBox = layout.getCursorRect(safeStart)
-        val startTopInRoot = chunkTopInRoot + startBox.top
-        val desiredAnchorInRoot = viewportTopInRoot + topOverlayPx + topComfortPx + searchFocusExtraTopPx
         val target = computeReaderSearchFocusScrollTarget(
-            useFullTextLayout = useFullTextLayout,
-            scrollValue = scrollState.value,
             scrollMaxValue = scrollState.maxValue,
             startBoxTop = startBox.top,
-            startTopInRoot = startTopInRoot,
-            desiredAnchorInRoot = desiredAnchorInRoot,
             topComfortPx = topComfortPx,
             searchFocusExtraTopPx = searchFocusExtraTopPx,
         )
@@ -870,22 +824,12 @@ internal fun buildChunkStartOffsetsForJoinedText(
 }
 
 internal fun computeReaderSearchFocusScrollTarget(
-    useFullTextLayout: Boolean,
-    scrollValue: Int,
     scrollMaxValue: Int,
     startBoxTop: Float,
-    startTopInRoot: Float,
-    desiredAnchorInRoot: Float,
     topComfortPx: Float,
     searchFocusExtraTopPx: Float,
 ): Int {
-    val rawTarget = if (useFullTextLayout) {
-        // Full-text uses a single text layout; target in local text coordinates.
-        startBoxTop - (topComfortPx + searchFocusExtraTopPx)
-    } else {
-        val delta = startTopInRoot - desiredAnchorInRoot
-        scrollValue + delta
-    }
+    val rawTarget = startBoxTop - (topComfortPx + searchFocusExtraTopPx)
     return rawTarget.roundToInt().coerceIn(0, scrollMaxValue)
 }
 

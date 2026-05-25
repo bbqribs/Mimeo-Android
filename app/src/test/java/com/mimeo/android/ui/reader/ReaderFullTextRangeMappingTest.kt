@@ -163,12 +163,8 @@ class ReaderFullTextRangeMappingTest {
     @Test
     fun searchFocusTargetInFullTextAlignsToDesiredTopOffset() {
         val target = computeReaderSearchFocusScrollTarget(
-            useFullTextLayout = true,
-            scrollValue = 500,
             scrollMaxValue = 5_000,
             startBoxTop = 1_240f,
-            startTopInRoot = 0f,
-            desiredAnchorInRoot = 0f,
             topComfortPx = 0f,
             searchFocusExtraTopPx = 24f,
         )
@@ -179,22 +175,14 @@ class ReaderFullTextRangeMappingTest {
     @Test
     fun searchFocusTargetClampsAtBoundsNearTopAndBottom() {
         val nearTop = computeReaderSearchFocusScrollTarget(
-            useFullTextLayout = true,
-            scrollValue = 100,
             scrollMaxValue = 2_000,
             startBoxTop = 12f,
-            startTopInRoot = 0f,
-            desiredAnchorInRoot = 0f,
             topComfortPx = 0f,
             searchFocusExtraTopPx = 24f,
         )
         val nearBottom = computeReaderSearchFocusScrollTarget(
-            useFullTextLayout = true,
-            scrollValue = 100,
             scrollMaxValue = 2_000,
             startBoxTop = 5_000f,
-            startTopInRoot = 0f,
-            desiredAnchorInRoot = 0f,
             topComfortPx = 0f,
             searchFocusExtraTopPx = 24f,
         )
