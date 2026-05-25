@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -29,10 +28,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.mimeo.android.model.ContentSummaryOut
 import com.mimeo.android.model.ContentSummaryState
 import com.mimeo.android.model.ReaderSummaryState
 import com.mimeo.android.model.canRequestGeneration
+import com.mimeo.android.model.contentSummaryFailureMessage
+import com.mimeo.android.model.contentSummaryFailureReasonFromCode
 import com.mimeo.android.model.normalizedState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,6 +47,7 @@ fun SummarySheet(
     onGenerate: (force: Boolean) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val loading = state is ReaderSummaryState.Loading && state.itemId == itemId
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -66,14 +69,18 @@ fun SummarySheet(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
-                TextButton(onClick = onRefresh) {
-                    Text("Refresh")
+                TextButton(
+                    onClick = onRefresh,
+                    enabled = !loading,
+                ) {
+                    Text(if (loading) "Checking" else "Refresh")
                 }
             }
             HorizontalDivider()
             SummarySheetBody(
                 state = state,
                 itemId = itemId,
+                onRefresh = onRefresh,
                 onGenerate = onGenerate,
             )
             Row(
@@ -92,6 +99,7 @@ fun SummarySheet(
 private fun SummarySheetBody(
     state: ReaderSummaryState,
     itemId: Int,
+    onRefresh: () -> Unit,
     onGenerate: (force: Boolean) -> Unit,
 ) {
     when (state) {
@@ -99,7 +107,12 @@ private fun SummarySheetBody(
         is ReaderSummaryState.Loading -> {
             val previous = state.previous
             if (previous != null && state.itemId == itemId) {
-                SummaryContent(summary = previous, loading = true, onGenerate = onGenerate)
+                SummaryContent(
+                    summary = previous,
+                    loading = true,
+                    onRefresh = onRefresh,
+                    onGenerate = onGenerate,
+                )
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -116,7 +129,12 @@ private fun SummarySheetBody(
         }
         is ReaderSummaryState.Ready -> {
             if (state.itemId == itemId) {
-                SummaryContent(summary = state.summary, loading = false, onGenerate = onGenerate)
+                SummaryContent(
+                    summary = state.summary,
+                    loading = false,
+                    onRefresh = onRefresh,
+                    onGenerate = onGenerate,
+                )
             } else {
                 SummaryUnavailableMessage()
             }
@@ -138,6 +156,7 @@ private fun SummarySheetBody(
 private fun SummaryContent(
     summary: ContentSummaryOut,
     loading: Boolean,
+    onRefresh: () -> Unit,
     onGenerate: (force: Boolean) -> Unit,
 ) {
     when (summary.normalizedState()) {
@@ -147,38 +166,38 @@ private fun SummaryContent(
         ContentSummaryState.STALE -> {
             SummaryMessage(
                 title = "Summary may be out of date",
-                body = "This summary was generated for an older version of the item.",
+                body = "This summary was generated before the latest readable text was saved.",
             )
             SummaryText(summary)
             if (summary.canRequestGeneration()) {
-                SummaryPrimaryButton("Generate new summary", loading) { onGenerate(false) }
+                SummaryPrimaryButton("Generate updated summary", loading) { onGenerate(false) }
             }
         }
         ContentSummaryState.MISSING -> {
+            val canRequest = summary.canRequestGeneration()
             SummaryMessage(
-                title = "No summary yet",
-                body = if (summary.canRequestGeneration()) {
+                title = if (canRequest) "No summary yet" else "Summary unavailable",
+                body = if (canRequest) {
                     "Generate a summary from the server when you want one."
                 } else {
-                    "Summaries are not available for this item right now."
+                    summaryUnavailableBody(summary)
                 },
             )
-            if (summary.canRequestGeneration()) {
+            if (canRequest) {
                 SummaryPrimaryButton("Generate Summary", loading) { onGenerate(false) }
             }
         }
         ContentSummaryState.PENDING -> {
             SummaryMessage(
                 title = "Generating summary",
-                body = "The server is working on this summary. Refresh to check again.",
+                body = "The server is working on this summary. Checking status will not start another request.",
             )
+            SummarySecondaryButton("Check status", loading, onRefresh)
         }
         ContentSummaryState.FAILED -> {
             SummaryMessage(
                 title = "Summary failed",
-                body = summary.failureReason?.takeIf { it.isNotBlank() }
-                    ?.let { "The last summary attempt did not finish: $it." }
-                    ?: "The last summary attempt did not finish.",
+                body = summaryFailedBody(summary),
             )
             if (summary.canRequestGeneration()) {
                 SummaryPrimaryButton("Retry", loading) { onGenerate(true) }
@@ -195,22 +214,22 @@ private fun SummaryContent(
 
 @Composable
 private fun SummaryText(summary: ContentSummaryOut) {
-    summary.disclaimer?.takeIf { it.isNotBlank() }?.let { disclaimer ->
-        Text(
-            text = disclaimer,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontStyle = FontStyle.Italic,
-        )
-    }
+    Text(
+        text = summaryDisclaimerText(summary),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontStyle = FontStyle.Italic,
+    )
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(
             text = summary.summaryText.orEmpty().ifBlank { "Summary text is not available." },
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 24.sp),
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
                 .heightIn(min = 96.dp, max = 320.dp)
                 .verticalScroll(rememberScrollState())
@@ -222,17 +241,43 @@ private fun SummaryText(summary: ContentSummaryOut) {
 
 @Composable
 private fun SummaryMetadata(summary: ContentSummaryOut) {
-    val parts = listOfNotNull(
-        summary.generatedAt?.takeIf { it.isNotBlank() }?.let { "Generated $it" },
-        summary.model?.takeIf { it.isNotBlank() },
-        summary.promptVersion?.takeIf { it.isNotBlank() },
-    )
+    val parts = summaryMetadataParts(summary)
     if (parts.isEmpty()) return
     Text(
-        text = parts.joinToString(" • "),
+        text = parts.joinToString("  |  "),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+}
+
+internal fun summaryUnavailableBody(summary: ContentSummaryOut): String {
+    val reason = contentSummaryFailureReasonFromCode(summary.failureReason)
+    return reason?.let(::contentSummaryFailureMessage)
+        ?: "Summaries are not available for this item right now."
+}
+
+internal fun summaryFailedBody(summary: ContentSummaryOut): String {
+    val reason = contentSummaryFailureReasonFromCode(summary.failureReason)
+    return reason?.let(::contentSummaryFailureMessage)
+        ?: "The last summary attempt did not finish. Try again when the server is available."
+}
+
+internal fun summaryDisclaimerText(summary: ContentSummaryOut): String {
+    return summary.disclaimer
+        ?.takeIf { it.isNotBlank() }
+        ?: "AI-generated summary. Verify important details."
+}
+
+internal fun summaryMetadataParts(summary: ContentSummaryOut): List<String> {
+    val generated = summary.generatedAt?.takeIf { it.isNotBlank() }?.let { "Generated $it" }
+    val provider = summary.provider?.takeIf { it.isNotBlank() }
+    val model = summary.model?.takeIf { it.isNotBlank() }
+    val modelPart = when {
+        provider != null && model != null -> "Model $provider/$model"
+        provider != null -> "Provider $provider"
+        else -> null
+    }
+    return listOfNotNull(generated, modelPart)
 }
 
 @Composable
@@ -264,6 +309,27 @@ private fun SummaryUnavailableMessage() {
 
 @Composable
 private fun SummaryPrimaryButton(
+    label: String,
+    loading: Boolean,
+    onClick: () -> Unit,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = !loading,
+    ) {
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+            )
+            Spacer(Modifier.size(8.dp))
+        }
+        Text(label)
+    }
+}
+
+@Composable
+private fun SummarySecondaryButton(
     label: String,
     loading: Boolean,
     onClick: () -> Unit,
