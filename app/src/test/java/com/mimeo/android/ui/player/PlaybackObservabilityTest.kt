@@ -378,20 +378,26 @@ class PlaybackObservabilityTest {
     }
 
     @Test
-    fun preservePlaybackOwnerForPreviewOpen_whenPlaybackActiveAndTargetDiffers() {
-        val shouldPreserve = shouldPreservePlaybackOwnerForPreviewOpen(
+    fun preservePlaybackOwnerForPreviewOpen_whenTargetDiffers_regardlessOfPlaybackActive() {
+        val whilePlaying = shouldPreservePlaybackOwnerForPreviewOpen(
             targetItemId = 20,
             currentItemId = 10,
             playbackActive = true,
         )
-        assertTrue(shouldPreserve)
+        val whilePaused = shouldPreservePlaybackOwnerForPreviewOpen(
+            targetItemId = 20,
+            currentItemId = 10,
+            playbackActive = false,
+        )
+        assertTrue(whilePlaying)
+        assertTrue(whilePaused)
     }
 
     @Test
-    fun preservePlaybackOwnerForPreviewOpen_falseWhenPlaybackInactiveOrSameItem() {
-        val inactive = shouldPreservePlaybackOwnerForPreviewOpen(
+    fun preservePlaybackOwnerForPreviewOpen_falseWhenNoSessionOrSameItem() {
+        val noSession = shouldPreservePlaybackOwnerForPreviewOpen(
             targetItemId = 20,
-            currentItemId = 10,
+            currentItemId = 0,
             playbackActive = false,
         )
         val sameItem = shouldPreservePlaybackOwnerForPreviewOpen(
@@ -399,7 +405,7 @@ class PlaybackObservabilityTest {
             currentItemId = 10,
             playbackActive = true,
         )
-        assertEquals(false, inactive)
+        assertEquals(false, noSession)
         assertEquals(false, sameItem)
     }
 
@@ -428,10 +434,25 @@ class PlaybackObservabilityTest {
     }
 
     @Test
-    fun requestedItemTransitionMode_replaceCurrentWhenPlaybackInactiveAndUnlocked() {
+    fun requestedItemTransitionMode_previewOnlyWhenPlaybackInactiveButSessionExists() {
+        // Tapping an item while TTS is paused but a session current exists should
+        // preview, not reclassify the session. ReplaceCurrent is reserved for the
+        // no-session case (currentItemId <= 0), exercised below.
         val mode = resolveRequestedItemTransitionMode(
             targetItemId = 20,
             currentItemId = 10,
+            playbackActive = false,
+            hasLockedPlaybackOwner = false,
+        )
+
+        assertEquals(RequestedItemTransitionMode.PreviewOnly, mode)
+    }
+
+    @Test
+    fun requestedItemTransitionMode_replaceCurrentWhenNoSession() {
+        val mode = resolveRequestedItemTransitionMode(
+            targetItemId = 20,
+            currentItemId = 0,
             playbackActive = false,
             hasLockedPlaybackOwner = false,
         )

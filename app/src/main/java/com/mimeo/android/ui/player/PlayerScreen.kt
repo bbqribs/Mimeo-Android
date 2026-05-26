@@ -503,11 +503,17 @@ internal fun resolveLocusActionBarTitle(
 internal fun shouldPreservePlaybackOwnerForPreviewOpen(
     targetItemId: Int,
     currentItemId: Int,
-    playbackActive: Boolean,
+    @Suppress("UNUSED_PARAMETER") playbackActive: Boolean,
 ): Boolean {
+    // Tapping any item while a different session current exists should preview it
+    // in the Reader without rebasing the session's current pointer. Promotion to
+    // Now Playing is reserved for explicit Play/Jump actions (jumpToUpcomingSessionItem,
+    // setNowPlayingCurrentItem, startNowPlayingSession). The previous behavior
+    // gated on `playbackActive`, which incorrectly reclassified the session
+    // whenever TTS was paused and the user tapped a row to read it.
     if (targetItemId <= 0 || currentItemId <= 0) return false
     if (targetItemId == currentItemId) return false
-    return playbackActive
+    return true
 }
 
 internal enum class RequestedItemTransitionMode {
