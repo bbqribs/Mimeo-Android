@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import com.mimeo.android.model.ContentSummaryOut
 import com.mimeo.android.model.ContentSummaryState
 import com.mimeo.android.model.ReaderSummaryState
+import com.mimeo.android.model.canRefreshOutdatedSummary
 import com.mimeo.android.model.canRequestGeneration
 import com.mimeo.android.model.contentSummaryFailureMessage
 import com.mimeo.android.model.contentSummaryFailureReasonFromCode
@@ -162,6 +163,13 @@ private fun SummaryContent(
     when (summary.normalizedState()) {
         ContentSummaryState.READY -> {
             SummaryText(summary)
+            if (summary.canRefreshOutdatedSummary()) {
+                SummaryMessage(
+                    title = summaryOutdatedTitle(),
+                    body = summaryOutdatedBody(),
+                )
+                SummarySecondaryButton("Refresh summary", loading) { onGenerate(true) }
+            }
         }
         ContentSummaryState.STALE -> {
             SummaryMessage(
@@ -261,6 +269,11 @@ internal fun summaryFailedBody(summary: ContentSummaryOut): String {
     return reason?.let(::contentSummaryFailureMessage)
         ?: "The last summary attempt did not finish. Try again when the server is available."
 }
+
+internal fun summaryOutdatedTitle(): String = "Summary uses an older prompt"
+
+internal fun summaryOutdatedBody(): String =
+    "A newer summary prompt is available. Tap Refresh to regenerate this summary."
 
 internal fun summaryDisclaimerText(summary: ContentSummaryOut): String {
     return summary.disclaimer

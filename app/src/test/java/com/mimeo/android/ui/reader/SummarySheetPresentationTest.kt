@@ -41,6 +41,16 @@ class SummarySheetPresentationTest {
     }
 
     @Test
+    fun outdatedReadyCopyExplainsRefreshIsManual() {
+        val title = summaryOutdatedTitle()
+        val body = summaryOutdatedBody()
+
+        assertTrue(title.contains("older prompt"))
+        assertTrue(body.contains("Refresh"))
+        assertFalse("must not promise automatic regeneration", body.contains("automatic"))
+    }
+
+    @Test
     fun metadataStaysConcise() {
         val parts = summaryMetadataParts(
             summary(
