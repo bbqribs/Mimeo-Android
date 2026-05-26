@@ -3962,6 +3962,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 _statusMessage.value = "Archived"
             }
+            // If the archived item is still visible in the active playback session
+            // (Now Playing, Earlier, Up Next, or History), mark it so rows render the
+            // Archived indicator without being removed from the session.
+            val sessionSnapshot = _nowPlayingSession.value
+            if (sessionSnapshot != null) {
+                val inSession = sessionSnapshot.items.any { it.itemId == itemId } ||
+                    sessionSnapshot.historyItems.any { it.itemId == itemId }
+                if (inSession) {
+                    _archivedSessionHistoryIds.update { it + itemId }
+                }
+            }
             _queueOffline.value = false
             updateSyncBadgeState()
             Result.success(Unit)
@@ -4306,6 +4317,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             repository.unarchiveItem(current.baseUrl, current.apiToken, itemId)
             repository.toggleCompletion(current.baseUrl, current.apiToken, itemId, markDone = false)
             loadQueueOnce(autoRetryPendingSaves = false)
+            _archivedSessionHistoryIds.update { it - itemId }
             _statusMessage.value = "Unarchived"
             _queueOffline.value = false
             updateSyncBadgeState()
@@ -4503,6 +4515,41 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (response.successCount > 0) {
                 lastBatchAction = action
                 lastBatchItemIds = response.results.filter { it.ok }.map { it.itemId }
+                // Mirror the local-state side effects that single-item archiveItem()/
+                // unarchiveItem() apply, so consumers (Reader archive icon, session row
+                // Archived indicator) reflect the new state immediately without waiting
+                // for a list refresh.
+                val affectedIds = lastBatchItemIds.toSet()
+                when (action) {
+                    "archive" -> {
+                        val sessionSnapshot = _nowPlayingSession.value
+                        affectedIds.forEach { id ->
+                            val seed = _queueItems.value.firstOrNull { it.itemId == id }
+                                ?: _inboxItems.value.firstOrNull { it.itemId == id }
+                                ?: _archivedItems.value.firstOrNull { it.itemId == id }
+                            if (seed != null) {
+                                _archivedItems.update { existing ->
+                                    mergeItemIntoList(existing, seed, addToFront = true)
+                                }
+                            }
+                            _queueItems.update { previous -> previous.filterNot { it.itemId == id } }
+                            _inboxItems.update { previous -> previous.filterNot { it.itemId == id } }
+                            if (sessionSnapshot != null) {
+                                val inSession = sessionSnapshot.items.any { it.itemId == id } ||
+                                    sessionSnapshot.historyItems.any { it.itemId == id }
+                                if (inSession) {
+                                    _archivedSessionHistoryIds.update { it + id }
+                                }
+                            }
+                        }
+                    }
+                    "unarchive" -> {
+                        affectedIds.forEach { id ->
+                            _archivedItems.update { previous -> previous.filterNot { it.itemId == id } }
+                            _archivedSessionHistoryIds.update { it - id }
+                        }
+                    }
+                }
             }
             val msg = when {
                 response.failureCount == 0 -> "${response.successCount} item(s) moved"
