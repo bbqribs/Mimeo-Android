@@ -690,6 +690,8 @@ internal fun NowPlayingSessionPanel(
                         val sourceLabel = item.host
                             ?: item.sourceLabel?.takeIf { it.isNotBlank() }
                             ?: item.sourceType?.takeIf { it.isNotBlank() }
+                        val showArchivedIndicator = item.itemId in archivedHistoryItemIds
+                        val rowMetadata = buildItemMetadata(sourceLabel, showArchived = showArchivedIndicator)
                         val rowTitle = item.title?.ifBlank { null } ?: item.url
                         val dragContainerColor = dragContainerColorFor(isDragging)
                         Column(
@@ -707,7 +709,7 @@ internal fun NowPlayingSessionPanel(
                         ) {
                             ItemRow(
                                 title = rowTitle,
-                                metadata = sourceLabel,
+                                metadata = rowMetadata,
                                 status = null,
                                 modifier = Modifier.semantics {
                                     customActions = buildList {
