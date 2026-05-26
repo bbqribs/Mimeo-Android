@@ -886,16 +886,26 @@ fun PlayerScreen(
     val mColors = LocalMimeoColorTokens.current
     val engineState by vm.playbackEngineState.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
-    // Session current takes precedence over the raw route id when the engine has
-    // not opened anything yet. This way, tapping a different item from the queue
-    // UI while the engine is empty (e.g. immediately after a Smart Queue seed,
-    // before any TTS has played) doesn't masquerade as the playback owner — the
-    // session's actual current item stays the anchor, and the requested item is
-    // routed through the preview-only path further below.
     val sessionCurrentItemId = nowPlayingSession?.currentItem?.itemId
+    // The session's current item is the authoritative playback anchor whenever
+    // the engine isn't actively owning playback. This covers:
+    //  - engine truly empty (fresh boot / no opens yet)
+    //  - engine holds a stale id from a previously-opened-but-never-played item
+    //    after a Smart Queue re-seed installed a new session current
+    // The engine wins only when it has actually started playback (or is auto-
+    // continuing) — i.e., it is the live source of truth, possibly ahead of
+    // the session during auto-continue handoff.
+    val engineOwnsLivePlayback =
+        engineState.currentItemId > 0 &&
+            (
+                engineState.hasStartedPlaybackForCurrentItem ||
+                    engineState.isSpeaking ||
+                    engineState.isAutoPlaying
+                )
     val currentItemId = when {
-        engineState.currentItemId > 0 -> engineState.currentItemId
+        engineOwnsLivePlayback -> engineState.currentItemId
         sessionCurrentItemId != null && sessionCurrentItemId > 0 -> sessionCurrentItemId
+        engineState.currentItemId > 0 -> engineState.currentItemId
         else -> initialItemId
     }
     val sharedContentState = vm.playerSurfaceContentState
@@ -1139,19 +1149,23 @@ fun PlayerScreen(
         if (resolvedInitial) return@LaunchedEffect
         val resolvedId = requestedItemId ?: vm.resolveInitialPlayerItemId(initialItemId)
         // Skip the engine open whenever a different item is already the playback
-        // owner. This includes the case where the engine itself has never been
-        // engaged but the session has an established current item — opening the
-        // tapped item via the engine would cascade into setNowPlayingCurrentItem
-        // and reclassify the session. The PreviewOnly path below will load the
-        // route target into the viewer instead.
-        val engineEmptyButSessionAnchored =
-            engineState.currentItemId <= 0 &&
-                sessionCurrentItemId != null && sessionCurrentItemId > 0
-        if ((hasLockedPlaybackOwner || engineEmptyButSessionAnchored) && resolvedId != currentItemId) {
+        // anchor. This includes:
+        //  - active playback for a different item (hasLockedPlaybackOwner)
+        //  - a session anchor that the engine has not caught up with: the engine
+        //    is either empty or holds a stale id from a previous open that was
+        //    never played, and the session has since been re-seeded.
+        // Without this skip, the engine would adopt the tapped item and the
+        // loadItem effect's setNowPlayingCurrentItem would reclassify the
+        // session — exactly what tapping-to-preview must not do.
+        val sessionAnchorDiffersFromEngine =
+            sessionCurrentItemId != null && sessionCurrentItemId > 0 &&
+                !engineOwnsLivePlayback
+        if ((hasLockedPlaybackOwner || sessionAnchorDiffersFromEngine) && resolvedId != currentItemId) {
             continuationLog(
                 "initialResolve previewOnly resolved=$resolvedId current=$currentItemId " +
                     "speaking=$isSpeaking auto=$isAutoPlaying " +
-                    "engineEmptyButSessionAnchored=$engineEmptyButSessionAnchored",
+                    "sessionAnchorDiffersFromEngine=$sessionAnchorDiffersFromEngine " +
+                    "engineCurrent=${engineState.currentItemId}",
             )
             resolvedInitial = true
             return@LaunchedEffect
