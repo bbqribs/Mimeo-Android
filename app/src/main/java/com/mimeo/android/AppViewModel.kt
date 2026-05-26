@@ -4515,6 +4515,41 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (response.successCount > 0) {
                 lastBatchAction = action
                 lastBatchItemIds = response.results.filter { it.ok }.map { it.itemId }
+                // Mirror the local-state side effects that single-item archiveItem()/
+                // unarchiveItem() apply, so consumers (Reader archive icon, session row
+                // Archived indicator) reflect the new state immediately without waiting
+                // for a list refresh.
+                val affectedIds = lastBatchItemIds.toSet()
+                when (action) {
+                    "archive" -> {
+                        val sessionSnapshot = _nowPlayingSession.value
+                        affectedIds.forEach { id ->
+                            val seed = _queueItems.value.firstOrNull { it.itemId == id }
+                                ?: _inboxItems.value.firstOrNull { it.itemId == id }
+                                ?: _archivedItems.value.firstOrNull { it.itemId == id }
+                            if (seed != null) {
+                                _archivedItems.update { existing ->
+                                    mergeItemIntoList(existing, seed, addToFront = true)
+                                }
+                            }
+                            _queueItems.update { previous -> previous.filterNot { it.itemId == id } }
+                            _inboxItems.update { previous -> previous.filterNot { it.itemId == id } }
+                            if (sessionSnapshot != null) {
+                                val inSession = sessionSnapshot.items.any { it.itemId == id } ||
+                                    sessionSnapshot.historyItems.any { it.itemId == id }
+                                if (inSession) {
+                                    _archivedSessionHistoryIds.update { it + id }
+                                }
+                            }
+                        }
+                    }
+                    "unarchive" -> {
+                        affectedIds.forEach { id ->
+                            _archivedItems.update { previous -> previous.filterNot { it.itemId == id } }
+                            _archivedSessionHistoryIds.update { it - id }
+                        }
+                    }
+                }
             }
             val msg = when {
                 response.failureCount == 0 -> "${response.successCount} item(s) moved"
