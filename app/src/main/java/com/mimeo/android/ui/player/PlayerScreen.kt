@@ -885,7 +885,19 @@ fun PlayerScreen(
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
     val engineState by vm.playbackEngineState.collectAsState()
-    val currentItemId = if (engineState.currentItemId > 0) engineState.currentItemId else initialItemId
+    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
+    // Session current takes precedence over the raw route id when the engine has
+    // not opened anything yet. This way, tapping a different item from the queue
+    // UI while the engine is empty (e.g. immediately after a Smart Queue seed,
+    // before any TTS has played) doesn't masquerade as the playback owner — the
+    // session's actual current item stays the anchor, and the requested item is
+    // routed through the preview-only path further below.
+    val sessionCurrentItemId = nowPlayingSession?.currentItem?.itemId
+    val currentItemId = when {
+        engineState.currentItemId > 0 -> engineState.currentItemId
+        sessionCurrentItemId != null && sessionCurrentItemId > 0 -> sessionCurrentItemId
+        else -> initialItemId
+    }
     val sharedContentState = vm.playerSurfaceContentState
     var resolvedInitial by rememberSaveable(initialItemId) { mutableStateOf(false) }
     val reloadNonce = engineState.reloadNonce
@@ -932,7 +944,6 @@ fun PlayerScreen(
     val queueItems by vm.queueItems.collectAsState()
     val archivedItems by vm.archivedItems.collectAsState()
     val playlists by vm.playlists.collectAsState()
-    val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val queueItemsById = remember(queueItems) { queueItems.associateBy { it.itemId } }
     val archivedItemIdSet = remember(archivedItems) { archivedItems.mapTo(hashSetOf()) { it.itemId } }
     val hasLockedPlaybackOwner =
@@ -944,7 +955,6 @@ fun PlayerScreen(
                 )
     // Route item IDs can temporarily lag behind session ownership during auto-continue.
     // Preview mode should only be driven by an explicit viewer override, not raw route mismatch.
-    val sessionCurrentItemId = nowPlayingSession?.currentItem?.itemId
     val playbackOwnerItemId = resolveLocusPlaybackOwnerItemId(
         engineCurrentItemId = engineState.currentItemId,
         sessionCurrentItemId = sessionCurrentItemId,
@@ -1128,10 +1138,20 @@ fun PlayerScreen(
         if (!playbackResumeStateReady) return@LaunchedEffect
         if (resolvedInitial) return@LaunchedEffect
         val resolvedId = requestedItemId ?: vm.resolveInitialPlayerItemId(initialItemId)
-        if (hasLockedPlaybackOwner && resolvedId != currentItemId) {
+        // Skip the engine open whenever a different item is already the playback
+        // owner. This includes the case where the engine itself has never been
+        // engaged but the session has an established current item — opening the
+        // tapped item via the engine would cascade into setNowPlayingCurrentItem
+        // and reclassify the session. The PreviewOnly path below will load the
+        // route target into the viewer instead.
+        val engineEmptyButSessionAnchored =
+            engineState.currentItemId <= 0 &&
+                sessionCurrentItemId != null && sessionCurrentItemId > 0
+        if ((hasLockedPlaybackOwner || engineEmptyButSessionAnchored) && resolvedId != currentItemId) {
             continuationLog(
                 "initialResolve previewOnly resolved=$resolvedId current=$currentItemId " +
-                    "speaking=$isSpeaking auto=$isAutoPlaying",
+                    "speaking=$isSpeaking auto=$isAutoPlaying " +
+                    "engineEmptyButSessionAnchored=$engineEmptyButSessionAnchored",
             )
             resolvedInitial = true
             return@LaunchedEffect
