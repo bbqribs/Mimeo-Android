@@ -383,6 +383,9 @@ data class ContentSummaryOut(
     val provider: String? = null,
     val model: String? = null,
     @SerialName("prompt_version") val promptVersion: String? = null,
+    @SerialName("current_prompt_version") val currentPromptVersion: String? = null,
+    @SerialName("is_current_prompt_version") val isCurrentPromptVersion: Boolean? = null,
+    @SerialName("can_refresh") val canRefresh: Boolean = false,
     @SerialName("generated_at") val generatedAt: String? = null,
     @SerialName("failure_reason") val failureReason: String? = null,
     @SerialName("can_request") val canRequest: Boolean = false,
@@ -442,6 +445,17 @@ fun ContentSummaryOut.canRequestGeneration(): Boolean {
         ContentSummaryState.FAILED,
         ContentSummaryState.STALE,
     )
+}
+
+/**
+ * True when a ready summary was generated with an older prompt version and the
+ * backend permits a forced refresh. Drives the soft "Refresh summary" affordance
+ * shown alongside the existing summary text — refresh is never automatic.
+ */
+fun ContentSummaryOut.canRefreshOutdatedSummary(): Boolean {
+    if (!canRefresh) return false
+    if (normalizedState() != ContentSummaryState.READY) return false
+    return isCurrentPromptVersion == false
 }
 
 fun contentSummaryFailureReasonFromCode(code: String?): ContentSummaryFailureReason? = when (code?.trim()?.lowercase()) {
