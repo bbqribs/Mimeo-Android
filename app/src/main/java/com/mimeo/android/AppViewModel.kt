@@ -250,6 +250,14 @@ sealed class StartupAuthState {
     data class Ready(val requiresSignIn: Boolean) : StartupAuthState()
 }
 
+/**
+ * Batch actions that remove items from active rotation and therefore should evict
+ * any cached article text. "unarchive"/"restore" are intentionally excluded so the
+ * next open re-caches fresh content. Mirrors the single-item eviction performed by
+ * [com.mimeo.android.repository.PlaybackRepository.archiveItem]/[moveItemToBin].
+ */
+internal val CACHE_EVICTING_BATCH_ACTIONS: Set<String> = setOf("archive", "bin")
+
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     data class SessionReseedResult(
         val sourceLabel: String,
@@ -4645,6 +4653,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 }
+                // Cache hygiene: bulk archive/bin/delete remove items from active
+                // rotation, so evict their cached text in one DB pass. Restore/
+                // unarchive intentionally leave re-caching to the next open.
+                if (action in CACHE_EVICTING_BATCH_ACTIONS) {
+                    runCatching { repository.evictCachedItems(affectedIds.toList()) }
+                    _cachedItemIds.update { previous -> previous - affectedIds }
+                }
             }
             val msg = when {
                 response.failureCount == 0 -> "${response.successCount} item(s) moved"
@@ -4895,8 +4910,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         add(insertAt, snapshot.item)
                     }
                 }
-                if (snapshot.wasCached) {
-                    _cachedItemIds.update { previous -> previous + snapshot.item.itemId }
+                // The cached text blob was evicted when the item was archived/binned,
+                // so the pre-eviction `wasCached` snapshot can no longer be trusted.
+                // Resolve offline-ready state from DB truth instead — the item will
+                // re-cache on next open.
+                val restoredOfflineReady =
+                    resolveOfflineReadyIdsForItemIds(setOf(snapshot.item.itemId))
+                _cachedItemIds.update { previous ->
+                    if (restoredOfflineReady.contains(snapshot.item.itemId)) {
+                        previous + snapshot.item.itemId
+                    } else {
+                        previous - snapshot.item.itemId
+                    }
                 }
                 if (snapshot.wasNoActiveContent) {
                     _noActiveContentItemIds.update { previous -> previous + snapshot.item.itemId }

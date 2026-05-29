@@ -654,6 +654,11 @@ class PlaybackRepository(
     }
 
     suspend fun archiveItem(baseUrl: String, token: String, itemId: Int): ProgressPostResult {
+        // Cache hygiene: an archived item leaves active rotation, so drop its cached
+        // text now rather than letting the blob linger. Evicted before the network
+        // call so it happens even when the action is queued offline; re-opening the
+        // item online re-caches it. See CLAUDE.md cache-eviction regime.
+        evictCachedItem(itemId)
         apiClient.markItemDone(baseUrl, token, itemId, autoArchive = true)
         return ProgressPostResult(queued = false)
     }
@@ -664,6 +669,8 @@ class PlaybackRepository(
     }
 
     suspend fun moveItemToBin(baseUrl: String, token: String, itemId: Int): ProgressPostResult {
+        // Binned (soft-deleted) items should not retain cached text.
+        evictCachedItem(itemId)
         apiClient.moveItemToBin(baseUrl, token, itemId)
         return ProgressPostResult(queued = false)
     }
@@ -674,8 +681,22 @@ class PlaybackRepository(
     }
 
     suspend fun purgeItemFromBin(baseUrl: String, token: String, itemId: Int): ProgressPostResult {
+        // Permanent delete — make sure no cached text survives the item.
+        evictCachedItem(itemId)
         apiClient.purgeItemFromBin(baseUrl, token, itemId)
         return ProgressPostResult(queued = false)
+    }
+
+    /** Removes a single item's cached text blob from the local DB, if present. */
+    suspend fun evictCachedItem(itemId: Int) {
+        database.cachedItemDao().deleteByItemId(itemId)
+    }
+
+    /** Removes cached text blobs for the given items in one DB pass. No-op when empty. */
+    suspend fun evictCachedItems(itemIds: List<Int>) {
+        val ids = itemIds.distinct()
+        if (ids.isEmpty()) return
+        database.cachedItemDao().deleteByItemIds(ids)
     }
 
     suspend fun setFavoriteState(
