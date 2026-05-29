@@ -4016,10 +4016,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val queueBeforeArchive = _queueItems.value
         val queueIndex = queueBeforeArchive.indexOfFirst { it.itemId == itemId }
         val queueItemSnapshot = queueBeforeArchive.getOrNull(queueIndex)
+        val inboxItemSnapshot = _inboxItems.value.firstOrNull { it.itemId == itemId }
         val archivedItemSnapshot = _archivedItems.value.firstOrNull { it.itemId == itemId }
         val wasCached = _cachedItemIds.value.contains(itemId)
         val wasNoActiveContent = _noActiveContentItemIds.value.contains(itemId)
-        val archiveSeed = queueItemSnapshot ?: archivedItemSnapshot
+        // Inbox-sourced items must seed the Archive list too, otherwise an item
+        // archived from the Inbox (especially offline) vanishes from Inbox but never
+        // appears in Archive until a server-backed refresh.
+        val archiveSeed = queueItemSnapshot ?: inboxItemSnapshot ?: archivedItemSnapshot
         return try {
             if (queueItemSnapshot != null && queueIndex >= 0) {
                 lastArchiveUndoSnapshot = ArchiveUndoSnapshot(
@@ -4110,10 +4114,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val queueBeforeMove = _queueItems.value
         val queueIndex = queueBeforeMove.indexOfFirst { it.itemId == itemId }
         val queueItemSnapshot = queueBeforeMove.getOrNull(queueIndex)
+        val inboxItemSnapshot = _inboxItems.value.firstOrNull { it.itemId == itemId }
         val archivedItemSnapshot = _archivedItems.value.firstOrNull { it.itemId == itemId }
         val wasCached = _cachedItemIds.value.contains(itemId)
         val wasNoActiveContent = _noActiveContentItemIds.value.contains(itemId)
-        val favoritedSnapshot = queueItemSnapshot?.isFavorited ?: archivedItemSnapshot?.isFavorited
+        val favoritedSnapshot = queueItemSnapshot?.isFavorited
+            ?: inboxItemSnapshot?.isFavorited
+            ?: archivedItemSnapshot?.isFavorited
         return try {
             if (favoritedSnapshot != null) {
                 binnedFavoriteStateByItemId[itemId] = favoritedSnapshot
@@ -4136,7 +4143,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 clearNowPlayingSessionNow()
             }
             removeArchivedItemLocally(itemId, preserveFavoriteState = true)
-            val binSeed = queueItemSnapshot ?: archivedItemSnapshot
+            val binSeed = queueItemSnapshot ?: inboxItemSnapshot ?: archivedItemSnapshot
             if (binSeed != null) {
                 _binItems.update { existing ->
                     mergeItemIntoList(existing, binSeed, addToFront = true)
@@ -4411,6 +4418,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     mergeItemIntoList(existing, archivedSnapshot, addToFront = true)
                 }
             }
+            // If the cached text blob survived the archive (e.g. an offline archive
+            // whose eviction is deferred until sync), restore the offline-ready badge
+            // now that the item is back in the queue. If the blob was already evicted
+            // (online archive synced), DB truth keeps the badge off and re-opening
+            // re-caches. Runs before the network call so it applies offline too.
+            val restoredOfflineReady = resolveOfflineReadyIdsForItemIds(setOf(itemId))
+            _cachedItemIds.update { previous ->
+                if (restoredOfflineReady.contains(itemId)) previous + itemId else previous - itemId
+            }
             updateAutoDownloadQueueSnapshotDiagnostics(
                 current = settings.value,
                 queueItems = _queueItems.value,
@@ -4457,6 +4473,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _queueItems.update { existing ->
                     mergeItemIntoList(existing, binSnapshot, addToFront = true)
                 }
+            }
+            // Restore the offline-ready badge if the cached blob survived the bin
+            // (deferred offline eviction). Mirrors the unarchive recovery path.
+            val restoredOfflineReady = resolveOfflineReadyIdsForItemIds(setOf(itemId))
+            _cachedItemIds.update { previous ->
+                if (restoredOfflineReady.contains(itemId)) previous + itemId else previous - itemId
             }
             updateAutoDownloadQueueSnapshotDiagnostics(
                 current = settings.value,
@@ -4988,6 +5010,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         preservePlaybackContext: Boolean = false,
     ) {
         _queueItems.update { previous -> previous.filterNot { it.itemId == itemId } }
+        _inboxItems.update { previous -> previous.filterNot { it.itemId == itemId } }
         _archivedItems.update { previous -> previous.filterNot { it.itemId == itemId } }
         _binItems.update { previous -> previous.filterNot { it.itemId == itemId } }
         _cachedItemIds.update { previous -> previous - itemId }
