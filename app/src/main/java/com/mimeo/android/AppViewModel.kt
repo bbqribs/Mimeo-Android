@@ -121,6 +121,8 @@ import com.mimeo.android.model.ConnectivityDiagnosticRow
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.ContentSummaryFailureReason
+import com.mimeo.android.model.ContentSummaryState
+import com.mimeo.android.model.normalizedState
 import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.LocusContentMode
@@ -148,6 +150,9 @@ import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.model.ReaderAppearanceState
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.ReaderSummaryState
+import com.mimeo.android.model.NON_POLLABLE_FAILURE_REASONS
+import com.mimeo.android.model.SUMMARY_POLL_DELAYS_MS
+import com.mimeo.android.model.isPendingForItem
 import com.mimeo.android.model.VisualDensityPreference
 import com.mimeo.android.model.VisualThemePreference
 import com.mimeo.android.model.contentSummaryFailureMessage
@@ -375,6 +380,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _readerSummaryState = MutableStateFlow<ReaderSummaryState>(ReaderSummaryState.Idle)
     val readerSummaryState: StateFlow<ReaderSummaryState> = _readerSummaryState.asStateFlow()
     private var readerSummaryRequestInFlightItemId: Int? = null
+
+    // Summary UX v2 PR 1: VM-owned polling lifecycle. UI no longer drives ticks
+    // for the PENDING state. Job is keyed by [summaryPollingItemId]; switching
+    // items or hitting a terminal state cancels it. See ReaderSummaryPolling.kt.
+    private var summaryPollingJob: Job? = null
+    private var summaryPollingItemId: Int? = null
 
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
@@ -3640,9 +3651,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun loadReaderSummary(itemId: Int): Result<Unit> {
         if (itemId <= 0) {
+            cancelSummaryPolling()
             _readerSummaryState.value = ReaderSummaryState.Idle
             return Result.success(Unit)
         }
+        // Any explicit fetch supersedes a scheduled poll tick; we'll restart the
+        // poll loop after this call resolves if the result is still PENDING.
+        cancelSummaryPolling()
         val current = settings.value
         if (current.apiToken.isBlank()) {
             _readerSummaryState.value = ReaderSummaryState.Error(
@@ -3663,6 +3678,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 itemId = itemId,
             )
             _readerSummaryState.value = ReaderSummaryState.Ready(itemId = itemId, summary = summary)
+            maybeStartSummaryPolling(itemId)
             Result.success(Unit)
         } catch (error: CancellationException) {
             throw error
@@ -3682,6 +3698,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (readerSummaryRequestInFlightItemId == itemId) {
             return Result.success(Unit)
         }
+        // Cancel any pending GET-poll loop; the POST below and its follow-up GET
+        // (via loadReaderSummary) will restart it if the new state is PENDING.
+        cancelSummaryPolling()
         val current = settings.value
         if (current.apiToken.isBlank()) {
             val reason = ContentSummaryFailureReason.UNAUTHORIZED
@@ -3721,6 +3740,82 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 readerSummaryRequestInFlightItemId = null
             }
         }
+    }
+
+    /**
+     * Summary UX v2 PR 1 — VM-owned polling lifecycle.
+     *
+     * Kicks off a bounded GET-only poll loop when the current reader summary
+     * state is PENDING for [itemId]. The job survives sheet dismissal (no UI
+     * callbacks involved) and is cancelled by:
+     *  - state going terminal (Ready non-pending, Error, or item change)
+     *  - any explicit user-initiated load/request (which restarts polling if
+     *    the new state is still PENDING)
+     *  - exhausting [SUMMARY_POLL_DELAYS_MS]
+     *
+     * No POSTs are ever issued from this loop; only [Repository.getContentSummary].
+     */
+    private fun maybeStartSummaryPolling(itemId: Int) {
+        val state = _readerSummaryState.value
+        if (!state.isPendingForItem(itemId)) {
+            if (summaryPollingItemId == itemId) cancelSummaryPolling()
+            return
+        }
+        if (summaryPollingJob?.isActive == true && summaryPollingItemId == itemId) {
+            return
+        }
+        cancelSummaryPolling()
+        summaryPollingItemId = itemId
+        summaryPollingJob = viewModelScope.launch {
+            try {
+                for (delayMs in SUMMARY_POLL_DELAYS_MS) {
+                    delay(delayMs)
+                    if (!_readerSummaryState.value.isPendingForItem(itemId)) break
+                    val current = settings.value
+                    if (current.apiToken.isBlank()) break
+                    val polled = try {
+                        repository.getContentSummary(
+                            baseUrl = current.baseUrl,
+                            token = current.apiToken,
+                            itemId = itemId,
+                        )
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        val reason = resolveReaderSummaryFailureReason(error)
+                        if (reason in NON_POLLABLE_FAILURE_REASONS) {
+                            _readerSummaryState.value = ReaderSummaryState.Error(
+                                itemId = itemId,
+                                reason = reason,
+                                message = contentSummaryFailureMessage(reason),
+                            )
+                            break
+                        }
+                        // Transient (e.g. NETWORK / UNKNOWN): leave existing
+                        // pending state in place and try the next tick.
+                        continue
+                    }
+                    // Ensure we're still the active poller before publishing.
+                    if (summaryPollingItemId != itemId) break
+                    _readerSummaryState.value = ReaderSummaryState.Ready(
+                        itemId = itemId,
+                        summary = polled,
+                    )
+                    if (polled.normalizedState() != ContentSummaryState.PENDING) break
+                }
+            } finally {
+                if (summaryPollingItemId == itemId) {
+                    summaryPollingItemId = null
+                    summaryPollingJob = null
+                }
+            }
+        }
+    }
+
+    private fun cancelSummaryPolling() {
+        summaryPollingJob?.cancel()
+        summaryPollingJob = null
+        summaryPollingItemId = null
     }
 
     suspend fun downloadItemForOffline(itemId: Int): Result<Unit> {
