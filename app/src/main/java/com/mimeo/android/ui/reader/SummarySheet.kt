@@ -74,7 +74,7 @@ fun SummarySheet(
                     onClick = onRefresh,
                     enabled = !loading,
                 ) {
-                    Text(if (loading) "Checking" else "Refresh")
+                    Text(if (loading) "Checking" else "Recheck")
                 }
             }
             HorizontalDivider()
@@ -192,13 +192,13 @@ private fun SummaryContent(
                 },
             )
             if (canRequest) {
-                SummaryPrimaryButton("Generate Summary", loading) { onGenerate(false) }
+                SummaryPrimaryButton("Generate summary", loading) { onGenerate(false) }
             }
         }
         ContentSummaryState.PENDING -> {
             SummaryMessage(
                 title = "Generating summary",
-                body = "The server is working on this summary. Checking status will not start another request.",
+                body = "The server is generating this summary. Tap Check status to see if it's ready.",
             )
             SummarySecondaryButton("Check status", loading, onRefresh)
         }
