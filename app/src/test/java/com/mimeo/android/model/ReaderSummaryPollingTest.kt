@@ -72,6 +72,82 @@ class ReaderSummaryPollingTest {
         assertFalse(ContentSummaryFailureReason.DAILY_LIMIT_REACHED in NON_POLLABLE_FAILURE_REASONS)
     }
 
+    // --- Late state publication guard ---------------------------------------
+
+    @Test
+    fun canPublishOnlyWhenCompletedItemIsStillActive() {
+        assertTrue(canPublishReaderSummary(activeItemId = 5, completedItemId = 5))
+    }
+
+    @Test
+    fun lateCompletionForPreviousItemCannotPublish() {
+        // Reader moved A(5) -> B(9); a late completion for 5 must be dropped.
+        assertFalse(canPublishReaderSummary(activeItemId = 9, completedItemId = 5))
+    }
+
+    @Test
+    fun publishBlockedWhenNoActiveItem() {
+        assertFalse(canPublishReaderSummary(activeItemId = null, completedItemId = 5))
+    }
+
+    // --- Force-refresh dedupe ------------------------------------------------
+
+    @Test
+    fun noInFlightRequestProceeds() {
+        assertEquals(
+            SummaryRequestDecision.PROCEED,
+            decideSummaryRequest(inFlight = null, requestedItemId = 1, requestedForce = false),
+        )
+        assertEquals(
+            SummaryRequestDecision.PROCEED,
+            decideSummaryRequest(inFlight = null, requestedItemId = 1, requestedForce = true),
+        )
+    }
+
+    @Test
+    fun differentItemInFlightProceeds() {
+        val inFlight = InFlightSummaryRequest(itemId = 2, force = false)
+        assertEquals(
+            SummaryRequestDecision.PROCEED,
+            decideSummaryRequest(inFlight = inFlight, requestedItemId = 1, requestedForce = true),
+        )
+    }
+
+    @Test
+    fun identicalRequestForSameItemIsDeduped() {
+        val nonForce = InFlightSummaryRequest(itemId = 1, force = false)
+        assertEquals(
+            SummaryRequestDecision.DEDUPE_NO_OP,
+            decideSummaryRequest(inFlight = nonForce, requestedItemId = 1, requestedForce = false),
+        )
+        val force = InFlightSummaryRequest(itemId = 1, force = true)
+        assertEquals(
+            SummaryRequestDecision.DEDUPE_NO_OP,
+            decideSummaryRequest(inFlight = force, requestedItemId = 1, requestedForce = true),
+        )
+    }
+
+    @Test
+    fun nonForceOverInFlightForceIsDeduped() {
+        // The stronger in-flight force already covers a weaker follow-up.
+        val force = InFlightSummaryRequest(itemId = 1, force = true)
+        assertEquals(
+            SummaryRequestDecision.DEDUPE_NO_OP,
+            decideSummaryRequest(inFlight = force, requestedItemId = 1, requestedForce = false),
+        )
+    }
+
+    @Test
+    fun forceOverInFlightNonForceIsExplicitDeferredNoOp() {
+        // Force must NOT be silently swallowed by a non-force request; it is
+        // recorded as a deferred no-op rather than dropped or auto-superseding.
+        val nonForce = InFlightSummaryRequest(itemId = 1, force = false)
+        assertEquals(
+            SummaryRequestDecision.FORCE_DEFERRED_NO_OP,
+            decideSummaryRequest(inFlight = nonForce, requestedItemId = 1, requestedForce = true),
+        )
+    }
+
     private fun summary(state: String): ContentSummaryOut = ContentSummaryOut(
         itemId = 1,
         state = state,

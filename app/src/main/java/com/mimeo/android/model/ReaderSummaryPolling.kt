@@ -47,3 +47,70 @@ internal val NON_POLLABLE_FAILURE_REASONS: Set<ContentSummaryFailureReason> = se
     ContentSummaryFailureReason.UNAUTHORIZED,
     ContentSummaryFailureReason.NOT_FOUND,
 )
+
+/**
+ * Guard for late summary state publication.
+ *
+ * A summary GET/POST is a suspending call. By the time it resolves, the reader
+ * may have moved to a different item. [activeItemId] is the item the VM most
+ * recently committed to showing a summary for; [completedItemId] is the item a
+ * just-resolved fetch/request belongs to. Only the active item may publish, so a
+ * late completion for a previous item can never clobber the now-visible item's
+ * loading/ready/error state. Publication is item-scoped, not data corruption,
+ * but allowing it produces confusing stale/unavailable UI.
+ */
+internal fun canPublishReaderSummary(activeItemId: Int?, completedItemId: Int): Boolean =
+    activeItemId != null && activeItemId == completedItemId
+
+/** A summary generation POST currently in flight, with the force flag it used. */
+internal data class InFlightSummaryRequest(val itemId: Int, val force: Boolean)
+
+/**
+ * Decision for a new [requestReaderSummary] call given what is already running.
+ *
+ * Force refresh must never be *silently* swallowed by an unrelated in-flight
+ * request, but we also cannot cancel/supersede an active generation here (that
+ * is a product decision, out of scope). Hence the explicit three-way outcome.
+ */
+internal enum class SummaryRequestDecision {
+    /** No conflicting request for this item: issue the POST. */
+    PROCEED,
+
+    /**
+     * An identical (same force) — or already-stronger (force) — request for the
+     * same item is in flight. The new call is a true duplicate and is deduped.
+     */
+    DEDUPE_NO_OP,
+
+    /**
+     * A force=true refresh arrived while a *non-force* request for the same item
+     * is still running. Force genuinely wants different behavior than the
+     * in-flight non-force call, but superseding an active generation is a
+     * product decision we do not make here. The force is recorded as an explicit
+     * no-op rather than silently dropped, so the caller can re-issue once the
+     * in-flight request settles.
+     */
+    FORCE_DEFERRED_NO_OP,
+}
+
+/**
+ * Decide how to handle [requestReaderSummary] for [requestedItemId]/[requestedForce]
+ * given the [inFlight] request (if any). Pure so it can be unit-tested without a VM.
+ */
+internal fun decideSummaryRequest(
+    inFlight: InFlightSummaryRequest?,
+    requestedItemId: Int,
+    requestedForce: Boolean,
+): SummaryRequestDecision {
+    if (inFlight == null || inFlight.itemId != requestedItemId) {
+        return SummaryRequestDecision.PROCEED
+    }
+    return when {
+        // Same force-ness → a genuine duplicate.
+        inFlight.force == requestedForce -> SummaryRequestDecision.DEDUPE_NO_OP
+        // In-flight force already covers a weaker (non-force) follow-up.
+        inFlight.force && !requestedForce -> SummaryRequestDecision.DEDUPE_NO_OP
+        // In-flight is non-force, incoming is force → cannot safely supersede.
+        else -> SummaryRequestDecision.FORCE_DEFERRED_NO_OP
+    }
+}
