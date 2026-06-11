@@ -4047,9 +4047,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // appears in Archive until a server-backed refresh.
         val archiveSeed = queueItemSnapshot ?: inboxItemSnapshot ?: archivedItemSnapshot
         return try {
-            val archivedCurrentSessionItem = currentPlaybackOwnerItemId() == itemId
-            val deferPlaybackCleanup = archivedCurrentSessionItem && isItemActivelyPlaying(itemId)
-            if (archivedCurrentSessionItem && !deferPlaybackCleanup) {
+            val archiveCleanup = archivePlaybackCleanupDecision(
+                engineCurrentItemId = playbackEngineState.value.currentItemId,
+                sessionCurrentItemId = currentNowPlayingItemId(),
+                itemId = itemId,
+                isItemActivelyPlaying = isItemActivelyPlaying(itemId),
+            )
+            val deferPlaybackCleanup = archiveCleanup.deferCleanup
+            if (archiveCleanup.clearSessionNow) {
                 playbackPause(forceSync = true)
                 clearNowPlayingSessionNow()
             }
@@ -4157,8 +4162,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (favoritedSnapshot != null) {
                 binnedFavoriteStateByItemId[itemId] = favoritedSnapshot
             }
-            val binnedCurrentSessionItem = currentPlaybackOwnerItemId() == itemId
-            if (binnedCurrentSessionItem) {
+            val binCleanup = binPlaybackCleanupDecision(
+                engineCurrentItemId = playbackEngineState.value.currentItemId,
+                sessionCurrentItemId = currentNowPlayingItemId(),
+                itemId = itemId,
+            )
+            if (binCleanup.clearSessionNow) {
                 playbackPause(forceSync = true)
                 clearNowPlayingSessionNow()
             }
@@ -5182,10 +5191,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return if (localSeeds.isEmpty()) filtered else localSeeds + filtered
     }
 
-    private fun currentPlaybackOwnerItemId(): Int? {
-        val engineItemId = playbackEngineState.value.currentItemId
-        return if (engineItemId > 0) engineItemId else currentNowPlayingItemId()
-    }
+    private fun currentPlaybackOwnerItemId(): Int? =
+        resolvePlaybackOwnerItemId(
+            engineCurrentItemId = playbackEngineState.value.currentItemId,
+            sessionCurrentItemId = currentNowPlayingItemId(),
+        )
 
     fun hasPlaybackInProgressForSessionItem(itemId: Int?): Boolean {
         val targetId = itemId ?: return false
