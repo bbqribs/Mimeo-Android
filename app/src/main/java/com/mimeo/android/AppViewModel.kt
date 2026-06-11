@@ -4007,11 +4007,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    suspend fun archiveItem(
+    internal suspend fun archiveItem(
         itemId: Int,
         refreshQueue: Boolean = true,
         source: ArchiveActionSource = ArchiveActionSource.UP_NEXT,
-    ): Result<Unit> {
+    ): Result<ArchiveUndoSnapshot?> {
+        val result = archiveItemInternal(
+            itemId = itemId,
+            refreshQueue = refreshQueue,
+            source = source,
+        )
+        lastArchiveUndoSnapshot = result.getOrNull()
+        return result
+    }
+
+    private suspend fun archiveItemInternal(
+        itemId: Int,
+        refreshQueue: Boolean = true,
+        source: ArchiveActionSource = ArchiveActionSource.UP_NEXT,
+    ): Result<ArchiveUndoSnapshot?> {
         val current = settings.value
         val queueBeforeArchive = _queueItems.value
         val queueIndex = queueBeforeArchive.indexOfFirst { it.itemId == itemId }
@@ -4020,23 +4034,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val archivedItemSnapshot = _archivedItems.value.firstOrNull { it.itemId == itemId }
         val wasCached = _cachedItemIds.value.contains(itemId)
         val wasNoActiveContent = _noActiveContentItemIds.value.contains(itemId)
+        val undoSnapshot = queueArchiveUndoSnapshot(
+            queueItems = queueBeforeArchive,
+            itemId = itemId,
+            wasCached = wasCached,
+            wasNoActiveContent = wasNoActiveContent,
+            source = source,
+            actionType = UndoableActionType.ARCHIVE,
+        )
         // Inbox-sourced items must seed the Archive list too, otherwise an item
         // archived from the Inbox (especially offline) vanishes from Inbox but never
         // appears in Archive until a server-backed refresh.
         val archiveSeed = queueItemSnapshot ?: inboxItemSnapshot ?: archivedItemSnapshot
         return try {
-            if (queueItemSnapshot != null && queueIndex >= 0) {
-                lastArchiveUndoSnapshot = ArchiveUndoSnapshot(
-                    item = queueItemSnapshot,
-                    originalIndex = queueIndex,
-                    wasCached = wasCached,
-                    wasNoActiveContent = wasNoActiveContent,
-                    source = source,
-                    actionType = UndoableActionType.ARCHIVE,
-                )
-            } else {
-                lastArchiveUndoSnapshot = null
-            }
             val archivedCurrentSessionItem = currentPlaybackOwnerItemId() == itemId
             val deferPlaybackCleanup = archivedCurrentSessionItem && isItemActivelyPlaying(itemId)
             if (archivedCurrentSessionItem && !deferPlaybackCleanup) {
@@ -4082,7 +4092,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             _queueOffline.value = false
             updateSyncBadgeState()
-            Result.success(Unit)
+            Result.success(undoSnapshot)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -4097,7 +4107,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _queueOffline.value = true
                 _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
                 _statusMessage.value = "Archived offline; will sync"
-                return Result.success(Unit)
+                return Result.success(undoSnapshot)
             }
             runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
             runCatching { loadArchivedItems() }
@@ -4105,11 +4115,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    suspend fun moveItemToBin(
+    internal suspend fun moveItemToBin(
         itemId: Int,
         refreshQueue: Boolean = true,
         source: ArchiveActionSource = ArchiveActionSource.UP_NEXT,
-    ): Result<Unit> {
+    ): Result<ArchiveUndoSnapshot?> {
+        val result = moveItemToBinInternal(
+            itemId = itemId,
+            refreshQueue = refreshQueue,
+            source = source,
+        )
+        lastArchiveUndoSnapshot = result.getOrNull()
+        return result
+    }
+
+    private suspend fun moveItemToBinInternal(
+        itemId: Int,
+        refreshQueue: Boolean = true,
+        source: ArchiveActionSource = ArchiveActionSource.UP_NEXT,
+    ): Result<ArchiveUndoSnapshot?> {
         val current = settings.value
         val queueBeforeMove = _queueItems.value
         val queueIndex = queueBeforeMove.indexOfFirst { it.itemId == itemId }
@@ -4118,24 +4142,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val archivedItemSnapshot = _archivedItems.value.firstOrNull { it.itemId == itemId }
         val wasCached = _cachedItemIds.value.contains(itemId)
         val wasNoActiveContent = _noActiveContentItemIds.value.contains(itemId)
+        val undoSnapshot = queueArchiveUndoSnapshot(
+            queueItems = queueBeforeMove,
+            itemId = itemId,
+            wasCached = wasCached,
+            wasNoActiveContent = wasNoActiveContent,
+            source = source,
+            actionType = UndoableActionType.BIN,
+        )
         val favoritedSnapshot = queueItemSnapshot?.isFavorited
             ?: inboxItemSnapshot?.isFavorited
             ?: archivedItemSnapshot?.isFavorited
         return try {
             if (favoritedSnapshot != null) {
                 binnedFavoriteStateByItemId[itemId] = favoritedSnapshot
-            }
-            if (queueItemSnapshot != null && queueIndex >= 0) {
-                lastArchiveUndoSnapshot = ArchiveUndoSnapshot(
-                    item = queueItemSnapshot,
-                    originalIndex = queueIndex,
-                    wasCached = wasCached,
-                    wasNoActiveContent = wasNoActiveContent,
-                    source = source,
-                    actionType = UndoableActionType.BIN,
-                )
-            } else {
-                lastArchiveUndoSnapshot = null
             }
             val binnedCurrentSessionItem = currentPlaybackOwnerItemId() == itemId
             if (binnedCurrentSessionItem) {
@@ -4162,7 +4182,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             _queueOffline.value = false
             updateSyncBadgeState()
-            Result.success(Unit)
+            Result.success(undoSnapshot)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -4177,7 +4197,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _queueOffline.value = true
                 _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
                 _statusMessage.value = "Moved to Bin offline; will sync"
-                return Result.success(Unit)
+                return Result.success(undoSnapshot)
             }
             runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
             runCatching { loadArchivedItems() }
@@ -4924,7 +4944,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             _archivedItems.update { previous -> previous.filterNot { it.itemId == snapshot.item.itemId } }
             _binItems.update { previous -> previous.filterNot { it.itemId == snapshot.item.itemId } }
-            if (snapshot.source != ArchiveActionSource.HISTORY_EARLIER) {
+            if (shouldReinsertQueueOnArchiveUndo(snapshot)) {
                 _queueItems.update { previous ->
                     val withoutItem = previous.filterNot { it.itemId == snapshot.item.itemId }
                     val insertAt = snapshot.originalIndex.coerceIn(0, withoutItem.size)
@@ -4957,29 +4977,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             _archivedSessionHistoryIds.update { it - snapshot.item.itemId }
             // Restore item to its session position for History/Earlier bin undos.
-            if (snapshot.source == ArchiveActionSource.HISTORY_EARLIER && snapshot.isSessionHistoryItem) {
-                repository.restoreHistoryItemToSession(snapshot.item, snapshot.originalSessionIndex.coerceAtLeast(0))?.let { _nowPlayingSession.value = it }
-                runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
-            } else if (snapshot.source == ArchiveActionSource.HISTORY_EARLIER && snapshot.originalSessionIndex >= 0) {
-                repository.insertItemAtIndexInSession(snapshot.item, snapshot.originalSessionIndex)
-                    ?.let { _nowPlayingSession.value = it }
-                runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
-            } else if (snapshot.source == ArchiveActionSource.UP_NEXT && snapshot.originalSessionIndex >= 0) {
-                repository.insertItemAtIndexInSession(snapshot.item, snapshot.originalSessionIndex)
-                    ?.let { _nowPlayingSession.value = it }
+            when (archiveUndoSessionRestoreTarget(snapshot)) {
+                ArchiveUndoSessionRestoreTarget.HISTORY -> {
+                    repository.restoreHistoryItemToSession(snapshot.item, snapshot.originalSessionIndex.coerceAtLeast(0))?.let { _nowPlayingSession.value = it }
+                    runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
+                }
+                ArchiveUndoSessionRestoreTarget.SESSION_ITEMS -> {
+                    repository.insertItemAtIndexInSession(snapshot.item, snapshot.originalSessionIndex)
+                        ?.let { _nowPlayingSession.value = it }
+                    runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
+                }
+                ArchiveUndoSessionRestoreTarget.NONE -> {
+                    if (snapshot.source == ArchiveActionSource.UP_NEXT && snapshot.originalSessionIndex >= 0) {
+                        repository.insertItemAtIndexInSession(snapshot.item, snapshot.originalSessionIndex)
+                            ?.let { _nowPlayingSession.value = it }
+                    }
+                }
             }
-            val reopenItemId = when (snapshot.source) {
-                ArchiveActionSource.LOCUS -> snapshot.item.itemId
-                ArchiveActionSource.UP_NEXT, ArchiveActionSource.HISTORY_EARLIER -> null
-            }
-            if (reopenItemId != null) {
-                startNowPlayingSession(startItemId = reopenItemId)
-                playbackOpenItem(
-                    itemId = reopenItemId,
-                    intent = PlaybackOpenIntent.ManualOpen,
-                    autoPlayAfterLoad = false,
-                )
-            }
+            val reopenItemId = archiveUndoReopenItemId(snapshot)
             _statusMessage.value = if (snapshot.actionType == UndoableActionType.BIN) {
                 "Bin move undone"
             } else {
@@ -5480,37 +5495,51 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val sessionItem = session?.items?.getOrNull(sessionItemIndex)
             val isEarlierItem = historyItem == null && session != null &&
                 sessionItemIndex >= 0 && sessionItemIndex < session.currentIndex
-            val result = archiveItem(itemId)
-            if (historyItem != null && result.isSuccess) {
-                // If archiveItem() did not set a snapshot (item not in queue), provide one.
-                // If it did (item was also in queue), keep that snapshot since it has the right
-                // originalIndex — just upgrade the source so undo skips queue reinsertion.
-                lastArchiveUndoSnapshot = (lastArchiveUndoSnapshot
-                    ?: sessionArchiveUndoSnapshot(
-                        item = historyItem,
-                        actionType = UndoableActionType.ARCHIVE,
-                    )).copy(
-                    source = ArchiveActionSource.HISTORY_EARLIER,
+            val wasCached = _cachedItemIds.value.contains(itemId)
+            val wasNoActiveContent = _noActiveContentItemIds.value.contains(itemId)
+            val result = archiveItemInternal(itemId)
+            val finalSnapshot = if (historyItem != null && result.isSuccess) {
+                val baseSnapshot = result.getOrNull()
+                val sessionSnapshot = sessionArchiveUndoSnapshot(
+                    item = historyItem,
+                    actionType = UndoableActionType.ARCHIVE,
+                    wasCached = wasCached,
+                    wasNoActiveContent = wasNoActiveContent,
+                )
+                val snapshot = composeSessionArchiveUndoSnapshot(
+                    baseSnapshot = baseSnapshot,
+                    sessionSnapshot = sessionSnapshot,
                     originalSessionIndex = historyIndex,
                     isSessionHistoryItem = true,
                 )
                 _archivedSessionHistoryIds.update { it + itemId }
+                snapshot
             } else if (isEarlierItem && result.isSuccess) {
+                val baseSnapshot = result.getOrNull()
+                val sessionSnapshot = sessionItem?.let {
+                    sessionArchiveUndoSnapshot(
+                        item = it,
+                        actionType = UndoableActionType.ARCHIVE,
+                        wasCached = wasCached,
+                        wasNoActiveContent = wasNoActiveContent,
+                    )
+                }
                 // Earlier is a session context, even when the item still has a queue row.
                 // Undo must restore session placement without inserting into Up Next.
-                lastArchiveUndoSnapshot = (lastArchiveUndoSnapshot
-                    ?: sessionItem?.let {
-                        sessionArchiveUndoSnapshot(
-                            item = it,
-                            actionType = UndoableActionType.ARCHIVE,
-                        )
-                    })?.copy(
-                    source = ArchiveActionSource.HISTORY_EARLIER,
+                val snapshot = composeSessionArchiveUndoSnapshot(
+                    baseSnapshot = baseSnapshot,
+                    sessionSnapshot = sessionSnapshot,
                     originalSessionIndex = sessionItemIndex,
                     isSessionHistoryItem = false,
                 )
                 _archivedSessionHistoryIds.update { it + itemId }
+                snapshot
+            } else if (result.isSuccess) {
+                result.getOrNull()
+            } else {
+                null
             }
+            lastArchiveUndoSnapshot = finalSnapshot
             if (result.isSuccess && !_queueOffline.value) {
                 if (lastArchiveUndoSnapshot != null) {
                     showSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
@@ -5546,22 +5575,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val session = _nowPlayingSession.value
             val historyItem = session?.historyItems?.firstOrNull { it.itemId == itemId }
             val historyIndex = session?.historyItems?.indexOfFirst { it.itemId == itemId } ?: -1
-            val result = moveItemToBin(itemId)
+            val wasCached = _cachedItemIds.value.contains(itemId)
+            val wasNoActiveContent = _noActiveContentItemIds.value.contains(itemId)
+            val result = moveItemToBinInternal(itemId)
+            val finalSnapshot = if (result.isSuccess && historyItem != null) {
+                val baseSnapshot = result.getOrNull()
+                val sessionSnapshot = sessionArchiveUndoSnapshot(
+                    item = historyItem,
+                    actionType = UndoableActionType.BIN,
+                    wasCached = wasCached,
+                    wasNoActiveContent = wasNoActiveContent,
+                )
+                composeSessionArchiveUndoSnapshot(
+                    baseSnapshot = baseSnapshot,
+                    sessionSnapshot = sessionSnapshot,
+                    originalSessionIndex = historyIndex,
+                    isSessionHistoryItem = true,
+                )
+            } else if (result.isSuccess) {
+                result.getOrNull()
+            } else {
+                null
+            }
+            lastArchiveUndoSnapshot = finalSnapshot
             if (result.isSuccess) {
-                if (historyItem != null) {
-                    // Upgrade or create the snapshot with history session context so undo
-                    // restores the item to session history instead of reinserting into the queue.
-                    // originalSessionIndex holds the history list index for position-accurate restore.
-                    lastArchiveUndoSnapshot = (lastArchiveUndoSnapshot
-                        ?: sessionArchiveUndoSnapshot(
-                            item = historyItem,
-                            actionType = UndoableActionType.BIN,
-                        )).copy(
-                        source = ArchiveActionSource.HISTORY_EARLIER,
-                        isSessionHistoryItem = true,
-                        originalSessionIndex = historyIndex,
-                    )
-                }
                 val updated = repository.removeHistoryItemFromSession(itemId) ?: return@launch
                 _nowPlayingSession.value = updated
                 if (!_queueOffline.value) {
@@ -5580,20 +5617,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val session = _nowPlayingSession.value
             val sessionIndex = session?.items?.indexOfFirst { it.itemId == itemId } ?: -1
             val sessionItem = session?.items?.getOrNull(sessionIndex)
-            val result = moveItemToBin(itemId)
-            if (result.isSuccess) {
+            val wasCached = _cachedItemIds.value.contains(itemId)
+            val wasNoActiveContent = _noActiveContentItemIds.value.contains(itemId)
+            val result = moveItemToBinInternal(itemId)
+            val finalSnapshot = if (result.isSuccess) {
+                val baseSnapshot = result.getOrNull()
+                val sessionSnapshot = sessionItem?.let {
+                    sessionArchiveUndoSnapshot(
+                        item = it,
+                        actionType = UndoableActionType.BIN,
+                        wasCached = wasCached,
+                        wasNoActiveContent = wasNoActiveContent,
+                    )
+                }
                 // Record session index so undo can restore the item to Earlier section.
-                lastArchiveUndoSnapshot = (lastArchiveUndoSnapshot
-                    ?: sessionItem?.let {
-                        sessionArchiveUndoSnapshot(
-                            item = it,
-                            actionType = UndoableActionType.BIN,
-                        )
-                    })?.copy(
-                    source = ArchiveActionSource.HISTORY_EARLIER,
+                composeSessionArchiveUndoSnapshot(
+                    baseSnapshot = baseSnapshot,
+                    sessionSnapshot = sessionSnapshot,
                     originalSessionIndex = sessionIndex,
                     isSessionHistoryItem = false,
                 )
+            } else {
+                null
+            }
+            lastArchiveUndoSnapshot = finalSnapshot
+            if (result.isSuccess) {
                 val updated = repository.removeItemFromSession(itemId) ?: return@launch
                 _nowPlayingSession.value = updated
                 if (!_queueOffline.value) {
@@ -5606,31 +5654,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
-
-    private fun sessionArchiveUndoSnapshot(
-        item: NowPlayingSessionItem,
-        actionType: UndoableActionType,
-    ): ArchiveUndoSnapshot =
-        ArchiveUndoSnapshot(
-            item = PlaybackQueueItem(
-                itemId = item.itemId,
-                title = item.title,
-                url = item.url,
-                host = item.host,
-                sourceType = item.sourceType,
-                sourceLabel = item.sourceLabel,
-                sourceUrl = item.sourceUrl,
-                captureKind = item.captureKind,
-                sourceAppPackage = item.sourceAppPackage,
-                status = item.status,
-                activeContentVersionId = item.activeContentVersionId,
-            ),
-            originalIndex = -1,
-            wasCached = _cachedItemIds.value.contains(item.itemId),
-            wasNoActiveContent = _noActiveContentItemIds.value.contains(item.itemId),
-            source = ArchiveActionSource.HISTORY_EARLIER,
-            actionType = actionType,
-        )
 
     fun reorderNowPlayingSessionItem(fromIndex: Int, toIndex: Int) {
         viewModelScope.launch {
