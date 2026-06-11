@@ -28,6 +28,9 @@ interface CachedItemDao {
     @Query("DELETE FROM cached_items WHERE itemId = :itemId")
     suspend fun deleteByItemId(itemId: Int)
 
+    @Query("DELETE FROM cached_items WHERE itemId IN (:itemIds)")
+    suspend fun deleteByItemIds(itemIds: List<Int>)
+
     /**
      * Emits the latest cached-item write signal whenever the [cached_items] table changes.
      * This avoids full-table ID emissions for each cache write.

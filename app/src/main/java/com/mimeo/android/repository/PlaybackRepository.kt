@@ -655,6 +655,13 @@ class PlaybackRepository(
 
     suspend fun archiveItem(baseUrl: String, token: String, itemId: Int): ProgressPostResult {
         apiClient.markItemDone(baseUrl, token, itemId, autoArchive = true)
+        // Cache hygiene: an archived item leaves active rotation, so drop its cached
+        // text. Evicted only AFTER the server confirms the archive so an offline
+        // action keeps its blob until the queued action drains — that lets an
+        // offline archive -> unarchive round-trip restore from cache. The pending
+        // drain reuses this method, so it evicts on successful sync automatically.
+        // Re-opening the item online re-caches it. See CLAUDE.md cache-eviction regime.
+        evictCachedItem(itemId)
         return ProgressPostResult(queued = false)
     }
 
@@ -665,6 +672,9 @@ class PlaybackRepository(
 
     suspend fun moveItemToBin(baseUrl: String, token: String, itemId: Int): ProgressPostResult {
         apiClient.moveItemToBin(baseUrl, token, itemId)
+        // Evict after the server confirms the bin so offline actions keep their
+        // blob until they sync (and an offline bin -> restore round-trip recovers).
+        evictCachedItem(itemId)
         return ProgressPostResult(queued = false)
     }
 
@@ -674,8 +684,24 @@ class PlaybackRepository(
     }
 
     suspend fun purgeItemFromBin(baseUrl: String, token: String, itemId: Int): ProgressPostResult {
+        // Permanent delete — make sure no cached text survives once the server
+        // confirms the purge. Evicted after the call so a queued offline purge
+        // still drops the blob when it drains.
         apiClient.purgeItemFromBin(baseUrl, token, itemId)
+        evictCachedItem(itemId)
         return ProgressPostResult(queued = false)
+    }
+
+    /** Removes a single item's cached text blob from the local DB, if present. */
+    suspend fun evictCachedItem(itemId: Int) {
+        database.cachedItemDao().deleteByItemId(itemId)
+    }
+
+    /** Removes cached text blobs for the given items in one DB pass. No-op when empty. */
+    suspend fun evictCachedItems(itemIds: List<Int>) {
+        val ids = itemIds.distinct()
+        if (ids.isEmpty()) return
+        database.cachedItemDao().deleteByItemIds(ids)
     }
 
     suspend fun setFavoriteState(
