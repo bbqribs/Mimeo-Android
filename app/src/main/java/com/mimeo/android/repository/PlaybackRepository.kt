@@ -274,7 +274,7 @@ internal fun computePlayNowSessionItemOrder(
 }
 
 @Serializable
-private data class StoredNowPlayingItem(
+internal data class StoredNowPlayingItem(
     val itemId: Int,
     val title: String? = null,
     val url: String,
@@ -814,25 +814,7 @@ class PlaybackRepository(
         if (queueItems.isEmpty()) {
             throw IllegalArgumentException("Cannot start now playing session from empty queue")
         }
-        val stored = queueItems.map { item ->
-            StoredNowPlayingItem(
-                itemId = item.itemId,
-                title = item.title,
-                url = item.url,
-                host = item.host,
-                sourceType = item.sourceType,
-                sourceLabel = item.sourceLabel,
-                sourceUrl = item.sourceUrl,
-                captureKind = item.captureKind,
-                sourceAppPackage = item.sourceAppPackage,
-                status = item.status,
-                activeContentVersionId = item.activeContentVersionId,
-                lastReadPercent = item.lastReadPercent,
-                chunkIndex = 0,
-                offsetInChunkChars = 0,
-                readerScrollOffset = 0,
-            )
-        }
+        val stored = queueItems.map { item -> item.toStoredNowPlayingItem() }
         val currentIndex = queueItems.indexOfFirst { it.itemId == startItemId }.let { if (it >= 0) it else 0 }
         val updatedAt = System.currentTimeMillis()
         val row = NowPlayingEntity(
@@ -1181,23 +1163,7 @@ class PlaybackRepository(
             return row.toSession(stored)
         }
         val insertIndex = (row.currentIndex + 1).coerceIn(0, stored.size)
-        val newItem = StoredNowPlayingItem(
-            itemId = item.itemId,
-            title = item.title,
-            url = item.url,
-            host = item.host,
-            sourceType = item.sourceType,
-            sourceLabel = item.sourceLabel,
-            sourceUrl = item.sourceUrl,
-            captureKind = item.captureKind,
-            sourceAppPackage = item.sourceAppPackage,
-            status = item.status,
-            activeContentVersionId = item.activeContentVersionId,
-            lastReadPercent = item.lastReadPercent,
-            chunkIndex = 0,
-            offsetInChunkChars = 0,
-            readerScrollOffset = 0,
-        )
+        val newItem = item.toStoredNowPlayingItem()
         stored.add(insertIndex, newItem)
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
@@ -1297,23 +1263,7 @@ class PlaybackRepository(
             // Item is currently playing — already at end semantically; no-op.
             return row.toSession(stored)
         }
-        val newItem = StoredNowPlayingItem(
-            itemId = item.itemId,
-            title = item.title,
-            url = item.url,
-            host = item.host,
-            sourceType = item.sourceType,
-            sourceLabel = item.sourceLabel,
-            sourceUrl = item.sourceUrl,
-            captureKind = item.captureKind,
-            sourceAppPackage = item.sourceAppPackage,
-            status = item.status,
-            activeContentVersionId = item.activeContentVersionId,
-            lastReadPercent = item.lastReadPercent,
-            chunkIndex = 0,
-            offsetInChunkChars = 0,
-            readerScrollOffset = 0,
-        )
+        val newItem = item.toStoredNowPlayingItem()
         stored.add(newItem)
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
@@ -1414,19 +1364,7 @@ class PlaybackRepository(
         if (history.any { it.itemId == item.itemId }) return row.toSession(stored)
         history.add(
             index.coerceIn(0, history.size),
-            StoredNowPlayingItem(
-                itemId = item.itemId,
-                title = item.title,
-                url = item.url,
-                host = item.host,
-                sourceType = item.sourceType,
-                sourceLabel = item.sourceLabel,
-                sourceUrl = item.sourceUrl,
-                captureKind = item.captureKind,
-                sourceAppPackage = item.sourceAppPackage,
-                status = item.status,
-                activeContentVersionId = item.activeContentVersionId,
-            ),
+            item.toStoredNowPlayingItem(),
         )
         val updatedRow = row.copy(
             queueJson = encodeStoredNowPlaying(stored, history),
@@ -1444,19 +1382,7 @@ class PlaybackRepository(
         val insertAt = index.coerceIn(0, stored.size)
         stored.add(
             insertAt,
-            StoredNowPlayingItem(
-                itemId = item.itemId,
-                title = item.title,
-                url = item.url,
-                host = item.host,
-                sourceType = item.sourceType,
-                sourceLabel = item.sourceLabel,
-                sourceUrl = item.sourceUrl,
-                captureKind = item.captureKind,
-                sourceAppPackage = item.sourceAppPackage,
-                status = item.status,
-                activeContentVersionId = item.activeContentVersionId,
-            ),
+            item.toStoredNowPlayingItem(),
         )
         val newCurrentIndex = if (insertAt <= row.currentIndex) {
             (row.currentIndex + 1).coerceIn(0, stored.lastIndex)
@@ -1715,22 +1641,23 @@ class PlaybackRepository(
         )
     }
 
-    private fun PlaybackQueueItem.toStoredNowPlayingItem(): StoredNowPlayingItem =
-        StoredNowPlayingItem(
-            itemId = itemId,
-            title = title,
-            url = url,
-            host = host,
-            sourceType = sourceType,
-            sourceLabel = sourceLabel,
-            sourceUrl = sourceUrl,
-            captureKind = captureKind,
-            sourceAppPackage = sourceAppPackage,
-            status = status,
-            activeContentVersionId = activeContentVersionId,
-            lastReadPercent = lastReadPercent,
-            chunkIndex = 0,
-            offsetInChunkChars = 0,
-            readerScrollOffset = 0,
-        )
 }
+
+internal fun PlaybackQueueItem.toStoredNowPlayingItem(): StoredNowPlayingItem =
+    StoredNowPlayingItem(
+        itemId = itemId,
+        title = title,
+        url = url,
+        host = host,
+        sourceType = sourceType,
+        sourceLabel = sourceLabel,
+        sourceUrl = sourceUrl,
+        captureKind = captureKind,
+        sourceAppPackage = sourceAppPackage,
+        status = status,
+        activeContentVersionId = activeContentVersionId,
+        lastReadPercent = lastReadPercent,
+        chunkIndex = 0,
+        offsetInChunkChars = 0,
+        readerScrollOffset = 0,
+    )
