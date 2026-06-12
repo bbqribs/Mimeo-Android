@@ -167,7 +167,7 @@ fun BlueskyBrowseScreen(
                 }
                 scan != null && scan!!.candidates.isEmpty() -> item {
                     Text(
-                        text = "No candidate links found for this source in the current scan window.",
+                        text = "No links found for this source in the current scan window.",
                         color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                         style = if (isV1) mTypography.body else MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
@@ -418,7 +418,7 @@ private fun ScanStatus(
     val mShapes = LocalMimeoShapeTokens.current
     if (scan == null && selected == null && error.isNullOrBlank() && !scanning) {
         Text(
-            text = "Choose a source to scan for candidate article links.",
+            text = "Choose a source to scan for article links.",
             color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
             style = if (isV1) mTypography.body else MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(horizontal = 4.dp),
