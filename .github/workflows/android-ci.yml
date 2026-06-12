@@ -1,0 +1,28 @@
+name: Android CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build and unit test
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Run unit tests
+        run: .\gradlew.bat :app:testDebugUnitTest --no-daemon
+
+      - name: Assemble debug APK
+        run: .\gradlew.bat :app:assembleDebug --no-daemon
