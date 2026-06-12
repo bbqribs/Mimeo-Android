@@ -13,6 +13,18 @@ Post-redesign product model planning (canonical in Mimeo): `C:\Users\brend\Docum
 Workflow + transition guidance: `docs/planning/AGENT_WORKFLOW.md` and `docs/planning/PROJECT_HANDOFF.md`.
 Planning-doc ownership decision: `docs/planning/DOCS_OWNERSHIP_DECISION.md`.
 
+## Productization state memo
+
+- [x] **Android P-1 host externalization is closed.** Release defaults no
+  longer expose personal hosts or IPs; developer presets remain in the debug
+  source set only. The release path is manual-first, and the release variant
+  gate passed.
+- **Productization pause:** backend portability remains the active track. Do
+  not start Play Console, signing, privacy-policy, network-security, CI, icon,
+  or onboarding work unless the operator explicitly allocates spare Android
+  capacity. Android P-2/P-4 remain sensible later follow-ups, not active work
+  now.
+
 ## Open — priority order
 
 ### P0 — redesign closeout (shipped)
