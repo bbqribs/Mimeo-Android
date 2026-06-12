@@ -2,6 +2,7 @@ package com.mimeo.android.ui.signin
 
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.ConnectionMode
+import com.mimeo.android.model.DEVELOPER_PRESETS_AVAILABLE
 import com.mimeo.android.model.DEFAULT_LAN_HOST
 import com.mimeo.android.model.DEFAULT_LOCAL_BASE_URL
 import com.mimeo.android.model.DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL
@@ -71,8 +72,26 @@ internal fun buildAuthDeviceName(manufacturer: String, model: String): String {
     }
 }
 
+/**
+ * Server presets offered on the sign-in screen. Release builds expose only manual entry so no
+ * personal backend host identity is presented as a default/preset choice; debug builds keep the
+ * full developer presets.
+ */
+internal fun availableSignInPresets(): List<SignInServerPreset> {
+    return if (DEVELOPER_PRESETS_AVAILABLE) {
+        SignInServerPreset.entries.toList()
+    } else {
+        listOf(SignInServerPreset.MANUAL)
+    }
+}
+
 internal fun defaultSignInServerUrl(initialServerUrl: String): String {
     val trimmed = initialServerUrl.trim()
+    if (!DEVELOPER_PRESETS_AVAILABLE) {
+        // Manual-first: preserve any stored URL for already-configured installs; otherwise start
+        // blank so the user enters their own server URL. No personal preset is seeded.
+        return trimmed
+    }
     return if (trimmed.isBlank() || trimmed == DEFAULT_LOCAL_SIGN_IN_URL) {
         buildPresetServerUrl(
             SignInServerPreset.REMOTE,

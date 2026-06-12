@@ -46,6 +46,41 @@ class ConnectionTestMessageResolverTest {
     }
 
     @Test
+    fun `unreachable host outcomes include server moved hint`() {
+        val unreachable = ConnectionTestMessageResolver.forException(
+            mode = ConnectionMode.REMOTE,
+            baseUrl = "http://100.101.102.103:8000",
+            message = "failed to connect",
+        )
+        val hostNotFound = ConnectionTestMessageResolver.forException(
+            mode = ConnectionMode.REMOTE,
+            baseUrl = "http://100.101.102.103:8000",
+            message = "unable to resolve host",
+        )
+
+        assertTrue(unreachable.contains(ConnectionTestMessageResolver.SERVER_MOVED_HINT))
+        assertTrue(hostNotFound.contains(ConnectionTestMessageResolver.SERVER_MOVED_HINT))
+    }
+
+    @Test
+    fun `auth and not-found outcomes omit server moved hint`() {
+        val auth = ConnectionTestMessageResolver.forApiFailure(
+            mode = ConnectionMode.REMOTE,
+            baseUrl = "http://100.101.102.103:8000",
+            statusCode = 401,
+            message = "Unauthorized",
+        )
+        val schemeMismatch = ConnectionTestMessageResolver.forException(
+            mode = ConnectionMode.REMOTE,
+            baseUrl = "https://100.101.102.103:8000",
+            message = "CLEARTEXT communication not permitted",
+        )
+
+        assertTrue(!auth.contains(ConnectionTestMessageResolver.SERVER_MOVED_HINT))
+        assertTrue(!schemeMismatch.contains(ConnectionTestMessageResolver.SERVER_MOVED_HINT))
+    }
+
+    @Test
     fun `remote mode with lan host hints wrong host type`() {
         val message = ConnectionTestMessageResolver.forException(
             mode = ConnectionMode.REMOTE,
