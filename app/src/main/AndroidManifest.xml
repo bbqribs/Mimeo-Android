@@ -10,7 +10,7 @@
         android:allowBackup="false"
         android:label="Mimeo Android"
         android:supportsRtl="true"
-        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/Theme.Mimeo">
         <activity
             android:name=".MainActivity"
