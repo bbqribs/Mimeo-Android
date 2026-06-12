@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive launcher foreground: near-white "M" monogram (#FFFCF6) inside the central safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:strokeColor="#FFFCF6"
+        android:strokeWidth="9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M37,72 L37,36 L54,58 L71,36 L71,72" />
+</vector>
