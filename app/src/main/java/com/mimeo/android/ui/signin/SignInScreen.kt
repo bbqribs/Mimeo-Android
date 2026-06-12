@@ -115,21 +115,23 @@ fun SignInScreen(
                         }
                     }
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    SignInUrlScheme.entries.forEach { nextScheme ->
-                        FilterChip(
-                            selected = scheme == nextScheme,
-                            onClick = {
-                                scheme = nextScheme
-                                serverUrl = buildPresetServerUrl(serverPreset, scheme, serverUrl)
-                                if (errorMessage != null) onClearError()
-                            },
-                            enabled = !loading,
-                            label = { Text(nextScheme.value.uppercase()) },
-                        )
+                if (availablePresets.size > 1) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        SignInUrlScheme.entries.forEach { nextScheme ->
+                            FilterChip(
+                                selected = scheme == nextScheme,
+                                onClick = {
+                                    scheme = nextScheme
+                                    serverUrl = buildPresetServerUrl(serverPreset, scheme, serverUrl)
+                                    if (errorMessage != null) onClearError()
+                                },
+                                enabled = !loading,
+                                label = { Text(nextScheme.value.uppercase()) },
+                            )
+                        }
                     }
                 }
                 OutlinedTextField(
