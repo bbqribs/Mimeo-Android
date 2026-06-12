@@ -46,6 +46,7 @@ fun SignInScreen(
     onOpenAdvancedSettings: () -> Unit,
     onClearError: () -> Unit,
 ) {
+    val availablePresets = remember { availableSignInPresets() }
     var serverPreset by rememberSaveable { mutableStateOf(inferSignInPreset(defaultSignInServerUrl(initialServerUrl))) }
     var scheme by rememberSaveable { mutableStateOf(inferSignInScheme(defaultSignInServerUrl(initialServerUrl))) }
     var serverUrl by rememberSaveable(initialServerUrl) {
@@ -95,21 +96,23 @@ fun SignInScreen(
                     text = "Server",
                     style = MaterialTheme.typography.labelMedium,
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    SignInServerPreset.entries.forEach { preset ->
-                        FilterChip(
-                            selected = serverPreset == preset,
-                            onClick = {
-                                serverPreset = preset
-                                serverUrl = buildPresetServerUrl(serverPreset, scheme, serverUrl)
-                                if (errorMessage != null) onClearError()
-                            },
-                            enabled = !loading,
-                            label = { Text(preset.label()) },
-                        )
+                if (availablePresets.size > 1) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        availablePresets.forEach { preset ->
+                            FilterChip(
+                                selected = serverPreset == preset,
+                                onClick = {
+                                    serverPreset = preset
+                                    serverUrl = buildPresetServerUrl(serverPreset, scheme, serverUrl)
+                                    if (errorMessage != null) onClearError()
+                                },
+                                enabled = !loading,
+                                label = { Text(preset.label()) },
+                            )
+                        }
                     }
                 }
                 Row(
@@ -138,6 +141,7 @@ fun SignInScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Server URL") },
+                    placeholder = { Text("https://your-server[:port]") },
                     singleLine = true,
                     enabled = !loading,
                     keyboardOptions = KeyboardOptions(

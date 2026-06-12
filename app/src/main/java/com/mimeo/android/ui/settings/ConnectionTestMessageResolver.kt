@@ -5,6 +5,11 @@ import java.net.URI
 import java.util.Locale
 
 internal object ConnectionTestMessageResolver {
+    // Shown only on unreachable-host outcomes (host lookup failure / no route), where a relocated
+    // server is a likely cause and the user can recover by re-entering the URL themselves.
+    internal const val SERVER_MOVED_HINT =
+        "If the server moved, update the URL in Settings → Connection."
+
     fun tokenRequired(
         mode: ConnectionMode,
         baseUrl: String,
@@ -89,10 +94,10 @@ internal object ConnectionTestMessageResolver {
             lower.contains("ssl") || lower.contains("certificate") || lower.contains("handshake") ->
                 "TLS/HTTPS failed. Verify remote certificate or URL scheme."
             lower.contains("unable to resolve host") || lower.contains("no address associated") ->
-                "Host not found. ${modeHint(mode, baseUrl)}"
+                "Host not found. ${modeHint(mode, baseUrl)} $SERVER_MOVED_HINT"
             lower.contains("failed to connect") || lower.contains("connection refused") ||
                 lower.contains("timeout") || lower.contains("timed out") || lower.contains("network is unreachable") ->
-                "Backend unreachable. ${modeHint(mode, baseUrl)}"
+                "Backend unreachable. ${modeHint(mode, baseUrl)} $SERVER_MOVED_HINT"
             else -> "Connection failed. ${modeHint(mode, baseUrl)}"
         }
     }

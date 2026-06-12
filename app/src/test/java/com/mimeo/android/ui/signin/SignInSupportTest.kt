@@ -3,6 +3,7 @@ package com.mimeo.android.ui.signin
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.ConnectionMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
 
@@ -56,6 +57,17 @@ class SignInSupportTest {
         assertEquals(
             "http://example.com:8000",
             buildPresetServerUrl(SignInServerPreset.MANUAL, SignInUrlScheme.HTTP, "example.com:8000"),
+        )
+    }
+
+    @Test
+    fun `available presets always offer manual entry and preserve stored urls`() {
+        // Manual entry is always available regardless of build variant.
+        assertTrue(availableSignInPresets().contains(SignInServerPreset.MANUAL))
+        // An already-configured server URL is preserved as the sign-in default.
+        assertEquals(
+            "https://reader.example.com",
+            defaultSignInServerUrl("https://reader.example.com"),
         )
     }
 
