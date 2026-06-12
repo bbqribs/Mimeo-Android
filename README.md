@@ -83,11 +83,11 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 - Physical device off-LAN (Tailscale) -> prefer `https://<machine>.<tailnet>.ts.net`
 - Raw Tailscale IP HTTP is fallback-only when TLS is unavailable.
 - `127.0.0.1` on Android points to the device itself, not your host backend.
-- If your PC IP is `192.168.68.124`, set app base URL to `http://192.168.68.124:8000`.
-- Current Stage 2 defaults/presets:
-  - `Local`: `http://10.0.2.2:8000`
-  - `LAN`: `http://192.168.68.124:8000`
-  - `Remote`: `https://beh-august2015.taildacac5.ts.net` (fallback HTTP: `http://100.84.13.10:8000`)
+- If your PC IP is `<your-pc-ip>`, set app base URL to `http://<your-pc-ip>:8000`.
+- Android P-1 host externalization is shipped:
+  - release defaults do not expose personal hosts or IPs
+  - debug builds retain developer presets for local/operator use
+  - release setup is manual-first
 
 ## Remote mode (Tailscale / off-LAN)
 Use this when your phone is not on the same home LAN as the backend host.
