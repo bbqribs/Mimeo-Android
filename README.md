@@ -126,11 +126,16 @@ Notes:
    - Sign in with username/password (recommended), or use advanced token entry (`API_TOKEN` / per-device token) if needed
 4. Tap **Test connection**.
 
-## Why cleartext setting was needed
+## Cleartext / network security config
 - Android blocks plain HTTP by default on many builds.
-- This app currently talks to local dev HTTP endpoints, so manifest now sets:
-  - `android:usesCleartextTraffic="true"`
-- Long term, prefer HTTPS for non-local hosting.
+- The app no longer enables app-wide cleartext. The manifest references a scoped
+  `@xml/network_security_config` instead of `android:usesCleartextTraffic="true"`.
+- Release baseline (`app/src/main/res/xml/network_security_config.xml`): cleartext is
+  denied by default (public hosts require HTTPS), permitted only for loopback/emulator
+  dev hosts (`10.0.2.2`, `127.0.0.1`, `localhost`).
+- Debug override (`app/src/debug/res/xml/network_security_config.xml`): widens cleartext
+  for private LAN and Tailscale CGNAT HTTP dev backends; debug-only, never ships in release.
+- Preferred remote path is HTTPS over Tailscale (`https://<machine>.<tailnet>.ts.net`).
 
 ## MVP smoke steps
 1. Start backend (`Mimeo` repo) and ensure `/debug/version` is reachable.

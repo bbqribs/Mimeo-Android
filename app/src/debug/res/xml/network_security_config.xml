@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-build override of the scoped network security config.
+
+  Compiled ONLY into debug builds (src/debug source set), so it never affects release
+  builds. It widens cleartext to keep the developer/runtime workflow working out of the
+  box against private HTTP backends whose addresses cannot be enumerated as exact hosts
+  in the release baseline:
+    - arbitrary private LAN servers (e.g. 192.168.x.y:8000, 10.x.y.z:8000, 172.16-31.x.y)
+    - Tailscale CGNAT raw-IP HTTP fallback (100.64.0.0/10, e.g. 100.84.13.10:8000)
+    - emulator / loopback dev hosts (also covered by the release baseline)
+
+  The preferred remote path remains HTTPS over Tailscale. Release builds use only the
+  strict baseline at app/src/main/res/xml/network_security_config.xml and therefore do
+  NOT globally allow cleartext.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
