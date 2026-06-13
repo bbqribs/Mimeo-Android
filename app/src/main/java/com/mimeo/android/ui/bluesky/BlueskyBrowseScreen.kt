@@ -367,9 +367,11 @@ private fun SourcePicker(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 val activeSourceLabel = if (scan != null || selected != null) {
-                    cleanSourceLabel(
-                        label = scan?.source?.displayLabel ?: selected?.displayLabel ?: "Selected source",
-                        sourceType = scan?.source?.sourceType ?: selected?.sourceKind,
+                    resolvePickerSourceLabel(
+                        scanLabel = scan?.source?.displayLabel,
+                        scanType = scan?.source?.sourceType,
+                        selectedLabel = selected?.displayLabel,
+                        selectedKind = selected?.sourceKind,
                     )
                 } else {
                     "Choose a source"
