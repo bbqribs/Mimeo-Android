@@ -2,6 +2,7 @@ package com.mimeo.android.ui.settings
 
 import android.app.Application
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import android.speech.tts.TextToSpeech
 import android.speech.tts.Voice
 import androidx.compose.foundation.background
@@ -198,6 +199,7 @@ fun SettingsScreen(
     // spoke directly when a request is pending (hub-and-spoke replaces the old scroll
     // anchor).
     val pendingReadingScroll by vm.pendingSettingsReadingScroll.collectAsState()
+    val pendingBlueskySection by vm.pendingSettingsBlueskySection.collectAsState()
     // Hub-and-spoke selection: null shows the index; a value shows that section.
     var selectedSection by remember { mutableStateOf<SettingsSection?>(null) }
     // Reveal the Bluesky connect form for an explicit Connect/Reconnect even when a
@@ -522,6 +524,19 @@ fun SettingsScreen(
         if (!pendingReadingScroll) return@LaunchedEffect
         selectedSection = SettingsSection.READING
         vm.consumeSettingsReadingScroll()
+    }
+
+    // The Bluesky browse screen's connect/reconnect action opens the Bluesky spoke.
+    LaunchedEffect(pendingBlueskySection) {
+        if (!pendingBlueskySection) return@LaunchedEffect
+        selectedSection = SettingsSection.BLUESKY
+        showBlueskyConnectForm = true
+        vm.consumeSettingsBlueskySection()
+    }
+
+    // Within a spoke, system back returns to the hub index instead of leaving Settings.
+    BackHandler(enabled = selectedSection != null) {
+        selectedSection = null
     }
 
     // Each time the section changes, present it from the top.

@@ -54,7 +54,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import com.mimeo.android.AppViewModel
+import com.mimeo.android.model.BlueskyAccountConnectionResponse
 import com.mimeo.android.model.BlueskyCandidate
 import com.mimeo.android.model.BlueskyCandidateScanResponse
 import com.mimeo.android.model.BlueskyCandidateSourceSelection
@@ -74,6 +76,7 @@ import kotlinx.coroutines.launch
 fun BlueskyBrowseScreen(
     vm: AppViewModel,
     onOpenItem: (Int) -> Unit,
+    onOpenConnectionSettings: () -> Unit = {},
     jumpPillBottomClearance: Dp = 0.dp,
 ) {
     val listState = rememberLazyListState()
@@ -129,6 +132,14 @@ fun BlueskyBrowseScreen(
             state = listState,
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            item {
+                BlueskyHealthHeader(
+                    connection = picker?.connection,
+                    loading = pickerLoading,
+                    onOpenConnectionSettings = onOpenConnectionSettings,
+                    onTryAgain = vm::loadBlueskyCandidatePicker,
+                )
+            }
             item {
                 ScanDefaults(picker = picker)
             }
@@ -192,6 +203,79 @@ fun BlueskyBrowseScreen(
                     .padding(bottom = jumpPillBottomPadding(jumpPillBottomClearance)),
                 onClick = { actionScope.launch { listState.animateScrollToItem(0) } },
             )
+        }
+    }
+}
+
+@Composable
+private fun BlueskyHealthHeader(
+    connection: BlueskyAccountConnectionResponse?,
+    loading: Boolean,
+    onOpenConnectionSettings: () -> Unit,
+    onTryAgain: () -> Unit,
+) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    val mShapes = LocalMimeoShapeTokens.current
+    val health = resolveBlueskyHealth(connection, null)
+    val statusColor = when (health.state) {
+        BlueskyHealthState.CONNECTED -> if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface
+        BlueskyHealthState.ACTION_NEEDED -> if (isV1) mColors.danger else MaterialTheme.colorScheme.error
+        BlueskyHealthState.TEMPORARY_TROUBLE -> Color(0xFFB8860B)
+        else -> if (isV1) mColors.fg2 else MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val actionLabel = when (health.action) {
+        BlueskyRecoveryAction.CONNECT -> "Connect"
+        BlueskyRecoveryAction.RECONNECT -> "Reconnect"
+        BlueskyRecoveryAction.TRY_AGAIN -> "Try again"
+        BlueskyRecoveryAction.NONE -> null
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = if (isV1) mShapes.card else MaterialTheme.shapes.medium,
+        color = if (isV1) mColors.surface else MaterialTheme.colorScheme.surface,
+        tonalElevation = if (isV1) 0.dp else 1.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = health.title,
+                    style = if (isV1) mTypography.row else MaterialTheme.typography.titleSmall,
+                    color = statusColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val subtitle = when {
+                    loading -> "Checking Bluesky status…"
+                    health.detail != null -> health.detail
+                    else -> null
+                }
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (actionLabel != null) {
+                OutlinedButton(
+                    enabled = !loading,
+                    onClick = {
+                        when (health.action) {
+                            BlueskyRecoveryAction.CONNECT, BlueskyRecoveryAction.RECONNECT -> onOpenConnectionSettings()
+                            else -> onTryAgain()
+                        }
+                    },
+                ) {
+                    Text(actionLabel)
+                }
+            }
         }
     }
 }

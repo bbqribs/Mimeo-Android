@@ -153,6 +153,7 @@ import com.mimeo.android.player.TtsChunkProgressEvent
 import com.mimeo.android.player.SOURCE_CUE_CHUNK_INDEX
 import com.mimeo.android.player.TITLE_INTRO_CHUNK_INDEX
 import com.mimeo.android.player.TtsController
+import com.mimeo.android.ui.bluesky.sanitizeUserFacingSourceLabel
 import com.mimeo.android.ui.common.locusCapturePresentation
 import com.mimeo.android.ui.common.copyArticleText
 import com.mimeo.android.ui.common.openItemInBrowser
@@ -1652,22 +1653,26 @@ fun PlayerScreen(
         }
         .ifBlank { nowPlayingSession?.currentItem?.title.orEmpty() }
         .ifBlank {
-            textPayload
+            // Last-resort fallback for an untitled item: never leak a raw AT-URI.
+            sanitizeUserFacingSourceLabel(
+                textPayload
+                    ?.takeIf { it.itemId == playbackOwnerItemId }
+                    ?.sourceLabel,
+            ).orEmpty()
+        }
+    val nowPlayingSourceLabel = sanitizeUserFacingSourceLabel(
+        queueItemsById[playbackOwnerItemId]
+            ?.sourceLabel
+            ?.takeIf { it.isNotBlank() }
+            ?: nowPlayingSession
+                ?.currentItem
+                ?.sourceLabel
+                ?.takeIf { it.isNotBlank() }
+            ?: textPayload
                 ?.takeIf { it.itemId == playbackOwnerItemId }
                 ?.sourceLabel
-                .orEmpty()
-        }
-    val nowPlayingSourceLabel = queueItemsById[playbackOwnerItemId]
-        ?.sourceLabel
-        ?.takeIf { it.isNotBlank() }
-        ?: nowPlayingSession
-            ?.currentItem
-            ?.sourceLabel
-            ?.takeIf { it.isNotBlank() }
-        ?: textPayload
-            ?.takeIf { it.itemId == playbackOwnerItemId }
-            ?.sourceLabel
-            ?.takeIf { it.isNotBlank() }
+                ?.takeIf { it.isNotBlank() },
+    )
     val nowPlayingUrl = queueItemsById[playbackOwnerItemId]?.url.orEmpty()
         .ifBlank { nowPlayingSession?.currentItem?.url.orEmpty() }
     val locusActionBarTitle = resolveLocusActionBarTitle(
@@ -4209,7 +4214,9 @@ private fun PlayerControlBar(
                     ),
                     color = if (isV1) mColors.fg else Color.Unspecified,
                 )
-                if (!nowPlayingSourceLabel.isNullOrBlank()) {
+                if (!nowPlayingSourceLabel.isNullOrBlank() &&
+                    !nowPlayingSourceLabel.equals(nowPlayingTitle, ignoreCase = true)
+                ) {
                     Text(
                         text = nowPlayingSourceLabel,
                         modifier = Modifier.padding(start = 8.dp),

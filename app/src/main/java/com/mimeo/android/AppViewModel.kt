@@ -565,6 +565,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // raised when the reader Aa panel's "reading settings" shortcut is tapped.
     private val _pendingSettingsReadingScroll = MutableStateFlow(false)
     val pendingSettingsReadingScroll: StateFlow<Boolean> = _pendingSettingsReadingScroll.asStateFlow()
+    // One-shot request to open the Settings screen directly on its Bluesky section,
+    // raised when the Bluesky browse screen's connect/reconnect action is tapped.
+    private val _pendingSettingsBlueskySection = MutableStateFlow(false)
+    val pendingSettingsBlueskySection: StateFlow<Boolean> = _pendingSettingsBlueskySection.asStateFlow()
     private val authFailureMutex = Mutex()
     private var authFailureHandledThisSession = false
     private var lastArchiveUndoSnapshot: ArchiveUndoSnapshot? = null
@@ -3263,6 +3267,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Clear the pending reading-section scroll once the Settings screen handles it. */
     fun consumeSettingsReadingScroll() {
         _pendingSettingsReadingScroll.value = false
+    }
+
+    /** Ask the Settings screen to open its Bluesky section on next open. */
+    fun requestSettingsBlueskySection() {
+        _pendingSettingsBlueskySection.value = true
+    }
+
+    /** Clear the pending Bluesky-section request once the Settings screen handles it. */
+    fun consumeSettingsBlueskySection() {
+        _pendingSettingsBlueskySection.value = false
     }
 
     fun createPlaylist(name: String) {
