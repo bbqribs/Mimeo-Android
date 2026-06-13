@@ -124,6 +124,7 @@ import com.mimeo.android.model.ContentSummaryFailureReason
 import com.mimeo.android.model.ContentSummaryState
 import com.mimeo.android.model.normalizedState
 import com.mimeo.android.model.DrawerPanelSide
+import com.mimeo.android.model.StartupDestination
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.PlaylistSummary
@@ -1377,6 +1378,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _settings.value = current.copy(drawerPanelSide = side)
         viewModelScope.launch {
             settingsStore.saveDrawerPanelSide(side)
+        }
+    }
+
+    fun saveStartupDestination(destination: StartupDestination) {
+        val current = settings.value
+        _settings.value = current.copy(startupDestination = destination)
+        viewModelScope.launch {
+            settingsStore.saveStartupDestination(destination)
         }
     }
 

@@ -35,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -46,6 +47,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -72,7 +74,9 @@ import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
 import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
 import com.mimeo.android.ui.theme.LocalMimeoV1Active
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 @Composable
 fun BlueskyBrowseScreen(
@@ -96,6 +100,9 @@ fun BlueskyBrowseScreen(
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
+    // Only show the pull-to-refresh indicator for an explicit pull, not for the initial
+    // automatic picker load / home-timeline scan that runs when the screen first opens.
+    var userRefreshing by remember { mutableStateOf(false) }
     val showJumpToTop by remember {
         derivedStateOf {
             shouldShowJumpToTopLazy(
@@ -120,7 +127,29 @@ fun BlueskyBrowseScreen(
         }
     }
 
-    Box(
+    PullToRefreshBox(
+        isRefreshing = userRefreshing,
+        onRefresh = {
+            // Refresh the picker (connection health, pins, lists/feeds) and re-scan the
+            // active source so the candidate list reloads. When nothing is selected yet,
+            // the home-timeline auto-scan effect repopulates the list after the reload.
+            actionScope.launch {
+                userRefreshing = true
+                try {
+                    vm.loadBlueskyCandidatePicker()
+                    selection?.let { vm.scanBlueskyCandidateSource(it) }
+                    // Loading flags flip asynchronously; wait for them to start and then
+                    // settle so the indicator tracks the real reload (timeout guards the
+                    // case where no request runs, e.g. a missing token).
+                    withTimeoutOrNull(10_000) {
+                        snapshotFlow { pickerLoading || scanning }.first { it }
+                        snapshotFlow { pickerLoading || scanning }.first { !it }
+                    }
+                } finally {
+                    userRefreshing = false
+                }
+            }
+        },
         modifier = Modifier
             .fillMaxSize()
             .then(if (isV1) Modifier.background(mColors.bg) else Modifier)
@@ -338,9 +367,11 @@ private fun SourcePicker(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 val activeSourceLabel = if (scan != null || selected != null) {
-                    cleanSourceLabel(
-                        label = scan?.source?.displayLabel ?: selected?.displayLabel ?: "Selected source",
-                        sourceType = scan?.source?.sourceType ?: selected?.sourceKind,
+                    resolvePickerSourceLabel(
+                        scanLabel = scan?.source?.displayLabel,
+                        scanType = scan?.source?.sourceType,
+                        selectedLabel = selected?.displayLabel,
+                        selectedKind = selected?.sourceKind,
                     )
                 } else {
                     "Choose a source"

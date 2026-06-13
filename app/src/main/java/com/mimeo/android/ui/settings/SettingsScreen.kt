@@ -85,6 +85,7 @@ import com.mimeo.android.model.DEFAULT_LOCAL_BASE_URL
 import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
 import com.mimeo.android.model.DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL
 import com.mimeo.android.model.DrawerPanelSide
+import com.mimeo.android.model.StartupDestination
 import com.mimeo.android.model.LocusContentMode
 import com.mimeo.android.model.DEFAULT_PARAGRAPH_SPACING_PRESETS
 import com.mimeo.android.model.MAX_PARAGRAPH_SPACING_PRESETS
@@ -150,6 +151,7 @@ private const val TTS_PREVIEW_PHRASE = "The quick brown fox jumps over the lazy 
  */
 internal enum class SettingsSection(val title: String, val subtitle: String) {
     ACCOUNT("Account & Connection", "Server mode, sign-in, device token, connection test."),
+    GENERAL("General", "Startup screen and app behavior."),
     READING("Reading", "Reader font, size, line height, and spacing."),
     PLAYBACK("Playback", "Listening behavior, speed presets, and TTS voice."),
     APPEARANCE("Appearance", "Theme, accent, and density."),
@@ -237,6 +239,9 @@ fun SettingsScreen(
     }
     var drawerPanelSide by remember(settings.drawerPanelSide) {
         mutableStateOf(settings.drawerPanelSide)
+    }
+    var startupDestination by remember(settings.startupDestination) {
+        mutableStateOf(settings.startupDestination)
     }
     var chevronOnRightSide by remember(settings.playerChevronSnapEdge) {
         mutableStateOf(settings.playerChevronSnapEdge != PlayerChevronSnapEdge.LEFT)
@@ -898,6 +903,49 @@ fun SettingsScreen(
                 }
             }
         }
+        }
+        if (activeSection == SettingsSection.GENERAL) {
+            SettingsSectionHeader(
+                title = "General",
+                subtitle = "Startup screen and app behavior.",
+            )
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = "Startup screen",
+                        style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                        color = if (isV1) mColors.fg else Color.Unspecified,
+                    )
+                    Text(
+                        text = "Which screen the app opens to from a cold start.",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        StartupDestination.entries.forEach { destination ->
+                            FilterChip(
+                                selected = startupDestination == destination,
+                                onClick = {
+                                    startupDestination = destination
+                                    vm.saveStartupDestination(destination)
+                                },
+                                label = { Text(startupDestinationLabel(destination)) },
+                            )
+                        }
+                    }
+                }
+            }
         }
         if (activeSection == SettingsSection.BLUESKY) {
         SettingsSectionHeader(
@@ -2642,6 +2690,12 @@ private fun BlueskySourceRow(
             }
         }
     }
+}
+
+private fun startupDestinationLabel(destination: StartupDestination): String = when (destination) {
+    StartupDestination.INBOX -> "Inbox"
+    StartupDestination.UP_NEXT -> "Up Next"
+    StartupDestination.SMART_QUEUE -> "Smart Queue"
 }
 
 @Composable

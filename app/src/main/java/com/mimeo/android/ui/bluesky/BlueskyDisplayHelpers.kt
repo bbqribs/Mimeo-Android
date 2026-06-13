@@ -17,6 +17,32 @@ internal fun cleanSourceLabel(label: String, sourceType: String?): String {
     return cleaned.takeIf { it.isNotBlank() } ?: formatSourceType(sourceType)
 }
 
+/**
+ * Picks the best human-facing label for the picker header. The backend scan can return a
+ * raw AT-URI as a list's `displayLabel` (which [cleanSourceLabel] would then collapse to a
+ * generic "Bluesky List"). In that case the label the user picked from the source list —
+ * which carries the real list/feed name — is preferred. Feeds and accounts already resolve
+ * to a proper name in the scan response, so this keeps using the scan label for them.
+ */
+internal fun resolvePickerSourceLabel(
+    scanLabel: String?,
+    scanType: String?,
+    selectedLabel: String?,
+    selectedKind: String?,
+): String {
+    val type = scanType ?: selectedKind
+    val scan = scanLabel?.trim()?.takeIf { it.isNotBlank() }
+    val selected = selectedLabel?.trim()?.takeIf { it.isNotBlank() }
+    val scanIsRaw = scan != null && scan.contains("://", ignoreCase = true)
+    val selectedIsRaw = selected != null && selected.contains("://", ignoreCase = true)
+    val preferred = when {
+        scan != null && !scanIsRaw -> scan
+        selected != null && !selectedIsRaw -> selected
+        else -> scan ?: selected ?: "Selected source"
+    }
+    return cleanSourceLabel(preferred, type)
+}
+
 internal fun formatSourceType(sourceType: String?): String = when (sourceType) {
     "home_timeline" -> "Home Timeline"
     "list_feed" -> "List"

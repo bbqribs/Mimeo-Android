@@ -171,6 +171,75 @@ class BlueskyDisplayHelpersTest {
         assertEquals(null, sanitizeUserFacingSourceLabel(null))
     }
 
+    // resolvePickerSourceLabel
+
+    @Test
+    fun resolvePickerSourceLabel_listRawScanLabel_prefersSelectedName() {
+        // Backend scan returns a raw AT-URI for the list; the picked name should win.
+        assertEquals(
+            "My Cool List",
+            resolvePickerSourceLabel(
+                scanLabel = "at://did:plc:abc/app.bsky.graph.list/xyz",
+                scanType = "list_feed",
+                selectedLabel = "My Cool List",
+                selectedKind = "list_feed",
+            ),
+        )
+    }
+
+    @Test
+    fun resolvePickerSourceLabel_listRawScanAndHttpSelected_fallsBackToGeneric() {
+        // Both labels are raw addresses, so the generic list label is the best we can do.
+        assertEquals(
+            "Bluesky List",
+            resolvePickerSourceLabel(
+                scanLabel = "at://did:plc:abc/app.bsky.graph.list/xyz",
+                scanType = "list_feed",
+                selectedLabel = "https://bsky.app/profile/alice/lists/123",
+                selectedKind = "list_feed",
+            ),
+        )
+    }
+
+    @Test
+    fun resolvePickerSourceLabel_feedNamedScanLabel_usesScanLabel() {
+        assertEquals(
+            "Tech News",
+            resolvePickerSourceLabel(
+                scanLabel = "Tech News",
+                scanType = "feed_generator",
+                selectedLabel = "Tech News",
+                selectedKind = "feed_generator",
+            ),
+        )
+    }
+
+    @Test
+    fun resolvePickerSourceLabel_nullScan_usesSelectedName() {
+        assertEquals(
+            "My Cool List",
+            resolvePickerSourceLabel(
+                scanLabel = null,
+                scanType = null,
+                selectedLabel = "My Cool List",
+                selectedKind = "list_feed",
+            ),
+        )
+    }
+
+    @Test
+    fun resolvePickerSourceLabel_bothNull_returnsSelectedSourceFallback() {
+        assertEquals(
+            "Selected source",
+            resolvePickerSourceLabel(
+                scanLabel = null,
+                scanType = null,
+                selectedLabel = null,
+                selectedKind = null,
+            ),
+        )
+    }
+
     // formatCandidateTimestamp
 
     @Test

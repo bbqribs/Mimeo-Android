@@ -61,6 +61,7 @@ import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.SmartPlaylistSummary
+import com.mimeo.android.model.StartupDestination
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.library.LibraryBatchAction
 import com.mimeo.android.ui.library.LibraryItemsScreen
@@ -438,7 +439,11 @@ internal fun MainActivityShell(
                     ) {
                         NavHost(
                             navController = nav,
-                            startDestination = if (startupInitialRequiresSignIn) ROUTE_SIGN_IN else ROUTE_UP_NEXT,
+                            startDestination = if (startupInitialRequiresSignIn) {
+                                ROUTE_SIGN_IN
+                            } else {
+                                startupDestinationRoute(settings.startupDestination)
+                            },
                             modifier = Modifier
                                 .fillMaxSize()
                                 .background(if (isV1) mColors.bg else MaterialTheme.colorScheme.background),
@@ -994,6 +999,13 @@ private fun NoNowPlayingScreen(onGoQueue: () -> Unit) {
             Text("Go to Up Next")
         }
     }
+}
+
+/** Maps the persisted cold-start preference to the NavHost route to open first. */
+private fun startupDestinationRoute(destination: StartupDestination): String = when (destination) {
+    StartupDestination.INBOX -> ROUTE_INBOX
+    StartupDestination.UP_NEXT -> ROUTE_UP_NEXT
+    StartupDestination.SMART_QUEUE -> ROUTE_SMART_QUEUE
 }
 
 private fun resolveSelectedDrawerRoute(currentRoute: String): String = when {
