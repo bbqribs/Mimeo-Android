@@ -62,6 +62,8 @@ import com.mimeo.android.model.BlueskyCandidateScanResponse
 import com.mimeo.android.model.BlueskyCandidateSourceSelection
 import com.mimeo.android.model.BlueskyPickerPinItem
 import com.mimeo.android.model.BlueskyPickerResponse
+import com.mimeo.android.ui.components.RefreshActionButton
+import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
@@ -141,14 +143,12 @@ fun BlueskyBrowseScreen(
                 )
             }
             item {
-                ScanDefaults(picker = picker)
-            }
-            item {
                 SourcePicker(
                     picker = picker,
                     loading = pickerLoading,
                     error = pickerError,
                     selected = selection,
+                    scan = scan,
                     onReload = vm::loadBlueskyCandidatePicker,
                     onScan = vm::scanBlueskyCandidateSource,
                 )
@@ -242,7 +242,20 @@ private fun BlueskyHealthHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .then(
+                        // When connected, tapping the status opens the Bluesky settings
+                        // section to manage/reconnect the account.
+                        if (health.handle != null) {
+                            Modifier.clickable { onOpenConnectionSettings() }
+                        } else {
+                            Modifier
+                        },
+                    ),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 Text(
                     text = health.title,
                     style = if (isV1) mTypography.row else MaterialTheme.typography.titleSmall,
@@ -281,33 +294,12 @@ private fun BlueskyHealthHeader(
 }
 
 @Composable
-private fun ScanDefaults(picker: BlueskyPickerResponse?) {
-    val isV1 = LocalMimeoV1Active.current
-    val mColors = LocalMimeoColorTokens.current
-    val mTypography = LocalMimeoTypographyTokens.current
-    val mShapes = LocalMimeoShapeTokens.current
-    val caps = picker?.caps
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = if (isV1) mColors.surface else MaterialTheme.colorScheme.surface,
-        tonalElevation = if (isV1) 0.dp else 1.dp,
-        shape = if (isV1) mShapes.card else MaterialTheme.shapes.medium,
-    ) {
-        Text(
-            text = "Scan defaults: ${caps?.maxAgeHours ?: 24} h, ${caps?.maxPosts ?: 30} posts, ${caps?.maxLinks ?: 15} links",
-            modifier = Modifier.padding(12.dp),
-            style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
-            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
 private fun SourcePicker(
     picker: BlueskyPickerResponse?,
     loading: Boolean,
     error: String?,
     selected: BlueskyCandidateSourceSelection?,
+    scan: BlueskyCandidateScanResponse?,
     onReload: () -> Unit,
     onScan: (BlueskyCandidateSourceSelection) -> Unit,
 ) {
@@ -345,14 +337,41 @@ private fun SourcePicker(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
-                    "Source picker",
-                    style = if (isV1) mTypography.row else MaterialTheme.typography.titleMedium,
-                    color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
+                val activeSourceLabel = if (scan != null || selected != null) {
+                    cleanSourceLabel(
+                        label = scan?.source?.displayLabel ?: selected?.displayLabel ?: "Selected source",
+                        sourceType = scan?.source?.sourceType ?: selected?.sourceKind,
+                    )
+                } else {
+                    "Choose a source"
+                }
+                val scannedStats = scan?.let {
+                    "Scanned ${it.scan.postsScanned} posts, ${it.candidates.size} links"
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(
+                        text = activeSourceLabel,
+                        style = if (isV1) mTypography.row else MaterialTheme.typography.titleMedium,
+                        color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (scannedStats != null) {
+                        Text(
+                            text = scannedStats,
+                            style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                RefreshActionButton(
+                    state = if (loading) RefreshActionVisualState.Refreshing else RefreshActionVisualState.Idle,
+                    showConnectivityIssue = false,
+                    onClick = onReload,
+                    contentDescription = "Refresh Bluesky sources",
                 )
-                if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                TextButton(onClick = onReload, enabled = !loading) { Text("Refresh") }
                 Icon(
                     imageVector = Icons.Filled.KeyboardArrowDown,
                     contentDescription = if (expanded) "Collapse" else "Expand",
@@ -509,6 +528,13 @@ private fun ScanStatus(
         )
         return
     }
+    val pinnedSourceId = findPinnedSourceId(scan, selected, pins)
+    val sourceType = scan?.source?.sourceType ?: selected?.sourceKind
+    val pinSupported = sourceType == "author_feed" || sourceType == "list_feed" || sourceType == "account"
+    val showPinRow = pinSupported && (scan != null || pinnedSourceId != null)
+    // The source title and scan counts now live in the picker header, so this card
+    // only renders when it carries an error or pin controls.
+    if (error.isNullOrBlank() && !showPinRow) return
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = if (isV1) mShapes.card else MaterialTheme.shapes.medium,
@@ -516,23 +542,6 @@ private fun ScanStatus(
         tonalElevation = if (isV1) 0.dp else 1.dp,
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            val label = cleanSourceLabel(
-                label = scan?.source?.displayLabel ?: selected?.displayLabel ?: "Selected source",
-                sourceType = scan?.source?.sourceType ?: selected?.sourceKind,
-            )
-            Text(
-                label,
-                style = if (isV1) mTypography.row else MaterialTheme.typography.titleSmall,
-                color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.SemiBold,
-            )
-            if (scan != null) {
-                Text(
-                    text = "Scanned ${scan.scan.postsScanned} posts, ${scan.candidates.size} links. Stop: ${scan.scan.stoppedReason}.",
-                    style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
-                    color = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
             if (!error.isNullOrBlank()) {
                 Text(
                     error,
@@ -540,10 +549,7 @@ private fun ScanStatus(
                     style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
                 )
             }
-            val pinnedSourceId = findPinnedSourceId(scan, selected, pins)
-            val sourceType = scan?.source?.sourceType ?: selected?.sourceKind
-            val pinSupported = sourceType == "author_feed" || sourceType == "list_feed" || sourceType == "account"
-            if (pinSupported && (scan != null || pinnedSourceId != null)) {
+            if (showPinRow) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (pinnedSourceId != null) {
                         OutlinedButton(onClick = { onUnpin(pinnedSourceId) }, enabled = !pinning) {
