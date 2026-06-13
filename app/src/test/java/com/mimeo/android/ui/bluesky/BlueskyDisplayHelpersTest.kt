@@ -129,6 +129,48 @@ class BlueskyDisplayHelpersTest {
         assertEquals("", blueskySourceDisplayName("  ", null))
     }
 
+    // sanitizeUserFacingSourceLabel
+
+    @Test
+    fun sanitizeUserFacingSourceLabel_plainDomain_passesThrough() {
+        assertEquals("nytimes.com", sanitizeUserFacingSourceLabel("nytimes.com"))
+    }
+
+    @Test
+    fun sanitizeUserFacingSourceLabel_prefixWithAtUri_keepsPrefix() {
+        assertEquals(
+            "Bluesky List",
+            sanitizeUserFacingSourceLabel("Bluesky List: at://did:plc:3ydpg/app.bsky.graph.list/xyz"),
+        )
+    }
+
+    @Test
+    fun sanitizeUserFacingSourceLabel_bareAtUriListContext_returnsBlueskyList() {
+        assertEquals(
+            "Bluesky List",
+            sanitizeUserFacingSourceLabel("at://did:plc:abc/app.bsky.graph.list/xyz"),
+        )
+    }
+
+    @Test
+    fun sanitizeUserFacingSourceLabel_bareAtUriFeedContext_returnsBlueskyFeed() {
+        assertEquals(
+            "Bluesky Feed",
+            sanitizeUserFacingSourceLabel("at://did:plc:abc/app.bsky.feed.generator/xyz"),
+        )
+    }
+
+    @Test
+    fun sanitizeUserFacingSourceLabel_bareAtUriNoContext_returnsBluesky() {
+        assertEquals("Bluesky", sanitizeUserFacingSourceLabel("at://did:plc:abc"))
+    }
+
+    @Test
+    fun sanitizeUserFacingSourceLabel_blankOrNull_returnsNull() {
+        assertEquals(null, sanitizeUserFacingSourceLabel("   "))
+        assertEquals(null, sanitizeUserFacingSourceLabel(null))
+    }
+
     // formatCandidateTimestamp
 
     @Test

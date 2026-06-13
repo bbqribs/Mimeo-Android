@@ -2,9 +2,11 @@ package com.mimeo.android.ui.settings
 
 import android.app.Application
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import android.speech.tts.TextToSpeech
 import android.speech.tts.Voice
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
@@ -43,7 +45,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,8 +53,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -68,6 +67,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Share
@@ -103,9 +104,15 @@ import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.VisualDensityPreference
 import com.mimeo.android.model.VisualThemePreference
+import com.mimeo.android.model.BlueskyAccountConnectionResponse
+import com.mimeo.android.model.BlueskyOperatorStatusResponse
 import com.mimeo.android.model.BlueskySourceDiagnostic
 import com.mimeo.android.ui.bluesky.BlueskyHandleField
+import com.mimeo.android.ui.bluesky.BlueskyHealthState
+import com.mimeo.android.ui.bluesky.BlueskyRecoveryAction
+import com.mimeo.android.ui.bluesky.blueskyPlainStatus
 import com.mimeo.android.ui.bluesky.blueskySourceDisplayName
+import com.mimeo.android.ui.bluesky.resolveBlueskyHealth
 import com.mimeo.android.util.bluesky.normalizeBlueskyHandleInput
 import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.jumpPillBottomPadding
@@ -135,6 +142,22 @@ import com.mimeo.android.ui.theme.toMimeoAccentScheme
 import kotlinx.coroutines.launch
 
 private const val TTS_PREVIEW_PHRASE = "The quick brown fox jumps over the lazy dog."
+
+/**
+ * Hub-and-spoke index entries for Settings. The screen shows this index first; tapping
+ * a row opens that section (a "spoke") with a Back control. Existing behavior and
+ * persistence are unchanged — only the navigation shape differs.
+ */
+internal enum class SettingsSection(val title: String, val subtitle: String) {
+    ACCOUNT("Account & Connection", "Server mode, sign-in, device token, connection test."),
+    READING("Reading", "Reader font, size, line height, and spacing."),
+    PLAYBACK("Playback", "Listening behavior, speed presets, and TTS voice."),
+    APPEARANCE("Appearance", "Theme, accent, and density."),
+    LIBRARY("Library & Downloads", "Save destination, offline downloads, and caching."),
+    AI_SUMMARIES("AI Summaries", "How article summaries work on this server."),
+    BLUESKY("Bluesky", "Connection status, recovery, and feed sources."),
+    DIAGNOSTICS("Diagnostics", "Connectivity tools and advanced diagnostics."),
+}
 
 @Composable
 fun SettingsScreen(
@@ -172,14 +195,16 @@ fun SettingsScreen(
     val playlists by vm.playlists.collectAsState()
     val scrollState = rememberScrollState()
     val actionScope = rememberCoroutineScope()
-    // Support the reader Aa panel's "All reading settings" shortcut: measure the
-    // reading section's scroll offset and jump to it when a request is pending.
+    // Support the reader Aa panel's "All reading settings" shortcut: open the Reading
+    // spoke directly when a request is pending (hub-and-spoke replaces the old scroll
+    // anchor).
     val pendingReadingScroll by vm.pendingSettingsReadingScroll.collectAsState()
-    var settingsViewportTopRootY by remember { mutableFloatStateOf(Float.NaN) }
-    // scrollState.value + the header's root-Y is invariant under scrolling, so
-    // this anchor is stable once measured; the section offset is anchor minus
-    // the viewport top.
-    var readingHeaderAnchorY by remember { mutableFloatStateOf(Float.NaN) }
+    val pendingBlueskySection by vm.pendingSettingsBlueskySection.collectAsState()
+    // Hub-and-spoke selection: null shows the index; a value shows that section.
+    var selectedSection by remember { mutableStateOf<SettingsSection?>(null) }
+    // Reveal the Bluesky connect form for an explicit Connect/Reconnect even when a
+    // (stale) account connection is still reported.
+    var showBlueskyConnectForm by remember { mutableStateOf(false) }
     val showJumpToTop by remember {
         derivedStateOf { shouldShowJumpToTopScroll(scrollState.value, thresholdPx = 220) }
     }
@@ -476,6 +501,7 @@ fun SettingsScreen(
         if (blueskyAccountConnection?.connected == true) {
             blueskyHandle = ""
             blueskyAppPassword = ""
+            showBlueskyConnectForm = false
         }
     }
 
@@ -486,17 +512,36 @@ fun SettingsScreen(
             restoredScrollOffset = true
             return@LaunchedEffect
         }
-        scrollState.scrollTo(settingsScrollOffset)
+        // Only restore offset for the index; spokes always start at the top.
+        if (selectedSection == null) {
+            scrollState.scrollTo(settingsScrollOffset)
+        }
         restoredScrollOffset = true
     }
 
-    LaunchedEffect(pendingReadingScroll, readingHeaderAnchorY, settingsViewportTopRootY) {
+    // The reader's "All reading settings" shortcut opens the Reading spoke directly.
+    LaunchedEffect(pendingReadingScroll) {
         if (!pendingReadingScroll) return@LaunchedEffect
-        val anchor = readingHeaderAnchorY
-        val viewportTop = settingsViewportTopRootY
-        if (anchor.isNaN() || viewportTop.isNaN()) return@LaunchedEffect
-        scrollState.animateScrollTo((anchor - viewportTop).toInt().coerceAtLeast(0))
+        selectedSection = SettingsSection.READING
         vm.consumeSettingsReadingScroll()
+    }
+
+    // The Bluesky browse screen's connect/reconnect action opens the Bluesky spoke.
+    LaunchedEffect(pendingBlueskySection) {
+        if (!pendingBlueskySection) return@LaunchedEffect
+        selectedSection = SettingsSection.BLUESKY
+        showBlueskyConnectForm = true
+        vm.consumeSettingsBlueskySection()
+    }
+
+    // Within a spoke, system back returns to the hub index instead of leaving Settings.
+    BackHandler(enabled = selectedSection != null) {
+        selectedSection = null
+    }
+
+    // Each time the section changes, present it from the top.
+    LaunchedEffect(selectedSection) {
+        scrollState.scrollTo(0)
     }
 
     LaunchedEffect(scrollState) {
@@ -551,7 +596,6 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .onGloballyPositioned { settingsViewportTopRootY = it.positionInRoot().y }
                 .passiveVerticalScrollIndicator(
                     scrollState = scrollState,
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
@@ -560,8 +604,16 @@ fun SettingsScreen(
                 .padding(bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+        val activeSection = selectedSection
+        if (activeSection == null) {
+            SettingsHubIndex(onSelect = { selectedSection = it })
+        }
+        if (activeSection != null) {
+            SettingsSpokeBackHeader(section = activeSection, onBack = { selectedSection = null })
+        }
+        if (activeSection == SettingsSection.ACCOUNT) {
         SettingsSectionHeader(
-            title = "Connection / Server",
+            title = "Account & Connection",
             subtitle = "Choose Local, LAN, or Remote mode. Sign In is recommended; manual token entry replaces this device token.",
         )
         ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
@@ -846,11 +898,19 @@ fun SettingsScreen(
                 }
             }
         }
-        SettingsSectionSeparator()
-
+        }
+        if (activeSection == SettingsSection.BLUESKY) {
         SettingsSectionHeader(
             title = "Bluesky",
-            subtitle = "Connect a Bluesky account for authenticated harvesting, or view scheduler and source diagnostics.",
+            subtitle = "Connect your Bluesky account and check its status. Saving from Bluesky never changes Up Next.",
+        )
+        BlueskyHealthCard(
+            account = blueskyAccountConnection,
+            operatorStatus = blueskyOperatorStatus,
+            loading = blueskyStatusLoading,
+            statusError = blueskyStatusError,
+            onConnectOrReconnect = { showBlueskyConnectForm = true },
+            onTryAgain = { vm.refreshBlueskyStatus() },
         )
 
         var blueskyExplainerExpanded by remember { mutableStateOf(false) }
@@ -960,15 +1020,31 @@ fun SettingsScreen(
                             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                             color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                    // The connect form is shared by first-time Connect and Reconnect
+                    // (re-entering an app password); the recovery action reveals it.
+                    val showConnectForm = account.connected != true || showBlueskyConnectForm
+                    if (showConnectForm) {
                         HorizontalDivider(
                             modifier = Modifier.fillMaxWidth(),
                             color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                             thickness = 1.dp,
                         )
-                        Text(
-                            text = "Connect Bluesky account",
-                            style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = if (account.connected == true) "Reconnect Bluesky account" else "Connect Bluesky account",
+                                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (account.connected == true) {
+                                TextButton(onClick = { showBlueskyConnectForm = false }) {
+                                    Text("Cancel")
+                                }
+                            }
+                        }
                         BlueskyHandleField(
                             value = blueskyHandle,
                             onValueChange = { blueskyHandle = it },
@@ -1109,7 +1185,7 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "Candidate scanner defaults",
+                        text = "Scan limits (advanced)",
                         style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
                         color = if (isV1) mColors.fg else Color.Unspecified,
                         modifier = Modifier.weight(1f),
@@ -1155,7 +1231,7 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = localMaxLinks,
                         onValueChange = { localMaxLinks = it },
-                        label = { Text("Max candidate links (1–${prefs.maxLinksCeiling})") },
+                        label = { Text("Max links (1–${prefs.maxLinksCeiling})") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         enabled = !blueskyScannerPreferencesSaving,
@@ -1209,11 +1285,11 @@ fun SettingsScreen(
                 }
             }
         }
-        SettingsSectionSeparator()
-
+        }
+        if (activeSection == SettingsSection.LIBRARY) {
         SettingsSectionHeader(
-            title = "Saving / Share-sheet",
-            subtitle = "Control where shared links go and how share results are shown.",
+            title = "Library & Downloads",
+            subtitle = "Control where shared links go, how share results are shown, and offline downloads.",
         )
         ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
             Column(
@@ -1300,8 +1376,8 @@ fun SettingsScreen(
                 )
             }
         }
-        SettingsSectionSeparator()
-
+        }
+        if (activeSection == SettingsSection.PLAYBACK) {
         SettingsSectionHeader(
             title = "Playback",
             subtitle = "Session and listening behavior across tabs and reading mode.",
@@ -1753,14 +1829,11 @@ fun SettingsScreen(
                 Text("Defaults: Local=$DEFAULT_LOCAL_BASE_URL, LAN=$DEFAULT_LAN_BASE_URL, Remote=$DEFAULT_REMOTE_BASE_URL (fallback HTTP: $DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL)")
             }
         }
-        SettingsSectionSeparator()
-
+        }
+        if (activeSection == SettingsSection.APPEARANCE) {
         SettingsSectionHeader(
-            title = "Appearance & Reading",
-            subtitle = "Control app-wide appearance, then fine-tune reading layout.",
-            modifier = Modifier.onGloballyPositioned { coords ->
-                readingHeaderAnchorY = scrollState.value + coords.positionInRoot().y
-            },
+            title = "Appearance",
+            subtitle = "Theme, accent, and density.",
         )
         ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
             Column(
@@ -1898,9 +1971,21 @@ fun SettingsScreen(
                     }
                 }
                 DensityPreviewCard(visualDensityPreference, isV1, mColors)
-                HorizontalDivider(
-                    color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                )
+            }
+        }
+        }
+        if (activeSection == SettingsSection.READING) {
+        SettingsSectionHeader(
+            title = "Reading",
+            subtitle = "Reader font, size, line height, and spacing.",
+        )
+        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 Text(
                     text = "Reading",
                     style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
@@ -2059,7 +2144,37 @@ fun SettingsScreen(
                 }
             }
         }
-        SettingsSectionSeparator()
+        }
+        if (activeSection == SettingsSection.AI_SUMMARIES) {
+            SettingsAiSummariesSection()
+        }
+        if (activeSection == SettingsSection.DIAGNOSTICS) {
+        SettingsSectionHeader(
+            title = "Diagnostics",
+            subtitle = "Connectivity tools and advanced diagnostics.",
+        )
+        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = "Connectivity",
+                    style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    color = if (isV1) mColors.fg else Color.Unspecified,
+                )
+                Text(
+                    text = "Run network and server reachability checks, and export a diagnostics report.",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Button(onClick = onOpenDiagnostics) { Text("Open connectivity diagnostics") }
+                }
+            }
+        }
 
         if (BuildConfig.DEBUG) {
             SettingsSectionHeader(
@@ -2244,7 +2359,7 @@ fun SettingsScreen(
                     }
                 }
             }
-            SettingsSectionSeparator()
+        }
         }
     }
 
@@ -2555,6 +2670,243 @@ private fun SettingsSectionHeader(
                 style = if (isV1) mTypography.body else androidx.compose.material3.MaterialTheme.typography.bodySmall,
                 color = if (isV1) mColors.fg2 else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+@Composable
+private fun SettingsHubIndex(onSelect: (SettingsSection) -> Unit) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    SettingsSectionHeader(
+        title = "Settings",
+        subtitle = "Choose a section.",
+    )
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            val sections = SettingsSection.entries
+            sections.forEachIndexed { index, section ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelect(section) }
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = section.title,
+                            style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyLarge,
+                            color = if (isV1) mColors.fg else Color.Unspecified,
+                        )
+                        Text(
+                            text = section.subtitle,
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = if (isV1) mColors.fg2 else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = if (isV1) mColors.fg3 else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (index < sections.lastIndex) {
+                    HorizontalDivider(
+                        color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsSpokeBackHeader(section: SettingsSection, onBack: () -> Unit) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back to all settings",
+                tint = if (isV1) mColors.fg else androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        Text(
+            text = section.title,
+            style = if (isV1) mTypography.title else androidx.compose.material3.MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = if (isV1) mColors.fg else Color.Unspecified,
+        )
+    }
+}
+
+@Composable
+private fun SettingsAiSummariesSection() {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    SettingsSectionHeader(
+        title = "AI Summaries",
+        subtitle = "How article summaries work on this server.",
+    )
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "Article summaries",
+                style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                color = if (isV1) mColors.fg else Color.Unspecified,
+            )
+            Text(
+                text = "Open a readable article, then use the summary action in the reader to " +
+                    "generate or update an AI summary. Summaries are produced by the provider " +
+                    "your server operator configured.",
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SettingsKeyValueLine("Configured by", "Your server operator")
+            Text(
+                text = "Mimeo never stores AI provider keys on this device, and never asks you " +
+                    "to paste one. Summary styles and provider details are managed on the server.",
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BlueskyHealthCard(
+    account: BlueskyAccountConnectionResponse?,
+    operatorStatus: BlueskyOperatorStatusResponse?,
+    loading: Boolean,
+    statusError: String?,
+    onConnectOrReconnect: () -> Unit,
+    onTryAgain: () -> Unit,
+) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    val health = resolveBlueskyHealth(account, operatorStatus)
+    var whatHappenedExpanded by remember { mutableStateOf(false) }
+    val dotColor = when (health.state) {
+        BlueskyHealthState.CONNECTED -> if (isV1) mColors.accent else androidx.compose.material3.MaterialTheme.colorScheme.primary
+        BlueskyHealthState.ACTION_NEEDED -> if (isV1) mColors.danger else androidx.compose.material3.MaterialTheme.colorScheme.error
+        BlueskyHealthState.TEMPORARY_TROUBLE -> Color(0xFFB8860B)
+        else -> if (isV1) mColors.fg3 else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .background(dotColor, CircleShape),
+                )
+                Text(
+                    text = health.title,
+                    style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = if (isV1) mColors.fg else Color.Unspecified,
+                )
+            }
+            health.detail?.let { detail ->
+                Text(
+                    text = detail,
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (loading) {
+                Text(
+                    text = "Checking Bluesky status…",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (!statusError.isNullOrBlank()) {
+                Text(
+                    text = statusError,
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.error,
+                )
+            }
+            val actionLabel = when (health.action) {
+                BlueskyRecoveryAction.CONNECT -> "Connect"
+                BlueskyRecoveryAction.RECONNECT -> "Reconnect"
+                BlueskyRecoveryAction.TRY_AGAIN -> "Try again"
+                BlueskyRecoveryAction.NONE -> null
+            }
+            if (actionLabel != null) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Button(
+                        enabled = !loading,
+                        onClick = {
+                            when (health.action) {
+                                BlueskyRecoveryAction.CONNECT, BlueskyRecoveryAction.RECONNECT -> onConnectOrReconnect()
+                                else -> onTryAgain()
+                            }
+                        },
+                    ) {
+                        Text(actionLabel)
+                    }
+                }
+            }
+            if (operatorStatus != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { whatHappenedExpanded = !whatHappenedExpanded },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "What happened?",
+                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.weight(1f),
+                        color = if (isV1) mColors.fg2 else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = if (whatHappenedExpanded) "Hide" else "Show",
+                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                        color = if (isV1) mColors.accent else androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                    )
+                }
+                AnimatedVisibility(visible = whatHappenedExpanded) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        SettingsKeyValueLine("Last run", blueskyPlainStatus(operatorStatus.lastRunStatus))
+                        SettingsKeyValueLine("Next check", operatorStatus.resolvedNextDue ?: "Not scheduled")
+                        SettingsKeyValueLine("Active sources", operatorStatus.enabledSourceCount?.toString() ?: "0")
+                        SettingsKeyValueLine(
+                            "Scheduler",
+                            blueskyPlainStatus(operatorStatus.state) .takeIf { operatorStatus.state != null }
+                                ?: if (operatorStatus.resolvedSchedulerEnabled == true) "Working normally" else "Paused",
+                        )
+                    }
+                }
+            }
         }
     }
 }

@@ -11,7 +11,7 @@ enum class LibrarySortOption(
     OPENED("Opened", "opened", "desc"),
     PROGRESS("Progress", "progress", "desc"),
     ARCHIVED_AT("Archived", "archived", "desc"),
-    TRASHED_AT("Trashed", "trashed", "desc"),
+    TRASHED_AT("Binned", "trashed", "desc"),
     ;
 
     companion object {

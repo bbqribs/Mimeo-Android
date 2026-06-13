@@ -36,6 +36,26 @@ internal fun blueskySourceDisplayName(resolvedName: String, typeLabel: String?):
     return candidate
 }
 
+/**
+ * Strips raw AT-URIs (at://…) out of a possibly operator-formatted source label so
+ * user-facing surfaces (player title/marquee, source chips) never show them. Keeps a
+ * human prefix when present ("Bluesky List: at://…" → "Bluesky List") and otherwise
+ * falls back to a generic Bluesky label. Non-AT labels (domains, titles) pass through
+ * unchanged. Returns null/blank inputs as null.
+ */
+internal fun sanitizeUserFacingSourceLabel(label: String?): String? {
+    val raw = label?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    val atIndex = raw.indexOf("at://", ignoreCase = true)
+    if (atIndex < 0) return raw
+    val prefix = raw.substring(0, atIndex).trim().trimEnd(':', '-', '·', '—', '/', ' ').trim()
+    return when {
+        prefix.isNotBlank() -> prefix
+        raw.contains("feed", ignoreCase = true) -> "Bluesky Feed"
+        raw.contains("list", ignoreCase = true) -> "Bluesky List"
+        else -> "Bluesky"
+    }
+}
+
 internal fun formatCandidateTimestamp(iso: String): String {
     return runCatching {
         val normalized = iso.replace("Z", "+00:00")

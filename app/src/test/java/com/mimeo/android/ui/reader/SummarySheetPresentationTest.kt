@@ -46,7 +46,7 @@ class SummarySheetPresentationTest {
         val body = summaryOutdatedBody()
 
         assertTrue(title.contains("older prompt"))
-        assertTrue(body.contains("Refresh"))
+        assertTrue(body.contains("Update summary"))
         assertFalse("must not promise automatic regeneration", body.contains("automatic"))
     }
 

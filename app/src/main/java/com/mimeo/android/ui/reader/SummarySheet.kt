@@ -168,7 +168,7 @@ private fun SummaryContent(
                     title = summaryOutdatedTitle(),
                     body = summaryOutdatedBody(),
                 )
-                SummarySecondaryButton("Refresh summary", loading) { onGenerate(true) }
+                SummarySecondaryButton("Update summary", loading) { onGenerate(true) }
             }
         }
         ContentSummaryState.STALE -> {
@@ -178,7 +178,7 @@ private fun SummaryContent(
             )
             SummaryText(summary)
             if (summary.canRequestGeneration()) {
-                SummaryPrimaryButton("Generate updated summary", loading) { onGenerate(false) }
+                SummaryPrimaryButton("Update summary", loading) { onGenerate(false) }
             }
         }
         ContentSummaryState.MISSING -> {
@@ -197,7 +197,7 @@ private fun SummaryContent(
         }
         ContentSummaryState.PENDING -> {
             SummaryMessage(
-                title = "Generating summary",
+                title = "Generating summary…",
                 body = "The server is generating this summary. Tap Check status to see if it's ready.",
             )
             SummarySecondaryButton("Check status", loading, onRefresh)
@@ -208,7 +208,7 @@ private fun SummaryContent(
                 body = summaryFailedBody(summary),
             )
             if (summary.canRequestGeneration()) {
-                SummaryPrimaryButton("Retry", loading) { onGenerate(true) }
+                SummaryPrimaryButton("Try again", loading) { onGenerate(true) }
             }
         }
         ContentSummaryState.UNKNOWN -> {
@@ -273,7 +273,7 @@ internal fun summaryFailedBody(summary: ContentSummaryOut): String {
 internal fun summaryOutdatedTitle(): String = "Summary uses an older prompt"
 
 internal fun summaryOutdatedBody(): String =
-    "A newer summary prompt is available. Tap Refresh to regenerate this summary."
+    "A newer summary prompt is available. Tap Update summary to regenerate this summary."
 
 internal fun summaryDisclaimerText(summary: ContentSummaryOut): String {
     return summary.disclaimer

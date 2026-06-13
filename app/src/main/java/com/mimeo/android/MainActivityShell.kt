@@ -732,6 +732,10 @@ internal fun MainActivityShell(
                                 BlueskyBrowseScreen(
                                     vm = vm,
                                     onOpenItem = shellState.openItemInLocus,
+                                    onOpenConnectionSettings = {
+                                        vm.requestSettingsBlueskySection()
+                                        nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true }
+                                    },
                                     jumpPillBottomClearance = snapBottomClearance,
                                 )
                             }
