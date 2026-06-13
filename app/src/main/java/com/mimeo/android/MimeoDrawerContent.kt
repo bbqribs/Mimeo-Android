@@ -355,13 +355,31 @@ private fun DrawerDestinationItem(
     accentColor: Color,
 ) {
     val isUpNext = destination.route == ROUTE_UP_NEXT
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
     MimeoNavigationDrawerItem(
         icon = { DrawerDestinationIcon(destination.route) },
         label = {
-            Text(
-                text = destination.label,
-                style = rowTextStyle,
-            )
+            if (destination.subtitle != null) {
+                Column {
+                    Text(
+                        text = destination.label,
+                        style = rowTextStyle,
+                    )
+                    Text(
+                        text = destination.subtitle,
+                        style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+                        color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            } else {
+                Text(
+                    text = destination.label,
+                    style = rowTextStyle,
+                )
+            }
         },
         selected = selectedDrawerRoute == destination.route,
         onClick = onClick,

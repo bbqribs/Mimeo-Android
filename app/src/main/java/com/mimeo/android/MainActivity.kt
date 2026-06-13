@@ -274,6 +274,12 @@ internal fun shouldSkipShareRefreshBurst(
 internal data class DrawerDestination(
     val route: String,
     val label: String,
+    /**
+     * Optional secondary line shown under [label] in the drawer. Used to disambiguate
+     * destinations whose names read similarly (e.g. "Smart Queue" vs "Up Next") without
+     * renaming routes or the primary labels.
+     */
+    val subtitle: String? = null,
 )
 
 data class UiSnackbarMessage(
