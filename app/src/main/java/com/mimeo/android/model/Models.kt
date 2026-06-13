@@ -516,6 +516,17 @@ enum class DrawerPanelSide {
     RIGHT,
 }
 
+/**
+ * Which library/queue screen the app opens to from a cold start. Mapped to a navigation
+ * route in the app shell; [UP_NEXT] preserves the historical default destination.
+ */
+@Serializable
+enum class StartupDestination {
+    INBOX,
+    UP_NEXT,
+    SMART_QUEUE,
+}
+
 @Serializable
 enum class ConnectionMode {
     LOCAL,
@@ -610,6 +621,7 @@ data class AppSettings(
     val playerChevronSnapEdge: PlayerChevronSnapEdge = PlayerChevronSnapEdge.HOME,
     val playerChevronEdgeOffset: Float = 0.5f,
     val drawerPanelSide: DrawerPanelSide = DrawerPanelSide.LEFT,
+    val startupDestination: StartupDestination = StartupDestination.UP_NEXT,
 )
 
 /** Default playback speed quick-tap presets shown in the player speed panel. */

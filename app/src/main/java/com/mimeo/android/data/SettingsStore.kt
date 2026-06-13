@@ -39,6 +39,7 @@ import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.ReaderTextAlignOption
+import com.mimeo.android.model.StartupDestination
 import com.mimeo.android.model.VisualDensityPreference
 import com.mimeo.android.model.VisualThemePreference
 import com.mimeo.android.model.decodeSelectedPlaylistId
@@ -142,6 +143,8 @@ class SettingsStore(private val context: Context) {
         floatPreferencesKey("player_chevron_edge_offset")
     private val drawerPanelSideKey: Preferences.Key<String> =
         stringPreferencesKey("drawer_panel_side")
+    private val startupDestinationKey: Preferences.Key<String> =
+        stringPreferencesKey("startup_destination")
     private val queueSnapshotsJsonKey: Preferences.Key<String> =
         stringPreferencesKey("queue_snapshots_json")
     private val pendingManualSavesJsonKey: Preferences.Key<String> =
@@ -238,6 +241,7 @@ class SettingsStore(private val context: Context) {
             drawerPanelSide = prefs[drawerPanelSideKey]
                 ?.let { runCatching { DrawerPanelSide.valueOf(it) }.getOrNull() }
                 ?: DrawerPanelSide.LEFT,
+            startupDestination = parseStartupDestination(prefs[startupDestinationKey]),
         )
     }
 
@@ -356,6 +360,12 @@ class SettingsStore(private val context: Context) {
     suspend fun saveDrawerPanelSide(drawerPanelSide: DrawerPanelSide) {
         context.dataStore.edit { prefs ->
             prefs[drawerPanelSideKey] = drawerPanelSide.name
+        }
+    }
+
+    suspend fun saveStartupDestination(startupDestination: StartupDestination) {
+        context.dataStore.edit { prefs ->
+            prefs[startupDestinationKey] = startupDestination.name
         }
     }
 
@@ -1021,6 +1031,12 @@ class SettingsStore(private val context: Context) {
         return raw
             ?.let { runCatching { AccentSchemePreference.valueOf(it) }.getOrNull() }
             ?: AccentSchemePreference.LILAC
+    }
+
+    internal fun parseStartupDestination(raw: String?): StartupDestination {
+        return raw
+            ?.let { runCatching { StartupDestination.valueOf(it) }.getOrNull() }
+            ?: StartupDestination.UP_NEXT
     }
 
     companion object {
