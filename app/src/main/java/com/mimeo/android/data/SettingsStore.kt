@@ -155,6 +155,8 @@ class SettingsStore(private val context: Context) {
         stringPreferencesKey("playback_segment_index_by_item_json")
     private val connectionTestSuccessJsonKey: Preferences.Key<String> =
         stringPreferencesKey("connection_test_success_json")
+    private val serverIdentityKey: Preferences.Key<String> =
+        stringPreferencesKey("server_identity")
     private val libSortInboxKey: Preferences.Key<String> =
         stringPreferencesKey("lib_sort_inbox")
     private val libSortFavoritesKey: Preferences.Key<String> =
@@ -570,11 +572,24 @@ class SettingsStore(private val context: Context) {
             prefs[connectionModeKey] = connectionMode.name
             prefs[tokenKey] = if (tokenWriteResult.usedLegacyFallback) trimmedToken else ""
             prefs[authTokenVersionKey] = (prefs[authTokenVersionKey] ?: 0) + 1
+            prefs[serverIdentityKey] = normalizeServerIdentity(trimmedBaseUrl)
             when (connectionMode) {
                 ConnectionMode.LOCAL -> prefs[localBaseUrlKey] = trimmedBaseUrl
                 ConnectionMode.LAN -> prefs[lanBaseUrlKey] = trimmedBaseUrl
                 ConnectionMode.REMOTE -> prefs[remoteBaseUrlKey] = trimmedBaseUrl
             }
+        }
+    }
+
+    suspend fun readServerIdentity(): String =
+        context.dataStore.data.first()[serverIdentityKey].orEmpty()
+
+    suspend fun clearServerScopedDataStoreState() {
+        context.dataStore.edit { prefs ->
+            prefs[queueSnapshotsJsonKey] = json.encodeToString(QueueSnapshotState())
+            prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(emptyList())
+            prefs[pendingItemActionsJsonKey] = encodePendingItemActions(emptyList())
+            prefs[playbackSegmentIndexByItemJsonKey] = encodePlaybackSegmentIndexRecords(emptyList())
         }
     }
 

@@ -99,6 +99,9 @@ import com.mimeo.android.data.AppDatabase
 import com.mimeo.android.data.NoActiveContentStore
 import com.mimeo.android.data.QueueFetchResult
 import com.mimeo.android.data.SettingsStore
+import com.mimeo.android.data.ServerIdentityGuardState
+import com.mimeo.android.data.normalizeServerIdentity
+import com.mimeo.android.data.detectServerIdentityMismatch
 import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.DEFAULT_PARAGRAPH_SPACING_PRESETS
@@ -480,6 +483,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val suppressPendingFailureSnackbarsUntilMs = MutableStateFlow(0L)
     private val _signInState = MutableStateFlow<SignInState>(SignInState.Idle)
     val signInState: StateFlow<SignInState> = _signInState.asStateFlow()
+    private val _serverIdentityGuardState =
+        MutableStateFlow<ServerIdentityGuardState>(ServerIdentityGuardState.Idle)
+    val serverIdentityGuardState: StateFlow<ServerIdentityGuardState> =
+        _serverIdentityGuardState.asStateFlow()
     private val _passwordChangeState = MutableStateFlow<PasswordChangeState>(PasswordChangeState.Idle)
     val passwordChangeState: StateFlow<PasswordChangeState> = _passwordChangeState.asStateFlow()
 
@@ -1481,30 +1488,67 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun signIn(serverUrl: String, username: String, password: String) {
         viewModelScope.launch {
-            _signInState.value = SignInState.Loading
-            try {
-                val normalizedBaseUrl = serverUrl.trim().trimEnd('/')
-                val response = apiClient.postAuthToken(
-                    baseUrl = normalizedBaseUrl,
-                    username = username.trim(),
-                    password = password,
-                    deviceName = buildAuthDeviceName(
-                        manufacturer = Build.MANUFACTURER.orEmpty(),
-                        model = Build.MODEL.orEmpty(),
-                    ),
+            val normalizedNewUrl = serverUrl.trim().trimEnd('/')
+            val newIdentity = normalizeServerIdentity(normalizedNewUrl)
+            val storedIdentity = settingsStore.readServerIdentity()
+            if (detectServerIdentityMismatch(storedIdentity, newIdentity)) {
+                _serverIdentityGuardState.value = ServerIdentityGuardState.AwaitingConfirmation(
+                    pendingServerUrl = serverUrl,
+                    pendingUsername = username,
+                    pendingPassword = password,
                 )
-                val connectionMode = inferConnectionModeForBaseUrl(normalizedBaseUrl)
-                settingsStore.saveSignedInSession(
-                    baseUrl = normalizedBaseUrl,
-                    connectionMode = connectionMode,
-                    apiToken = response.token,
-                )
-                authFailureHandledThisSession = false
-                _signInState.value = SignInState.Idle
-                requestNavigation(ROUTE_UP_NEXT)
-            } catch (error: Exception) {
-                _signInState.value = SignInState.Error(resolveSignInErrorMessage(error))
+                return@launch
             }
+            performSignIn(serverUrl, username, password)
+        }
+    }
+
+    fun confirmClearAndSignIn() {
+        val pending = _serverIdentityGuardState.value
+            as? ServerIdentityGuardState.AwaitingConfirmation ?: return
+        _serverIdentityGuardState.value = ServerIdentityGuardState.Idle
+        viewModelScope.launch {
+            clearServerScopedCache()
+            performSignIn(pending.pendingServerUrl, pending.pendingUsername, pending.pendingPassword)
+        }
+    }
+
+    fun dismissServerIdentityGuard() {
+        _serverIdentityGuardState.value = ServerIdentityGuardState.Idle
+    }
+
+    private suspend fun clearServerScopedCache() {
+        database.cachedItemDao().deleteAll()
+        database.pendingProgressDao().deleteAll()
+        database.nowPlayingDao().clear()
+        playerSurfaceContentState.reset()
+        settingsStore.clearServerScopedDataStoreState()
+    }
+
+    private suspend fun performSignIn(serverUrl: String, username: String, password: String) {
+        _signInState.value = SignInState.Loading
+        try {
+            val normalizedBaseUrl = serverUrl.trim().trimEnd('/')
+            val response = apiClient.postAuthToken(
+                baseUrl = normalizedBaseUrl,
+                username = username.trim(),
+                password = password,
+                deviceName = buildAuthDeviceName(
+                    manufacturer = Build.MANUFACTURER.orEmpty(),
+                    model = Build.MODEL.orEmpty(),
+                ),
+            )
+            val connectionMode = inferConnectionModeForBaseUrl(normalizedBaseUrl)
+            settingsStore.saveSignedInSession(
+                baseUrl = normalizedBaseUrl,
+                connectionMode = connectionMode,
+                apiToken = response.token,
+            )
+            authFailureHandledThisSession = false
+            _signInState.value = SignInState.Idle
+            requestNavigation(ROUTE_UP_NEXT)
+        } catch (error: Exception) {
+            _signInState.value = SignInState.Error(resolveSignInErrorMessage(error))
         }
     }
 
