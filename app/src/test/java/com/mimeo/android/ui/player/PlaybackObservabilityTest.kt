@@ -220,57 +220,39 @@ class PlaybackObservabilityTest {
     }
 
     @Test
-    fun readerPlayButtonEnabledWhenDisplayedItemHasContent() {
-        // Previewed earlier-queue / upcoming Up Next item: displayed content is
-        // loaded even though the shared active-playback buffer is empty.
-        assertTrue(readerPlayButtonEnabled(displayedChunkCount = 7))
-    }
-
-    @Test
-    fun readerPlayButtonDisabledWhenDisplayedItemHasNoContent() {
-        assertFalse(readerPlayButtonEnabled(displayedChunkCount = 0))
-    }
-
-    @Test
-    fun promoteDisplayedItemOnPlayForEarlierQueueItem() {
-        // Reader shows an earlier queue/session item while another item is active.
-        val promote = shouldPromoteDisplayedItemOnPlay(
-            displayedItemId = 41,
-            playbackCurrentItemId = 42,
+    fun readerPlayButtonEnabledWhenPreviewedItemHasContentButActiveBufferEmpty() {
+        // Previewing a non-active earlier-queue / upcoming Up Next item: the
+        // displayed buffer is loaded (long-press start target) even though the
+        // shared active-playback buffer is empty. Control must stay enabled so
+        // both the tap (active item) and long-press (displayed item) gestures fire.
+        assertTrue(
+            readerPlayButtonEnabled(
+                displayedChunkCount = 7,
+                activeChunkCount = 0,
+            ),
         )
-
-        assertTrue(promote)
     }
 
     @Test
-    fun promoteDisplayedItemOnPlayForUpcomingUpNextItem() {
-        val promote = shouldPromoteDisplayedItemOnPlay(
-            displayedItemId = 99,
-            playbackCurrentItemId = 42,
+    fun readerPlayButtonEnabledWhenActiveBufferHasContentButDisplayEmpty() {
+        // Active item is controllable (tap target) while a previewed item is still
+        // loading its display buffer.
+        assertTrue(
+            readerPlayButtonEnabled(
+                displayedChunkCount = 0,
+                activeChunkCount = 5,
+            ),
         )
-
-        assertTrue(promote)
     }
 
     @Test
-    fun doNotPromoteDisplayedItemOnPlayForCurrentNowPlayingItem() {
-        // Now Playing item: Play must keep toggling the active item, not promote.
-        val promote = shouldPromoteDisplayedItemOnPlay(
-            displayedItemId = 42,
-            playbackCurrentItemId = 42,
+    fun readerPlayButtonDisabledWhenNeitherBufferHasContent() {
+        assertFalse(
+            readerPlayButtonEnabled(
+                displayedChunkCount = 0,
+                activeChunkCount = 0,
+            ),
         )
-
-        assertFalse(promote)
-    }
-
-    @Test
-    fun doNotPromoteDisplayedItemOnPlayWhenDisplayedItemUnresolved() {
-        val promote = shouldPromoteDisplayedItemOnPlay(
-            displayedItemId = -1,
-            playbackCurrentItemId = 42,
-        )
-
-        assertFalse(promote)
     }
 
     @Test

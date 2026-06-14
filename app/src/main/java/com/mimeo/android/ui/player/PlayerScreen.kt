@@ -551,31 +551,24 @@ internal fun resolveRequestedItemTransitionMode(
 }
 
 /**
- * The Reader's Play button must be enabled whenever the item currently shown on
- * screen has playable content. Previously this was gated on the active-playback
- * chunk buffer, which is empty while previewing a non-active queue/Up Next item
- * (that item's content lives in the preview/display buffer). The empty buffer
- * disabled the whole Play control — including its long-press — so Play/long-press
- * did nothing for earlier-queue and upcoming items. Deriving from the displayed
- * content keeps the Now Playing and history cases identical (their displayed
- * content is the active buffer) while restoring Play for previewed items.
+ * The Reader's Play control must be enabled whenever there is something it can
+ * act on. Per ANDROID_MINIPLAYER_CONTROL_SPEC §3.1, a short tap toggles the
+ * active playback item while a long press starts the item shown in the Reader
+ * (`playLocusItem`). So the control is meaningful when EITHER the active buffer
+ * (tap target) OR the displayed buffer (long-press target) has content.
+ *
+ * Previously this was gated on the active-playback buffer alone, which is empty
+ * while previewing a non-active queue/Up Next item (that item's content lives in
+ * the display/preview buffer). The empty buffer disabled the whole Play control
+ * — including its long-press — so neither tap nor long-press worked for
+ * earlier-queue and upcoming items. Now Playing and history are unaffected:
+ * their displayed content IS the active buffer.
  */
-internal fun readerPlayButtonEnabled(displayedChunkCount: Int): Boolean {
-    return displayedChunkCount > 0
-}
-
-/**
- * Pressing Play on an item that is not the active playback owner should promote
- * that displayed (previewed) item to Now Playing and start it, instead of
- * toggling the unrelated active session item. Long-press already routes through
- * the promote path; this makes the tap match so "Play" starts the readable item
- * on screen for earlier-queue and upcoming Up Next items.
- */
-internal fun shouldPromoteDisplayedItemOnPlay(
-    displayedItemId: Int,
-    playbackCurrentItemId: Int,
+internal fun readerPlayButtonEnabled(
+    displayedChunkCount: Int,
+    activeChunkCount: Int,
 ): Boolean {
-    return displayedItemId > 0 && displayedItemId != playbackCurrentItemId
+    return displayedChunkCount > 0 || activeChunkCount > 0
 }
 
 internal fun shouldSpeakTitleBeforeBody(
@@ -1962,7 +1955,10 @@ fun PlayerScreen(
             canSeek = chunks.isNotEmpty(),
             canMoveBackward = chunks.isNotEmpty(),
             canMoveForward = nextSentencePosition != null,
-            canPlay = readerPlayButtonEnabled(displayChunks.size),
+            canPlay = readerPlayButtonEnabled(
+                displayedChunkCount = displayChunks.size,
+                activeChunkCount = chunks.size,
+            ),
             isPlaying = isSpeaking || isAutoPlaying,
             onSeekToPercent = { targetPercent ->
                 if (chunks.isEmpty()) return@PlayerControlBar
@@ -1990,12 +1986,7 @@ fun PlayerScreen(
                 seekToTargetAndReveal(target)
             },
             onPlayPause = {
-                if (shouldPromoteDisplayedItemOnPlay(locusItemId, currentItemId)) {
-                    // Reader shows a non-active (previewed) earlier-queue or
-                    // upcoming Up Next item: start playback for THAT item by
-                    // promoting it to Now Playing, mirroring long-press Play.
-                    playLocusItem()
-                } else if (isSpeaking || isAutoPlaying) {
+                if (isSpeaking || isAutoPlaying) {
                     stopSpeaking(forceSync = true)
                 } else if (chunks.isNotEmpty()) {
                     val livePosition = normalizedPosition(vm.getPlaybackPosition(currentItemId))
