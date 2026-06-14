@@ -35,6 +35,18 @@ internal fun ReaderSummaryState.isPendingForItem(itemId: Int): Boolean {
 }
 
 /**
+ * Kind-scoped variant of [isPendingForItem]. T-AUX-3 keys the visible reader
+ * summary by (item, kind), so a poll loop started for one mode must stop once the
+ * user switches to a different mode — even on the same item.
+ */
+internal fun ReaderSummaryState.isPendingForItem(itemId: Int, kind: String): Boolean {
+    if (this !is ReaderSummaryState.Ready) return false
+    if (this.itemId != itemId) return false
+    if (this.summary.summaryKind != kind) return false
+    return this.summary.normalizedState() == ContentSummaryState.PENDING
+}
+
+/**
  * Failure reasons that should never trigger or continue polling. These describe
  * the item or the deployment, not a transient server condition, so retrying is
  * pointless and would just waste requests.
@@ -62,8 +74,16 @@ internal val NON_POLLABLE_FAILURE_REASONS: Set<ContentSummaryFailureReason> = se
 internal fun canPublishReaderSummary(activeItemId: Int?, completedItemId: Int): Boolean =
     activeItemId != null && activeItemId == completedItemId
 
-/** A summary generation POST currently in flight, with the force flag it used. */
-internal data class InFlightSummaryRequest(val itemId: Int, val force: Boolean)
+/**
+ * A summary generation POST currently in flight, with the kind and force flag it
+ * used. Kind is part of the identity: a different mode is a genuinely different
+ * request and must never be deduped against an in-flight one for another mode.
+ */
+internal data class InFlightSummaryRequest(
+    val itemId: Int,
+    val force: Boolean,
+    val kind: String = SUMMARY_KIND_ABSTRACT,
+)
 
 /**
  * Decision for a new [requestReaderSummary] call given what is already running.
@@ -101,8 +121,11 @@ internal fun decideSummaryRequest(
     inFlight: InFlightSummaryRequest?,
     requestedItemId: Int,
     requestedForce: Boolean,
+    requestedKind: String = SUMMARY_KIND_ABSTRACT,
 ): SummaryRequestDecision {
-    if (inFlight == null || inFlight.itemId != requestedItemId) {
+    // A request for a different item — or a different mode of the same item — is
+    // never a duplicate of the in-flight one; it targets a distinct summary.
+    if (inFlight == null || inFlight.itemId != requestedItemId || inFlight.kind != requestedKind) {
         return SummaryRequestDecision.PROCEED
     }
     return when {

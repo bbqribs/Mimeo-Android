@@ -420,12 +420,17 @@ enum class ContentSummaryFailureReason {
 
 sealed class ReaderSummaryState {
     object Idle : ReaderSummaryState()
-    data class Loading(val itemId: Int, val previous: ContentSummaryOut? = null) : ReaderSummaryState()
+    data class Loading(
+        val itemId: Int,
+        val kind: String = SUMMARY_KIND_ABSTRACT,
+        val previous: ContentSummaryOut? = null,
+    ) : ReaderSummaryState()
     data class Ready(val itemId: Int, val summary: ContentSummaryOut) : ReaderSummaryState()
     data class Error(
         val itemId: Int,
         val reason: ContentSummaryFailureReason,
         val message: String,
+        val kind: String = SUMMARY_KIND_ABSTRACT,
     ) : ReaderSummaryState()
 }
 

@@ -151,6 +151,10 @@ import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.model.ReaderAppearanceState
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.ReaderSummaryState
+import com.mimeo.android.model.SUMMARY_KIND_ABSTRACT
+import com.mimeo.android.model.SummaryCapabilitiesOut
+import com.mimeo.android.model.SummaryCapabilitiesState
+import com.mimeo.android.model.coerceSelectedKind
 import com.mimeo.android.model.NON_POLLABLE_FAILURE_REASONS
 import com.mimeo.android.model.SUMMARY_POLL_DELAYS_MS
 import com.mimeo.android.model.InFlightSummaryRequest
@@ -392,14 +396,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val progressSyncBadgeState: StateFlow<ProgressSyncBadgeState> = _progressSyncBadgeState.asStateFlow()
     private val _readerSummaryState = MutableStateFlow<ReaderSummaryState>(ReaderSummaryState.Idle)
     val readerSummaryState: StateFlow<ReaderSummaryState> = _readerSummaryState.asStateFlow()
-    // The summary POST currently in flight (item + force flag), used to dedupe
+    // T-AUX-3: backend-owned summary capabilities, fetched lazily and cached here.
+    // Drives the AI Summaries settings spoke and the reader mode selector.
+    private val _summaryCapabilities =
+        MutableStateFlow<SummaryCapabilitiesState>(SummaryCapabilitiesState.Idle)
+    val summaryCapabilities: StateFlow<SummaryCapabilitiesState> = _summaryCapabilities.asStateFlow()
+    // The summary mode the reader is currently showing. Defaults to Standard and
+    // is coerced to a supported kind once capabilities load.
+    private val _selectedSummaryKind = MutableStateFlow(SUMMARY_KIND_ABSTRACT)
+    val selectedSummaryKind: StateFlow<String> = _selectedSummaryKind.asStateFlow()
+    // The summary POST currently in flight (item + kind + force flag), used to dedupe
     // repeat requests and to let force refresh make an explicit, non-silent
     // decision when a non-force request is already running. See decideSummaryRequest.
     private var readerSummaryRequestInFlight: InFlightSummaryRequest? = null
-    // The item the VM most recently committed to showing a summary for. Late
-    // GET/POST completions for a previous item must not publish over this; see
-    // canPublishReaderSummary.
+    // The item + kind the VM most recently committed to showing a summary for. Late
+    // GET/POST completions for a previous item/kind must not publish over this; see
+    // canPublishReaderSummary plus the kind check in canPublishReaderSummaryKind.
     private var activeReaderSummaryItemId: Int? = null
+    private var activeReaderSummaryKind: String = SUMMARY_KIND_ABSTRACT
     // Last force-dedupe decision, recorded for observability/tests so a deferred
     // force refresh is never a silent drop.
     @Volatile
@@ -411,6 +425,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // items or hitting a terminal state cancels it. See ReaderSummaryPolling.kt.
     private var summaryPollingJob: Job? = null
     private var summaryPollingItemId: Int? = null
+    private var summaryPollingKind: String = SUMMARY_KIND_ABSTRACT
 
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
@@ -3696,16 +3711,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    suspend fun loadReaderSummary(itemId: Int): Result<Unit> {
+    /**
+     * Update the selected summary mode and load that kind's summary for [itemId].
+     * The selection is owned by the VM so the settings spoke and reader stay in
+     * sync; an unsupported kind is ignored. Re-selecting the current kind reloads.
+     */
+    suspend fun selectSummaryKind(itemId: Int, kind: String): Result<Unit> {
+        val resolved = kind.trim().ifEmpty { return Result.success(Unit) }
+        _selectedSummaryKind.value = resolved
+        if (itemId <= 0) return Result.success(Unit)
+        return loadReaderSummary(itemId, resolved)
+    }
+
+    suspend fun loadReaderSummary(
+        itemId: Int,
+        kind: String = _selectedSummaryKind.value,
+    ): Result<Unit> {
         if (itemId <= 0) {
             activeReaderSummaryItemId = null
             cancelSummaryPolling()
             _readerSummaryState.value = ReaderSummaryState.Idle
             return Result.success(Unit)
         }
-        // This call commits the reader to itemId; later completions for a prior
-        // item must not publish over it (canPublishReaderSummary).
+        // This call commits the reader to (itemId, kind); later completions for a
+        // prior item/kind must not publish over it (canPublishReaderSummaryKind).
         activeReaderSummaryItemId = itemId
+        activeReaderSummaryKind = kind
         // Any explicit fetch supersedes a scheduled poll tick; we'll restart the
         // poll loop after this call resolves if the result is still PENDING.
         cancelSummaryPolling()
@@ -3713,37 +3744,43 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (current.apiToken.isBlank()) {
             _readerSummaryState.value = ReaderSummaryState.Error(
                 itemId = itemId,
+                kind = kind,
                 reason = ContentSummaryFailureReason.UNAUTHORIZED,
                 message = contentSummaryFailureMessage(ContentSummaryFailureReason.UNAUTHORIZED),
             )
             return Result.failure(IllegalStateException("Token required"))
         }
+        // Only carry forward the previous summary as faint text if it is the same
+        // mode — otherwise a Standard summary would flash under a Brief load.
         val previous = (_readerSummaryState.value as? ReaderSummaryState.Ready)
-            ?.takeIf { it.itemId == itemId }
+            ?.takeIf { it.itemId == itemId && it.summary.summaryKind == kind }
             ?.summary
-        _readerSummaryState.value = ReaderSummaryState.Loading(itemId = itemId, previous = previous)
+        _readerSummaryState.value =
+            ReaderSummaryState.Loading(itemId = itemId, kind = kind, previous = previous)
         return try {
             val summary = repository.getContentSummary(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
                 itemId = itemId,
+                kind = kind,
             )
-            // Reader may have moved on while the GET was in flight.
-            if (!canPublishReaderSummary(activeReaderSummaryItemId, itemId)) {
+            // Reader may have moved on (item or mode) while the GET was in flight.
+            if (!canPublishReaderSummaryKind(itemId, kind)) {
                 return Result.success(Unit)
             }
             _readerSummaryState.value = ReaderSummaryState.Ready(itemId = itemId, summary = summary)
-            maybeStartSummaryPolling(itemId)
+            maybeStartSummaryPolling(itemId, kind)
             Result.success(Unit)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            if (!canPublishReaderSummary(activeReaderSummaryItemId, itemId)) {
+            if (!canPublishReaderSummaryKind(itemId, kind)) {
                 return Result.failure(error)
             }
             val reason = resolveReaderSummaryFailureReason(error)
             _readerSummaryState.value = ReaderSummaryState.Error(
                 itemId = itemId,
+                kind = kind,
                 reason = reason,
                 message = contentSummaryFailureMessage(reason),
             )
@@ -3751,20 +3788,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    suspend fun requestReaderSummary(itemId: Int, force: Boolean = false): Result<Unit> {
+    suspend fun requestReaderSummary(
+        itemId: Int,
+        force: Boolean = false,
+        kind: String = _selectedSummaryKind.value,
+    ): Result<Unit> {
         if (itemId <= 0) return Result.failure(IllegalArgumentException("Item required"))
-        // Dedupe against the in-flight POST. A repeat (same force) is a no-op; a
-        // force refresh arriving over a non-force request is recorded as an
-        // explicit deferred no-op rather than silently dropped (or silently
-        // cancelling an active generation, which is a product decision).
-        val decision = decideSummaryRequest(readerSummaryRequestInFlight, itemId, force)
+        // Dedupe against the in-flight POST. A repeat (same item+kind+force) is a
+        // no-op; a force refresh arriving over a non-force request is recorded as
+        // an explicit deferred no-op rather than silently dropped (or silently
+        // cancelling an active generation, which is a product decision). A request
+        // for a different kind is never a duplicate.
+        val decision = decideSummaryRequest(readerSummaryRequestInFlight, itemId, force, kind)
         lastSummaryRequestDecision = decision
         if (decision != SummaryRequestDecision.PROCEED) {
             return Result.success(Unit)
         }
-        // This call commits the reader to itemId; later completions for a prior
-        // item must not publish over it (canPublishReaderSummary).
+        // This call commits the reader to (itemId, kind); later completions for a
+        // prior item/kind must not publish over it (canPublishReaderSummaryKind).
         activeReaderSummaryItemId = itemId
+        activeReaderSummaryKind = kind
         // Cancel any pending GET-poll loop; the POST below and its follow-up GET
         // (via loadReaderSummary) will restart it if the new state is PENDING.
         cancelSummaryPolling()
@@ -3773,46 +3816,102 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val reason = ContentSummaryFailureReason.UNAUTHORIZED
             _readerSummaryState.value = ReaderSummaryState.Error(
                 itemId = itemId,
+                kind = kind,
                 reason = reason,
                 message = contentSummaryFailureMessage(reason),
             )
             return Result.failure(IllegalStateException("Token required"))
         }
         val previous = (_readerSummaryState.value as? ReaderSummaryState.Ready)
-            ?.takeIf { it.itemId == itemId }
+            ?.takeIf { it.itemId == itemId && it.summary.summaryKind == kind }
             ?.summary
-        _readerSummaryState.value = ReaderSummaryState.Loading(itemId = itemId, previous = previous)
-        readerSummaryRequestInFlight = InFlightSummaryRequest(itemId = itemId, force = force)
+        _readerSummaryState.value =
+            ReaderSummaryState.Loading(itemId = itemId, kind = kind, previous = previous)
+        readerSummaryRequestInFlight =
+            InFlightSummaryRequest(itemId = itemId, force = force, kind = kind)
         return try {
             val requested = repository.requestContentSummary(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
                 itemId = itemId,
                 force = force,
+                kind = kind,
             )
-            // Reader may have moved on while the POST was in flight.
-            if (!canPublishReaderSummary(activeReaderSummaryItemId, itemId)) {
+            // Reader may have moved on (item or mode) while the POST was in flight.
+            if (!canPublishReaderSummaryKind(itemId, kind)) {
                 return Result.success(Unit)
             }
             _readerSummaryState.value = ReaderSummaryState.Ready(itemId = itemId, summary = requested)
-            loadReaderSummary(itemId)
+            loadReaderSummary(itemId, kind)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            if (!canPublishReaderSummary(activeReaderSummaryItemId, itemId)) {
+            if (!canPublishReaderSummaryKind(itemId, kind)) {
                 return Result.failure(error)
             }
             val reason = resolveReaderSummaryFailureReason(error)
             _readerSummaryState.value = ReaderSummaryState.Error(
                 itemId = itemId,
+                kind = kind,
                 reason = reason,
                 message = contentSummaryFailureMessage(reason),
             )
             Result.failure(error)
         } finally {
-            if (readerSummaryRequestInFlight?.itemId == itemId) {
+            val inFlight = readerSummaryRequestInFlight
+            if (inFlight?.itemId == itemId && inFlight.kind == kind) {
                 readerSummaryRequestInFlight = null
             }
+        }
+    }
+
+    /**
+     * Item-and-kind scoped variant of the late-publication guard. A summary
+     * fetch/request may only publish if the reader is still committed to the same
+     * (item, kind) it was started for.
+     */
+    private fun canPublishReaderSummaryKind(completedItemId: Int, completedKind: String): Boolean =
+        canPublishReaderSummary(activeReaderSummaryItemId, completedItemId) &&
+            activeReaderSummaryKind == completedKind
+
+    /**
+     * Fetch the backend summary capabilities and cache them in [summaryCapabilities].
+     * Failures collapse to a display-safe [SummaryCapabilitiesState.Unavailable];
+     * raw errors, payloads, and provider internals are never surfaced.
+     */
+    fun refreshSummaryCapabilities() {
+        viewModelScope.launch { loadSummaryCapabilities() }
+    }
+
+    suspend fun loadSummaryCapabilities(): Result<SummaryCapabilitiesOut> {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            _summaryCapabilities.value = SummaryCapabilitiesState.Unavailable(
+                contentSummaryFailureMessage(ContentSummaryFailureReason.UNAUTHORIZED),
+            )
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        if (_summaryCapabilities.value !is SummaryCapabilitiesState.Ready) {
+            _summaryCapabilities.value = SummaryCapabilitiesState.Loading
+        }
+        return try {
+            val capabilities = repository.getSummaryCapabilities(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+            )
+            _summaryCapabilities.value = SummaryCapabilitiesState.Ready(capabilities)
+            // Keep the active selection valid against what the backend supports.
+            _selectedSummaryKind.value =
+                capabilities.coerceSelectedKind(_selectedSummaryKind.value)
+            Result.success(capabilities)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            val reason = resolveReaderSummaryFailureReason(error)
+            _summaryCapabilities.value = SummaryCapabilitiesState.Unavailable(
+                contentSummaryFailureMessage(reason),
+            )
+            Result.failure(error)
         }
     }
 
@@ -3829,22 +3928,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      *
      * No POSTs are ever issued from this loop; only [Repository.getContentSummary].
      */
-    private fun maybeStartSummaryPolling(itemId: Int) {
+    private fun maybeStartSummaryPolling(itemId: Int, kind: String) {
         val state = _readerSummaryState.value
-        if (!state.isPendingForItem(itemId)) {
-            if (summaryPollingItemId == itemId) cancelSummaryPolling()
+        if (!state.isPendingForItem(itemId, kind)) {
+            if (summaryPollingItemId == itemId && summaryPollingKind == kind) cancelSummaryPolling()
             return
         }
-        if (summaryPollingJob?.isActive == true && summaryPollingItemId == itemId) {
+        if (summaryPollingJob?.isActive == true &&
+            summaryPollingItemId == itemId &&
+            summaryPollingKind == kind
+        ) {
             return
         }
         cancelSummaryPolling()
         summaryPollingItemId = itemId
+        summaryPollingKind = kind
         summaryPollingJob = viewModelScope.launch {
             try {
                 for (delayMs in SUMMARY_POLL_DELAYS_MS) {
                     delay(delayMs)
-                    if (!_readerSummaryState.value.isPendingForItem(itemId)) break
+                    if (!_readerSummaryState.value.isPendingForItem(itemId, kind)) break
                     val current = settings.value
                     if (current.apiToken.isBlank()) break
                     val polled = try {
@@ -3852,6 +3955,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             baseUrl = current.baseUrl,
                             token = current.apiToken,
                             itemId = itemId,
+                            kind = kind,
                         )
                     } catch (error: CancellationException) {
                         throw error
@@ -3860,6 +3964,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         if (reason in NON_POLLABLE_FAILURE_REASONS) {
                             _readerSummaryState.value = ReaderSummaryState.Error(
                                 itemId = itemId,
+                                kind = kind,
                                 reason = reason,
                                 message = contentSummaryFailureMessage(reason),
                             )
@@ -3870,7 +3975,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         continue
                     }
                     // Ensure we're still the active poller before publishing.
-                    if (summaryPollingItemId != itemId) break
+                    if (summaryPollingItemId != itemId || summaryPollingKind != kind) break
                     _readerSummaryState.value = ReaderSummaryState.Ready(
                         itemId = itemId,
                         summary = polled,
@@ -3878,7 +3983,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     if (polled.normalizedState() != ContentSummaryState.PENDING) break
                 }
             } finally {
-                if (summaryPollingItemId == itemId) {
+                if (summaryPollingItemId == itemId && summaryPollingKind == kind) {
                     summaryPollingItemId = null
                     summaryPollingJob = null
                 }

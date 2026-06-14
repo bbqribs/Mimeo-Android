@@ -170,6 +170,8 @@ import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.playlists.PlaylistPickerChoice
 import com.mimeo.android.ui.playlists.PlaylistPickerDialog
 import com.mimeo.android.ui.reader.ReaderBody
+import com.mimeo.android.model.SummaryCapabilitiesState
+import com.mimeo.android.model.availableModes
 import com.mimeo.android.ui.reader.SummarySheet
 import com.mimeo.android.ui.reader.extractReaderPreservedLinks
 import com.mimeo.android.ui.reader.READER_CHUNK_SEPARATOR
@@ -945,6 +947,8 @@ fun PlayerScreen(
     val queueOffline by vm.queueOffline.collectAsState()
     val syncBadgeState by vm.progressSyncBadgeState.collectAsState()
     val readerSummaryState by vm.readerSummaryState.collectAsState()
+    val summaryCapabilities by vm.summaryCapabilities.collectAsState()
+    val selectedSummaryKind by vm.selectedSummaryKind.collectAsState()
     val settings by vm.settings.collectAsState()
     val playbackResumeStateReady by vm.playbackResumeStateReady.collectAsState()
     val locusContentMode = settings.locusContentMode
@@ -2437,6 +2441,7 @@ fun PlayerScreen(
                                             onOpenSummary = {
                                                 overflowExpanded = false
                                                 showSummarySheet = true
+                                                vm.refreshSummaryCapabilities()
                                                 actionScope.launch {
                                                     vm.loadReaderSummary(locusActionItemId)
                                                 }
@@ -2511,9 +2516,20 @@ fun PlayerScreen(
     }
 
     if (showSummarySheet) {
+        val summaryModes = (summaryCapabilities as? SummaryCapabilitiesState.Ready)
+            ?.capabilities
+            ?.availableModes()
+            .orEmpty()
         SummarySheet(
             state = readerSummaryState,
             itemId = locusActionItemId,
+            modes = summaryModes,
+            selectedKind = selectedSummaryKind,
+            onSelectKind = { kind ->
+                actionScope.launch {
+                    vm.selectSummaryKind(locusActionItemId, kind)
+                }
+            },
             onDismiss = { showSummarySheet = false },
             onRefresh = {
                 actionScope.launch {

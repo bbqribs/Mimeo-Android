@@ -75,6 +75,7 @@ import androidx.compose.material.icons.outlined.Share
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material.icons.outlined.Info
 import com.mimeo.android.AppViewModel
+import com.mimeo.android.model.SummaryCapabilitiesState
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.ConnectionMode
@@ -2194,7 +2195,7 @@ fun SettingsScreen(
         }
         }
         if (activeSection == SettingsSection.AI_SUMMARIES) {
-            SettingsAiSummariesSection()
+            SettingsAiSummariesSection(vm)
         }
         if (activeSection == SettingsSection.DIAGNOSTICS) {
         SettingsSectionHeader(
@@ -2804,10 +2805,11 @@ private fun SettingsSpokeBackHeader(section: SettingsSection, onBack: () -> Unit
 }
 
 @Composable
-private fun SettingsAiSummariesSection() {
-    val isV1 = LocalMimeoV1Active.current
-    val mColors = LocalMimeoColorTokens.current
-    val mTypography = LocalMimeoTypographyTokens.current
+private fun SettingsAiSummariesSection(vm: AppViewModel) {
+    val capabilitiesState by vm.summaryCapabilities.collectAsState()
+    LaunchedEffect(Unit) {
+        vm.refreshSummaryCapabilities()
+    }
     SettingsSectionHeader(
         title = "AI Summaries",
         subtitle = "How article summaries work on this server.",
@@ -2822,25 +2824,92 @@ private fun SettingsAiSummariesSection() {
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = "Article summaries",
-                style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                color = if (isV1) mColors.fg else Color.Unspecified,
-            )
-            Text(
-                text = "Open a readable article, then use the summary action in the reader to " +
-                    "generate or update an AI summary. Summaries are produced by the provider " +
-                    "your server operator configured.",
-                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            SettingsKeyValueLine("Configured by", "Your server operator")
-            Text(
-                text = "Mimeo never stores AI provider keys on this device, and never asks you " +
-                    "to paste one. Summary styles and provider details are managed on the server.",
-                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            when (val state = capabilitiesState) {
+                is SummaryCapabilitiesState.Ready ->
+                    AiSummariesCapabilitiesContent(aiSummariesSettingsViewData(state.capabilities))
+                is SummaryCapabilitiesState.Unavailable ->
+                    AiSummariesStatusMessage(
+                        title = "Summary status unavailable",
+                        body = state.message,
+                        onRetry = { vm.refreshSummaryCapabilities() },
+                    )
+                else ->
+                    AiSummariesStatusMessage(
+                        title = "Checking summary settings…",
+                        body = "Reading what your server allows.",
+                        onRetry = null,
+                    )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiSummariesCapabilitiesContent(data: AiSummariesSettingsViewData) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    Text(
+        text = "Article summaries",
+        style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+        color = if (isV1) mColors.fg else Color.Unspecified,
+    )
+    SettingsKeyValueLine("Status", data.statusLabel)
+    data.providerLine?.let { SettingsKeyValueLine("Provider", it) }
+    data.modelLine?.let { SettingsKeyValueLine("Model", it) }
+    data.dailyLimitLine?.let { SettingsKeyValueLine("Daily limit", it) }
+    if (data.modeLabels.isNotEmpty()) {
+        SettingsKeyValueLine("Summary styles", data.modeLabels.joinToString(", "))
+    }
+    data.defaultModeLabel?.let { SettingsKeyValueLine("Default style", it) }
+    Text(
+        text = if (data.enabled) {
+            "Open a readable article, then use the summary action in the reader to " +
+                "generate or update an AI summary. Summary styles and provider details " +
+                "are configured by your server."
+        } else {
+            "Summaries are turned off on your server right now. Your server operator " +
+                "manages whether summaries are available."
+        },
+        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    SettingsKeyValueLine("Configured by", "Your server")
+    Text(
+        text = data.disclaimer,
+        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text(
+        text = "Mimeo never stores AI provider keys on this device, and never asks you " +
+            "to paste one. Provider settings and prompts are managed on the server.",
+        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun AiSummariesStatusMessage(
+    title: String,
+    body: String,
+    onRetry: (() -> Unit)?,
+) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    Text(
+        text = title,
+        style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+        color = if (isV1) mColors.fg else Color.Unspecified,
+    )
+    Text(
+        text = body,
+        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    if (onRetry != null) {
+        TextButton(onClick = onRetry) {
+            Text("Try again")
         }
     }
 }
