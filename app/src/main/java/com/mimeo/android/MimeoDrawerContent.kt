@@ -44,6 +44,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,6 +56,7 @@ import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
 import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
 import com.mimeo.android.ui.theme.LocalMimeoV1Active
+import com.mimeo.android.ui.theme.destinationAccentColor
 
 @Composable
 internal fun MimeoDrawerContent(
@@ -80,6 +82,13 @@ internal fun MimeoDrawerContent(
     var playlistsExpanded by remember(selectedDrawerRoute) { mutableStateOf(onPlaylistDetail) }
     var smartPlaylistsExpanded by remember(selectedDrawerRoute) { mutableStateOf(onSmartPlaylistDetail) }
     val drawerBackground = if (isV1) mColors.surface else MaterialTheme.colorScheme.surface
+    // Per-destination accent bases for icon/selected-state tinting. Neutral destinations
+    // fall back to the standard foreground so the drawer stays calm and readable.
+    val darkDrawerSurface = drawerBackground.luminance() < 0.5f
+    val neutralAccent = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface
+    val primaryAccent = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary
+    val playlistsAccent = destinationAccentColor("playlist/", neutralAccent, primaryAccent, darkDrawerSurface)
+    val settingsAccent = destinationAccentColor(ROUTE_SETTINGS, neutralAccent, primaryAccent, darkDrawerSurface)
     val drawerItemColorsV1 = NavigationDrawerItemDefaults.colors(
         selectedContainerColor = Color.Transparent,
         unselectedContainerColor = Color.Transparent,
@@ -144,7 +153,12 @@ internal fun MimeoDrawerContent(
                             itemShape = mShapes.item,
                             itemColors = drawerItemColorsV1,
                             legacyColors = drawerSelectedColorsLegacy,
-                            accentColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
+                            accentColor = destinationAccentColor(
+                                destination.route,
+                                neutralAccent,
+                                primaryAccent,
+                                darkDrawerSurface,
+                            ),
                         )
                     }
                     HorizontalDivider(
@@ -157,6 +171,7 @@ internal fun MimeoDrawerContent(
                         onClick = { playlistsExpanded = !playlistsExpanded },
                         isV1 = isV1,
                         textStyle = rowTextStyle,
+                        titleColor = playlistsAccent,
                         colors = drawerItemColorsV1,
                         shape = mShapes.item,
                     )
@@ -169,6 +184,7 @@ internal fun MimeoDrawerContent(
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.PlaylistPlay,
                                         contentDescription = null,
+                                        tint = if (selected) playlistsAccent else playlistsAccent.copy(alpha = 0.82f),
                                     )
                                 },
                                 label = {
@@ -182,6 +198,7 @@ internal fun MimeoDrawerContent(
                                             overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f),
                                             style = rowTextStyle,
+                                            color = playlistsAccent,
                                         )
                                         if (count > 0) {
                                             Text(
@@ -200,7 +217,7 @@ internal fun MimeoDrawerContent(
                                 v1Shape = mShapes.item,
                                 v1Colors = drawerItemColorsV1,
                                 legacyColors = drawerSelectedColorsLegacy,
-                                selectedRailColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
+                                selectedRailColor = playlistsAccent,
                             )
                         }
                         MimeoNavigationDrawerItem(
@@ -234,6 +251,7 @@ internal fun MimeoDrawerContent(
                         onClick = { smartPlaylistsExpanded = !smartPlaylistsExpanded },
                         isV1 = isV1,
                         textStyle = rowTextStyle,
+                        titleColor = playlistsAccent,
                         colors = drawerItemColorsV1,
                         shape = mShapes.item,
                     )
@@ -245,6 +263,7 @@ internal fun MimeoDrawerContent(
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.PlaylistPlay,
                                         contentDescription = null,
+                                        tint = if (selected) playlistsAccent else playlistsAccent.copy(alpha = 0.82f),
                                     )
                                 },
                                 label = {
@@ -254,6 +273,7 @@ internal fun MimeoDrawerContent(
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                             style = rowTextStyle,
+                                            color = playlistsAccent,
                                         )
                                         Text(
                                             text = "Live dynamic",
@@ -269,7 +289,7 @@ internal fun MimeoDrawerContent(
                                 v1Shape = mShapes.item,
                                 v1Colors = drawerItemColorsV1,
                                 legacyColors = drawerSelectedColorsLegacy,
-                                selectedRailColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
+                                selectedRailColor = playlistsAccent,
                             )
                         }
                         MimeoNavigationDrawerItem(
@@ -307,7 +327,12 @@ internal fun MimeoDrawerContent(
                             itemShape = mShapes.item,
                             itemColors = drawerItemColorsV1,
                             legacyColors = drawerSelectedColorsLegacy,
-                            accentColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
+                            accentColor = destinationAccentColor(
+                                destination.route,
+                                neutralAccent,
+                                primaryAccent,
+                                darkDrawerSurface,
+                            ),
                         )
                     }
                 }
@@ -315,27 +340,30 @@ internal fun MimeoDrawerContent(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant,
                 )
+                val settingsSelected = selectedDrawerRoute == ROUTE_SETTINGS
                 MimeoNavigationDrawerItem(
                     icon = {
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = null,
+                            tint = if (settingsSelected) settingsAccent else settingsAccent.copy(alpha = 0.82f),
                         )
                     },
                     label = {
                         Text(
                             text = "Settings",
                             style = rowTextStyle,
+                            color = settingsAccent,
                         )
                     },
-                    selected = selectedDrawerRoute == ROUTE_SETTINGS,
+                    selected = settingsSelected,
                     onClick = onSettingsClick,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
                     isV1 = isV1,
                     v1Shape = mShapes.item,
                     v1Colors = drawerItemColorsV1,
                     legacyColors = drawerSelectedColorsLegacy,
-                    selectedRailColor = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
+                    selectedRailColor = settingsAccent,
                 )
             }
         }
@@ -355,16 +383,19 @@ private fun DrawerDestinationItem(
     accentColor: Color,
 ) {
     val isUpNext = destination.route == ROUTE_UP_NEXT
+    val selected = selectedDrawerRoute == destination.route
+    val iconTint = if (selected) accentColor else accentColor.copy(alpha = 0.82f)
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
     MimeoNavigationDrawerItem(
-        icon = { DrawerDestinationIcon(destination.route) },
+        icon = { DrawerDestinationIcon(destination.route, iconTint) },
         label = {
             if (destination.subtitle != null) {
                 Column {
                     Text(
                         text = destination.label,
                         style = rowTextStyle,
+                        color = accentColor,
                     )
                     Text(
                         text = destination.subtitle,
@@ -378,10 +409,11 @@ private fun DrawerDestinationItem(
                 Text(
                     text = destination.label,
                     style = rowTextStyle,
+                    color = accentColor,
                 )
             }
         },
-        selected = selectedDrawerRoute == destination.route,
+        selected = selected,
         onClick = onClick,
         modifier = Modifier
             .padding(horizontal = 12.dp, vertical = 2.dp)
@@ -404,43 +436,50 @@ private fun DrawerDestinationItem(
 }
 
 @Composable
-private fun DrawerDestinationIcon(route: String) {
+private fun DrawerDestinationIcon(route: String, tint: Color) {
     when (route) {
         ROUTE_UP_NEXT -> Icon(
             painter = painterResource(id = R.drawable.msr_chevron_right_24),
             contentDescription = null,
+            tint = tint,
             modifier = Modifier.size(28.dp),
         )
 
         ROUTE_INBOX -> Icon(
             imageVector = Icons.Default.Inbox,
             contentDescription = null,
+            tint = tint,
         )
 
         ROUTE_FAVORITES -> Icon(
             imageVector = Icons.Default.Star,
             contentDescription = null,
+            tint = tint,
         )
 
         ROUTE_ARCHIVE -> Icon(
             imageVector = Icons.Default.Archive,
             contentDescription = null,
+            tint = tint,
         )
 
         ROUTE_BIN -> Icon(
             imageVector = Icons.Default.Delete,
             contentDescription = null,
+            tint = tint,
         )
 
         ROUTE_SMART_QUEUE -> Icon(
             imageVector = Icons.AutoMirrored.Filled.PlaylistPlay,
             contentDescription = null,
+            tint = tint,
         )
 
         ROUTE_BLUESKY_BROWSE -> Icon(
+            // [tint] resolves to the Bluesky brand blue via the central accent mapping.
             painter = painterResource(id = R.drawable.ic_bluesky_butterfly_24),
             contentDescription = null,
-            tint = BlueskyBrandBlue,
+            tint = tint,
         )
     }
 }
@@ -452,6 +491,7 @@ private fun DrawerGroupHeader(
     onClick: () -> Unit,
     isV1: Boolean,
     textStyle: TextStyle,
+    titleColor: Color,
     colors: NavigationDrawerItemColors,
     shape: androidx.compose.ui.graphics.Shape,
 ) {
@@ -460,6 +500,7 @@ private fun DrawerGroupHeader(
             Text(
                 text = title,
                 style = textStyle,
+                color = titleColor,
             )
         },
         badge = {
@@ -569,5 +610,3 @@ private fun Modifier.selectedRail(selected: Boolean, color: Color): Modifier {
         )
     }
 }
-
-private val BlueskyBrandBlue = Color(0xFF1185FE)

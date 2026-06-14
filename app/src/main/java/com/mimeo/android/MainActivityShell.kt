@@ -46,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Dp
@@ -83,6 +84,7 @@ import com.mimeo.android.ui.signin.SignInScreen
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
 import com.mimeo.android.ui.theme.LocalMimeoV1Active
+import com.mimeo.android.ui.theme.destinationAccentColor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -409,6 +411,16 @@ internal fun MainActivityShell(
                         )
                     }
                     if (libraryShellVisible) {
+                        // Lightweight destination accent for the centralized screen title.
+                        // Neutral destinations resolve back to the standard foreground, so
+                        // only Smart Queue / Playlists / Bluesky / Up Next / Settings tint.
+                        val titleSurface = if (isV1) mColors.bg else MaterialTheme.colorScheme.background
+                        val titleColor = destinationAccentColor(
+                            route = selectedDrawerRoute,
+                            neutral = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
+                            primary = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
+                            darkSurface = titleSurface.luminance() < 0.5f,
+                        )
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -428,7 +440,7 @@ internal fun MainActivityShell(
                             Text(
                                 text = drawerRouteLabel(selectedDrawerRoute, playlists, smartPlaylists),
                                 style = if (isV1) mTypography.title else MaterialTheme.typography.titleMedium,
-                                color = if (isV1) mColors.fg else Color.Unspecified,
+                                color = titleColor,
                             )
                         }
                     }
