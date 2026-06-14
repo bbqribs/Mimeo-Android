@@ -1873,7 +1873,12 @@ fun PlayerScreen(
                 autoPlayAfterLoad = true,
             )
             actionScope.launch {
-                vm.setNowPlayingCurrentItem(locusItemId)
+                // Route the session pointer by the item's actual location
+                // (queue/upcoming, history, or external). setNowPlayingCurrentItem
+                // alone only handles queue items and would no-op for a history
+                // item, leaving the engine and session pointing at different
+                // items.
+                vm.promoteReaderItemToNowPlaying(locusItemId)
             }
             onOpenItem(locusItemId)
             onShowSnackbar("Playing item shown in Locus", null, null)

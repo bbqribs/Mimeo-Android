@@ -313,6 +313,35 @@ internal fun shouldReplayCompletedItem(furthestPercent: Int): Boolean {
     return furthestPercent >= DONE_PERCENT_THRESHOLD
 }
 
+/**
+ * Where a Reader-promoted item currently lives in the Now Playing session. The
+ * session mutation needed to make it the current item differs by location:
+ * items already in the queue use the current-index move; history items must be
+ * pulled out of history; anything else has to be inserted. Picking the wrong
+ * one (e.g. treating a history item as a queue item) silently no-ops and leaves
+ * the engine playing the promoted item while the session pointer still points at
+ * the prior active item.
+ */
+internal enum class ReaderPromoteRoute {
+    SessionItem,
+    HistoryItem,
+    ExternalItem,
+    None,
+}
+
+internal fun classifyReaderPromoteRoute(
+    itemId: Int,
+    inSessionItems: Boolean,
+    inHistory: Boolean,
+): ReaderPromoteRoute {
+    if (itemId <= 0) return ReaderPromoteRoute.None
+    return when {
+        inSessionItems -> ReaderPromoteRoute.SessionItem
+        inHistory -> ReaderPromoteRoute.HistoryItem
+        else -> ReaderPromoteRoute.ExternalItem
+    }
+}
+
 internal fun resolveNextPlaylistScopedSessionIndex(
     session: NowPlayingSession,
     currentId: Int,
