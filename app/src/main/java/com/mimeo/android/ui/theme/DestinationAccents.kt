@@ -41,7 +41,9 @@ internal enum class DestinationAccentRole {
  */
 private val SmartQueueGreenLight = Color(0xFF2E7A4F)
 private val SmartQueueGreenDark = Color(0xFF72C99A)
-private val PlaylistsTurquoiseLight = Color(0xFF0E7C86)
+// Light turquoise is tuned to clear 4.5:1 against the light drawer surface so it is
+// safe for normal-weight label text (the drawer playlist titles), not just icons.
+private val PlaylistsTurquoiseLight = Color(0xFF0C7480)
 private val PlaylistsTurquoiseDark = Color(0xFF5CD0D8)
 
 /**

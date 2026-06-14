@@ -171,6 +171,7 @@ internal fun MimeoDrawerContent(
                         onClick = { playlistsExpanded = !playlistsExpanded },
                         isV1 = isV1,
                         textStyle = rowTextStyle,
+                        titleColor = playlistsAccent,
                         colors = drawerItemColorsV1,
                         shape = mShapes.item,
                     )
@@ -197,6 +198,7 @@ internal fun MimeoDrawerContent(
                                             overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f),
                                             style = rowTextStyle,
+                                            color = playlistsAccent,
                                         )
                                         if (count > 0) {
                                             Text(
@@ -249,6 +251,7 @@ internal fun MimeoDrawerContent(
                         onClick = { smartPlaylistsExpanded = !smartPlaylistsExpanded },
                         isV1 = isV1,
                         textStyle = rowTextStyle,
+                        titleColor = playlistsAccent,
                         colors = drawerItemColorsV1,
                         shape = mShapes.item,
                     )
@@ -270,6 +273,7 @@ internal fun MimeoDrawerContent(
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                             style = rowTextStyle,
+                                            color = playlistsAccent,
                                         )
                                         Text(
                                             text = "Live dynamic",
@@ -484,6 +488,7 @@ private fun DrawerGroupHeader(
     onClick: () -> Unit,
     isV1: Boolean,
     textStyle: TextStyle,
+    titleColor: Color,
     colors: NavigationDrawerItemColors,
     shape: androidx.compose.ui.graphics.Shape,
 ) {
@@ -492,6 +497,7 @@ private fun DrawerGroupHeader(
             Text(
                 text = title,
                 style = textStyle,
+                color = titleColor,
             )
         },
         badge = {
