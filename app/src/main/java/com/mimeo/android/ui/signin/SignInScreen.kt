@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
@@ -21,6 +22,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import com.mimeo.android.data.ServerIdentityGuardState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,10 +44,13 @@ fun SignInScreen(
     initialServerUrl: String,
     initialAutoDownloadEnabled: Boolean,
     signInState: SignInState,
+    serverIdentityGuardState: ServerIdentityGuardState = ServerIdentityGuardState.Idle,
     onSignIn: (serverUrl: String, username: String, password: String) -> Unit,
     onAutoDownloadChanged: (Boolean) -> Unit,
     onOpenAdvancedSettings: () -> Unit,
     onClearError: () -> Unit,
+    onConfirmClearAndSignIn: () -> Unit = {},
+    onDismissServerIdentityGuard: () -> Unit = {},
 ) {
     val availablePresets = remember { availableSignInPresets() }
     var serverPreset by rememberSaveable { mutableStateOf(inferSignInPreset(defaultSignInServerUrl(initialServerUrl))) }
@@ -250,6 +256,29 @@ fun SignInScreen(
                 )
             }
         }
+    }
+
+    if (serverIdentityGuardState is ServerIdentityGuardState.AwaitingConfirmation) {
+        AlertDialog(
+            onDismissRequest = onDismissServerIdentityGuard,
+            title = { Text("Different Mimeo server") },
+            text = {
+                Text(
+                    "This looks like a different Mimeo server.\n\n" +
+                        "Clear local cached items and pending progress before continuing?",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = onConfirmClearAndSignIn) {
+                    Text("Clear and continue")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissServerIdentityGuard) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 

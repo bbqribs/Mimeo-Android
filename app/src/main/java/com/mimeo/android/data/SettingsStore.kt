@@ -155,6 +155,8 @@ class SettingsStore(private val context: Context) {
         stringPreferencesKey("playback_segment_index_by_item_json")
     private val connectionTestSuccessJsonKey: Preferences.Key<String> =
         stringPreferencesKey("connection_test_success_json")
+    private val serverIdentityKey: Preferences.Key<String> =
+        stringPreferencesKey("server_identity")
     private val libSortInboxKey: Preferences.Key<String> =
         stringPreferencesKey("lib_sort_inbox")
     private val libSortFavoritesKey: Preferences.Key<String> =
@@ -570,11 +572,45 @@ class SettingsStore(private val context: Context) {
             prefs[connectionModeKey] = connectionMode.name
             prefs[tokenKey] = if (tokenWriteResult.usedLegacyFallback) trimmedToken else ""
             prefs[authTokenVersionKey] = (prefs[authTokenVersionKey] ?: 0) + 1
+            prefs[serverIdentityKey] = normalizeServerIdentity(trimmedBaseUrl)
             when (connectionMode) {
                 ConnectionMode.LOCAL -> prefs[localBaseUrlKey] = trimmedBaseUrl
                 ConnectionMode.LAN -> prefs[lanBaseUrlKey] = trimmedBaseUrl
                 ConnectionMode.REMOTE -> prefs[remoteBaseUrlKey] = trimmedBaseUrl
             }
+        }
+    }
+
+    suspend fun readServerIdentity(): String =
+        context.dataStore.data.first()[serverIdentityKey].orEmpty()
+
+    /**
+     * One-time backfill so the cache guard protects sessions that were already
+     * signed in before the server-identity record existed. If no identity is
+     * stored yet but a token and base URL are present, stamp the current server
+     * as the established baseline. No-op once an identity exists or when signed out.
+     */
+    suspend fun backfillServerIdentityIfNeeded() {
+        val prefs = context.dataStore.data.first()
+        if (!prefs[serverIdentityKey].isNullOrBlank()) return
+        val storedBaseUrl = prefs[baseUrlKey]?.trim().orEmpty()
+        if (storedBaseUrl.isBlank()) return
+        val legacyToken = prefs[tokenKey]?.trim().orEmpty()
+        val token = authTokenStorage.readToken().ifBlank { legacyToken }
+        if (token.isBlank()) return
+        context.dataStore.edit { mutablePrefs ->
+            if (mutablePrefs[serverIdentityKey].isNullOrBlank()) {
+                mutablePrefs[serverIdentityKey] = normalizeServerIdentity(storedBaseUrl)
+            }
+        }
+    }
+
+    suspend fun clearServerScopedDataStoreState() {
+        context.dataStore.edit { prefs ->
+            prefs[queueSnapshotsJsonKey] = json.encodeToString(QueueSnapshotState())
+            prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(emptyList())
+            prefs[pendingItemActionsJsonKey] = encodePendingItemActions(emptyList())
+            prefs[playbackSegmentIndexByItemJsonKey] = encodePlaybackSegmentIndexRecords(emptyList())
         }
     }
 
@@ -1046,6 +1082,14 @@ class SettingsStore(private val context: Context) {
 
     internal suspend fun clearAllSettingsForTesting() {
         context.dataStore.edit { prefs -> prefs.clear() }
+    }
+
+    internal suspend fun clearServerIdentityForTesting() {
+        context.dataStore.edit { prefs -> prefs.remove(serverIdentityKey) }
+    }
+
+    internal suspend fun setBaseUrlForTesting(baseUrl: String) {
+        context.dataStore.edit { prefs -> prefs[baseUrlKey] = baseUrl.trim() }
     }
 }
 

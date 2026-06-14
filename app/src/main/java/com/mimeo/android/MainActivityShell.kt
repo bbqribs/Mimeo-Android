@@ -80,6 +80,7 @@ import com.mimeo.android.ui.queue.SmartQueueScreen
 import com.mimeo.android.ui.bluesky.BlueskyBrowseScreen
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
 import com.mimeo.android.ui.settings.SettingsScreen
+import com.mimeo.android.data.ServerIdentityGuardState
 import com.mimeo.android.ui.signin.SignInScreen
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
@@ -144,6 +145,7 @@ internal fun MainActivityShell(
     val playlists by vm.playlists.collectAsState()
     val smartPlaylists by vm.smartPlaylists.collectAsState()
     val signInState by vm.signInState.collectAsState()
+    val serverIdentityGuardState by vm.serverIdentityGuardState.collectAsState()
     val inboxItems by vm.inboxItems.collectAsState()
     val favoriteItems by vm.favoriteItems.collectAsState()
     val archivedItems by vm.archivedItems.collectAsState()
@@ -465,10 +467,13 @@ internal fun MainActivityShell(
                                     initialServerUrl = settings.baseUrl,
                                     initialAutoDownloadEnabled = settings.autoDownloadSavedArticles,
                                     signInState = signInState,
+                                    serverIdentityGuardState = serverIdentityGuardState,
                                     onSignIn = vm::signIn,
                                     onAutoDownloadChanged = vm::saveAutoDownloadSavedArticles,
                                     onOpenAdvancedSettings = { nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true } },
                                     onClearError = vm::clearSignInError,
+                                    onConfirmClearAndSignIn = vm::confirmClearAndSignIn,
+                                    onDismissServerIdentityGuard = vm::dismissServerIdentityGuard,
                                 )
                             }
                             composable(ROUTE_INBOX) {
