@@ -5957,6 +5957,39 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _nowPlayingSession.value = repository.setCurrentIndex(idx) ?: session.copy(currentIndex = idx)
     }
 
+    /**
+     * Make any Reader-displayed item the Now Playing current item, regardless of
+     * where it lives in the session. [setNowPlayingCurrentItem] only relocates
+     * items already in `session.items`; a history item (in `historyItems`) or an
+     * item not in the session at all would silently no-op, leaving the engine
+     * playing the promoted item while the session pointer still referenced the
+     * prior active item. That divergence reverted Now Playing and blanked the
+     * Reader once playback later paused. This routes the session mutation by the
+     * item's actual location. It does not start playback — callers open and
+     * auto-play the item via the engine.
+     */
+    suspend fun promoteReaderItemToNowPlaying(itemId: Int) {
+        val session = nowPlayingSession.value ?: return
+        val route = classifyReaderPromoteRoute(
+            itemId = itemId,
+            inSessionItems = session.items.any { it.itemId == itemId },
+            inHistory = session.historyItems.any { it.itemId == itemId },
+        )
+        when (route) {
+            ReaderPromoteRoute.SessionItem -> setNowPlayingCurrentItem(itemId)
+            ReaderPromoteRoute.HistoryItem -> {
+                val updated = repository.moveHistoryItemToCurrent(itemId) ?: return
+                applySessionSnapshot(updated, preserveExistingPositions = true)
+            }
+            ReaderPromoteRoute.ExternalItem -> {
+                val item = allQueueActionItems().firstOrNull { it.itemId == itemId } ?: return
+                val updated = repository.playNowInSession(item)
+                applySessionSnapshot(updated, preserveExistingPositions = true)
+            }
+            ReaderPromoteRoute.None -> return
+        }
+    }
+
     suspend fun nextSessionItemId(currentId: Int): Int? {
         val session = getOrCreateNowPlayingSession(currentId) ?: return null
         val idx = session.items.indexOfFirst { it.itemId == currentId }.let { if (it >= 0) it else session.currentIndex }

@@ -220,6 +220,42 @@ class PlaybackObservabilityTest {
     }
 
     @Test
+    fun readerPlayButtonEnabledWhenPreviewedItemHasContentButActiveBufferEmpty() {
+        // Previewing a non-active earlier-queue / upcoming Up Next item: the
+        // displayed buffer is loaded (long-press start target) even though the
+        // shared active-playback buffer is empty. Control must stay enabled so
+        // both the tap (active item) and long-press (displayed item) gestures fire.
+        assertTrue(
+            readerPlayButtonEnabled(
+                displayedChunkCount = 7,
+                activeChunkCount = 0,
+            ),
+        )
+    }
+
+    @Test
+    fun readerPlayButtonEnabledWhenActiveBufferHasContentButDisplayEmpty() {
+        // Active item is controllable (tap target) while a previewed item is still
+        // loading its display buffer.
+        assertTrue(
+            readerPlayButtonEnabled(
+                displayedChunkCount = 0,
+                activeChunkCount = 5,
+            ),
+        )
+    }
+
+    @Test
+    fun readerPlayButtonDisabledWhenNeitherBufferHasContent() {
+        assertFalse(
+            readerPlayButtonEnabled(
+                displayedChunkCount = 0,
+                activeChunkCount = 0,
+            ),
+        )
+    }
+
+    @Test
     fun applyVoiceSettingsWhenRequestedVoiceChanges() {
         val apply = shouldApplyVoiceSettings(
             lastAppliedVoiceName = "en-us-x-sfg#male_1-local",

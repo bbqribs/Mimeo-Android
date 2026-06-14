@@ -550,6 +550,27 @@ internal fun resolveRequestedItemTransitionMode(
     }
 }
 
+/**
+ * The Reader's Play control must be enabled whenever there is something it can
+ * act on. Per ANDROID_MINIPLAYER_CONTROL_SPEC §3.1, a short tap toggles the
+ * active playback item while a long press starts the item shown in the Reader
+ * (`playLocusItem`). So the control is meaningful when EITHER the active buffer
+ * (tap target) OR the displayed buffer (long-press target) has content.
+ *
+ * Previously this was gated on the active-playback buffer alone, which is empty
+ * while previewing a non-active queue/Up Next item (that item's content lives in
+ * the display/preview buffer). The empty buffer disabled the whole Play control
+ * — including its long-press — so neither tap nor long-press worked for
+ * earlier-queue and upcoming items. Now Playing and history are unaffected:
+ * their displayed content IS the active buffer.
+ */
+internal fun readerPlayButtonEnabled(
+    displayedChunkCount: Int,
+    activeChunkCount: Int,
+): Boolean {
+    return displayedChunkCount > 0 || activeChunkCount > 0
+}
+
 internal fun shouldSpeakTitleBeforeBody(
     enabled: Boolean,
     title: String?,
@@ -1852,7 +1873,12 @@ fun PlayerScreen(
                 autoPlayAfterLoad = true,
             )
             actionScope.launch {
-                vm.setNowPlayingCurrentItem(locusItemId)
+                // Route the session pointer by the item's actual location
+                // (queue/upcoming, history, or external). setNowPlayingCurrentItem
+                // alone only handles queue items and would no-op for a history
+                // item, leaving the engine and session pointing at different
+                // items.
+                vm.promoteReaderItemToNowPlaying(locusItemId)
             }
             onOpenItem(locusItemId)
             onShowSnackbar("Playing item shown in Locus", null, null)
@@ -1934,7 +1960,10 @@ fun PlayerScreen(
             canSeek = chunks.isNotEmpty(),
             canMoveBackward = chunks.isNotEmpty(),
             canMoveForward = nextSentencePosition != null,
-            canPlay = chunks.isNotEmpty(),
+            canPlay = readerPlayButtonEnabled(
+                displayedChunkCount = displayChunks.size,
+                activeChunkCount = chunks.size,
+            ),
             isPlaying = isSpeaking || isAutoPlaying,
             onSeekToPercent = { targetPercent ->
                 if (chunks.isEmpty()) return@PlayerControlBar
