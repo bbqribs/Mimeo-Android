@@ -353,6 +353,7 @@ internal fun MimeoDrawerContent(
                         Text(
                             text = "Settings",
                             style = rowTextStyle,
+                            color = settingsAccent,
                         )
                     },
                     selected = settingsSelected,
@@ -394,6 +395,7 @@ private fun DrawerDestinationItem(
                     Text(
                         text = destination.label,
                         style = rowTextStyle,
+                        color = accentColor,
                     )
                     Text(
                         text = destination.subtitle,
@@ -407,6 +409,7 @@ private fun DrawerDestinationItem(
                 Text(
                     text = destination.label,
                     style = rowTextStyle,
+                    color = accentColor,
                 )
             }
         },
