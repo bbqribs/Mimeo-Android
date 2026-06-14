@@ -674,6 +674,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             settingsStore.migrateLegacyTokenIfNeeded()
+            settingsStore.backfillServerIdentityIfNeeded()
             var previous = _settings.value
             var firstSettingsEmission = true
             settingsStore.settingsFlow.collect { next ->
