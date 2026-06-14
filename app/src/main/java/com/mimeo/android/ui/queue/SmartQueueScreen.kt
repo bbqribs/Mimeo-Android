@@ -101,6 +101,7 @@ fun SmartQueueScreen(
 
     LibraryItemsScreen(
         title = "Smart Queue",
+        pullToRefreshEnabled = true,
         items = queueItems,
         loading = loading,
         emptyMessage = if (searchQuery.isBlank()) {

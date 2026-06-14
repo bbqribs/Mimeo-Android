@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -50,6 +51,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipBox
@@ -203,6 +205,9 @@ fun LibraryItemsScreen(
     onPlayFromHere: ((itemsFromHere: List<PlaybackQueueItem>, selectedItemId: Int) -> Unit)? = null,
     onLoadMore: (() -> Unit)? = null,
     loadingMore: Boolean = false,
+    // Opt-in swipe-down-to-refresh. Off by default so screens with drag-reorder
+    // (Smart Queue) are never wrapped; the four library lists enable it explicitly.
+    pullToRefreshEnabled: Boolean = false,
     jumpPillBottomClearance: Dp = 0.dp,
 ) {
     val isV1 = LocalMimeoV1Active.current
@@ -738,14 +743,13 @@ fun LibraryItemsScreen(
         empty = if (clientSideSearch) searchedItems.isEmpty() else items.isEmpty(),
         emptyContent = { DefaultListSurfaceMessage(emptyMessage) },
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .passiveVerticalScrollIndicator(
-                    listState = listState,
-                    color = if (isV1) mColors.fg4 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
-                ),
-        ) {
+        val surfaceModifier = Modifier
+            .fillMaxSize()
+            .passiveVerticalScrollIndicator(
+                listState = listState,
+                color = if (isV1) mColors.fg4 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
+            )
+        val listSurfaceContent: @Composable BoxScope.() -> Unit = {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 state = listState,
@@ -935,6 +939,19 @@ fun LibraryItemsScreen(
                     },
                 )
             }
+        }
+        // Pull-to-refresh wraps the list only where opted in and outside selection mode,
+        // so it never competes with drag-reorder (Smart Queue, which never opts in) or
+        // multi-select gestures. The indicator tracks the existing refresh state machine.
+        if (pullToRefreshEnabled && !selectionActive) {
+            PullToRefreshBox(
+                isRefreshing = refreshActionState == RefreshActionVisualState.Refreshing,
+                onRefresh = { actionScope.launch { refreshListContent() } },
+                modifier = surfaceModifier,
+                content = listSurfaceContent,
+            )
+        } else {
+            Box(modifier = surfaceModifier, content = listSurfaceContent)
         }
     }
     if (showBatchPlaylistPicker && onBatchAddToPlaylist != null) {

@@ -134,8 +134,8 @@ internal fun MainActivityShell(
             DrawerDestination(ROUTE_FAVORITES, "Favorites"),
             DrawerDestination(ROUTE_ARCHIVE, "Archive"),
             DrawerDestination(ROUTE_BIN, "Bin"),
-            DrawerDestination(ROUTE_SMART_QUEUE, "Smart Queue"),
-            DrawerDestination(ROUTE_UP_NEXT, "Up Next"),
+            DrawerDestination(ROUTE_SMART_QUEUE, "Smart Queue", "Your saved reading queue"),
+            DrawerDestination(ROUTE_UP_NEXT, "Up Next", "Now playing session"),
             DrawerDestination(ROUTE_BLUESKY_BROWSE, "Bluesky"),
         )
     }
@@ -468,6 +468,7 @@ internal fun MainActivityShell(
                                 }
                                 LibraryItemsScreen(
                                     title = "Inbox",
+                                    pullToRefreshEnabled = true,
                                     items = inboxItems,
                                     loading = loading,
                                     emptyMessage = "No inbox items.",
@@ -534,6 +535,7 @@ internal fun MainActivityShell(
                                 }
                                 LibraryItemsScreen(
                                     title = "Favorites",
+                                    pullToRefreshEnabled = true,
                                     items = favoriteItems,
                                     loading = loading,
                                     emptyMessage = "No favorite items.",
@@ -599,6 +601,7 @@ internal fun MainActivityShell(
                                 }
                                 LibraryItemsScreen(
                                     title = "Archive",
+                                    pullToRefreshEnabled = true,
                                     items = archivedItems,
                                     loading = loading,
                                     emptyMessage = "No archived items.",
@@ -663,6 +666,7 @@ internal fun MainActivityShell(
                                 }
                                 LibraryItemsScreen(
                                     title = "Bin",
+                                    pullToRefreshEnabled = true,
                                     items = binItems,
                                     loading = loading,
                                     emptyMessage = "Bin is empty.",
