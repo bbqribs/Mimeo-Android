@@ -220,6 +220,60 @@ class PlaybackObservabilityTest {
     }
 
     @Test
+    fun readerPlayButtonEnabledWhenDisplayedItemHasContent() {
+        // Previewed earlier-queue / upcoming Up Next item: displayed content is
+        // loaded even though the shared active-playback buffer is empty.
+        assertTrue(readerPlayButtonEnabled(displayedChunkCount = 7))
+    }
+
+    @Test
+    fun readerPlayButtonDisabledWhenDisplayedItemHasNoContent() {
+        assertFalse(readerPlayButtonEnabled(displayedChunkCount = 0))
+    }
+
+    @Test
+    fun promoteDisplayedItemOnPlayForEarlierQueueItem() {
+        // Reader shows an earlier queue/session item while another item is active.
+        val promote = shouldPromoteDisplayedItemOnPlay(
+            displayedItemId = 41,
+            playbackCurrentItemId = 42,
+        )
+
+        assertTrue(promote)
+    }
+
+    @Test
+    fun promoteDisplayedItemOnPlayForUpcomingUpNextItem() {
+        val promote = shouldPromoteDisplayedItemOnPlay(
+            displayedItemId = 99,
+            playbackCurrentItemId = 42,
+        )
+
+        assertTrue(promote)
+    }
+
+    @Test
+    fun doNotPromoteDisplayedItemOnPlayForCurrentNowPlayingItem() {
+        // Now Playing item: Play must keep toggling the active item, not promote.
+        val promote = shouldPromoteDisplayedItemOnPlay(
+            displayedItemId = 42,
+            playbackCurrentItemId = 42,
+        )
+
+        assertFalse(promote)
+    }
+
+    @Test
+    fun doNotPromoteDisplayedItemOnPlayWhenDisplayedItemUnresolved() {
+        val promote = shouldPromoteDisplayedItemOnPlay(
+            displayedItemId = -1,
+            playbackCurrentItemId = 42,
+        )
+
+        assertFalse(promote)
+    }
+
+    @Test
     fun applyVoiceSettingsWhenRequestedVoiceChanges() {
         val apply = shouldApplyVoiceSettings(
             lastAppliedVoiceName = "en-us-x-sfg#male_1-local",

@@ -550,6 +550,34 @@ internal fun resolveRequestedItemTransitionMode(
     }
 }
 
+/**
+ * The Reader's Play button must be enabled whenever the item currently shown on
+ * screen has playable content. Previously this was gated on the active-playback
+ * chunk buffer, which is empty while previewing a non-active queue/Up Next item
+ * (that item's content lives in the preview/display buffer). The empty buffer
+ * disabled the whole Play control — including its long-press — so Play/long-press
+ * did nothing for earlier-queue and upcoming items. Deriving from the displayed
+ * content keeps the Now Playing and history cases identical (their displayed
+ * content is the active buffer) while restoring Play for previewed items.
+ */
+internal fun readerPlayButtonEnabled(displayedChunkCount: Int): Boolean {
+    return displayedChunkCount > 0
+}
+
+/**
+ * Pressing Play on an item that is not the active playback owner should promote
+ * that displayed (previewed) item to Now Playing and start it, instead of
+ * toggling the unrelated active session item. Long-press already routes through
+ * the promote path; this makes the tap match so "Play" starts the readable item
+ * on screen for earlier-queue and upcoming Up Next items.
+ */
+internal fun shouldPromoteDisplayedItemOnPlay(
+    displayedItemId: Int,
+    playbackCurrentItemId: Int,
+): Boolean {
+    return displayedItemId > 0 && displayedItemId != playbackCurrentItemId
+}
+
 internal fun shouldSpeakTitleBeforeBody(
     enabled: Boolean,
     title: String?,
@@ -1934,7 +1962,7 @@ fun PlayerScreen(
             canSeek = chunks.isNotEmpty(),
             canMoveBackward = chunks.isNotEmpty(),
             canMoveForward = nextSentencePosition != null,
-            canPlay = chunks.isNotEmpty(),
+            canPlay = readerPlayButtonEnabled(displayChunks.size),
             isPlaying = isSpeaking || isAutoPlaying,
             onSeekToPercent = { targetPercent ->
                 if (chunks.isEmpty()) return@PlayerControlBar
@@ -1962,7 +1990,12 @@ fun PlayerScreen(
                 seekToTargetAndReveal(target)
             },
             onPlayPause = {
-                if (isSpeaking || isAutoPlaying) {
+                if (shouldPromoteDisplayedItemOnPlay(locusItemId, currentItemId)) {
+                    // Reader shows a non-active (previewed) earlier-queue or
+                    // upcoming Up Next item: start playback for THAT item by
+                    // promoting it to Now Playing, mirroring long-press Play.
+                    playLocusItem()
+                } else if (isSpeaking || isAutoPlaying) {
                     stopSpeaking(forceSync = true)
                 } else if (chunks.isNotEmpty()) {
                     val livePosition = normalizedPosition(vm.getPlaybackPosition(currentItemId))
