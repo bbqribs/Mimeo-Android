@@ -12,8 +12,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -32,10 +34,12 @@ import androidx.compose.ui.unit.sp
 import com.mimeo.android.model.ContentSummaryOut
 import com.mimeo.android.model.ContentSummaryState
 import com.mimeo.android.model.ReaderSummaryState
+import com.mimeo.android.model.SummaryModeOut
 import com.mimeo.android.model.canRefreshOutdatedSummary
 import com.mimeo.android.model.canRequestGeneration
 import com.mimeo.android.model.contentSummaryFailureMessage
 import com.mimeo.android.model.contentSummaryFailureReasonFromCode
+import com.mimeo.android.model.defaultLabelForKind
 import com.mimeo.android.model.normalizedState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,6 +50,9 @@ fun SummarySheet(
     onDismiss: () -> Unit,
     onRefresh: () -> Unit,
     onGenerate: (force: Boolean) -> Unit,
+    modes: List<SummaryModeOut> = emptyList(),
+    selectedKind: String = "",
+    onSelectKind: (String) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val loading = state is ReaderSummaryState.Loading && state.itemId == itemId
@@ -77,6 +84,14 @@ fun SummarySheet(
                     Text(if (loading) "Checking" else "Recheck")
                 }
             }
+            if (summaryModeSelectorVisible(modes)) {
+                SummaryModeSelector(
+                    modes = modes,
+                    selectedKind = selectedKind,
+                    enabled = !loading,
+                    onSelectKind = onSelectKind,
+                )
+            }
             HorizontalDivider()
             SummarySheetBody(
                 state = state,
@@ -92,6 +107,41 @@ fun SummarySheet(
                     Text("Close")
                 }
             }
+        }
+    }
+}
+
+/**
+ * The mode selector only earns its space when the backend advertises more than
+ * one summary mode. A single-mode (or empty) deployment keeps the legacy
+ * single-summary layout untouched.
+ */
+internal fun summaryModeSelectorVisible(modes: List<SummaryModeOut>): Boolean =
+    modes.count { it.kind.isNotBlank() } > 1
+
+internal fun summaryModeChipLabel(mode: SummaryModeOut): String =
+    mode.label.takeIf { it.isNotBlank() } ?: defaultLabelForKind(mode.kind)
+
+@Composable
+private fun SummaryModeSelector(
+    modes: List<SummaryModeOut>,
+    selectedKind: String,
+    enabled: Boolean,
+    onSelectKind: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        modes.filter { it.kind.isNotBlank() }.forEach { mode ->
+            FilterChip(
+                selected = mode.kind == selectedKind,
+                onClick = { if (mode.kind != selectedKind) onSelectKind(mode.kind) },
+                enabled = enabled,
+                label = { Text(summaryModeChipLabel(mode)) },
+            )
         }
     }
 }

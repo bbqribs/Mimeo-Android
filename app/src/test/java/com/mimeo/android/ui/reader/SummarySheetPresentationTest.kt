@@ -1,12 +1,46 @@
 package com.mimeo.android.ui.reader
 
 import com.mimeo.android.model.ContentSummaryOut
+import com.mimeo.android.model.SummaryModeOut
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SummarySheetPresentationTest {
+
+    @Test
+    fun modeSelectorHiddenForZeroOrOneMode() {
+        assertFalse(summaryModeSelectorVisible(emptyList()))
+        assertFalse(summaryModeSelectorVisible(listOf(SummaryModeOut(kind = "abstract", label = "Standard"))))
+        // Blank kinds do not count toward the threshold.
+        assertFalse(
+            summaryModeSelectorVisible(
+                listOf(
+                    SummaryModeOut(kind = "abstract", label = "Standard"),
+                    SummaryModeOut(kind = "", label = "Bogus"),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun modeSelectorShownForMultipleModes() {
+        assertTrue(
+            summaryModeSelectorVisible(
+                listOf(
+                    SummaryModeOut(kind = "abstract", label = "Standard"),
+                    SummaryModeOut(kind = "brief", label = "Brief"),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun chipLabelFallsBackToTitleCasedSlug() {
+        assertEquals("Brief", summaryModeChipLabel(SummaryModeOut(kind = "brief", label = "Brief")))
+        assertEquals("Key points", summaryModeChipLabel(SummaryModeOut(kind = "key_points", label = "")))
+    }
     @Test
     fun unavailableCopyUsesBackendReasonCodes() {
         val disabled = summary(state = "missing", failureReason = "summaries_disabled")

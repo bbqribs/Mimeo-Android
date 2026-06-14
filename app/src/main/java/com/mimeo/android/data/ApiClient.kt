@@ -25,6 +25,7 @@ import com.mimeo.android.model.BlueskyPickerResponse
 import com.mimeo.android.model.BlueskySourceInfo
 import com.mimeo.android.model.ContentSummaryOut
 import com.mimeo.android.model.ContentSummaryRequest
+import com.mimeo.android.model.SummaryCapabilitiesOut
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaybackQueueResponse
@@ -421,13 +422,26 @@ class ApiClient(
         executeJson(request) { payload -> json.decodeFromString<ArticleSummary>(payload) }
     }
 
+    suspend fun getSummaryCapabilities(
+        baseUrl: String,
+        token: String,
+    ): SummaryCapabilitiesOut = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/summary/capabilities"))
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<SummaryCapabilitiesOut>(payload) }
+    }
+
     suspend fun getContentSummary(
         baseUrl: String,
         token: String,
         itemId: Int,
+        kind: String? = null,
     ): ContentSummaryOut = withContext(Dispatchers.IO) {
         val request = Request.Builder()
-            .url(resolveUrl(baseUrl, "/items/$itemId/summary"))
+            .url(resolveUrl(baseUrl, "/items/$itemId/summary${summaryKindQuery(kind)}"))
             .header("Authorization", "Bearer $token")
             .get()
             .build()
@@ -439,11 +453,14 @@ class ApiClient(
         token: String,
         itemId: Int,
         force: Boolean = false,
+        kind: String? = null,
     ): ContentSummaryOut = withContext(Dispatchers.IO) {
+        // Kind is sent as a query param (backend accepts it on the POST); the body
+        // keeps its existing shape so the no-kind path stays byte-for-byte compatible.
         val body = json.encodeToString(ContentSummaryRequest(force = force))
             .toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
-            .url(resolveUrl(baseUrl, "/items/$itemId/summary"))
+            .url(resolveUrl(baseUrl, "/items/$itemId/summary${summaryKindQuery(kind)}"))
             .header("Authorization", "Bearer $token")
             .post(body)
             .build()
@@ -1262,6 +1279,17 @@ class ApiClient(
         val cleanBase = baseUrl.trim().trimEnd('/')
         val cleanPath = if (path.startsWith('/')) path else "/$path"
         return "$cleanBase$cleanPath"
+    }
+
+    /**
+     * Build the optional `?kind=` query for summary requests. Blank/null kinds
+     * yield an empty string so the URL is identical to the legacy no-kind path.
+     */
+    private fun summaryKindQuery(kind: String?): String {
+        val trimmed = kind?.trim().orEmpty()
+        if (trimmed.isEmpty()) return ""
+        val encoded = java.net.URLEncoder.encode(trimmed, "UTF-8")
+        return "?kind=$encoded"
     }
 
     private inline fun <T> executeJson(

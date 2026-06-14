@@ -148,8 +148,56 @@ class ReaderSummaryPollingTest {
         )
     }
 
-    private fun summary(state: String): ContentSummaryOut = ContentSummaryOut(
+    // --- T-AUX-3: per-kind request + polling -------------------------------
+
+    @Test
+    fun differentKindForSameItemIsNeverDeduped() {
+        // A Brief request must proceed even while a Standard request is in flight
+        // for the same item — they target distinct per-kind summaries.
+        val abstractInFlight = InFlightSummaryRequest(itemId = 1, force = false, kind = "abstract")
+        assertEquals(
+            SummaryRequestDecision.PROCEED,
+            decideSummaryRequest(
+                inFlight = abstractInFlight,
+                requestedItemId = 1,
+                requestedForce = false,
+                requestedKind = "brief",
+            ),
+        )
+    }
+
+    @Test
+    fun sameKindSameForceIsStillDeduped() {
+        val briefInFlight = InFlightSummaryRequest(itemId = 1, force = true, kind = "brief")
+        assertEquals(
+            SummaryRequestDecision.DEDUPE_NO_OP,
+            decideSummaryRequest(
+                inFlight = briefInFlight,
+                requestedItemId = 1,
+                requestedForce = true,
+                requestedKind = "brief",
+            ),
+        )
+    }
+
+    @Test
+    fun isPendingForItemIsKindScoped() {
+        val pendingBrief = ReaderSummaryState.Ready(
+            itemId = 7,
+            summary = summary("pending", summaryKind = "brief"),
+        )
+        assertTrue(pendingBrief.isPendingForItem(7, "brief"))
+        // Same item, wrong mode -> poll loop for "abstract" must not keep ticking.
+        assertFalse(pendingBrief.isPendingForItem(7, "abstract"))
+        assertFalse(pendingBrief.isPendingForItem(9, "brief"))
+    }
+
+    private fun summary(
+        state: String,
+        summaryKind: String = "abstract",
+    ): ContentSummaryOut = ContentSummaryOut(
         itemId = 1,
         state = state,
+        summaryKind = summaryKind,
     )
 }
