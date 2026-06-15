@@ -245,7 +245,10 @@ private fun sourceLineFor(rawSource: String?): String? =
 private fun keyLineFor(status: AiProviderConfigStatusOut): String? {
     if (!status.keyPresent) return null
     val last4 = status.keyLast4?.trim().orEmpty()
-    return if (last4.matches(Regex("""[A-Za-z0-9]{1,4}"""))) {
+    // Allow the alphanumerics plus the `-`/`_` that real provider key tails use
+    // (e.g. Gemini "3_2Y"), but stay bounded to <=4 chars so a misbehaving
+    // backend can never echo a long/garbage value as if it were a key tail.
+    return if (last4.matches(Regex("""[A-Za-z0-9_-]{1,4}"""))) {
         "Key: stored (ending $last4)"
     } else {
         "Key: stored"

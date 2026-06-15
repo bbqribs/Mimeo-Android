@@ -108,7 +108,12 @@ class AiProviderStatusEnrichmentTest {
             "Key: stored",
             aiProviderStatusEnrichment(status(keyLast4 = null))?.keyLine,
         )
-        // Malformed last4 is not echoed; falls back to generic stored line.
+        // Real provider tails may contain `_`/`-` (e.g. Gemini "3_2Y").
+        assertEquals(
+            "Key: stored (ending 3_2Y)",
+            aiProviderStatusEnrichment(status(keyLast4 = "3_2Y"))?.keyLine,
+        )
+        // Over-length / malformed last4 is not echoed; falls back to generic line.
         assertEquals(
             "Key: stored",
             aiProviderStatusEnrichment(status(keyLast4 = "sk-secrettail"))?.keyLine,
