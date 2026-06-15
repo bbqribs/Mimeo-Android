@@ -2863,18 +2863,18 @@ private fun AiSummariesCapabilitiesContent(data: AiSummariesSettingsViewData) {
     }
     data.defaultModeLabel?.let { SettingsKeyValueLine("Default style", it) }
     Text(
-        text = if (data.enabled) {
-            "Open a readable article, then use the summary action in the reader to " +
-                "generate or update an AI summary. Summary styles and provider details " +
-                "are configured by your server."
-        } else {
-            "Summaries are turned off on your server right now. Your server operator " +
-                "manages whether summaries are available."
-        },
+        text = data.guidanceMessage,
         style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
         color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    SettingsKeyValueLine("Configured by", "Your server")
+    data.configureOnWebMessage?.let { message ->
+        Text(
+            text = message,
+            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    SettingsKeyValueLine("Configured by", data.configuredByLine)
     Text(
         text = data.disclaimer,
         style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
