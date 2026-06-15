@@ -1,6 +1,7 @@
 package com.mimeo.android.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import com.mimeo.android.ROUTE_ARCHIVE
 import com.mimeo.android.ROUTE_BIN
 import com.mimeo.android.ROUTE_BLUESKY_BROWSE
@@ -78,5 +79,71 @@ class DestinationAccentsTest {
     fun bluesky_usesBrandBlueInBothModes() {
         assertEquals(BlueskyBrandBlue, accent(ROUTE_BLUESKY_BROWSE, dark = false))
         assertEquals(BlueskyBrandBlue, accent(ROUTE_BLUESKY_BROWSE, dark = true))
+    }
+
+    // --- VIS-2: contrast-aware PRIMARY mapping ---
+
+    private fun contrastRatio(a: Color, b: Color): Float {
+        val la = a.luminance()
+        val lb = b.luminance()
+        val hi = maxOf(la, lb)
+        val lo = minOf(la, lb)
+        return (hi + 0.05f) / (lo + 0.05f)
+    }
+
+    private val emberLightAccent = Color(0xFFC25B2E)
+    private val lightDrawerSurface = Color(0xFFFFFCF6)
+
+    @Test
+    fun primary_withoutSurface_returnsRawAccent_preservingBackCompat() {
+        // No surface supplied => mapping is untouched (existing call sites / Lilac default).
+        assertEquals(
+            emberLightAccent,
+            destinationAccentColor(ROUTE_UP_NEXT, neutral, emberLightAccent, darkSurface = false),
+        )
+    }
+
+    @Test
+    fun primary_emberLightOnLightSurface_isAdjustedToMeetContrast() {
+        val raw = contrastRatio(emberLightAccent, lightDrawerSurface)
+        // Precondition: the carried-forward issue — Ember light is borderline (< 4.5:1).
+        assert(raw < 4.5f)
+        val adjusted = destinationAccentColor(
+            ROUTE_UP_NEXT, neutral, emberLightAccent, darkSurface = false, surface = lightDrawerSurface,
+        )
+        assert(adjusted != emberLightAccent)
+        assert(contrastRatio(adjusted, lightDrawerSurface) >= 4.5f)
+    }
+
+    @Test
+    fun primary_lilacLightOnLightSurface_isUnchanged_preservingDefault() {
+        // Lilac already clears the bar, so it must pass through untouched.
+        val lilac = Color(0xFF6B49CC)
+        assert(contrastRatio(lilac, lightDrawerSurface) >= 4.5f)
+        assertEquals(
+            lilac,
+            destinationAccentColor(
+                ROUTE_SETTINGS, neutral, lilac, darkSurface = false, surface = lightDrawerSurface,
+            ),
+        )
+    }
+
+    @Test
+    fun primary_adjustmentAppliesToSettingsToo() {
+        val adjusted = destinationAccentColor(
+            ROUTE_SETTINGS, neutral, emberLightAccent, darkSurface = false, surface = lightDrawerSurface,
+        )
+        assert(contrastRatio(adjusted, lightDrawerSurface) >= 4.5f)
+    }
+
+    @Test
+    fun primary_nonPrimaryRolesIgnoreSurface() {
+        // Smart Queue / Bluesky must not be touched by the contrast-safe primary path.
+        assertEquals(
+            BlueskyBrandBlue,
+            destinationAccentColor(
+                ROUTE_BLUESKY_BROWSE, neutral, emberLightAccent, darkSurface = false, surface = lightDrawerSurface,
+            ),
+        )
     }
 }
