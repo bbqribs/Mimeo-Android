@@ -87,8 +87,8 @@ internal fun MimeoDrawerContent(
     val darkDrawerSurface = drawerBackground.luminance() < 0.5f
     val neutralAccent = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface
     val primaryAccent = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary
-    val playlistsAccent = destinationAccentColor("playlist/", neutralAccent, primaryAccent, darkDrawerSurface)
-    val settingsAccent = destinationAccentColor(ROUTE_SETTINGS, neutralAccent, primaryAccent, darkDrawerSurface)
+    val playlistsAccent = destinationAccentColor("playlist/", neutralAccent, primaryAccent, darkDrawerSurface, drawerBackground)
+    val settingsAccent = destinationAccentColor(ROUTE_SETTINGS, neutralAccent, primaryAccent, darkDrawerSurface, drawerBackground)
     val drawerItemColorsV1 = NavigationDrawerItemDefaults.colors(
         selectedContainerColor = Color.Transparent,
         unselectedContainerColor = Color.Transparent,
@@ -158,6 +158,7 @@ internal fun MimeoDrawerContent(
                                 neutralAccent,
                                 primaryAccent,
                                 darkDrawerSurface,
+                                drawerBackground,
                             ),
                         )
                     }
@@ -332,6 +333,7 @@ internal fun MimeoDrawerContent(
                                 neutralAccent,
                                 primaryAccent,
                                 darkDrawerSurface,
+                                drawerBackground,
                             ),
                         )
                     }

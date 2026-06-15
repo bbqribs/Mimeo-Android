@@ -422,6 +422,7 @@ internal fun MainActivityShell(
                             neutral = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
                             primary = if (isV1) mColors.accent else MaterialTheme.colorScheme.primary,
                             darkSurface = titleSurface.luminance() < 0.5f,
+                            surface = titleSurface,
                         )
                         Row(
                             modifier = Modifier
