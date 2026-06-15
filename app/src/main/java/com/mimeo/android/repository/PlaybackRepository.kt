@@ -12,6 +12,7 @@ import com.mimeo.android.data.entities.CachedItemEntity
 import com.mimeo.android.data.entities.PendingProgressEntity
 import com.mimeo.android.model.ArticleSummary
 import com.mimeo.android.model.ContentSummaryOut
+import com.mimeo.android.model.AiProviderConfigStatusOut
 import com.mimeo.android.model.SummaryCapabilitiesOut
 import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.model.ItemTextResponse
@@ -366,6 +367,14 @@ class PlaybackRepository(
         token: String,
     ): SummaryCapabilitiesOut {
         return apiClient.getSummaryCapabilities(baseUrl, token)
+    }
+
+    /** BYOAI-A3 — read-only provider status enrichment (see ApiClient). */
+    suspend fun getAiProviderStatus(
+        baseUrl: String,
+        token: String,
+    ): AiProviderConfigStatusOut {
+        return apiClient.getAiProviderStatus(baseUrl, token)
     }
 
     suspend fun getContentSummary(
