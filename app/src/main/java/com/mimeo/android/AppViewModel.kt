@@ -109,6 +109,7 @@ import com.mimeo.android.model.DEFAULT_PLAYBACK_SPEED_PRESETS
 import com.mimeo.android.model.sanitizeParagraphSpacingPresets
 import com.mimeo.android.model.sanitizePlaybackSpeedPresets
 import com.mimeo.android.model.AutoDownloadDiagnostics
+import com.mimeo.android.model.AiProviderStatusState
 import com.mimeo.android.model.ArticleSummary
 import com.mimeo.android.model.BlueskyAccountConnectionResponse
 import com.mimeo.android.model.BlueskyBrowseItem
@@ -404,6 +405,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _summaryCapabilities =
         MutableStateFlow<SummaryCapabilitiesState>(SummaryCapabilitiesState.Idle)
     val summaryCapabilities: StateFlow<SummaryCapabilitiesState> = _summaryCapabilities.asStateFlow()
+    // BYOAI-A3: optional read-only AI provider status enrichment over the
+    // capabilities display. Any failure collapses to Unavailable, which the UI
+    // treats as "no enrichment" so the BYOAI-A1 display degrades silently.
+    private val _aiProviderStatus =
+        MutableStateFlow<AiProviderStatusState>(AiProviderStatusState.Idle)
+    val aiProviderStatus: StateFlow<AiProviderStatusState> = _aiProviderStatus.asStateFlow()
     // The summary mode the reader is currently showing. Defaults to Standard and
     // is coerced to a supported kind once capabilities load.
     private val _selectedSummaryKind = MutableStateFlow(SUMMARY_KIND_ABSTRACT)
@@ -3957,6 +3964,40 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 contentSummaryFailureMessage(reason),
             )
             Result.failure(error)
+        }
+    }
+
+    /**
+     * BYOAI-A3 — fetch the read-only AI provider status enrichment. This is
+     * best-effort: any failure (no token, unauthorized, missing endpoint,
+     * network) collapses to [AiProviderStatusState.Unavailable], which the
+     * settings UI treats as "show no enrichment" so the BYOAI-A1 capabilities
+     * display stays intact. Raw errors and provider internals are never surfaced.
+     */
+    fun refreshAiProviderStatus() {
+        viewModelScope.launch { loadAiProviderStatus() }
+    }
+
+    suspend fun loadAiProviderStatus() {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            _aiProviderStatus.value = AiProviderStatusState.Unavailable
+            return
+        }
+        if (_aiProviderStatus.value !is AiProviderStatusState.Ready) {
+            _aiProviderStatus.value = AiProviderStatusState.Loading
+        }
+        try {
+            val status = repository.getAiProviderStatus(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+            )
+            _aiProviderStatus.value = AiProviderStatusState.Ready(status)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            // Degrade silently — no raw error or payload is surfaced.
+            _aiProviderStatus.value = AiProviderStatusState.Unavailable
         }
     }
 

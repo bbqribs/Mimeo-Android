@@ -75,6 +75,7 @@ import androidx.compose.material.icons.outlined.Share
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material.icons.outlined.Info
 import com.mimeo.android.AppViewModel
+import com.mimeo.android.model.AiProviderStatusState
 import com.mimeo.android.model.SummaryCapabilitiesState
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.AccentSchemePreference
@@ -2807,9 +2808,15 @@ private fun SettingsSpokeBackHeader(section: SettingsSection, onBack: () -> Unit
 @Composable
 private fun SettingsAiSummariesSection(vm: AppViewModel) {
     val capabilitiesState by vm.summaryCapabilities.collectAsState()
+    val providerStatusState by vm.aiProviderStatus.collectAsState()
     LaunchedEffect(Unit) {
         vm.refreshSummaryCapabilities()
+        // BYOAI-A3 — best-effort read-only enrichment; failures degrade silently.
+        vm.refreshAiProviderStatus()
     }
+    // Only surface enrichment when the optional endpoint returned safe detail.
+    val providerEnrichment = (providerStatusState as? AiProviderStatusState.Ready)
+        ?.let { aiProviderStatusEnrichment(it.status) }
     SettingsSectionHeader(
         title = "AI Summaries",
         subtitle = "How article summaries work on this server.",
@@ -2826,7 +2833,10 @@ private fun SettingsAiSummariesSection(vm: AppViewModel) {
         ) {
             when (val state = capabilitiesState) {
                 is SummaryCapabilitiesState.Ready ->
-                    AiSummariesCapabilitiesContent(aiSummariesSettingsViewData(state.capabilities))
+                    AiSummariesCapabilitiesContent(
+                        data = aiSummariesSettingsViewData(state.capabilities),
+                        providerEnrichment = providerEnrichment,
+                    )
                 is SummaryCapabilitiesState.Unavailable ->
                     AiSummariesStatusMessage(
                         title = "Summary status unavailable",
@@ -2845,7 +2855,10 @@ private fun SettingsAiSummariesSection(vm: AppViewModel) {
 }
 
 @Composable
-private fun AiSummariesCapabilitiesContent(data: AiSummariesSettingsViewData) {
+private fun AiSummariesCapabilitiesContent(
+    data: AiSummariesSettingsViewData,
+    providerEnrichment: AiProviderStatusEnrichment? = null,
+) {
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
@@ -2862,6 +2875,38 @@ private fun AiSummariesCapabilitiesContent(data: AiSummariesSettingsViewData) {
         SettingsKeyValueLine("Summary styles", data.modeLabels.joinToString(", "))
     }
     data.defaultModeLabel?.let { SettingsKeyValueLine("Default style", it) }
+    // BYOAI-A3 — optional read-only provider diagnostics. Status-display only:
+    // no edit/test/delete controls, no key entry, no raw provider detail.
+    providerEnrichment?.let { enrichment ->
+        enrichment.sourceLine?.let {
+            Text(
+                text = it,
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        enrichment.keyLine?.let {
+            Text(
+                text = it,
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        enrichment.lastTestLine?.let {
+            Text(
+                text = it,
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        enrichment.lastTestedOnLine?.let {
+            Text(
+                text = it,
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
     Text(
         text = data.guidanceMessage,
         style = androidx.compose.material3.MaterialTheme.typography.bodySmall,

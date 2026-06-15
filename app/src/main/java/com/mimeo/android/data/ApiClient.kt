@@ -25,6 +25,7 @@ import com.mimeo.android.model.BlueskyPickerResponse
 import com.mimeo.android.model.BlueskySourceInfo
 import com.mimeo.android.model.ContentSummaryOut
 import com.mimeo.android.model.ContentSummaryRequest
+import com.mimeo.android.model.AiProviderConfigStatusOut
 import com.mimeo.android.model.SummaryCapabilitiesOut
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackQueueItem
@@ -432,6 +433,24 @@ class ApiClient(
             .get()
             .build()
         executeJson(request) { payload -> json.decodeFromString<SummaryCapabilitiesOut>(payload) }
+    }
+
+    /**
+     * BYOAI-A3 — read-only AI provider status enrichment. Calls the read-scope
+     * `GET /config/ai-provider` endpoint. Callers must treat any failure
+     * (unauthorized, missing endpoint, network) as "no enrichment" and fall back
+     * to the capabilities display. This never sends or stores provider config.
+     */
+    suspend fun getAiProviderStatus(
+        baseUrl: String,
+        token: String,
+    ): AiProviderConfigStatusOut = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/config/ai-provider"))
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<AiProviderConfigStatusOut>(payload) }
     }
 
     suspend fun getContentSummary(
