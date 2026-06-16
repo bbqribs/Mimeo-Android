@@ -41,9 +41,10 @@ ones run elsewhere:
   (`27614602845`, job `81647247017`, 11:34:51-11:46:14 UTC). It saved Gradle
   dependency, transform, wrapper, generated-jar, DSL, and Gradle home cache
   entries for commit `2de637c6989b6eedd3781b56087f8f76f96cfa2b`.
-- No subsequent PR `Build and unit test` timing was available at verification
-  time, so CI-2 should close as: release lane verified; warm-cache timing
-  pending the next PR.
+- The first subsequent PR timing was PR #431: `Build and unit test` succeeded
+  in 1m44s (`27615458757`, job `81650149873`). `setup-gradle` restored Gradle
+  home, dependency, transform, wrapper, generated-jar, and DSL cache entries;
+  the Gradle build completed in 1m6s with 18 tasks executed and 28 from cache.
 - `Android Release Check` was verified on `main` after PR #430 via manual
   dispatch run `27614793587`: `Assemble release` succeeded in 11m28s and ran
   `:app:assembleRelease`. Release assemble was moved out of the PR gate, not
