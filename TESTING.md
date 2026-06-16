@@ -1,5 +1,40 @@
 # Testing Notes
 
+## CI lanes and where verification runs
+
+There are three distinct verification lanes. Know which one gates a PR and which
+ones run elsewhere:
+
+- **Fast required PR gate** — `.github/workflows/android-ci.yml`
+  - Triggers: every PR to `main` (also runs on `main` pushes to warm the cache,
+    and on manual `workflow_dispatch`).
+  - Runs: `:app:testDebugUnitTest` + `:app:assembleDebug` (one Gradle
+    invocation) and a `git diff --check` whitespace/conflict-marker guard.
+  - This is the lane that must stay fast. Unit tests remain required here.
+  - Caching: `gradle/actions/setup-gradle` provides dependency + build-state
+    caching and a per-run Gradle build summary. It manages cache keys itself and
+    only writes the cache from `main`, so PRs reuse main's cache read-only (no
+    bloat, no secrets stored).
+  - Timing visibility: GitHub shows per-step durations and total run time in the
+    Actions UI; the Gradle build summary (added to each run) reports the
+    executed Gradle work.
+
+- **Release / full verification** — `.github/workflows/android-release-check.yml`
+  - Triggers: `main` pushes, a weekly schedule (Mondays 07:00 UTC), and manual
+    `workflow_dispatch`.
+  - Runs: `:app:assembleRelease` (unsigned; no signing secrets). This is the
+    relocated release-assemble coverage — it is moved out of the PR gate, not
+    deleted.
+
+- **Playback Scroll Guard Suite** — `.github/workflows/playback-scroll-guard.yml`
+  - Path-scoped: runs only when reader/player/MainActivity paths or the scroll
+    contract doc change (plus manual `workflow_dispatch`). Unchanged by the
+    fast-gate work; still required when those paths are touched.
+
+Local verification stays broader than the PR gate — run the full
+`.\gradlew.bat :app:testDebugUnitTest` and any ticket-specific suites (e.g. the
+Playback Scroll Guard suite below) before pushing.
+
 ## Locus UI invariants
 
 Copy this checklist into any PR that changes Locus or player UI:

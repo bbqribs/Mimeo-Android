@@ -1,10 +1,22 @@
 name: Android CI
 
+# Fast, required PR gate.
+# Runs unit tests + debug assemble + whitespace check on every PR to main.
+# Release assemble lives in android-release-check.yml (non-blocking lane).
+
 on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
   workflow_dispatch:
+
+# Cancel superseded runs for the same PR/branch when a newer commit lands.
+concurrency:
+  group: android-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
@@ -19,10 +31,25 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
 
-      - name: Run unit tests
-        run: .\gradlew.bat :app:testDebugUnitTest --no-daemon
+      # Dependency + build-state caching and a per-run Gradle build summary.
+      # The action manages safe cache keys itself; it only writes the cache on
+      # the default branch (main) and is read-only on PR branches, so PRs reuse
+      # main's cache without bloating it or storing any secrets.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          add-job-summary: always
 
-      - name: Assemble debug APK
-        run: .\gradlew.bat :app:assembleDebug --no-daemon
+      # Whitespace / conflict-marker guard on PR-introduced changes only.
+      - name: Whitespace check
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF"
+          git diff --check "origin/$GITHUB_BASE_REF" -- .
+
+      # Single Gradle invocation: unit tests + debug APK share one configuration
+      # and one compile, avoiding the double JVM/Gradle startup of two steps.
+      - name: Build and test (debug)
+        run: .\gradlew.bat :app:testDebugUnitTest :app:assembleDebug --no-daemon --build-cache

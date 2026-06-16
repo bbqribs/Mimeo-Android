@@ -1,0 +1,41 @@
+name: Android Release Check
+
+# Non-blocking release-assemble lane.
+# Moved out of the required PR gate so PR feedback stays fast, while release
+# build coverage is preserved on main pushes, on a weekly schedule, and on
+# manual dispatch. Produces an unsigned release APK (no signing secrets used).
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    # Mondays 07:00 UTC — weekly safety net even if main is quiet.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: android-release-check-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  assemble-release:
+    name: Assemble release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          add-job-summary: always
+
+      - name: Assemble release APK
+        run: .\gradlew.bat :app:assembleRelease --no-daemon --build-cache
