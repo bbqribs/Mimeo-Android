@@ -109,7 +109,11 @@ import com.mimeo.android.model.DEFAULT_PLAYBACK_SPEED_PRESETS
 import com.mimeo.android.model.sanitizeParagraphSpacingPresets
 import com.mimeo.android.model.sanitizePlaybackSpeedPresets
 import com.mimeo.android.model.AutoDownloadDiagnostics
+import com.mimeo.android.model.AiProviderConfigIn
+import com.mimeo.android.model.AiProviderEditResult
+import com.mimeo.android.model.AiProviderErrorCode
 import com.mimeo.android.model.AiProviderStatusState
+import com.mimeo.android.data.AiProviderConfigException
 import com.mimeo.android.model.ArticleSummary
 import com.mimeo.android.model.BlueskyAccountConnectionResponse
 import com.mimeo.android.model.BlueskyBrowseItem
@@ -411,6 +415,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _aiProviderStatus =
         MutableStateFlow<AiProviderStatusState>(AiProviderStatusState.Idle)
     val aiProviderStatus: StateFlow<AiProviderStatusState> = _aiProviderStatus.asStateFlow()
+    // BYOAI-A5: operator provider edit flow. Busy gates the action buttons; result
+    // carries only a coarse outcome / safe error code (never a key or raw body).
+    private val _aiProviderEditBusy = MutableStateFlow(false)
+    val aiProviderEditBusy: StateFlow<Boolean> = _aiProviderEditBusy.asStateFlow()
+    private val _aiProviderEditResult = MutableStateFlow<AiProviderEditResult?>(null)
+    val aiProviderEditResult: StateFlow<AiProviderEditResult?> = _aiProviderEditResult.asStateFlow()
     // The summary mode the reader is currently showing. Defaults to Standard and
     // is coerced to a supported kind once capabilities load.
     private val _selectedSummaryKind = MutableStateFlow(SUMMARY_KIND_ABSTRACT)
@@ -3998,6 +4008,100 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (_: Exception) {
             // Degrade silently — no raw error or payload is surfaced.
             _aiProviderStatus.value = AiProviderStatusState.Unavailable
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // BYOAI-A5 — operator provider edit actions.
+    //
+    // No-secret discipline: the API key arrives only as a parameter on these
+    // calls, is forwarded straight into the request, and is never assigned to any
+    // field on this ViewModel (which outlives the edit screen). Failures collapse
+    // to a coarse [AiProviderEditResult.Failed] with a safe error code; the raw
+    // backend body is parsed-and-discarded inside the data layer and never
+    // surfaced, logged, or stored. Android only ever calls the Mimeo backend.
+    // -----------------------------------------------------------------------
+
+    /** Clear any lingering action result (e.g. when opening or leaving the editor). */
+    fun clearAiProviderEditResult() {
+        _aiProviderEditResult.value = null
+    }
+
+    /** Upsert the provider config. [config] is transient and never retained. */
+    fun saveAiProviderConfig(config: AiProviderConfigIn) {
+        runAiProviderEditAction(AiProviderEditResult.Saved) { baseUrl, token ->
+            repository.saveAiProviderConfig(baseUrl, token, config)
+        }
+    }
+
+    /** Trigger the backend-side provider test (no provider call from Android). */
+    fun testAiProviderConfig() {
+        runAiProviderEditAction(AiProviderEditResult.Tested) { baseUrl, token ->
+            repository.testAiProviderConfig(baseUrl, token)
+        }
+    }
+
+    /** Clear the stored provider config, then re-fetch the safe status. */
+    fun deleteAiProviderConfig() {
+        if (_aiProviderEditBusy.value) return
+        viewModelScope.launch {
+            val current = settings.value
+            if (current.apiToken.isBlank()) {
+                _aiProviderEditResult.value =
+                    AiProviderEditResult.Failed(AiProviderErrorCode.Unauthorized)
+                return@launch
+            }
+            _aiProviderEditBusy.value = true
+            _aiProviderEditResult.value = null
+            try {
+                repository.deleteAiProviderConfig(current.baseUrl, current.apiToken)
+                _aiProviderEditResult.value = AiProviderEditResult.Cleared
+                loadAiProviderStatus()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: AiProviderConfigException) {
+                _aiProviderEditResult.value = AiProviderEditResult.Failed(error.code)
+            } catch (_: Exception) {
+                _aiProviderEditResult.value =
+                    AiProviderEditResult.Failed(AiProviderErrorCode.Unknown)
+            } finally {
+                _aiProviderEditBusy.value = false
+            }
+        }
+    }
+
+    /**
+     * Shared runner for save/test: performs the action, publishes the refreshed
+     * safe status as [AiProviderStatusState.Ready], and reports a coarse result.
+     */
+    private fun runAiProviderEditAction(
+        success: AiProviderEditResult,
+        action: suspend (baseUrl: String, token: String) -> com.mimeo.android.model.AiProviderConfigStatusOut,
+    ) {
+        if (_aiProviderEditBusy.value) return
+        viewModelScope.launch {
+            val current = settings.value
+            if (current.apiToken.isBlank()) {
+                _aiProviderEditResult.value =
+                    AiProviderEditResult.Failed(AiProviderErrorCode.Unauthorized)
+                return@launch
+            }
+            _aiProviderEditBusy.value = true
+            _aiProviderEditResult.value = null
+            try {
+                val status = action(current.baseUrl, current.apiToken)
+                _aiProviderStatus.value = AiProviderStatusState.Ready(status)
+                _aiProviderEditResult.value = success
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: AiProviderConfigException) {
+                _aiProviderEditResult.value = AiProviderEditResult.Failed(error.code)
+            } catch (_: Exception) {
+                _aiProviderEditResult.value =
+                    AiProviderEditResult.Failed(AiProviderErrorCode.Unknown)
+            } finally {
+                _aiProviderEditBusy.value = false
+            }
         }
     }
 

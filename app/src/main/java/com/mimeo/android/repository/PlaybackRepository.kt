@@ -12,6 +12,7 @@ import com.mimeo.android.data.entities.CachedItemEntity
 import com.mimeo.android.data.entities.PendingProgressEntity
 import com.mimeo.android.model.ArticleSummary
 import com.mimeo.android.model.ContentSummaryOut
+import com.mimeo.android.model.AiProviderConfigIn
 import com.mimeo.android.model.AiProviderConfigStatusOut
 import com.mimeo.android.model.SummaryCapabilitiesOut
 import com.mimeo.android.model.QueueFetchDebugSnapshot
@@ -375,6 +376,31 @@ class PlaybackRepository(
         token: String,
     ): AiProviderConfigStatusOut {
         return apiClient.getAiProviderStatus(baseUrl, token)
+    }
+
+    /** BYOAI-A5 — operator provider upsert (see ApiClient). */
+    suspend fun saveAiProviderConfig(
+        baseUrl: String,
+        token: String,
+        config: AiProviderConfigIn,
+    ): AiProviderConfigStatusOut {
+        return apiClient.saveAiProviderConfig(baseUrl, token, config)
+    }
+
+    /** BYOAI-A5 — backend-side provider test (see ApiClient). */
+    suspend fun testAiProviderConfig(
+        baseUrl: String,
+        token: String,
+    ): AiProviderConfigStatusOut {
+        return apiClient.testAiProviderConfig(baseUrl, token)
+    }
+
+    /** BYOAI-A5 — clear the stored provider config (see ApiClient). */
+    suspend fun deleteAiProviderConfig(
+        baseUrl: String,
+        token: String,
+    ) {
+        apiClient.deleteAiProviderConfig(baseUrl, token)
     }
 
     suspend fun getContentSummary(

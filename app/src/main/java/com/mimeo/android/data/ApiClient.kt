@@ -25,7 +25,10 @@ import com.mimeo.android.model.BlueskyPickerResponse
 import com.mimeo.android.model.BlueskySourceInfo
 import com.mimeo.android.model.ContentSummaryOut
 import com.mimeo.android.model.ContentSummaryRequest
+import com.mimeo.android.model.AiProviderConfigIn
 import com.mimeo.android.model.AiProviderConfigStatusOut
+import com.mimeo.android.model.AiProviderErrorCode
+import com.mimeo.android.model.parseAiProviderErrorCode
 import com.mimeo.android.model.SummaryCapabilitiesOut
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackQueueItem
@@ -56,6 +59,19 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 
 class ApiException(val statusCode: Int, message: String) : Exception(message)
+
+/**
+ * BYOAI-A5 — failure of an operator provider write/test/delete, carrying only a
+ * coarse, display-safe [code] and the HTTP [statusCode]. The raw response body
+ * (which may contain provider errors, ciphertext, or env var names) is parsed
+ * into [code] and then discarded; it is deliberately NOT placed on this
+ * exception, so nothing downstream — logs, crash breadcrumbs, UI copy — can leak
+ * it. The message is the safe enum name only.
+ */
+class AiProviderConfigException(
+    val code: AiProviderErrorCode,
+    val statusCode: Int,
+) : Exception("ai_provider_error:${code.name}")
 
 data class QueueFetchResult(
     val payload: PlaybackQueueResponse,
@@ -451,6 +467,69 @@ class ApiClient(
             .get()
             .build()
         executeJson(request) { payload -> json.decodeFromString<AiProviderConfigStatusOut>(payload) }
+    }
+
+    /**
+     * BYOAI-A5 — operator upsert of the AI provider config
+     * (`POST /config/ai-provider`). Reachable only with an operator-capable
+     * device token; ordinary read/read_write tokens are rejected by the backend.
+     *
+     * No-secret discipline: the [config] (including its transient `api_key`) is
+     * sent once and never retained; failures are mapped to a safe
+     * [AiProviderConfigException] code and the raw body is discarded — it is never
+     * logged or surfaced. Android never calls an LLM provider directly; this only
+     * talks to the Mimeo backend.
+     */
+    suspend fun saveAiProviderConfig(
+        baseUrl: String,
+        token: String,
+        config: AiProviderConfigIn,
+    ): AiProviderConfigStatusOut = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(config).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/config/ai-provider"))
+            .header("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+        executeProviderActionJson(request) { payload ->
+            json.decodeFromString<AiProviderConfigStatusOut>(payload)
+        }
+    }
+
+    /**
+     * BYOAI-A5 — backend-side provider test (`POST /config/ai-provider/test`).
+     * The backend performs the provider call; Android never contacts the provider
+     * directly. A 409 (no saved config) maps to
+     * [AiProviderErrorCode.TestBeforeSave]. Raw provider errors are never surfaced.
+     */
+    suspend fun testAiProviderConfig(
+        baseUrl: String,
+        token: String,
+    ): AiProviderConfigStatusOut = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/config/ai-provider/test"))
+            .header("Authorization", "Bearer $token")
+            .post(ByteArray(0).toRequestBody(null, 0, 0))
+            .build()
+        executeProviderActionJson(request) { payload ->
+            json.decodeFromString<AiProviderConfigStatusOut>(payload)
+        }
+    }
+
+    /**
+     * BYOAI-A5 — clear the stored provider config (`DELETE /config/ai-provider`).
+     * Operator-only. Returns no body; callers re-fetch status afterwards.
+     */
+    suspend fun deleteAiProviderConfig(
+        baseUrl: String,
+        token: String,
+    ) = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/config/ai-provider"))
+            .header("Authorization", "Bearer $token")
+            .delete()
+            .build()
+        executeProviderActionNoBody(request)
     }
 
     suspend fun getContentSummary(
@@ -1330,6 +1409,41 @@ class ApiClient(
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
                 throwApiException(response.code, body)
+            }
+        }
+    }
+
+    /**
+     * BYOAI-A5 — execute a provider write/test that returns JSON, mapping any
+     * non-2xx into a body-free [AiProviderConfigException]. The error body is read
+     * only to classify a safe [AiProviderErrorCode] and is then discarded, so the
+     * raw provider/backend detail never escapes this method.
+     */
+    private inline fun <T> executeProviderActionJson(
+        request: Request,
+        parser: (String) -> T,
+    ): T {
+        okHttpClient.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                throw AiProviderConfigException(
+                    code = parseAiProviderErrorCode(response.code, body),
+                    statusCode = response.code,
+                )
+            }
+            return parser(body)
+        }
+    }
+
+    /** BYOAI-A5 — body-free provider action (e.g. DELETE) with safe error mapping. */
+    private fun executeProviderActionNoBody(request: Request) {
+        okHttpClient.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                throw AiProviderConfigException(
+                    code = parseAiProviderErrorCode(response.code, body),
+                    statusCode = response.code,
+                )
             }
         }
     }

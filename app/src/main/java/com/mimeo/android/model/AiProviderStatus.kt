@@ -39,7 +39,112 @@ data class AiProviderConfigStatusOut(
     @SerialName("last_test_at") val lastTestAt: String? = null,
     // "database" | "environment" | "none" — where the config originates.
     val source: String = "none",
+    /**
+     * BYOAI-A5 — backend-authoritative operator-capability flag. Only when this
+     * is true may Android show the provider edit flow; ordinary read /
+     * read_write / NULL-scope sessions report false (or omit the field, which
+     * decodes to false), so they remain status-only. Android never infers this
+     * by probing privileged endpoints — it is read from this field only.
+     */
+    @SerialName("can_edit") val canEdit: Boolean = false,
 )
+
+/**
+ * BYOAI-A5 — write payload for an operator provider upsert
+ * (`POST /config/ai-provider`). Mirrors the backend `AiProviderConfigIn`
+ * contract and adds no new semantics.
+ *
+ * Encoding rules (the repo's `Json` uses the default `encodeDefaults = false`):
+ *   - [provider], [model] and [enabled] have no defaults, so they are always
+ *     serialized.
+ *   - [baseUrl] and [apiKey] default to null and are therefore OMITTED from the
+ *     JSON when null. An omitted [apiKey] is the "keep the existing key"
+ *     signal — Android never sends an empty-string key. [baseUrl] is only set
+ *     for providers that use it (`openai_compatible` / `local`).
+ *
+ * The [apiKey] here is transient request-only data; it is never stored, logged,
+ * or read back. Responses carry only `key_present` + `key_last4`.
+ */
+@Serializable
+data class AiProviderConfigIn(
+    val provider: String,
+    val model: String,
+    val enabled: Boolean,
+    @SerialName("base_url") val baseUrl: String? = null,
+    @SerialName("api_key") val apiKey: String? = null,
+)
+
+/**
+ * BYOAI-A5 — coarse, display-safe classification of a provider write/test/delete
+ * failure. The raw backend body (which may carry provider errors, ciphertext, or
+ * env var names) is never represented here: the data layer maps a response to one
+ * of these codes and discards the body, and the UI maps a code to friendly copy.
+ */
+enum class AiProviderErrorCode {
+    /** Backend has no usable encryption key configured, so it can't store a key. */
+    EncryptionKeyRequired,
+
+    /** Backend encryption key is present but invalid/unusable. */
+    EncryptionKeyInvalid,
+
+    /** A base URL is required for the chosen provider but was missing. */
+    BaseUrlRequired,
+
+    /** The base URL must start with http:// or https://. */
+    BaseUrlMustBeHttp,
+
+    /** The chosen provider slug is not supported by the backend. */
+    UnsupportedProvider,
+
+    /** A model is required but was missing. */
+    ModelRequired,
+
+    /** An API key is required (e.g. first configure) but none is stored or sent. */
+    ApiKeyRequired,
+
+    /** Test was requested before any config was saved (HTTP 409). */
+    TestBeforeSave,
+
+    /** The session isn't authorized to perform provider writes (HTTP 401/403). */
+    Unauthorized,
+
+    /** Anything else — mapped to a generic, safe message. */
+    Unknown,
+}
+
+/**
+ * Known backend `_bad_config`-style error slugs, in priority order. These slugs
+ * are stable identifiers (not secrets), so matching on them does not echo any
+ * sensitive payload. Anything not on this list collapses to [AiProviderErrorCode]
+ * derived from the HTTP status, and ultimately to [AiProviderErrorCode.Unknown].
+ */
+private val AI_PROVIDER_ERROR_SLUGS: List<Pair<String, AiProviderErrorCode>> = listOf(
+    "encryption_key_required" to AiProviderErrorCode.EncryptionKeyRequired,
+    "encryption_key_invalid" to AiProviderErrorCode.EncryptionKeyInvalid,
+    "base_url_required" to AiProviderErrorCode.BaseUrlRequired,
+    "base_url_must_be_http" to AiProviderErrorCode.BaseUrlMustBeHttp,
+    "unsupported_provider" to AiProviderErrorCode.UnsupportedProvider,
+    "model_required" to AiProviderErrorCode.ModelRequired,
+    "api_key_required" to AiProviderErrorCode.ApiKeyRequired,
+)
+
+/**
+ * Pure, display-safe classification of a provider action failure. Scans [body]
+ * only for known stable slugs (never echoing it) and otherwise classifies by
+ * [statusCode]. Always returns a code — never the raw body — so no caller can
+ * accidentally surface provider errors, ciphertext, or env var names.
+ */
+fun parseAiProviderErrorCode(statusCode: Int, body: String?): AiProviderErrorCode {
+    val haystack = body?.lowercase().orEmpty()
+    AI_PROVIDER_ERROR_SLUGS.forEach { (slug, code) ->
+        if (haystack.contains(slug)) return code
+    }
+    return when (statusCode) {
+        409 -> AiProviderErrorCode.TestBeforeSave
+        401, 403 -> AiProviderErrorCode.Unauthorized
+        else -> AiProviderErrorCode.Unknown
+    }
+}
 
 /**
  * VM-facing state for the optional provider-status enrichment lookup. Failure or
@@ -51,4 +156,17 @@ sealed class AiProviderStatusState {
     object Loading : AiProviderStatusState()
     data class Ready(val status: AiProviderConfigStatusOut) : AiProviderStatusState()
     object Unavailable : AiProviderStatusState()
+}
+
+/**
+ * BYOAI-A5 — outcome of an operator provider action (save/test/delete). Carries
+ * only a coarse outcome or a safe [AiProviderErrorCode]; never a key, raw body,
+ * or provider error. The UI maps these to display copy. The refreshed safe status
+ * is published separately via [AiProviderStatusState.Ready].
+ */
+sealed class AiProviderEditResult {
+    object Saved : AiProviderEditResult()
+    object Tested : AiProviderEditResult()
+    object Cleared : AiProviderEditResult()
+    data class Failed(val code: AiProviderErrorCode) : AiProviderEditResult()
 }

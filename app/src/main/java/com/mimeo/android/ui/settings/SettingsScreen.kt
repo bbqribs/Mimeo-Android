@@ -2814,6 +2814,14 @@ private fun SettingsAiSummariesSection(vm: AppViewModel) {
         // BYOAI-A3 — best-effort read-only enrichment; failures degrade silently.
         vm.refreshAiProviderStatus()
     }
+    // BYOAI-A5 — the operator edit flow is a nested screen inside this spoke,
+    // reached only through the gated "Manage AI provider" entry below. Ordinary
+    // sessions never see the entry and never reach the editor.
+    var showProviderEditor by remember { mutableStateOf(false) }
+    if (showProviderEditor) {
+        AiProviderEditScreen(vm = vm, onBack = { showProviderEditor = false })
+        return
+    }
     // Only surface enrichment when the optional endpoint returned safe detail.
     val providerEnrichment = (providerStatusState as? AiProviderStatusState.Ready)
         ?.let { aiProviderStatusEnrichment(it.status) }
@@ -2849,6 +2857,34 @@ private fun SettingsAiSummariesSection(vm: AppViewModel) {
                         body = "Reading what your server allows.",
                         onRetry = null,
                     )
+            }
+        }
+    }
+    // BYOAI-A5 — operator-only entry. Shown solely when the backend reports
+    // can_edit=true for this session; ordinary read/read_write sessions never see
+    // it, preserving the status-only spoke.
+    if (aiProviderManageEntryVisible(providerStatusState)) {
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface,
+            ),
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = AI_PROVIDER_MANAGE_ENTRY_HINT,
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(
+                    onClick = { showProviderEditor = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(AI_PROVIDER_MANAGE_ENTRY_LABEL)
+                }
             }
         }
     }
