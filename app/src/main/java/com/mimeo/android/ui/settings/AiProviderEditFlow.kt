@@ -57,17 +57,21 @@ internal data class AiProviderOption(
 )
 
 /**
- * Provider options mirroring the backend operator page. `openai_compatible` and
- * `local` are the only ones that take a base URL; default models match the
- * backend `default_model_for_provider` so Android and web behave identically.
+ * Provider options mirroring the backend's centralised provider catalogue —
+ * `SUPPORTED_AI_PROVIDERS`, `PROVIDER_DISPLAY_NAMES`, `OPENAI_COMPATIBLE_PROVIDERS`
+ * and `DEFAULT_MODELS` in `backend/app/services/ai_provider_config.py`. These
+ * MUST stay byte-identical to that source of truth so Android and the web
+ * operator page offer the same choices, labels, and default models; the parity
+ * test guards against drift. `openai_compatible` / `local` are the only providers
+ * that take a base URL.
  */
 internal val AI_PROVIDER_OPTIONS: List<AiProviderOption> = listOf(
-    AiProviderOption("anthropic", "Anthropic", "claude-3-5-sonnet-latest", usesBaseUrl = false),
+    AiProviderOption("anthropic", "Anthropic", "claude-haiku-4-5-20251001", usesBaseUrl = false),
     AiProviderOption("openai", "OpenAI", "gpt-4o-mini", usesBaseUrl = false),
     AiProviderOption("deepseek", "DeepSeek", "deepseek-chat", usesBaseUrl = false),
-    AiProviderOption("gemini", "Google Gemini", "gemini-1.5-flash", usesBaseUrl = false),
-    AiProviderOption("openai_compatible", "OpenAI-compatible", "", usesBaseUrl = true),
-    AiProviderOption("local", "Local", "", usesBaseUrl = true),
+    AiProviderOption("gemini", "Gemini", "gemini-3.5-flash", usesBaseUrl = false),
+    AiProviderOption("openai_compatible", "OpenAI-compatible", "model-name", usesBaseUrl = true),
+    AiProviderOption("local", "Local OpenAI-compatible", "local-model", usesBaseUrl = true),
 )
 
 private val DEFAULT_PROVIDER_SLUG = AI_PROVIDER_OPTIONS.first().slug

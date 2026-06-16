@@ -120,6 +120,44 @@ class AiProviderEditFlowTest {
     // ----- Form + request building -----
 
     @Test
+    fun providerCatalogueMatchesBackendSourceOfTruth() {
+        // MUST stay identical to DEFAULT_MODELS / PROVIDER_DISPLAY_NAMES /
+        // OPENAI_COMPATIBLE_PROVIDERS in
+        // backend/app/services/ai_provider_config.py. Update both together.
+        val expected = listOf(
+            AiProviderOption("anthropic", "Anthropic", "claude-haiku-4-5-20251001", usesBaseUrl = false),
+            AiProviderOption("openai", "OpenAI", "gpt-4o-mini", usesBaseUrl = false),
+            AiProviderOption("deepseek", "DeepSeek", "deepseek-chat", usesBaseUrl = false),
+            AiProviderOption("gemini", "Gemini", "gemini-3.5-flash", usesBaseUrl = false),
+            AiProviderOption("openai_compatible", "OpenAI-compatible", "model-name", usesBaseUrl = true),
+            AiProviderOption("local", "Local OpenAI-compatible", "local-model", usesBaseUrl = true),
+        )
+        assertEquals(expected, AI_PROVIDER_OPTIONS)
+    }
+
+    @Test
+    fun unconfiguredFormPrefillsDefaultModelForDefaultProvider() {
+        // Matches the web page: an unconfigured server shows the default provider
+        // (anthropic) with its default model already filled in.
+        val form = aiProviderEditFormFrom(null)
+        assertEquals("anthropic", form.provider)
+        assertEquals("claude-haiku-4-5-20251001", form.model)
+    }
+
+    @Test
+    fun formUsesStoredModelOverDefaultWhenConfigured() {
+        val form = aiProviderEditFormFrom(status(provider = "openai", model = "gpt-4o"))
+        assertEquals("openai", form.provider)
+        assertEquals("gpt-4o", form.model)
+    }
+
+    @Test
+    fun formFallsBackToProviderDefaultWhenStoredModelBlank() {
+        val form = aiProviderEditFormFrom(status(provider = "deepseek", model = ""))
+        assertEquals("deepseek-chat", form.model)
+    }
+
+    @Test
     fun baseUrlShownOnlyForCompatibleAndLocal() {
         assertFalse(aiProviderShowBaseUrl("anthropic"))
         assertFalse(aiProviderShowBaseUrl("openai"))

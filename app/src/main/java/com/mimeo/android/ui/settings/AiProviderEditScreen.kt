@@ -199,10 +199,12 @@ internal fun AiProviderEditScreen(
                                     providerMenuOpen = false
                                     if (option.slug != providerSlug) {
                                         providerSlug = option.slug
-                                        // Prefill a sensible default model on switch
-                                        // when the field is empty; never touch the key.
-                                        if (model.isBlank()) model = option.defaultModel
-                                        if (!option.usesBaseUrl) baseUrl = ""
+                                        // Match the web operator page: switching
+                                        // provider replaces the model with that
+                                        // provider's default model. The base URL
+                                        // value is kept (just hidden) for providers
+                                        // that don't use it; the key is never touched.
+                                        model = option.defaultModel
                                     }
                                 },
                             )
