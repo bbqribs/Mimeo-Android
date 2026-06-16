@@ -1,5 +1,6 @@
 package com.mimeo.android.ui.settings
 
+import com.mimeo.android.model.AiProviderCatalogueItemOut
 import com.mimeo.android.model.AiProviderConfigStatusOut
 import com.mimeo.android.model.AiProviderEditResult
 import com.mimeo.android.model.AiProviderErrorCode
@@ -22,6 +23,14 @@ class AiProviderEditNoSecretTest {
     private val plantedEnvVar = "AI_PROVIDER_ENCRYPTION_KEY"
     private val plantedProviderError = "401 invalid_api_key from provider: bad sk-xyz"
 
+    private val catalogue = listOf(
+        AiProviderCatalogueItemOut("anthropic", "Anthropic", "claude-haiku-4-5-20251001"),
+        AiProviderCatalogueItemOut(
+            "openai_compatible", "OpenAI-compatible", "model-name",
+            baseUrlRequired = true, baseUrlAllowed = true,
+        ),
+    )
+
     private fun configuredStatus() = AiProviderConfigStatusOut(
         provider = "anthropic",
         model = "claude-x",
@@ -34,18 +43,21 @@ class AiProviderEditNoSecretTest {
         lastTestAt = "2026-06-10T14:30:00Z",
         source = "database",
         canEdit = true,
+        catalogue = catalogue,
     )
+
+    private fun options() = aiProviderOptionsFrom(configuredStatus())
 
     @Test
     fun keyIsNeverPrefilledFromStatus() {
         // Even when the backend reports a stored key, the form key starts empty.
-        val form = aiProviderEditFormFrom(configuredStatus())
+        val form = aiProviderEditFormFrom(options(), configuredStatus())
         assertEquals("", form.apiKey)
     }
 
     @Test
     fun saveableSnapshotExcludesTheKey() {
-        val form = aiProviderEditFormFrom(configuredStatus()).copy(apiKey = plantedKey)
+        val form = aiProviderEditFormFrom(options(), configuredStatus()).copy(apiKey = plantedKey)
         val fields = aiProviderSaveableFields(form)
         assertFalse(fields.containsKey("api_key"))
         assertFalse(fields.containsKey("apiKey"))
@@ -58,7 +70,7 @@ class AiProviderEditNoSecretTest {
 
     @Test
     fun clearingKeyWipesItButKeepsOtherFields() {
-        val form = aiProviderEditFormFrom(configuredStatus()).copy(apiKey = plantedKey)
+        val form = aiProviderEditFormFrom(options(), configuredStatus()).copy(apiKey = plantedKey)
         val cleared = form.withClearedKey()
         assertEquals("", cleared.apiKey)
         assertEquals(form.provider, cleared.provider)
@@ -75,7 +87,7 @@ class AiProviderEditNoSecretTest {
             baseUrl = plantedCiphertext,
             keyLast4 = plantedEnvVar, // over-long / disallowed tail must not be echoed
         )
-        val view = aiProviderEditStatusView(hostile)
+        val view = aiProviderEditStatusView(options(), hostile)
         val rendered = listOfNotNull(
             view.stateMessage,
             view.providerLine,
@@ -135,14 +147,14 @@ class AiProviderEditNoSecretTest {
         // Clean 4-char tail surfaces; anything longer/garbage falls back generic.
         assertEquals(
             "Stored key ending aZ9_",
-            aiProviderEditStatusView(configuredStatus().copy(keyLast4 = "aZ9_")).keyLine,
+            aiProviderEditStatusView(options(), configuredStatus().copy(keyLast4 = "aZ9_")).keyLine,
         )
         assertEquals(
             "A key is stored on the server",
-            aiProviderEditStatusView(configuredStatus().copy(keyLast4 = "abcdef")).keyLine,
+            aiProviderEditStatusView(options(), configuredStatus().copy(keyLast4 = "abcdef")).keyLine,
         )
         assertTrue(
-            aiProviderEditStatusView(configuredStatus().copy(keyPresent = false)).keyLine == null,
+            aiProviderEditStatusView(options(), configuredStatus().copy(keyPresent = false)).keyLine == null,
         )
     }
 }

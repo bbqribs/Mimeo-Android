@@ -73,10 +73,16 @@ internal fun AiProviderEditScreen(
 
     val liveStatus = (statusState as? AiProviderStatusState.Ready)?.status
 
+    // BYOAI-A6 — the provider catalogue (dropdown choices, default models, base-URL
+    // rules) comes from the backend status. When it is missing we degrade to a safe
+    // read-only fallback rather than writing with stale mirrored data.
+    val providerOptions = remember(liveStatus) { aiProviderOptionsFrom(liveStatus) }
+    val catalogueAvailable = providerOptions.isNotEmpty()
+
     // Seed the form once from the status that was loaded before the gated entry
     // was shown. Non-secret fields survive a configuration change; the key does
     // not (plain remember below).
-    val initialForm = remember { aiProviderEditFormFrom(liveStatus) }
+    val initialForm = remember { aiProviderEditFormFrom(providerOptions, liveStatus) }
     var providerSlug by rememberSaveable { mutableStateOf(initialForm.provider) }
     var model by rememberSaveable { mutableStateOf(initialForm.model) }
     var baseUrl by rememberSaveable { mutableStateOf(initialForm.baseUrl) }
@@ -118,8 +124,8 @@ internal fun AiProviderEditScreen(
         }
     }
 
-    val showBaseUrl = aiProviderShowBaseUrl(providerSlug)
-    val selectedOption = aiProviderOptionFor(providerSlug)
+    val showBaseUrl = aiProviderShowBaseUrl(providerOptions, providerSlug)
+    val selectedOption = aiProviderOptionFor(providerOptions, providerSlug)
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -140,7 +146,7 @@ internal fun AiProviderEditScreen(
 
         // ----- Safe status (read-only) -----
         liveStatus?.let { status ->
-            val view = aiProviderEditStatusView(status)
+            val view = aiProviderEditStatusView(providerOptions, status)
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.elevatedCardColors(
@@ -166,7 +172,26 @@ internal fun AiProviderEditScreen(
             }
         }
 
+        // ----- Catalogue-unavailable fallback (no edit controls) -----
+        if (!catalogueAvailable) {
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text("Editing unavailable", style = MaterialTheme.typography.bodyMedium)
+                    SmallInfo(AI_PROVIDER_CATALOGUE_UNAVAILABLE)
+                }
+            }
+        }
+
         // ----- Configuration form -----
+        if (catalogueAvailable) {
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.elevatedCardColors(
@@ -192,7 +217,7 @@ internal fun AiProviderEditScreen(
                         expanded = providerMenuOpen,
                         onDismissRequest = { providerMenuOpen = false },
                     ) {
-                        AI_PROVIDER_OPTIONS.forEach { option ->
+                        providerOptions.forEach { option ->
                             DropdownMenuItem(
                                 text = { Text(option.label) },
                                 onClick = {
@@ -265,6 +290,7 @@ internal fun AiProviderEditScreen(
                 }
             }
         }
+        }
 
         // ----- Action result message -----
         result?.let { actionResult ->
@@ -272,13 +298,16 @@ internal fun AiProviderEditScreen(
         }
 
         // ----- Actions -----
-        val canSave = !busy && model.isNotBlank() &&
-            (!showBaseUrl || baseUrl.isNotBlank() || liveStatus?.configured == true)
+        // A required base URL must be present (unless already configured) before a
+        // save is allowed; this follows the backend catalogue rule for the provider.
+        val baseUrlSatisfied = !selectedOption.baseUrlRequired ||
+            baseUrl.isNotBlank() || liveStatus?.configured == true
+        val canSave = catalogueAvailable && !busy && model.isNotBlank() && baseUrlSatisfied
         val canTest = !busy && liveStatus?.configured == true
 
         Button(
             onClick = {
-                vm.saveAiProviderConfig(aiProviderSaveRequest(currentForm()))
+                vm.saveAiProviderConfig(aiProviderSaveRequest(providerOptions, currentForm()))
                 apiKey = ""
             },
             enabled = canSave,

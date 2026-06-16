@@ -1,5 +1,6 @@
 package com.mimeo.android.ui.settings
 
+import com.mimeo.android.model.AiProviderCatalogueItemOut
 import com.mimeo.android.model.AiProviderConfigIn
 import com.mimeo.android.model.AiProviderConfigStatusOut
 import com.mimeo.android.model.AiProviderErrorCode
@@ -52,38 +53,85 @@ internal data class AiProviderOption(
     val slug: String,
     val label: String,
     val defaultModel: String,
-    /** Whether this provider needs an operator-entered base URL. */
-    val usesBaseUrl: Boolean,
-)
-
-/**
- * Provider options mirroring the backend's centralised provider catalogue —
- * `SUPPORTED_AI_PROVIDERS`, `PROVIDER_DISPLAY_NAMES`, `OPENAI_COMPATIBLE_PROVIDERS`
- * and `DEFAULT_MODELS` in `backend/app/services/ai_provider_config.py`. These
- * MUST stay byte-identical to that source of truth so Android and the web
- * operator page offer the same choices, labels, and default models; the parity
- * test guards against drift. `openai_compatible` / `local` are the only providers
- * that take a base URL.
- */
-internal val AI_PROVIDER_OPTIONS: List<AiProviderOption> = listOf(
-    AiProviderOption("anthropic", "Anthropic", "claude-haiku-4-5-20251001", usesBaseUrl = false),
-    AiProviderOption("openai", "OpenAI", "gpt-4o-mini", usesBaseUrl = false),
-    AiProviderOption("deepseek", "DeepSeek", "deepseek-chat", usesBaseUrl = false),
-    AiProviderOption("gemini", "Gemini", "gemini-3.5-flash", usesBaseUrl = false),
-    AiProviderOption("openai_compatible", "OpenAI-compatible", "model-name", usesBaseUrl = true),
-    AiProviderOption("local", "Local OpenAI-compatible", "local-model", usesBaseUrl = true),
-)
-
-private val DEFAULT_PROVIDER_SLUG = AI_PROVIDER_OPTIONS.first().slug
-
-internal fun aiProviderOptionFor(slug: String?): AiProviderOption {
-    val normalized = slug?.trim()?.lowercase()
-    return AI_PROVIDER_OPTIONS.firstOrNull { it.slug == normalized }
-        ?: AI_PROVIDER_OPTIONS.first()
+    /** Whether a base URL is permitted for this provider (controls field visibility). */
+    val baseUrlAllowed: Boolean,
+    /** Whether a base URL is mandatory for this provider (controls validation). */
+    val baseUrlRequired: Boolean,
+) {
+    /** Base URL entry is offered whenever the backend allows it for this provider. */
+    val usesBaseUrl: Boolean get() = baseUrlAllowed
 }
 
-/** Base URL entry is offered only for providers that actually use one. */
-internal fun aiProviderShowBaseUrl(slug: String?): Boolean = aiProviderOptionFor(slug).usesBaseUrl
+/**
+ * BYOAI-A6 — the backend catalogue is the single source of truth for provider
+ * choices, labels, default models, and base-URL rules. Android no longer mirrors
+ * `backend/app/services/ai_provider_config.py`; it consumes the `catalogue`
+ * field of the safe provider status. The only retained constant is a minimal
+ * fallback slug used to seed a restored snapshot when the persisted provider is
+ * blank — it never drives provider writes on its own (see [aiProviderOptionsFrom]
+ * / [aiProviderCatalogueAvailable], which gate the edit controls when the
+ * catalogue is missing).
+ */
+internal const val AI_PROVIDER_FALLBACK_SLUG = "anthropic"
+
+/** Map a backend catalogue item to a UI option, or null when it has no usable key. */
+internal fun AiProviderCatalogueItemOut.toOptionOrNull(): AiProviderOption? {
+    val normalized = key.trim().lowercase()
+    if (normalized.isEmpty()) return null
+    return AiProviderOption(
+        slug = normalized,
+        label = label.trim().ifEmpty { normalized },
+        defaultModel = defaultModel.trim(),
+        // A required base URL is, by definition, also allowed.
+        baseUrlAllowed = baseUrlAllowed || baseUrlRequired,
+        baseUrlRequired = baseUrlRequired,
+    )
+}
+
+/**
+ * The provider options for a given safe status, derived purely from the backend
+ * catalogue. Returns empty when the backend supplied no usable catalogue, which
+ * the screen treats as the conservative "editing unavailable" fallback.
+ */
+internal fun aiProviderOptionsFrom(status: AiProviderConfigStatusOut?): List<AiProviderOption> =
+    status?.catalogue.orEmpty().mapNotNull { it.toOptionOrNull() }
+
+/** True only when the backend supplied at least one usable catalogue entry. */
+internal fun aiProviderCatalogueAvailable(status: AiProviderConfigStatusOut?): Boolean =
+    aiProviderOptionsFrom(status).isNotEmpty()
+
+/** Title-case a provider slug for display when no catalogue label is available. */
+private fun String.toProviderDisplayLabel(): String =
+    split('_').filter { it.isNotEmpty() }.joinToString(" ") { word ->
+        word.replaceFirstChar { it.uppercaseChar() }
+    }
+
+/**
+ * Resolve the option for a slug within the given catalogue [options]. Falls back
+ * to the first catalogue entry, and finally — when the catalogue is empty — to a
+ * display-only option synthesized from the slug so the read-only status section
+ * can still render a friendly label. A synthesized option carries no base-URL
+ * affordance and an empty default model, so it can never seed a provider write.
+ */
+internal fun aiProviderOptionFor(
+    options: List<AiProviderOption>,
+    slug: String?,
+): AiProviderOption {
+    val normalized = slug?.trim()?.lowercase()
+    options.firstOrNull { it.slug == normalized }?.let { return it }
+    options.firstOrNull()?.let { return it }
+    return AiProviderOption(
+        slug = normalized.orEmpty(),
+        label = normalized?.toProviderDisplayLabel().orEmpty(),
+        defaultModel = "",
+        baseUrlAllowed = false,
+        baseUrlRequired = false,
+    )
+}
+
+/** Base URL entry is offered only for providers the backend allows one for. */
+internal fun aiProviderShowBaseUrl(options: List<AiProviderOption>, slug: String?): Boolean =
+    aiProviderOptionFor(options, slug).baseUrlAllowed
 
 // ---------------------------------------------------------------------------
 // Write form
@@ -110,8 +158,11 @@ internal data class AiProviderEditForm(
  * prefilled; the model falls back to the provider default when the backend has
  * none. The API key is ALWAYS empty — it is never populated from any response.
  */
-internal fun aiProviderEditFormFrom(status: AiProviderConfigStatusOut?): AiProviderEditForm {
-    val option = aiProviderOptionFor(status?.provider)
+internal fun aiProviderEditFormFrom(
+    options: List<AiProviderOption>,
+    status: AiProviderConfigStatusOut?,
+): AiProviderEditForm {
+    val option = aiProviderOptionFor(options, status?.provider)
     val model = status?.model?.takeIf { it.isNotBlank() } ?: option.defaultModel
     val baseUrl = if (option.usesBaseUrl) status?.baseUrl?.trim().orEmpty() else ""
     // First-configure defaults to enabled; otherwise reflect the stored state.
@@ -147,7 +198,7 @@ internal fun aiProviderSaveableFields(form: AiProviderEditForm): Map<String, Str
 /** Restore a form from a [aiProviderSaveableFields] snapshot; the key stays empty. */
 internal fun aiProviderFormFromSaveable(fields: Map<String, String>): AiProviderEditForm =
     AiProviderEditForm(
-        provider = fields[AI_PROVIDER_FORM_KEY_PROVIDER].orEmpty().ifBlank { DEFAULT_PROVIDER_SLUG },
+        provider = fields[AI_PROVIDER_FORM_KEY_PROVIDER].orEmpty().ifBlank { AI_PROVIDER_FALLBACK_SLUG },
         model = fields[AI_PROVIDER_FORM_KEY_MODEL].orEmpty(),
         baseUrl = fields[AI_PROVIDER_FORM_KEY_BASE_URL].orEmpty(),
         enabled = fields[AI_PROVIDER_FORM_KEY_ENABLED]?.toBooleanStrictOrNull() ?: true,
@@ -159,8 +210,11 @@ internal fun aiProviderFormFromSaveable(fields: Map<String, String>): AiProvider
  * when blank (keep-existing semantics — never an empty string); omits `base_url`
  * for providers that don't use one.
  */
-internal fun aiProviderSaveRequest(form: AiProviderEditForm): AiProviderConfigIn {
-    val option = aiProviderOptionFor(form.provider)
+internal fun aiProviderSaveRequest(
+    options: List<AiProviderOption>,
+    form: AiProviderEditForm,
+): AiProviderConfigIn {
+    val option = aiProviderOptionFor(options, form.provider)
     val trimmedKey = form.apiKey.trim()
     val trimmedBaseUrl = form.baseUrl.trim()
     return AiProviderConfigIn(
@@ -207,14 +261,23 @@ internal const val AI_PROVIDER_EDIT_TEST_ERROR =
 internal const val AI_PROVIDER_EDIT_ENVIRONMENT_NOTE =
     "This provider is set by a server environment variable. Saving here will " +
         "override it in the database."
+internal const val AI_PROVIDER_CATALOGUE_UNAVAILABLE =
+    "The provider catalogue couldn't be loaded from your Mimeo server, so editing " +
+        "is disabled to avoid saving outdated settings. Reconnect and reopen this " +
+        "screen to make changes."
 
-internal fun aiProviderEditStatusView(status: AiProviderConfigStatusOut): AiProviderEditStatusView {
-    val option = aiProviderOptionFor(status.provider)
+internal fun aiProviderEditStatusView(
+    options: List<AiProviderOption>,
+    status: AiProviderConfigStatusOut,
+): AiProviderEditStatusView {
+    val option = aiProviderOptionFor(options, status.provider)
     val providerLine = status.provider?.takeIf { it.isNotBlank() }?.let { "Provider: ${option.label}" }
     val modelLine = status.model?.takeIf { it.isNotBlank() }?.let { "Model: $it" }
+    // Show the stored base URL whenever the backend reports one. It is display-safe
+    // operator-entered data; gating on a catalogue flag would hide it in fallback.
     val baseUrlLine = status.baseUrl
         ?.trim()
-        ?.takeIf { it.isNotEmpty() && option.usesBaseUrl }
+        ?.takeIf { it.isNotEmpty() }
         ?.let { "Base URL: $it" }
     val enabledLine = "Enabled: ${if (status.enabled) "Yes" else "No"}"
     return AiProviderEditStatusView(

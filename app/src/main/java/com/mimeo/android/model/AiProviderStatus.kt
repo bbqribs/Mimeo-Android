@@ -4,6 +4,36 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
+ * BYOAI-A6 — a single safe entry in the backend-provided provider catalogue
+ * (`AiProviderCatalogueItemOut`). This is the source of truth for the provider
+ * dropdown, default models, and base-URL rules; Android no longer mirrors them.
+ *
+ * Every field here is display-safe metadata: a stable provider slug, a label,
+ * the default model, base-URL rules, and a coarse endpoint kind. There is never
+ * a key, ciphertext, env var name, prompt, or raw provider payload. Unknown
+ * non-critical fields are ignored by the decoder (`ignoreUnknownKeys = true`),
+ * and every modeled field except [key] has a safe default so a partial item
+ * still decodes; [key] is the item's identity and is required.
+ */
+@Serializable
+data class AiProviderCatalogueItemOut(
+    /** Stable, pre-sanitized provider slug (e.g. "anthropic"). */
+    val key: String,
+    /** Human-facing label (e.g. "Anthropic"); falls back to [key] when blank. */
+    val label: String = "",
+    @SerialName("default_model") val defaultModel: String = "",
+    /** Whether the backend requires an operator-entered base URL for this provider. */
+    @SerialName("base_url_required") val baseUrlRequired: Boolean = false,
+    /** Whether a base URL is permitted at all for this provider. */
+    @SerialName("base_url_allowed") val baseUrlAllowed: Boolean = false,
+    // "fixed_endpoint" | "openai_compatible" | "local_openai_compatible" — coarse,
+    // non-secret classification; opaque slug, surfaced only as a hint if at all.
+    @SerialName("endpoint_kind") val endpointKind: String? = null,
+    /** Optional short, display-safe help string for the provider; may be null. */
+    val help: String? = null,
+)
+
+/**
  * BYOAI-A3 — Android consumption of the backend's read-only AI provider status
  * contract (`GET /config/ai-provider` -> `AiProviderConfigStatusOut`).
  *
@@ -47,6 +77,14 @@ data class AiProviderConfigStatusOut(
      * by probing privileged endpoints — it is read from this field only.
      */
     @SerialName("can_edit") val canEdit: Boolean = false,
+    /**
+     * BYOAI-A6 — backend-authoritative provider catalogue. This is the source of
+     * truth for the edit-flow dropdown, default models, and base-URL rules.
+     * Defaults to empty so an older backend (or a response that omits it) decodes
+     * cleanly; an empty catalogue triggers the conservative fallback in the edit
+     * flow rather than any stale mirrored data.
+     */
+    val catalogue: List<AiProviderCatalogueItemOut> = emptyList(),
 )
 
 /**
