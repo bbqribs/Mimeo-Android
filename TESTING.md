@@ -31,6 +31,31 @@ ones run elsewhere:
     contract doc change (plus manual `workflow_dispatch`). Unchanged by the
     fast-gate work; still required when those paths are touched.
 
+### Android CI-2 measured results (2026-06-16)
+
+- PR #430's cold-cache `Build and unit test` run succeeded in 9m1s
+  (`27614094461`, job `81645553847`, 11:24:56-11:33:57 UTC). Its
+  `setup-gradle` step was read-only and reported no Gradle User Home cache hit,
+  as expected for a PR before the `main` cache was warmed.
+- The first `Android CI` run on `main` after PR #430 succeeded
+  (`27614602845`, job `81647247017`, 11:34:51-11:46:14 UTC). It saved Gradle
+  dependency, transform, wrapper, generated-jar, DSL, and Gradle home cache
+  entries for commit `2de637c6989b6eedd3781b56087f8f76f96cfa2b`.
+- The first subsequent PR timing was PR #431: `Build and unit test` succeeded
+  in 1m44s (`27615458757`, job `81650149873`). `setup-gradle` restored Gradle
+  home, dependency, transform, wrapper, generated-jar, and DSL cache entries;
+  the Gradle build completed in 1m6s with 18 tasks executed and 28 from cache.
+- `Android Release Check` was verified on `main` after PR #430 via manual
+  dispatch run `27614793587`: `Assemble release` succeeded in 11m28s and ran
+  `:app:assembleRelease`. Release assemble was moved out of the PR gate, not
+  deleted.
+- Current observed PR checks: `Build and unit test` is present on PR #430; the
+  path-scoped `Playback Scroll Guard Suite` workflow remains present and applies
+  when its reader/player/MainActivity/test/doc/workflow paths are touched.
+  GitHub's API reported no active classic branch protection for `main`; the
+  only readable repository ruleset for Playback Scroll Guard is currently
+  disabled.
+
 Local verification stays broader than the PR gate — run the full
 `.\gradlew.bat :app:testDebugUnitTest` and any ticket-specific suites (e.g. the
 Playback Scroll Guard suite below) before pushing.
