@@ -1,8 +1,14 @@
 package com.mimeo.android.ui.bluesky
 
+import com.mimeo.android.model.BlueskyCandidate
+import com.mimeo.android.model.BlueskyCandidatePostContext
+import com.mimeo.android.model.BlueskyCandidateScan
+import com.mimeo.android.model.BlueskyCandidateScanResponse
+import com.mimeo.android.model.BlueskyCandidateSource
 import com.mimeo.android.model.BlueskyCandidateSourceSelection
 import com.mimeo.android.model.BlueskyPickerPinItem
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class BlueskyBrowseScreenTest {
@@ -28,5 +34,52 @@ class BlueskyBrowseScreenTest {
         )
 
         assertEquals(42, sourceId)
+    }
+
+    @Test
+    fun blueskyBrowseCopyUsesUserFacingLinkLanguage() {
+        val scan = BlueskyCandidateScanResponse(
+            source = BlueskyCandidateSource(
+                sourceType = "list_feed",
+                identifier = "at://did:plc:example/app.bsky.graph.list/links",
+                displayLabel = "at://did:plc:example/app.bsky.graph.list/links",
+            ),
+            scan = BlueskyCandidateScan(
+                maxAgeHours = 24,
+                maxPosts = 50,
+                maxLinks = 10,
+                postsScanned = 12,
+                postsSkippedOld = 0,
+                stoppedReason = "limit",
+            ),
+            candidates = listOf(
+                BlueskyCandidate(
+                    articleUrl = "https://example.com/story",
+                    normalizedUrl = "https://example.com/story",
+                    bluesky = BlueskyCandidatePostContext(
+                        postUri = "at://did:plc:example/app.bsky.feed.post/abc",
+                    ),
+                    sourceLabel = "at://did:plc:example/app.bsky.graph.list/links",
+                    sourceType = "list_feed",
+                ),
+            ),
+        )
+        val renderedCopy = listOf(
+            blueskyScanStatsCopy(scan),
+            blueskyPinShortcutCopy(),
+            blueskyCandidateSourceLine(scan.source.displayLabel, scan.source.sourceType),
+        )
+
+        renderedCopy.forEach { copy ->
+            assertFalse(copy, copy.contains("candidate", ignoreCase = true))
+            assertFalse(copy, copy.contains("at://", ignoreCase = true))
+            assertFalse(copy, copy.contains("harvest", ignoreCase = true))
+            assertFalse(copy, copy.contains("max age", ignoreCase = true))
+            assertFalse(copy, copy.contains("max posts", ignoreCase = true))
+            assertFalse(copy, copy.contains("max links", ignoreCase = true))
+            assertFalse(copy, copy.contains("operator", ignoreCase = true))
+        }
+        assertEquals("Checked 12 posts, found 1 links", renderedCopy[0])
+        assertEquals("Bluesky list · List", renderedCopy[2])
     }
 }

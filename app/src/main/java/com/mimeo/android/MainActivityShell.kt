@@ -772,7 +772,7 @@ internal fun MainActivityShell(
                                     onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
                                     onCreateBlueskySmartPlaylist = {
                                         newSmartPlaylistInitialState = SmartPlaylistFormState(
-                                            name = "Bluesky harvests",
+                                            name = "Saved from Bluesky",
                                             captureKinds = "bluesky_harvest",
                                             sort = "saved_desc",
                                         )

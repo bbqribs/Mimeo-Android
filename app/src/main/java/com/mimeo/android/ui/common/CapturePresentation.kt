@@ -178,8 +178,8 @@ private fun String.containsRawAddress(): Boolean =
         contains("https://", ignoreCase = true)
 
 private fun genericBlueskySourceLabel(sourceType: String?, rawLabel: String): String = when {
-    sourceType == "feed_generator" || rawLabel.contains("feed", ignoreCase = true) -> "Bluesky Feed"
-    sourceType == "list_feed" || rawLabel.contains("list", ignoreCase = true) -> "Bluesky List"
+    sourceType == "feed_generator" || rawLabel.contains("feed", ignoreCase = true) -> "Bluesky feed"
+    sourceType == "list_feed" || rawLabel.contains("list", ignoreCase = true) -> "Bluesky list"
     rawLabel.contains("post", ignoreCase = true) -> "Bluesky Post"
     else -> "Bluesky Source"
 }

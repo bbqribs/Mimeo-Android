@@ -376,9 +376,7 @@ private fun SourcePicker(
                 } else {
                     "Choose a source"
                 }
-                val scannedStats = scan?.let {
-                    "Scanned ${it.scan.postsScanned} posts, ${it.candidates.size} links"
-                }
+                val scannedStats = scan?.let { blueskyScanStatsCopy(it) }
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     Text(
                         text = activeSourceLabel,
@@ -552,7 +550,7 @@ private fun ScanStatus(
     val mShapes = LocalMimeoShapeTokens.current
     if (scan == null && selected == null && error.isNullOrBlank() && !scanning) {
         Text(
-            text = "Choose a source to scan for article links.",
+            text = "Choose a source to scan for links from Bluesky.",
             color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
             style = if (isV1) mTypography.body else MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -592,7 +590,7 @@ private fun ScanStatus(
                         }
                     }
                     Text(
-                        text = "Pinning only stores the picker shortcut; it does not save or harvest links.",
+                        text = blueskyPinShortcutCopy(),
                         style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
                         color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
@@ -695,7 +693,7 @@ private fun CandidateRow(
                 }
             }
             Text(
-                text = "${cleanSourceLabel(candidate.sourceLabel, candidate.sourceType)} · ${formatSourceType(candidate.sourceType)}",
+                text = blueskyCandidateSourceLine(candidate.sourceLabel, candidate.sourceType),
                 style = if (isV1) mTypography.meta else MaterialTheme.typography.labelSmall,
                 color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -764,6 +762,18 @@ private fun SaveActionChip(
                 ) else FilterChipDefaults.filterChipColors(),
             )
     }
+}
+
+internal fun blueskyScanStatsCopy(scan: BlueskyCandidateScanResponse): String =
+    "Checked ${scan.scan.postsScanned} posts, found ${scan.candidates.size} links"
+
+internal fun blueskyPinShortcutCopy(): String =
+    "Pinning only stores the shortcut; it does not save links."
+
+internal fun blueskyCandidateSourceLine(sourceLabel: String, sourceType: String?): String {
+    val label = cleanSourceLabel(sourceLabel, sourceType)
+    val type = formatSourceType(sourceType)
+    return if (label.equals(type, ignoreCase = true)) label else "$label · $type"
 }
 
 private data class SourceDropdownOption(

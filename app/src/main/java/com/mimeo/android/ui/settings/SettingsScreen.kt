@@ -1263,7 +1263,7 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = localMaxAgeHours,
                         onValueChange = { localMaxAgeHours = it },
-                        label = { Text("Max age (hours, 1–${prefs.maxAgeHoursCeiling})") },
+                        label = { Text("Lookback window (hours, 1–${prefs.maxAgeHoursCeiling})") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         enabled = !blueskyScannerPreferencesSaving,
@@ -1272,7 +1272,7 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = localMaxPosts,
                         onValueChange = { localMaxPosts = it },
-                        label = { Text("Max posts scanned (1–${prefs.maxPostsCeiling})") },
+                        label = { Text("Posts to check (1–${prefs.maxPostsCeiling})") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         enabled = !blueskyScannerPreferencesSaving,
@@ -1281,7 +1281,7 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = localMaxLinks,
                         onValueChange = { localMaxLinks = it },
-                        label = { Text("Max links (1–${prefs.maxLinksCeiling})") },
+                        label = { Text("Links to show (1–${prefs.maxLinksCeiling})") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         enabled = !blueskyScannerPreferencesSaving,
@@ -2646,7 +2646,7 @@ private fun BlueskySourceRow(
             "Next due",
             if (enabled) source.resolvedNextDue ?: "Not scheduled" else "Paused",
         )
-        SettingsKeyValueLine("Last harvested", source.lastHarvestedAt ?: "Never")
+        SettingsKeyValueLine("Last saved", source.lastHarvestedAt ?: "Never")
         SettingsKeyValueLine("Last status", source.lastStatus ?: "Unknown")
         val savedCount = source.lastRunSaved
         val dupCount = source.lastRunDuplicate
@@ -2678,10 +2678,10 @@ private fun BlueskySourceRow(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(
                         onClick = {
-                            val name = if (source.typeLabel?.equals("Home timeline", ignoreCase = true) == true) {
+                            val name = if (source.typeLabel.equals("Home timeline", ignoreCase = true)) {
                                 "Bluesky Home Timeline"
                             } else {
-                                "Bluesky List"
+                                "Bluesky list"
                             }
                             onCreateSmartPlaylist(name, "bluesky_harvest", "saved_desc")
                         },
