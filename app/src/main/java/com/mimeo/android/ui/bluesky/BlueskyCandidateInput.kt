@@ -51,7 +51,7 @@ internal fun BlueskyCandidateInputSection(
         val parsed = parseBlueskyListIdentifierInput(listDraft)
         if (parsed.ok) {
             inputError = null
-            onScan(BlueskyCandidateSourceSelection("list_feed", "Bluesky List", uri = parsed.uri))
+            onScan(BlueskyCandidateSourceSelection("list_feed", "Bluesky list", uri = parsed.uri))
         } else {
             inputError = parsed.error
         }

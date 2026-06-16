@@ -1,6 +1,7 @@
 package com.mimeo.android.ui.bluesky
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class BlueskyDisplayHelpersTest {
@@ -9,17 +10,17 @@ class BlueskyDisplayHelpersTest {
 
     @Test
     fun cleanSourceLabel_listFeedWithAtUri_returnsBlueskyList() {
-        assertEquals("Bluesky List", cleanSourceLabel("at://did:plc:abc/app.bsky.graph.list/xyz", "list_feed"))
+        assertEquals("Bluesky list", cleanSourceLabel("at://did:plc:abc/app.bsky.graph.list/xyz", "list_feed"))
     }
 
     @Test
     fun cleanSourceLabel_listFeedWithHttpUri_returnsBlueskyList() {
-        assertEquals("Bluesky List", cleanSourceLabel("https://bsky.app/profile/alice/lists/123", "list_feed"))
+        assertEquals("Bluesky list", cleanSourceLabel("https://bsky.app/profile/alice/lists/123", "list_feed"))
     }
 
     @Test
     fun cleanSourceLabel_listFeedPinnedPrefixWithAtUri_returnsBlueskyList() {
-        assertEquals("Bluesky List", cleanSourceLabel("Pinned: at://did:plc:abc/app.bsky.graph.list/xyz", "list_feed"))
+        assertEquals("Bluesky list", cleanSourceLabel("Pinned: at://did:plc:abc/app.bsky.graph.list/xyz", "list_feed"))
     }
 
     @Test
@@ -29,12 +30,12 @@ class BlueskyDisplayHelpersTest {
 
     @Test
     fun cleanSourceLabel_feedGeneratorWithAtUri_returnsBlueskyFeed() {
-        assertEquals("Bluesky Feed", cleanSourceLabel("at://did:plc:abc/app.bsky.feed.generator/xyz", "feed_generator"))
+        assertEquals("Bluesky feed", cleanSourceLabel("at://did:plc:abc/app.bsky.feed.generator/xyz", "feed_generator"))
     }
 
     @Test
     fun cleanSourceLabel_feedGeneratorWithHttpUri_returnsBlueskyFeed() {
-        assertEquals("Bluesky Feed", cleanSourceLabel("https://bsky.app/profile/alice/feed/news", "feed_generator"))
+        assertEquals("Bluesky feed", cleanSourceLabel("https://bsky.app/profile/alice/feed/news", "feed_generator"))
     }
 
     @Test
@@ -103,15 +104,15 @@ class BlueskyDisplayHelpersTest {
 
     @Test
     fun blueskySourceDisplayName_atUriWithFeedTypeLabel_returnsBlueskyFeed() {
-        assertEquals("Bluesky Feed", blueskySourceDisplayName("at://did:plc:abc/app.bsky.feed.generator/xyz", "Feed"))
+        assertEquals("Bluesky feed", blueskySourceDisplayName("at://did:plc:abc/app.bsky.feed.generator/xyz", "Feed"))
         // "List feed" contains "feed" which is checked first, so feed wins
-        assertEquals("Bluesky Feed", blueskySourceDisplayName("at://did:plc:abc", "List feed"))
+        assertEquals("Bluesky feed", blueskySourceDisplayName("at://did:plc:abc", "List feed"))
     }
 
     @Test
     fun blueskySourceDisplayName_atUriWithListTypeLabel_returnsBlueskyList() {
         // "List" contains "list" but not "feed", so the list branch wins
-        assertEquals("Bluesky List", blueskySourceDisplayName("at://did:plc:abc/app.bsky.graph.list/xyz", "List"))
+        assertEquals("Bluesky list", blueskySourceDisplayName("at://did:plc:abc/app.bsky.graph.list/xyz", "List"))
     }
 
     @Test
@@ -147,7 +148,7 @@ class BlueskyDisplayHelpersTest {
     @Test
     fun sanitizeUserFacingSourceLabel_bareAtUriListContext_returnsBlueskyList() {
         assertEquals(
-            "Bluesky List",
+            "Bluesky list",
             sanitizeUserFacingSourceLabel("at://did:plc:abc/app.bsky.graph.list/xyz"),
         )
     }
@@ -155,7 +156,7 @@ class BlueskyDisplayHelpersTest {
     @Test
     fun sanitizeUserFacingSourceLabel_bareAtUriFeedContext_returnsBlueskyFeed() {
         assertEquals(
-            "Bluesky Feed",
+            "Bluesky feed",
             sanitizeUserFacingSourceLabel("at://did:plc:abc/app.bsky.feed.generator/xyz"),
         )
     }
@@ -191,7 +192,7 @@ class BlueskyDisplayHelpersTest {
     fun resolvePickerSourceLabel_listRawScanAndHttpSelected_fallsBackToGeneric() {
         // Both labels are raw addresses, so the generic list label is the best we can do.
         assertEquals(
-            "Bluesky List",
+            "Bluesky list",
             resolvePickerSourceLabel(
                 scanLabel = "at://did:plc:abc/app.bsky.graph.list/xyz",
                 scanType = "list_feed",
@@ -238,6 +239,25 @@ class BlueskyDisplayHelpersTest {
                 selectedKind = null,
             ),
         )
+    }
+
+    @Test
+    fun userFacingSourceLabels_hideRawAtUri() {
+        val labels = listOf(
+            cleanSourceLabel("at://did:plc:abc/app.bsky.graph.list/xyz", "list_feed"),
+            blueskySourceDisplayName("at://did:plc:abc/app.bsky.feed.generator/xyz", "Feed"),
+            sanitizeUserFacingSourceLabel("at://did:plc:abc/app.bsky.feed.generator/xyz").orEmpty(),
+            resolvePickerSourceLabel(
+                scanLabel = "at://did:plc:abc/app.bsky.graph.list/xyz",
+                scanType = "list_feed",
+                selectedLabel = "at://did:plc:abc/app.bsky.graph.list/xyz",
+                selectedKind = "list_feed",
+            ),
+        )
+
+        labels.forEach { label ->
+            assertFalse(label, label.contains("at://", ignoreCase = true))
+        }
     }
 
     // formatCandidateTimestamp

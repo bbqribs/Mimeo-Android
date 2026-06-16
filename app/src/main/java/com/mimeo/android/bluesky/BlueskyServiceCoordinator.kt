@@ -369,7 +369,7 @@ internal class BlueskyServiceCoordinator(
     fun scanBlueskyCandidateSource(selection: BlueskyCandidateSourceSelection) {
         val current = settings.value
         if (current.apiToken.isBlank()) {
-            state._blueskyCandidateError.value = "Token required to scan Bluesky candidates."
+            state._blueskyCandidateError.value = "Token required to scan links from Bluesky."
             return
         }
         state._blueskyCandidateSelection.value = selection
@@ -391,15 +391,15 @@ internal class BlueskyServiceCoordinator(
                 state._blueskyCandidateError.value = when (error) {
                     is ApiException -> when (error.statusCode) {
                         401 -> "Unauthorized. Sign in again."
-                        404 -> "Bluesky candidate endpoint not available on this backend."
+                        404 -> "Bluesky links are not available on this backend."
                         409 -> blueskyCandidateRequestErrorMessage(error, "Connect or reconnect Bluesky before scanning this source.")
-                        429 -> "Bluesky rate limited the candidate scan. Try again later."
-                        502 -> blueskyCandidateRequestErrorMessage(error, "Live Bluesky candidate scan failed.")
-                        in 500..599 -> "Backend error while scanning Bluesky candidates."
-                        else -> blueskyCandidateRequestErrorMessage(error, "Couldn't scan Bluesky candidates.")
+                        429 -> "Bluesky rate limited the link scan. Try again later."
+                        502 -> blueskyCandidateRequestErrorMessage(error, "Live Bluesky link scan failed.")
+                        in 500..599 -> "Backend error while scanning links from Bluesky."
+                        else -> blueskyCandidateRequestErrorMessage(error, "Couldn't scan links from Bluesky.")
                     }
                     is IOException -> "Couldn't reach server."
-                    else -> userFacingRequestErrorMessage(error, "Couldn't scan Bluesky candidates.")
+                    else -> userFacingRequestErrorMessage(error, "Couldn't scan links from Bluesky.")
                 }
             } finally {
                 state._blueskyCandidateLoading.value = false
@@ -434,9 +434,9 @@ internal class BlueskyServiceCoordinator(
                 onCandidateSaved()
             } catch (error: Throwable) {
                 val message = when (error) {
-                    is ApiException -> blueskyCandidateRequestErrorMessage(error, "Couldn't save candidate.")
+                    is ApiException -> blueskyCandidateRequestErrorMessage(error, "Couldn't save link.")
                     is IOException -> "Couldn't reach server."
-                    else -> userFacingRequestErrorMessage(error, "Couldn't save candidate.")
+                    else -> userFacingRequestErrorMessage(error, "Couldn't save link.")
                 }
                 state._blueskyCandidateSaveErrors.update { it + (candidate.articleUrl to message) }
             } finally {

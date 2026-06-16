@@ -6,11 +6,11 @@ internal fun cleanSourceLabel(label: String, sourceType: String?): String {
         val withoutPrefix = cleaned.removePrefix("Pinned:").trim()
         val hasRawAddress = withoutPrefix.contains("at://", ignoreCase = true) ||
             withoutPrefix.contains("://", ignoreCase = true)
-        if (hasRawAddress) return "Bluesky List"
+        if (hasRawAddress) return "Bluesky list"
     } else if (sourceType == "feed_generator") {
         val hasRawAddress = cleaned.contains("at://", ignoreCase = true) ||
             cleaned.contains("://", ignoreCase = true)
-        if (hasRawAddress) return "Bluesky Feed"
+        if (hasRawAddress) return "Bluesky feed"
     } else if (cleaned.startsWith("at://", ignoreCase = true)) {
         return formatSourceType(sourceType)
     }
@@ -54,8 +54,8 @@ internal fun blueskySourceDisplayName(resolvedName: String, typeLabel: String?):
     val candidate = resolvedName.trim()
     if (candidate.startsWith("at://", ignoreCase = true)) {
         return when {
-            typeLabel?.contains("feed", ignoreCase = true) == true -> "Bluesky Feed"
-            typeLabel?.contains("list", ignoreCase = true) == true -> "Bluesky List"
+            typeLabel?.contains("feed", ignoreCase = true) == true -> "Bluesky feed"
+            typeLabel?.contains("list", ignoreCase = true) == true -> "Bluesky list"
             else -> "Bluesky Source"
         }
     }
@@ -76,8 +76,8 @@ internal fun sanitizeUserFacingSourceLabel(label: String?): String? {
     val prefix = raw.substring(0, atIndex).trim().trimEnd(':', '-', '·', '—', '/', ' ').trim()
     return when {
         prefix.isNotBlank() -> prefix
-        raw.contains("feed", ignoreCase = true) -> "Bluesky Feed"
-        raw.contains("list", ignoreCase = true) -> "Bluesky List"
+        raw.contains("feed", ignoreCase = true) -> "Bluesky feed"
+        raw.contains("list", ignoreCase = true) -> "Bluesky list"
         else -> "Bluesky"
     }
 }

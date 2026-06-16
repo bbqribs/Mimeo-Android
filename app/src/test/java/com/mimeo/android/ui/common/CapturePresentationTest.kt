@@ -76,7 +76,7 @@ class CapturePresentationTest {
 
         val presentation = queueCapturePresentation(item)
 
-        assertEquals("Bluesky List", presentation.sourceLabel)
+        assertEquals("Bluesky list", presentation.sourceLabel)
     }
 
     @Test
