@@ -815,7 +815,7 @@ private fun SmartPlaylistHeader(
                         val filterParts = smartFilterParts(detail.filterDefinition)
                         if (filterParts.isEmpty()) {
                             Text(
-                                text = "All non-trashed, non-archived items",
+                                text = SMART_PLAYLIST_DEFAULT_FILTER_LABEL,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -923,7 +923,13 @@ private fun smartSortLabel(sort: String): String =
         else -> "Newest first"
     }
 
-private fun smartFilterParts(filter: JsonObject): List<String> {
+/**
+ * User-facing description shown when a smart playlist has no extra filters. Uses reader
+ * vocabulary (Bin, Archive) rather than internal store terms (trashed, archived).
+ */
+internal const val SMART_PLAYLIST_DEFAULT_FILTER_LABEL = "All items except Bin and Archive"
+
+internal fun smartFilterParts(filter: JsonObject): List<String> {
     val parts = mutableListOf<String>()
     filter.stringValue("keyword")?.let { parts += "keyword: $it" }
     filter.stringList("source_labels").takeIf { it.isNotEmpty() }?.let { parts += "source: ${it.joinToString()}" }
