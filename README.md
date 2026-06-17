@@ -89,6 +89,14 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
   - debug builds retain developer presets for local/operator use
   - release setup is manual-first
 
+## Changing backend host (migration / fresh-host testing)
+To point the app at a different backend, retarget without losing pending saves or
+playback state, and switch back, follow the host-change runbook:
+`docs/ANDROID_HOST_CHANGE_RUNBOOK.md`. Short version:
+- Sign In to the new host for a clean switch (prompts before clearing local data).
+- Settings -> Account & Connection -> edit Base URL -> Save for a non-destructive
+  retarget that keeps pending saves and cached state.
+
 ## Remote mode (Tailscale / off-LAN)
 Use this when your phone is not on the same home LAN as the backend host.
 
