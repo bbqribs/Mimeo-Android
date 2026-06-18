@@ -20,6 +20,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -65,8 +66,9 @@ internal fun BlueskyPostPreviewCard(
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        // Name + handle ellipsize (handle first, then name) while the timestamp stays pinned
-        // to the trailing edge, matching how Bluesky keeps the time marker always visible.
+        // Name + handle take the left, ellipsizing (handle first, then name) while the
+        // timestamp is right-aligned to the trailing edge and stays fully visible, matching
+        // how Bluesky lays out a post header.
         val author = buildAnnotatedString {
             preview.displayName?.let { name ->
                 // Bluesky renders the display name bold in the primary text colour.
@@ -81,22 +83,28 @@ internal fun BlueskyPostPreviewCard(
         }
         val metaStyle = TextStyle(fontSize = 13.sp, lineHeight = 18.sp)
         if (author.isNotEmpty() || preview.timestamp != null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 if (author.isNotEmpty()) {
                     Text(
                         text = author,
                         style = metaStyle,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
+                        modifier = Modifier.weight(1f),
                     )
                 }
                 preview.timestamp?.let { time ->
                     Text(
-                        text = if (author.isEmpty()) time else "  ·  $time",
+                        text = time,
                         style = metaStyle,
                         color = palette.muted,
                         maxLines = 1,
+                        // When there is no author to push against, keep the time on the right.
+                        modifier = if (author.isEmpty()) Modifier.weight(1f) else Modifier,
+                        textAlign = if (author.isEmpty()) TextAlign.End else null,
                     )
                 }
             }
