@@ -161,13 +161,13 @@ fun BlueskyBrowseScreen(
             ),
     ) {
         LazyColumn(
-            // Bleed outward past the shell's global 12dp horizontal padding so the Bluesky
-            // cards sit wider than other screens. The end bleed is larger than the start so
-            // the left margin is wider — balancing the scroll-thumb affordance that hugs the
-            // right edge, which would otherwise make the right side look more inset.
+            // Keep the left edge at the shell's standard 12dp margin and only bleed the right
+            // edge outward. The scroll-thumb affordance hugs the right edge and adds visual
+            // weight there, so an equal left margin reads as tighter; leaving the full 12dp on
+            // the left balances the two sides.
             modifier = Modifier
                 .fillMaxSize()
-                .horizontalBleed(start = 4.dp, end = 8.dp),
+                .horizontalBleed(start = 0.dp, end = 8.dp),
             state = listState,
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
