@@ -43,7 +43,7 @@ internal fun BlueskyPostPreviewCard(
     modifier: Modifier = Modifier,
 ) {
     val darkTheme = LocalMimeoColorTokens.current.bg.luminance() < 0.5f
-    val palette = if (darkTheme) BlueskyPostPalette.Dim else BlueskyPostPalette.Light
+    val palette = if (darkTheme) BlueskyPostPalette.Dark else BlueskyPostPalette.Light
     val uriHandler = LocalUriHandler.current
     val shape = RoundedCornerShape(12.dp)
 
@@ -107,9 +107,10 @@ internal fun BlueskyPostPreviewCard(
 
 /**
  * Bluesky's post colours, lifted from the ALF design tokens. [Light] is the default light
- * theme; [Dim] is Bluesky's default dark ("dim") theme. Values are the resolved
- * contrast/primary tokens: background = canvas, border = contrast_100, text = contrast_900,
- * muted = contrast_500.
+ * theme; [Dark] is Bluesky's true-black "Dark" theme (its other dark theme, "dim", uses a
+ * lighter blue-grey canvas — the true-black theme is the closer match for Mimeo's near-black
+ * dark surfaces). Values are the resolved tokens: background = canvas (trueBlack in dark),
+ * border = a subtle contrast hairline, text = contrast_900, muted = contrast_500.
  */
 private data class BlueskyPostPalette(
     val background: Color,
@@ -124,11 +125,11 @@ private data class BlueskyPostPalette(
             text = Color(0xFF253342),
             muted = Color(0xFF6F869F),
         )
-        val Dim = BlueskyPostPalette(
-            background = Color(0xFF161E27),
-            border = Color(0xFF2E4052),
-            text = Color(0xFFD7DDE4),
-            muted = Color(0xFF788EA5),
+        val Dark = BlueskyPostPalette(
+            background = Color(0xFF000000),
+            border = Color(0xFF1C2732),
+            text = Color(0xFFD4DBE2),
+            muted = Color(0xFF6F869F),
         )
 
         /** Bluesky brand link blue (primary_500); reserved for inline links/mentions. */
