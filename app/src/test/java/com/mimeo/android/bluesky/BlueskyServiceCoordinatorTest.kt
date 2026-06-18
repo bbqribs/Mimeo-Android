@@ -118,4 +118,54 @@ class BlueskyServiceCoordinatorTest {
 
         assertEquals("Token required to load Bluesky sources.", state.blueskyCandidatePickerError.value)
     }
+
+    @Test
+    fun resolveBlueskyPinTarget_feedGenerator_setsUri() {
+        // Feeds pin by uri, like lists — this is the parity fix; previously feeds resolved
+        // to no target and the pin was skipped.
+        val target = resolveBlueskyPinTarget(
+            sourceType = "feed_generator",
+            scanIdentifier = "at://did:plc:abc/app.bsky.feed.generator/news",
+            selectionActor = null,
+            selectionUri = "at://did:plc:abc/app.bsky.feed.generator/news",
+        )
+        assertNull(target.actor)
+        assertEquals("at://did:plc:abc/app.bsky.feed.generator/news", target.uri)
+    }
+
+    @Test
+    fun resolveBlueskyPinTarget_listFeed_setsUri() {
+        val target = resolveBlueskyPinTarget(
+            sourceType = "list_feed",
+            scanIdentifier = null,
+            selectionActor = null,
+            selectionUri = "at://did:plc:abc/app.bsky.graph.list/uk",
+        )
+        assertNull(target.actor)
+        assertEquals("at://did:plc:abc/app.bsky.graph.list/uk", target.uri)
+    }
+
+    @Test
+    fun resolveBlueskyPinTarget_authorFeed_setsActor() {
+        val target = resolveBlueskyPinTarget(
+            sourceType = "author_feed",
+            scanIdentifier = "alice.bsky.social",
+            selectionActor = "alice.bsky.social",
+            selectionUri = null,
+        )
+        assertEquals("alice.bsky.social", target.actor)
+        assertNull(target.uri)
+    }
+
+    @Test
+    fun resolveBlueskyPinTarget_homeTimeline_hasNoTarget() {
+        val target = resolveBlueskyPinTarget(
+            sourceType = "home_timeline",
+            scanIdentifier = null,
+            selectionActor = null,
+            selectionUri = null,
+        )
+        assertNull(target.actor)
+        assertNull(target.uri)
+    }
 }

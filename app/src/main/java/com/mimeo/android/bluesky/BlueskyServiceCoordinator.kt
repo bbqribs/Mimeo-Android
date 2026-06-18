@@ -451,11 +451,14 @@ internal class BlueskyServiceCoordinator(
         val scanSource = state._blueskyCandidateScan.value?.source
         if (current.apiToken.isBlank() || selection == null) return
         val sourceType = scanSource?.sourceType ?: selection.sourceKind
-        val actor = when (sourceType) {
-            "author_feed", "account" -> scanSource?.identifier ?: selection.actor
-            else -> null
-        }
-        val uri = if (sourceType == "list_feed") scanSource?.identifier ?: selection.uri else null
+        val target = resolveBlueskyPinTarget(
+            sourceType = sourceType,
+            scanIdentifier = scanSource?.identifier,
+            selectionActor = selection.actor,
+            selectionUri = selection.uri,
+        )
+        val actor = target.actor
+        val uri = target.uri
         if (actor.isNullOrBlank() && uri.isNullOrBlank()) return
         scope.launch {
             state._blueskyCandidatePinning.value = true
@@ -567,4 +570,30 @@ private fun blueskyCandidateRequestErrorMessage(error: ApiException, fallback: S
             ?: detail?.jsonPrimitive?.contentOrNull
     }.getOrNull()?.takeIf { it.isNotBlank() }
     return detailMessage ?: userFacingRequestErrorMessage(error, fallback)
+}
+
+/** The pin payload target: author/account sources pin by [actor]; lists and feeds by [uri]. */
+internal data class BlueskyPinTarget(val actor: String?, val uri: String?)
+
+/**
+ * Resolves which pin identifier to send for the active source. Author/account sources pin by
+ * actor handle; list and feed sources pin by uri. The backend pin route resolves list_feed vs
+ * feed_generator from the uri, so both feed and list URIs go through the same `uri` field.
+ * The scan-resolved identifier is preferred over the original selection when present.
+ */
+internal fun resolveBlueskyPinTarget(
+    sourceType: String?,
+    scanIdentifier: String?,
+    selectionActor: String?,
+    selectionUri: String?,
+): BlueskyPinTarget {
+    val actor = when (sourceType) {
+        "author_feed", "account" -> scanIdentifier ?: selectionActor
+        else -> null
+    }
+    val uri = when (sourceType) {
+        "list_feed", "feed_generator" -> scanIdentifier ?: selectionUri
+        else -> null
+    }
+    return BlueskyPinTarget(actor = actor, uri = uri)
 }

@@ -559,7 +559,8 @@ private fun ScanStatus(
     }
     val pinnedSourceId = findPinnedSourceId(scan, selected, pins)
     val sourceType = scan?.source?.sourceType ?: selected?.sourceKind
-    val pinSupported = sourceType == "author_feed" || sourceType == "list_feed" || sourceType == "account"
+    val pinSupported = sourceType == "author_feed" || sourceType == "list_feed" ||
+        sourceType == "account" || sourceType == "feed_generator"
     val showPinRow = pinSupported && (scan != null || pinnedSourceId != null)
     // The source title and scan counts now live in the picker header, so this card
     // only renders when it carries an error or pin controls.
@@ -881,9 +882,9 @@ internal fun findPinnedSourceId(
             val actor = (identifier ?: selected?.actor).orEmpty().trimStart('@')
             pins.firstOrNull { it.kind == "author_feed" && it.handle.equals(actor, ignoreCase = true) }?.sourceId
         }
-        "list_feed" -> {
+        "list_feed", "feed_generator" -> {
             val uri = identifier ?: selected?.uri
-            pins.firstOrNull { it.kind == "list_feed" && it.uri == uri }?.sourceId
+            pins.firstOrNull { it.kind == sourceType && it.uri == uri }?.sourceId
         }
         else -> null
     }
