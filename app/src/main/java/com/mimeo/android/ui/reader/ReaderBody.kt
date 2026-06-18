@@ -353,11 +353,12 @@ fun ReaderBody(
     val searchFocusExtraTopPx = with(density) { READER_SEARCH_FOCUS_EXTRA_TOP_PADDING.roundToPx().toFloat() }
     val topOverlayPx = topOverlayOcclusionPx.coerceAtLeast(0).toFloat()
     val bottomOverlayPx = bottomOverlayOcclusionPx.coerceAtLeast(0).toFloat()
-    // Trailing scroll headroom so the bottom-most text can be scrolled clear of the player
-    // dock, mirroring the bottom content padding on list screens. Crucially, autoscroll and
-    // search targets clamp to [followMaxValue] below (== the max BEFORE this spacer), so the
-    // headroom is reachable only by manual scrolling and never alters established follow
-    // behaviour at the end of the document.
+    // Trailing scroll headroom (== the dock height) appended below the text so the
+    // bottom-most lines can be scrolled clear of the player dock, mirroring the bottom
+    // content padding on list screens. The dock always covers this region during playback,
+    // so it shows no blank space. The follow/search targets intentionally use the FULL
+    // scrollState.maxValue (which now includes this room) so autoplay can keep the highlight
+    // above the dock at the end of the document — clamping it away breaks end-of-text follow.
     val bottomContentSpacerPx = bottomOverlayOcclusionPx.coerceAtLeast(0)
     val anchorRange = fullTextHighlightRange
     val followRange = fullTextFollowRange
@@ -528,7 +529,7 @@ fun ReaderBody(
         val safeStart = range.first.coerceIn(0, maxOffset)
         val startBox = layout.getCursorRect(safeStart)
         val target = computeReaderSearchFocusScrollTarget(
-            scrollMaxValue = (scrollState.maxValue - bottomContentSpacerPx).coerceAtLeast(0),
+            scrollMaxValue = scrollState.maxValue,
             startBoxTop = startBox.top,
             topComfortPx = topComfortPx,
             searchFocusExtraTopPx = searchFocusExtraTopPx,
@@ -648,11 +649,7 @@ fun ReaderBody(
             lastAnchorRange = anchor
             return@LaunchedEffect
         }
-        if (
-            externalTrigger &&
-            (scrollState.maxValue - bottomContentSpacerPx).coerceAtLeast(0) == 0 &&
-            abs(deltaToTopAnchor) > 1f
-        ) {
+        if (externalTrigger && scrollState.maxValue == 0 && abs(deltaToTopAnchor) > 1f) {
             return@LaunchedEffect
         }
         val hiddenByBottom = endBottomInRoot > desiredBottomInRoot
@@ -721,8 +718,11 @@ fun ReaderBody(
                     latestVisibleTop + topComfortPx
                 }
                 val delta = latestStartTopInRoot - desiredAnchorInRoot
-                val followMaxValue = (scrollState.maxValue - bottomContentSpacerPx).coerceAtLeast(0)
-                val target = (scrollState.value + delta).roundToInt().coerceIn(0, followMaxValue)
+                val target = computeReaderFollowTarget(
+                    currentScroll = scrollState.value,
+                    deltaToAnchorPx = delta,
+                    scrollMaxValue = scrollState.maxValue,
+                )
                 if (abs(target - scrollState.value) <= 1) return
                 isProgrammaticScroll = true
                 scrollState.scrollTo(target)
@@ -991,6 +991,20 @@ internal fun shouldSuppressStandardTriggerDuringCooldown(
 ): Boolean {
     return triggerKind == ReaderScrollTriggerKind.STANDARD && nowMs < suppressUntilMs
 }
+
+/**
+ * Resolves the absolute scroll offset the follow should animate to so the active anchor
+ * lands at the desired position. [deltaToAnchorPx] is how far the anchor must move (positive
+ * = scroll down). The result clamps to `[0, scrollMaxValue]` using the FULL scroll range —
+ * including the trailing dock-clearing spacer — so end-of-document follow can lift the last
+ * anchor above the dock. Reducing [scrollMaxValue] here (e.g. by the spacer height) silently
+ * breaks autoplay follow once the highlight reaches the bottom of the visible text.
+ */
+internal fun computeReaderFollowTarget(
+    currentScroll: Int,
+    deltaToAnchorPx: Float,
+    scrollMaxValue: Int,
+): Int = (currentScroll + deltaToAnchorPx).roundToInt().coerceIn(0, scrollMaxValue.coerceAtLeast(0))
 
 internal fun computeReaderVisibleBounds(
     viewportTopInRoot: Float,

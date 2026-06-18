@@ -1,11 +1,49 @@
 package com.mimeo.android.ui.reader
 
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlaybackScrollContractGuardTest {
+
+    @Test
+    fun followTarget_reachesIntoTrailingSpacerToClearDock_atEndOfDocument() {
+        // Text-only scroll max is 1000; a 150px trailing spacer (== dock height) extends the
+        // range to 1150 so the last anchor can be lifted above the dock. At the old end (1000)
+        // the follow still needs +150 to clear the dock; it must be allowed to use the room.
+        val textOnlyMax = 1000
+        val dockSpacer = 150
+        val scrollMaxValue = textOnlyMax + dockSpacer
+        assertEquals(
+            1150,
+            computeReaderFollowTarget(
+                currentScroll = textOnlyMax,
+                deltaToAnchorPx = 150f,
+                scrollMaxValue = scrollMaxValue,
+            ),
+        )
+        // Regression guard: clamping the ceiling back to the text-only max would pin the
+        // highlight under the dock (this is exactly the bug a maxValue-minus-spacer clamp
+        // reintroduces).
+        assertEquals(
+            1000,
+            computeReaderFollowTarget(
+                currentScroll = textOnlyMax,
+                deltaToAnchorPx = 150f,
+                scrollMaxValue = textOnlyMax,
+            ),
+        )
+    }
+
+    @Test
+    fun followTarget_clampsWithinBounds() {
+        assertEquals(0, computeReaderFollowTarget(50, -200f, 1000))
+        assertEquals(1000, computeReaderFollowTarget(900, 500f, 1000))
+        assertEquals(0, computeReaderFollowTarget(0, 0f, 0))
+        assertEquals(420, computeReaderFollowTarget(400, 20f, 1000))
+    }
 
     @Test
     fun manualScroll_detachesAsSoonAsAnchorIsNotFullyVisible() {
