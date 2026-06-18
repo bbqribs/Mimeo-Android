@@ -1,5 +1,86 @@
 package com.mimeo.android.ui.bluesky
 
+import com.mimeo.android.model.BlueskyCandidatePostContext
+
+/**
+ * The user-facing pieces of a Bluesky post excerpt rendered by [BlueskyPostPreviewCard].
+ * Every field is already sanitized for ordinary surfaces: no raw `at://` URIs, DIDs, or
+ * other backend identifiers survive into these strings, and [postUrl] is only populated
+ * when it is a safe http(s) link.
+ */
+internal data class BlueskyPostPreview(
+    val attribution: String?,
+    val timestamp: String?,
+    val snippet: String?,
+    val postUrl: String?,
+)
+
+/**
+ * Builds a sanitized [BlueskyPostPreview] from the candidate's post context, or null when
+ * there is nothing meaningful to show. A preview is only worth rendering when there is real
+ * post content — an author attribution or post text. A bare timestamp or link with no
+ * attribution/snippet is not enough to justify a "Bluesky post" box, so it degrades to null.
+ */
+internal fun buildBlueskyPostPreview(post: BlueskyCandidatePostContext): BlueskyPostPreview? {
+    val attribution = blueskyAttributionLine(post.authorDisplayName, post.authorHandle)
+    val snippet = sanitizeBlueskyText(post.textSnippet)
+    if (attribution == null && snippet == null) return null
+    val timestamp = post.indexedAt
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?.let { formatCandidateTimestamp(it) }
+    val postUrl = post.postUrl?.trim()?.takeIf { isSafeWebUrl(it) }
+    return BlueskyPostPreview(
+        attribution = attribution,
+        timestamp = timestamp,
+        snippet = snippet,
+        postUrl = postUrl,
+    )
+}
+
+/**
+ * Composes the "Display Name @handle" attribution line, dropping either part that is blank
+ * or that carries a raw identifier (an `at://` URI or `did:` value never belongs on an
+ * ordinary card). Handles with embedded whitespace are treated as untrustworthy and dropped.
+ */
+internal fun blueskyAttributionLine(displayName: String?, handle: String?): String? {
+    val name = displayName?.trim()?.takeIf { it.isNotBlank() && !containsRawIdentifier(it) }
+    val cleanHandle = handle?.trim()?.trimStart('@')
+        ?.takeIf { it.isNotBlank() && !containsRawIdentifier(it) && it.none(Char::isWhitespace) }
+    return when {
+        name != null && cleanHandle != null -> "$name @$cleanHandle"
+        cleanHandle != null -> "@$cleanHandle"
+        name != null -> name
+        else -> null
+    }
+}
+
+/**
+ * Strips raw `at://` URIs and bare `did:` identifiers out of post text so they never leak
+ * onto ordinary cards, then collapses the whitespace they leave behind. Returns null when
+ * nothing readable remains. This is a defensive scrub, not a rich-text/link parser:
+ * mentions, hashtags, and plain links already present in the text pass through unchanged.
+ */
+internal fun sanitizeBlueskyText(text: String?): String? {
+    val raw = text?.takeIf { it.isNotBlank() } ?: return null
+    val scrubbed = raw
+        .replace(Regex("at://\\S+", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("did:[A-Za-z0-9:._-]+", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("[ \\t]{2,}"), " ")
+        .trim()
+    return scrubbed.takeIf { it.isNotBlank() }
+}
+
+private fun containsRawIdentifier(value: String): Boolean {
+    val lower = value.lowercase()
+    return lower.contains("at://") || lower.contains("did:")
+}
+
+private fun isSafeWebUrl(url: String): Boolean {
+    val lower = url.lowercase()
+    return (lower.startsWith("http://") || lower.startsWith("https://")) && !lower.contains("at://")
+}
+
 internal fun cleanSourceLabel(label: String, sourceType: String?): String {
     val cleaned = label.trim()
     if (sourceType == "list_feed") {

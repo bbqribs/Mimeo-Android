@@ -654,43 +654,9 @@ private fun CandidateRow(
                     modifier = Modifier.offset(y = (-8).dp),
                 )
             }
-            val postMeta = buildList {
-                candidate.bluesky.authorDisplayName?.takeIf { it.isNotBlank() }?.let { add(it) }
-                candidate.bluesky.authorHandle?.takeIf { it.isNotBlank() }?.let { add("@$it") }
-                candidate.bluesky.indexedAt?.takeIf { it.isNotBlank() }?.let { add(formatCandidateTimestamp(it)) }
-            }
-            val postUrl = candidate.bluesky.postUrl
-            val hasPostContent = postMeta.isNotEmpty() || !candidate.bluesky.textSnippet.isNullOrBlank()
-            if (hasPostContent) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(
-                            if (!postUrl.isNullOrBlank()) {
-                                Modifier.clickable { uriHandler.openUri(postUrl) }
-                            } else {
-                                Modifier
-                            },
-                        ),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    if (postMeta.isNotEmpty()) {
-                        Text(
-                            text = postMeta.joinToString(" · "),
-                            style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
-                            color = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    if (!candidate.bluesky.textSnippet.isNullOrBlank()) {
-                        Text(
-                            text = candidate.bluesky.textSnippet,
-                            style = if (isV1) mTypography.body else MaterialTheme.typography.bodyMedium,
-                            color = if (isV1) mColors.fg else MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
+            val postPreview = buildBlueskyPostPreview(candidate.bluesky)
+            if (postPreview != null) {
+                BlueskyPostPreviewCard(preview = postPreview)
             }
             Text(
                 text = blueskyCandidateSourceLine(candidate.sourceLabel, candidate.sourceType),
