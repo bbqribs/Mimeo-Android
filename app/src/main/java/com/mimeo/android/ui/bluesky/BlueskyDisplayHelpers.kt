@@ -1,5 +1,90 @@
 package com.mimeo.android.ui.bluesky
 
+import com.mimeo.android.model.BlueskyCandidatePostContext
+
+/**
+ * The user-facing pieces of a Bluesky post excerpt rendered by [BlueskyPostPreviewCard].
+ * The display name and handle are kept separate so the card can style them like Bluesky
+ * does (bold name, muted handle). Every field is already sanitized for ordinary surfaces:
+ * no raw `at://` URIs, DIDs, or other backend identifiers survive into these strings,
+ * [handle] never carries a leading `@`, and [postUrl] is only populated when it is a safe
+ * http(s) link.
+ */
+internal data class BlueskyPostPreview(
+    val displayName: String?,
+    val handle: String?,
+    val timestamp: String?,
+    val snippet: String?,
+    val postUrl: String?,
+)
+
+/**
+ * Builds a sanitized [BlueskyPostPreview] from the candidate's post context, or null when
+ * there is nothing meaningful to show. A preview is only worth rendering when there is real
+ * post content — an author (name or handle) or post text. A bare timestamp or link with no
+ * attribution/snippet is not enough to justify a post box, so it degrades to null.
+ */
+internal fun buildBlueskyPostPreview(post: BlueskyCandidatePostContext): BlueskyPostPreview? {
+    val displayName = sanitizeBlueskyDisplayName(post.authorDisplayName)
+    val handle = sanitizeBlueskyHandle(post.authorHandle)
+    val snippet = sanitizeBlueskyText(post.textSnippet)
+    if (displayName == null && handle == null && snippet == null) return null
+    val timestamp = post.indexedAt
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?.let { formatCandidateTimestamp(it) }
+    val postUrl = post.postUrl?.trim()?.takeIf { isSafeWebUrl(it) }
+    return BlueskyPostPreview(
+        displayName = displayName,
+        handle = handle,
+        timestamp = timestamp,
+        snippet = snippet,
+        postUrl = postUrl,
+    )
+}
+
+/**
+ * Returns the author display name, or null when blank or carrying a raw identifier (an
+ * `at://` URI or `did:` value never belongs on an ordinary card).
+ */
+internal fun sanitizeBlueskyDisplayName(displayName: String?): String? =
+    displayName?.trim()?.takeIf { it.isNotBlank() && !containsRawIdentifier(it) }
+
+/**
+ * Returns the author handle without a leading `@`, or null when blank, carrying a raw
+ * identifier, or containing whitespace (a real Bluesky handle never has spaces, so an
+ * embedded space signals an untrustworthy value).
+ */
+internal fun sanitizeBlueskyHandle(handle: String?): String? =
+    handle?.trim()?.trimStart('@')
+        ?.takeIf { it.isNotBlank() && !containsRawIdentifier(it) && it.none(Char::isWhitespace) }
+
+/**
+ * Strips raw `at://` URIs and bare `did:` identifiers out of post text so they never leak
+ * onto ordinary cards, then collapses the whitespace they leave behind. Returns null when
+ * nothing readable remains. This is a defensive scrub, not a rich-text/link parser:
+ * mentions, hashtags, and plain links already present in the text pass through unchanged.
+ */
+internal fun sanitizeBlueskyText(text: String?): String? {
+    val raw = text?.takeIf { it.isNotBlank() } ?: return null
+    val scrubbed = raw
+        .replace(Regex("at://\\S+", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("did:[A-Za-z0-9:._-]+", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("[ \\t]{2,}"), " ")
+        .trim()
+    return scrubbed.takeIf { it.isNotBlank() }
+}
+
+private fun containsRawIdentifier(value: String): Boolean {
+    val lower = value.lowercase()
+    return lower.contains("at://") || lower.contains("did:")
+}
+
+private fun isSafeWebUrl(url: String): Boolean {
+    val lower = url.lowercase()
+    return (lower.startsWith("http://") || lower.startsWith("https://")) && !lower.contains("at://")
+}
+
 internal fun cleanSourceLabel(label: String, sourceType: String?): String {
     val cleaned = label.trim()
     if (sourceType == "list_feed") {
@@ -50,6 +135,34 @@ internal fun formatSourceType(sourceType: String?): String = when (sourceType) {
     else -> "Bluesky"
 }
 
+/**
+ * The Bluesky-branded label for a source kind, matching the web app's `sourceKindLabel`:
+ * "Bluesky Home Timeline", "Bluesky List", "Bluesky Feed", "Bluesky Account".
+ */
+internal fun blueskySourceKindLabel(sourceType: String?): String = when (sourceType) {
+    "home_timeline" -> "Bluesky Home Timeline"
+    "list_feed" -> "Bluesky List"
+    "feed_generator" -> "Bluesky Feed"
+    "author_feed", "account" -> "Bluesky Account"
+    else -> "Bluesky"
+}
+
+/**
+ * Resolves the real, human-facing name of a source from its raw `source_label`, matching the
+ * web app's `resolvedSourceLabel`: strips a "Bluesky List: " / "Bluesky Feed: " prefix, drops
+ * labels that are merely the generic kind name (so they don't duplicate the kind prefix), and
+ * drops raw identifiers (`at://`, `did:plc`). Returns "" when no meaningful name remains.
+ */
+internal fun resolveCandidateSourceName(rawLabel: String?): String {
+    val stripped = (rawLabel ?: "")
+        .trim()
+        .replace(Regex("^Bluesky\\s+(?:List|Feed):\\s*", RegexOption.IGNORE_CASE), "")
+    val generic = setOf("Bluesky Feed", "Bluesky List", "Bluesky Home Timeline", "Home Timeline")
+    if (stripped.isBlank() || stripped in generic) return ""
+    if (stripped.contains("at://") || stripped.contains("did:plc")) return ""
+    return stripped
+}
+
 internal fun blueskySourceDisplayName(resolvedName: String, typeLabel: String?): String {
     val candidate = resolvedName.trim()
     if (candidate.startsWith("at://", ignoreCase = true)) {
@@ -82,17 +195,43 @@ internal fun sanitizeUserFacingSourceLabel(label: String?): String? {
     }
 }
 
+/**
+ * Formats a post timestamp the way Bluesky does: a compact relative marker with no "ago"
+ * suffix — `2m`, `4h`, `8d` — counting seconds → minutes → hours → days up to 30 days, then
+ * falling back to a calendar date (`MMM d`, with the year appended once it differs from the
+ * current year). Unparseable input degrades to its leading date portion.
+ */
 internal fun formatCandidateTimestamp(iso: String): String {
     return runCatching {
         val normalized = iso.replace("Z", "+00:00")
         val dt = java.time.OffsetDateTime.parse(normalized)
         val now = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
-        val hours = java.time.Duration.between(dt, now).toHours()
+        val seconds = java.time.Duration.between(dt, now).seconds.coerceAtLeast(0)
+        val minutes = seconds / 60
+        val hours = minutes / 60
+        val days = hours / 24
         when {
-            hours < 1 -> "just now"
-            hours < 24 -> "${hours}h ago"
-            hours < 24 * 7 -> "${hours / 24}d ago"
-            else -> dt.format(java.time.format.DateTimeFormatter.ofPattern("MMM d"))
+            seconds < 60 -> "${seconds}s"
+            minutes < 60 -> "${minutes}m"
+            hours < 24 -> "${hours}h"
+            days < 30 -> "${days}d"
+            dt.year == now.year -> dt.format(java.time.format.DateTimeFormatter.ofPattern("MMM d"))
+            else -> dt.format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy"))
         }
     }.getOrDefault(iso.take(10))
+}
+
+/**
+ * Finds the spans within already-sanitized post text that Bluesky renders in its brand blue:
+ * plain http(s) links, @mentions, and #hashtags. Returns non-overlapping ranges sorted by
+ * start offset so the card can colour them. This is a lightweight highlighter, not a
+ * clickable rich-text parser: the whole post box remains the single tap target.
+ */
+internal fun blueskyTextLinkRanges(text: String): List<IntRange> {
+    if (text.isEmpty()) return emptyList()
+    val pattern = Regex("https?://\\S+|(?<![\\w@])@[A-Za-z0-9][A-Za-z0-9._-]*|(?<!\\w)#[A-Za-z0-9_]+")
+    return pattern.findAll(text)
+        .map { it.range }
+        .filter { !it.isEmpty() }
+        .toList()
 }

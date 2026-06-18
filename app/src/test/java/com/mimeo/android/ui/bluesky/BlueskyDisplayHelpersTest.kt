@@ -1,7 +1,11 @@
 package com.mimeo.android.ui.bluesky
 
+import com.mimeo.android.model.BlueskyCandidatePostContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BlueskyDisplayHelpersTest {
@@ -269,18 +273,278 @@ class BlueskyDisplayHelpersTest {
     }
 
     @Test
-    fun formatCandidateTimestamp_recentIso_returnsRelativeLabel() {
+    fun formatCandidateTimestamp_secondsAgo_returnsCompactSeconds() {
         val iso = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
-            .minusMinutes(5)
+            .minusSeconds(20)
             .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-        assertEquals("just now", formatCandidateTimestamp(iso))
+        assertEquals("20s", formatCandidateTimestamp(iso))
     }
 
     @Test
-    fun formatCandidateTimestamp_hoursAgoIso_returnsHourLabel() {
+    fun formatCandidateTimestamp_minutesAgo_returnsCompactMinutes() {
         val iso = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
-            .minusHours(3)
+            .minusMinutes(5)
             .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-        assertEquals("3h ago", formatCandidateTimestamp(iso))
+        assertEquals("5m", formatCandidateTimestamp(iso))
+    }
+
+    @Test
+    fun formatCandidateTimestamp_hoursAgo_returnsCompactHours() {
+        val iso = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
+            .minusHours(4)
+            .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        assertEquals("4h", formatCandidateTimestamp(iso))
+    }
+
+    @Test
+    fun formatCandidateTimestamp_daysAgo_returnsCompactDays() {
+        // Days run past a week (Bluesky shows "8d", not "1w"), up to 30 days.
+        val iso = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
+            .minusDays(8)
+            .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        assertEquals("8d", formatCandidateTimestamp(iso))
+    }
+
+    @Test
+    fun formatCandidateTimestamp_neverUsesAgoSuffix() {
+        val now = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
+        val iso = java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME
+        val rendered = listOf(
+            formatCandidateTimestamp(now.minusSeconds(20).format(iso)),
+            formatCandidateTimestamp(now.minusMinutes(5).format(iso)),
+            formatCandidateTimestamp(now.minusHours(4).format(iso)),
+            formatCandidateTimestamp(now.minusDays(8).format(iso)),
+        )
+        rendered.forEach { value -> assertFalse(value, value.contains("ago", ignoreCase = true)) }
+        assertEquals(listOf("20s", "5m", "4h", "8d"), rendered)
+    }
+
+    // blueskyTextLinkRanges
+
+    @Test
+    fun blueskyTextLinkRanges_plainText_returnsEmpty() {
+        assertTrue(blueskyTextLinkRanges("Just a plain sentence with no links").isEmpty())
+        assertTrue(blueskyTextLinkRanges("").isEmpty())
+    }
+
+    @Test
+    fun blueskyTextLinkRanges_url_isMatched() {
+        val text = "Read it at https://example.com/story today"
+        val ranges = blueskyTextLinkRanges(text)
+        assertEquals(1, ranges.size)
+        assertEquals("https://example.com/story", text.substring(ranges[0].first, ranges[0].last + 1))
+    }
+
+    @Test
+    fun blueskyTextLinkRanges_mentionAndHashtag_areMatched() {
+        val text = "thanks @alice.bsky.social for the #news"
+        val matched = blueskyTextLinkRanges(text)
+            .sortedBy { it.first }
+            .map { text.substring(it.first, it.last + 1) }
+        assertEquals(listOf("@alice.bsky.social", "#news"), matched)
+    }
+
+    // sanitizeBlueskyDisplayName
+
+    @Test
+    fun sanitizeBlueskyDisplayName_plainName_passesThrough() {
+        assertEquals("Alice Example", sanitizeBlueskyDisplayName("  Alice Example  "))
+    }
+
+    @Test
+    fun sanitizeBlueskyDisplayName_blank_returnsNull() {
+        assertNull(sanitizeBlueskyDisplayName("   "))
+        assertNull(sanitizeBlueskyDisplayName(null))
+    }
+
+    @Test
+    fun sanitizeBlueskyDisplayName_dropsNameCarryingAtUri() {
+        assertNull(sanitizeBlueskyDisplayName("at://did:plc:abc/post"))
+    }
+
+    @Test
+    fun sanitizeBlueskyDisplayName_dropsNameCarryingDid() {
+        assertNull(sanitizeBlueskyDisplayName("did:plc:abc123"))
+    }
+
+    // sanitizeBlueskyHandle
+
+    @Test
+    fun sanitizeBlueskyHandle_stripsLeadingAt() {
+        assertEquals("alice.bsky.social", sanitizeBlueskyHandle("@alice.bsky.social"))
+        assertEquals("alice.bsky.social", sanitizeBlueskyHandle("alice.bsky.social"))
+    }
+
+    @Test
+    fun sanitizeBlueskyHandle_blank_returnsNull() {
+        assertNull(sanitizeBlueskyHandle("   "))
+        assertNull(sanitizeBlueskyHandle(null))
+    }
+
+    @Test
+    fun sanitizeBlueskyHandle_dropsHandleCarryingDid() {
+        // A handle should never be a raw DID; drop it rather than leak the identifier.
+        assertNull(sanitizeBlueskyHandle("did:plc:abc123"))
+    }
+
+    @Test
+    fun sanitizeBlueskyHandle_dropsHandleWithWhitespace() {
+        // Real handles never contain spaces; an embedded space signals an untrustworthy value.
+        assertNull(sanitizeBlueskyHandle("not a handle"))
+    }
+
+    // sanitizeBlueskyText
+
+    @Test
+    fun sanitizeBlueskyText_plainText_passesThrough() {
+        assertEquals("Check out this article", sanitizeBlueskyText("Check out this article"))
+    }
+
+    @Test
+    fun sanitizeBlueskyText_mentionsAndHashtags_preserved() {
+        assertEquals(
+            "Great read from @alice.bsky.social #news",
+            sanitizeBlueskyText("Great read from @alice.bsky.social #news"),
+        )
+    }
+
+    @Test
+    fun sanitizeBlueskyText_stripsRawAtUri() {
+        val result = sanitizeBlueskyText("See at://did:plc:abc/app.bsky.feed.post/xyz now")
+        assertNotNull(result)
+        assertFalse(result!!, result.contains("at://"))
+        assertEquals("See now", result)
+    }
+
+    @Test
+    fun sanitizeBlueskyText_stripsBareDid() {
+        val result = sanitizeBlueskyText("Posted by did:plc:abc123 today")
+        assertNotNull(result)
+        assertFalse(result!!, result.contains("did:"))
+        assertEquals("Posted by today", result)
+    }
+
+    @Test
+    fun sanitizeBlueskyText_blankOrNull_returnsNull() {
+        assertNull(sanitizeBlueskyText("   "))
+        assertNull(sanitizeBlueskyText(null))
+    }
+
+    @Test
+    fun sanitizeBlueskyText_onlyIdentifier_returnsNull() {
+        assertNull(sanitizeBlueskyText("at://did:plc:abc/app.bsky.feed.post/xyz"))
+    }
+
+    // buildBlueskyPostPreview
+
+    @Test
+    fun buildBlueskyPostPreview_fullContext_rendersAllFields() {
+        val iso = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
+            .minusHours(2)
+            .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        val preview = buildBlueskyPostPreview(
+            BlueskyCandidatePostContext(
+                postUri = "at://did:plc:abc/app.bsky.feed.post/xyz",
+                postUrl = "https://bsky.app/profile/alice.bsky.social/post/xyz",
+                authorHandle = "alice.bsky.social",
+                authorDisplayName = "Alice Example",
+                textSnippet = "A fascinating story worth saving",
+                indexedAt = iso,
+            ),
+        )
+
+        assertNotNull(preview)
+        assertEquals("Alice Example", preview!!.displayName)
+        assertEquals("alice.bsky.social", preview.handle)
+        assertEquals("2h", preview.timestamp)
+        assertEquals("A fascinating story worth saving", preview.snippet)
+        assertEquals("https://bsky.app/profile/alice.bsky.social/post/xyz", preview.postUrl)
+    }
+
+    @Test
+    fun buildBlueskyPostPreview_missingPostContext_returnsNull() {
+        // Only the internal post URI is present (no author, no text) — there is nothing
+        // user-facing to show, so the preview degrades to nothing rather than an empty box.
+        val preview = buildBlueskyPostPreview(
+            BlueskyCandidatePostContext(postUri = "at://did:plc:abc/app.bsky.feed.post/xyz"),
+        )
+        assertNull(preview)
+    }
+
+    @Test
+    fun buildBlueskyPostPreview_timestampOnly_returnsNull() {
+        // A bare timestamp with no attribution or text does not justify a "Bluesky post" box.
+        val iso = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
+            .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        val preview = buildBlueskyPostPreview(
+            BlueskyCandidatePostContext(
+                postUri = "at://did:plc:abc/app.bsky.feed.post/xyz",
+                indexedAt = iso,
+            ),
+        )
+        assertNull(preview)
+    }
+
+    @Test
+    fun buildBlueskyPostPreview_snippetOnly_rendersDegraded() {
+        val preview = buildBlueskyPostPreview(
+            BlueskyCandidatePostContext(
+                postUri = "at://did:plc:abc/app.bsky.feed.post/xyz",
+                textSnippet = "Just the text, no author",
+            ),
+        )
+        assertNotNull(preview)
+        assertNull(preview!!.displayName)
+        assertNull(preview.handle)
+        assertNull(preview.timestamp)
+        assertNull(preview.postUrl)
+        assertEquals("Just the text, no author", preview.snippet)
+    }
+
+    @Test
+    fun buildBlueskyPostPreview_rejectsAtUriPostUrl() {
+        // The post link must be a safe web URL; an at:// value is suppressed.
+        val preview = buildBlueskyPostPreview(
+            BlueskyCandidatePostContext(
+                postUri = "at://did:plc:abc/app.bsky.feed.post/xyz",
+                postUrl = "at://did:plc:abc/app.bsky.feed.post/xyz",
+                authorHandle = "alice.bsky.social",
+                textSnippet = "Some text",
+            ),
+        )
+        assertNotNull(preview)
+        assertNull(preview!!.postUrl)
+    }
+
+    @Test
+    fun buildBlueskyPostPreview_neverLeaksRawIdentifiers() {
+        // Even when the backend stuffs identifiers into every field, the rendered preview
+        // must not surface at://, did:, or other backend identifiers on an ordinary card.
+        val preview = buildBlueskyPostPreview(
+            BlueskyCandidatePostContext(
+                postUri = "at://did:plc:abc/app.bsky.feed.post/xyz",
+                postUrl = "at://did:plc:abc/app.bsky.feed.post/xyz",
+                authorHandle = "did:plc:leak",
+                authorDisplayName = "Real Name",
+                textSnippet = "Body with at://did:plc:abc/app.bsky.feed.post/xyz inside",
+                indexedAt = "not-a-date",
+            ),
+        )
+        assertNotNull(preview)
+        val rendered = listOfNotNull(
+            preview!!.displayName,
+            preview.handle,
+            preview.timestamp,
+            preview.snippet,
+            preview.postUrl,
+        )
+        rendered.forEach { value ->
+            assertFalse(value, value.contains("at://", ignoreCase = true))
+            assertFalse(value, value.contains("did:", ignoreCase = true))
+        }
+        assertEquals("Real Name", preview.displayName)
+        // The DID-shaped handle is dropped rather than rendered.
+        assertNull(preview.handle)
+        assertTrue(preview.snippet!!.startsWith("Body with"))
     }
 }
