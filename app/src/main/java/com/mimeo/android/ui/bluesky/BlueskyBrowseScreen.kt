@@ -207,7 +207,7 @@ fun BlueskyBrowseScreen(
                 }
                 scan != null && scan!!.candidates.isEmpty() -> item {
                     Text(
-                        text = "No links found for this source in the current scan window.",
+                        text = blueskyNoLinksCopy(),
                         color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
                         style = if (isV1) mTypography.body else MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
@@ -550,7 +550,7 @@ private fun ScanStatus(
     val mShapes = LocalMimeoShapeTokens.current
     if (scan == null && selected == null && error.isNullOrBlank() && !scanning) {
         Text(
-            text = "Choose a source to scan for links from Bluesky.",
+            text = blueskyChooseSourceCopy(),
             color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
             style = if (isV1) mTypography.body else MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -766,6 +766,14 @@ private fun SaveActionChip(
 
 internal fun blueskyScanStatsCopy(scan: BlueskyCandidateScanResponse): String =
     "Checked ${scan.scan.postsScanned} posts, found ${scan.candidates.size} links"
+
+/** Empty state shown before the user has picked a Bluesky source to browse. */
+internal fun blueskyChooseSourceCopy(): String =
+    "Choose a source to scan for links from Bluesky."
+
+/** Empty state shown when a scanned source has no shareable links in the window. */
+internal fun blueskyNoLinksCopy(): String =
+    "No links found for this source in the current scan window."
 
 internal fun blueskyPinShortcutCopy(): String =
     "Pinning only stores the shortcut; it does not save links."
