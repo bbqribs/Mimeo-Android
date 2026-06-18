@@ -167,17 +167,43 @@ internal fun sanitizeUserFacingSourceLabel(label: String?): String? {
     }
 }
 
+/**
+ * Formats a post timestamp the way Bluesky does: a compact relative marker with no "ago"
+ * suffix — `2m`, `4h`, `8d` — counting seconds → minutes → hours → days up to 30 days, then
+ * falling back to a calendar date (`MMM d`, with the year appended once it differs from the
+ * current year). Unparseable input degrades to its leading date portion.
+ */
 internal fun formatCandidateTimestamp(iso: String): String {
     return runCatching {
         val normalized = iso.replace("Z", "+00:00")
         val dt = java.time.OffsetDateTime.parse(normalized)
         val now = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
-        val hours = java.time.Duration.between(dt, now).toHours()
+        val seconds = java.time.Duration.between(dt, now).seconds.coerceAtLeast(0)
+        val minutes = seconds / 60
+        val hours = minutes / 60
+        val days = hours / 24
         when {
-            hours < 1 -> "just now"
-            hours < 24 -> "${hours}h ago"
-            hours < 24 * 7 -> "${hours / 24}d ago"
-            else -> dt.format(java.time.format.DateTimeFormatter.ofPattern("MMM d"))
+            seconds < 60 -> "${seconds}s"
+            minutes < 60 -> "${minutes}m"
+            hours < 24 -> "${hours}h"
+            days < 30 -> "${days}d"
+            dt.year == now.year -> dt.format(java.time.format.DateTimeFormatter.ofPattern("MMM d"))
+            else -> dt.format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy"))
         }
     }.getOrDefault(iso.take(10))
+}
+
+/**
+ * Finds the spans within already-sanitized post text that Bluesky renders in its brand blue:
+ * plain http(s) links, @mentions, and #hashtags. Returns non-overlapping ranges sorted by
+ * start offset so the card can colour them. This is a lightweight highlighter, not a
+ * clickable rich-text parser: the whole post box remains the single tap target.
+ */
+internal fun blueskyTextLinkRanges(text: String): List<IntRange> {
+    if (text.isEmpty()) return emptyList()
+    val pattern = Regex("https?://\\S+|(?<![\\w@])@[A-Za-z0-9][A-Za-z0-9._-]*|(?<!\\w)#[A-Za-z0-9_]+")
+    return pattern.findAll(text)
+        .map { it.range }
+        .filter { !it.isEmpty() }
+        .toList()
 }

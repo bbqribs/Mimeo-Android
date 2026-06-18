@@ -5,11 +5,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -63,38 +65,52 @@ internal fun BlueskyPostPreviewCard(
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        val header = buildAnnotatedString {
-            var hasContent = false
+        // Name + handle ellipsize (handle first, then name) while the timestamp stays pinned
+        // to the trailing edge, matching how Bluesky keeps the time marker always visible.
+        val author = buildAnnotatedString {
             preview.displayName?.let { name ->
                 // Bluesky renders the display name bold in the primary text colour.
                 withStyle(SpanStyle(color = palette.text, fontWeight = FontWeight.SemiBold)) {
                     append(name)
                 }
-                hasContent = true
             }
             preview.handle?.let { handle ->
-                if (hasContent) append(" ")
+                if (length > 0) append(" ")
                 withStyle(SpanStyle(color = palette.muted)) { append("@$handle") }
-                hasContent = true
             }
-            preview.timestamp?.let { time ->
-                // Handle/timestamp share Bluesky's muted contrast colour; separated by a dot.
-                withStyle(SpanStyle(color = palette.muted)) {
-                    append(if (hasContent) "  ·  $time" else time)
+        }
+        val metaStyle = TextStyle(fontSize = 13.sp, lineHeight = 18.sp)
+        if (author.isNotEmpty() || preview.timestamp != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (author.isNotEmpty()) {
+                    Text(
+                        text = author,
+                        style = metaStyle,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
+                preview.timestamp?.let { time ->
+                    Text(
+                        text = if (author.isEmpty()) time else "  ·  $time",
+                        style = metaStyle,
+                        color = palette.muted,
+                        maxLines = 1,
+                    )
                 }
             }
         }
-        if (header.isNotEmpty()) {
-            Text(
-                text = header,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
         if (!preview.snippet.isNullOrBlank()) {
+            // Highlight links, @mentions, and #hashtags in Bluesky's brand blue, like the app.
+            val body = buildAnnotatedString {
+                append(preview.snippet)
+                blueskyTextLinkRanges(preview.snippet).forEach { range ->
+                    addStyle(SpanStyle(color = BlueskyPostPalette.Link), range.first, range.last + 1)
+                }
+            }
             Text(
-                text = preview.snippet,
+                text = body,
                 // Bluesky body text: 15sp at the "snug" 1.3 line-height (~20sp).
                 style = TextStyle(fontSize = 15.sp, lineHeight = 20.sp),
                 color = palette.text,
@@ -132,8 +148,7 @@ private data class BlueskyPostPalette(
             muted = Color(0xFF6F869F),
         )
 
-        /** Bluesky brand link blue (primary_500); reserved for inline links/mentions. */
-        @Suppress("unused")
+        /** Bluesky brand link blue (primary_500), used for inline links, mentions, hashtags. */
         val Link = Color(0xFF1083FE)
     }
 }

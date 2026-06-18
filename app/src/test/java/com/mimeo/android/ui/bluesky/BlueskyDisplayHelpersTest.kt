@@ -273,19 +273,75 @@ class BlueskyDisplayHelpersTest {
     }
 
     @Test
-    fun formatCandidateTimestamp_recentIso_returnsRelativeLabel() {
+    fun formatCandidateTimestamp_secondsAgo_returnsCompactSeconds() {
         val iso = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
-            .minusMinutes(5)
+            .minusSeconds(20)
             .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-        assertEquals("just now", formatCandidateTimestamp(iso))
+        assertEquals("20s", formatCandidateTimestamp(iso))
     }
 
     @Test
-    fun formatCandidateTimestamp_hoursAgoIso_returnsHourLabel() {
+    fun formatCandidateTimestamp_minutesAgo_returnsCompactMinutes() {
         val iso = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
-            .minusHours(3)
+            .minusMinutes(5)
             .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-        assertEquals("3h ago", formatCandidateTimestamp(iso))
+        assertEquals("5m", formatCandidateTimestamp(iso))
+    }
+
+    @Test
+    fun formatCandidateTimestamp_hoursAgo_returnsCompactHours() {
+        val iso = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
+            .minusHours(4)
+            .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        assertEquals("4h", formatCandidateTimestamp(iso))
+    }
+
+    @Test
+    fun formatCandidateTimestamp_daysAgo_returnsCompactDays() {
+        // Days run past a week (Bluesky shows "8d", not "1w"), up to 30 days.
+        val iso = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
+            .minusDays(8)
+            .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        assertEquals("8d", formatCandidateTimestamp(iso))
+    }
+
+    @Test
+    fun formatCandidateTimestamp_neverUsesAgoSuffix() {
+        val now = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
+        val iso = java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME
+        val rendered = listOf(
+            formatCandidateTimestamp(now.minusSeconds(20).format(iso)),
+            formatCandidateTimestamp(now.minusMinutes(5).format(iso)),
+            formatCandidateTimestamp(now.minusHours(4).format(iso)),
+            formatCandidateTimestamp(now.minusDays(8).format(iso)),
+        )
+        rendered.forEach { value -> assertFalse(value, value.contains("ago", ignoreCase = true)) }
+        assertEquals(listOf("20s", "5m", "4h", "8d"), rendered)
+    }
+
+    // blueskyTextLinkRanges
+
+    @Test
+    fun blueskyTextLinkRanges_plainText_returnsEmpty() {
+        assertTrue(blueskyTextLinkRanges("Just a plain sentence with no links").isEmpty())
+        assertTrue(blueskyTextLinkRanges("").isEmpty())
+    }
+
+    @Test
+    fun blueskyTextLinkRanges_url_isMatched() {
+        val text = "Read it at https://example.com/story today"
+        val ranges = blueskyTextLinkRanges(text)
+        assertEquals(1, ranges.size)
+        assertEquals("https://example.com/story", text.substring(ranges[0].first, ranges[0].last + 1))
+    }
+
+    @Test
+    fun blueskyTextLinkRanges_mentionAndHashtag_areMatched() {
+        val text = "thanks @alice.bsky.social for the #news"
+        val matched = blueskyTextLinkRanges(text)
+            .sortedBy { it.first }
+            .map { text.substring(it.first, it.last + 1) }
+        assertEquals(listOf("@alice.bsky.social", "#news"), matched)
     }
 
     // sanitizeBlueskyDisplayName
@@ -400,7 +456,7 @@ class BlueskyDisplayHelpersTest {
         assertNotNull(preview)
         assertEquals("Alice Example", preview!!.displayName)
         assertEquals("alice.bsky.social", preview.handle)
-        assertEquals("2h ago", preview.timestamp)
+        assertEquals("2h", preview.timestamp)
         assertEquals("A fascinating story worth saving", preview.snippet)
         assertEquals("https://bsky.app/profile/alice.bsky.social/post/xyz", preview.postUrl)
     }
