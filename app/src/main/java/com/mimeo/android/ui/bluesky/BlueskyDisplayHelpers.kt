@@ -4,12 +4,15 @@ import com.mimeo.android.model.BlueskyCandidatePostContext
 
 /**
  * The user-facing pieces of a Bluesky post excerpt rendered by [BlueskyPostPreviewCard].
- * Every field is already sanitized for ordinary surfaces: no raw `at://` URIs, DIDs, or
- * other backend identifiers survive into these strings, and [postUrl] is only populated
- * when it is a safe http(s) link.
+ * The display name and handle are kept separate so the card can style them like Bluesky
+ * does (bold name, muted handle). Every field is already sanitized for ordinary surfaces:
+ * no raw `at://` URIs, DIDs, or other backend identifiers survive into these strings,
+ * [handle] never carries a leading `@`, and [postUrl] is only populated when it is a safe
+ * http(s) link.
  */
 internal data class BlueskyPostPreview(
-    val attribution: String?,
+    val displayName: String?,
+    val handle: String?,
     val timestamp: String?,
     val snippet: String?,
     val postUrl: String?,
@@ -18,20 +21,22 @@ internal data class BlueskyPostPreview(
 /**
  * Builds a sanitized [BlueskyPostPreview] from the candidate's post context, or null when
  * there is nothing meaningful to show. A preview is only worth rendering when there is real
- * post content — an author attribution or post text. A bare timestamp or link with no
- * attribution/snippet is not enough to justify a "Bluesky post" box, so it degrades to null.
+ * post content — an author (name or handle) or post text. A bare timestamp or link with no
+ * attribution/snippet is not enough to justify a post box, so it degrades to null.
  */
 internal fun buildBlueskyPostPreview(post: BlueskyCandidatePostContext): BlueskyPostPreview? {
-    val attribution = blueskyAttributionLine(post.authorDisplayName, post.authorHandle)
+    val displayName = sanitizeBlueskyDisplayName(post.authorDisplayName)
+    val handle = sanitizeBlueskyHandle(post.authorHandle)
     val snippet = sanitizeBlueskyText(post.textSnippet)
-    if (attribution == null && snippet == null) return null
+    if (displayName == null && handle == null && snippet == null) return null
     val timestamp = post.indexedAt
         ?.trim()
         ?.takeIf { it.isNotBlank() }
         ?.let { formatCandidateTimestamp(it) }
     val postUrl = post.postUrl?.trim()?.takeIf { isSafeWebUrl(it) }
     return BlueskyPostPreview(
-        attribution = attribution,
+        displayName = displayName,
+        handle = handle,
         timestamp = timestamp,
         snippet = snippet,
         postUrl = postUrl,
@@ -39,21 +44,20 @@ internal fun buildBlueskyPostPreview(post: BlueskyCandidatePostContext): Bluesky
 }
 
 /**
- * Composes the "Display Name @handle" attribution line, dropping either part that is blank
- * or that carries a raw identifier (an `at://` URI or `did:` value never belongs on an
- * ordinary card). Handles with embedded whitespace are treated as untrustworthy and dropped.
+ * Returns the author display name, or null when blank or carrying a raw identifier (an
+ * `at://` URI or `did:` value never belongs on an ordinary card).
  */
-internal fun blueskyAttributionLine(displayName: String?, handle: String?): String? {
-    val name = displayName?.trim()?.takeIf { it.isNotBlank() && !containsRawIdentifier(it) }
-    val cleanHandle = handle?.trim()?.trimStart('@')
+internal fun sanitizeBlueskyDisplayName(displayName: String?): String? =
+    displayName?.trim()?.takeIf { it.isNotBlank() && !containsRawIdentifier(it) }
+
+/**
+ * Returns the author handle without a leading `@`, or null when blank, carrying a raw
+ * identifier, or containing whitespace (a real Bluesky handle never has spaces, so an
+ * embedded space signals an untrustworthy value).
+ */
+internal fun sanitizeBlueskyHandle(handle: String?): String? =
+    handle?.trim()?.trimStart('@')
         ?.takeIf { it.isNotBlank() && !containsRawIdentifier(it) && it.none(Char::isWhitespace) }
-    return when {
-        name != null && cleanHandle != null -> "$name @$cleanHandle"
-        cleanHandle != null -> "@$cleanHandle"
-        name != null -> name
-        else -> null
-    }
-}
 
 /**
  * Strips raw `at://` URIs and bare `did:` identifiers out of post text so they never leak

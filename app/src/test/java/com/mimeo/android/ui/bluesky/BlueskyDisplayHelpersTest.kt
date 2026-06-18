@@ -288,43 +288,53 @@ class BlueskyDisplayHelpersTest {
         assertEquals("3h ago", formatCandidateTimestamp(iso))
     }
 
-    // blueskyAttributionLine
+    // sanitizeBlueskyDisplayName
 
     @Test
-    fun blueskyAttributionLine_nameAndHandle_combinesWithAtPrefix() {
-        assertEquals("Alice Example @alice.bsky.social", blueskyAttributionLine("Alice Example", "alice.bsky.social"))
+    fun sanitizeBlueskyDisplayName_plainName_passesThrough() {
+        assertEquals("Alice Example", sanitizeBlueskyDisplayName("  Alice Example  "))
     }
 
     @Test
-    fun blueskyAttributionLine_handleAlreadyPrefixed_doesNotDoublePrefix() {
-        assertEquals("@alice.bsky.social", blueskyAttributionLine(null, "@alice.bsky.social"))
+    fun sanitizeBlueskyDisplayName_blank_returnsNull() {
+        assertNull(sanitizeBlueskyDisplayName("   "))
+        assertNull(sanitizeBlueskyDisplayName(null))
     }
 
     @Test
-    fun blueskyAttributionLine_onlyDisplayName_returnsName() {
-        assertEquals("Alice Example", blueskyAttributionLine("Alice Example", "   "))
+    fun sanitizeBlueskyDisplayName_dropsNameCarryingAtUri() {
+        assertNull(sanitizeBlueskyDisplayName("at://did:plc:abc/post"))
     }
 
     @Test
-    fun blueskyAttributionLine_bothBlank_returnsNull() {
-        assertNull(blueskyAttributionLine("  ", null))
+    fun sanitizeBlueskyDisplayName_dropsNameCarryingDid() {
+        assertNull(sanitizeBlueskyDisplayName("did:plc:abc123"))
+    }
+
+    // sanitizeBlueskyHandle
+
+    @Test
+    fun sanitizeBlueskyHandle_stripsLeadingAt() {
+        assertEquals("alice.bsky.social", sanitizeBlueskyHandle("@alice.bsky.social"))
+        assertEquals("alice.bsky.social", sanitizeBlueskyHandle("alice.bsky.social"))
     }
 
     @Test
-    fun blueskyAttributionLine_dropsHandleCarryingDid() {
+    fun sanitizeBlueskyHandle_blank_returnsNull() {
+        assertNull(sanitizeBlueskyHandle("   "))
+        assertNull(sanitizeBlueskyHandle(null))
+    }
+
+    @Test
+    fun sanitizeBlueskyHandle_dropsHandleCarryingDid() {
         // A handle should never be a raw DID; drop it rather than leak the identifier.
-        assertEquals("Alice Example", blueskyAttributionLine("Alice Example", "did:plc:abc123"))
+        assertNull(sanitizeBlueskyHandle("did:plc:abc123"))
     }
 
     @Test
-    fun blueskyAttributionLine_dropsDisplayNameCarryingAtUri() {
-        assertEquals("@alice.bsky.social", blueskyAttributionLine("at://did:plc:abc/post", "alice.bsky.social"))
-    }
-
-    @Test
-    fun blueskyAttributionLine_dropsHandleWithWhitespace() {
+    fun sanitizeBlueskyHandle_dropsHandleWithWhitespace() {
         // Real handles never contain spaces; an embedded space signals an untrustworthy value.
-        assertEquals("Alice Example", blueskyAttributionLine("Alice Example", "not a handle"))
+        assertNull(sanitizeBlueskyHandle("not a handle"))
     }
 
     // sanitizeBlueskyText
@@ -388,7 +398,8 @@ class BlueskyDisplayHelpersTest {
         )
 
         assertNotNull(preview)
-        assertEquals("Alice Example @alice.bsky.social", preview!!.attribution)
+        assertEquals("Alice Example", preview!!.displayName)
+        assertEquals("alice.bsky.social", preview.handle)
         assertEquals("2h ago", preview.timestamp)
         assertEquals("A fascinating story worth saving", preview.snippet)
         assertEquals("https://bsky.app/profile/alice.bsky.social/post/xyz", preview.postUrl)
@@ -427,7 +438,8 @@ class BlueskyDisplayHelpersTest {
             ),
         )
         assertNotNull(preview)
-        assertNull(preview!!.attribution)
+        assertNull(preview!!.displayName)
+        assertNull(preview.handle)
         assertNull(preview.timestamp)
         assertNull(preview.postUrl)
         assertEquals("Just the text, no author", preview.snippet)
@@ -464,7 +476,8 @@ class BlueskyDisplayHelpersTest {
         )
         assertNotNull(preview)
         val rendered = listOfNotNull(
-            preview!!.attribution,
+            preview!!.displayName,
+            preview.handle,
             preview.timestamp,
             preview.snippet,
             preview.postUrl,
@@ -473,7 +486,9 @@ class BlueskyDisplayHelpersTest {
             assertFalse(value, value.contains("at://", ignoreCase = true))
             assertFalse(value, value.contains("did:", ignoreCase = true))
         }
-        assertEquals("Real Name", preview.attribution)
+        assertEquals("Real Name", preview.displayName)
+        // The DID-shaped handle is dropped rather than rendered.
+        assertNull(preview.handle)
         assertTrue(preview.snippet!!.startsWith("Body with"))
     }
 }
