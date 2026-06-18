@@ -40,12 +40,23 @@ class PlayerPanelInsetState {
 }
 
 /**
+ * Height of the only visible element of the NUB-mode player dock: the thin progress line
+ * pinned to the bottom of the (otherwise transparent) transport row. Matches the
+ * `PlayerProgressLine` height in PlayerScreen.
+ */
+val NUB_VISIBLE_PANEL_HEIGHT = 3.dp
+
+/**
  * First-frame estimate for the player-panel occupied height, used before the shell has
- * measured the rendered panel (and as a stable value in tests). Returns 0 when the panel
- * is not visible so hidden / no-playback states never add bottom padding.
+ * measured the rendered panel (and as the authoritative value for NUB mode and in tests).
+ * Returns 0 when the panel is not visible so hidden / no-playback states never add bottom
+ * padding.
  *
- * The per-mode dp values are intentionally coarse fall-backs only; the measured value from
- * [PlayerPanelInsetState] supersedes them as soon as the panel lays out.
+ * The FULL / MINIMAL dp values are intentionally coarse fall-backs only; the measured value
+ * from [PlayerPanelInsetState] supersedes them as soon as the panel lays out. NUB is special:
+ * its transport row is transparent except for the bottom progress line, so the *measured*
+ * column would overshoot — the visible occupied height is only the progress line plus the
+ * shell clearance, which is what this returns.
  */
 fun estimatedPlayerPanelOccupiedHeight(
     showMiniPlayer: Boolean,
@@ -56,7 +67,7 @@ fun estimatedPlayerPanelOccupiedHeight(
     val panel = when (controlsMode) {
         PlayerControlsMode.FULL -> 96.dp
         PlayerControlsMode.MINIMAL -> 72.dp
-        PlayerControlsMode.NUB -> 1.dp
+        PlayerControlsMode.NUB -> NUB_VISIBLE_PANEL_HEIGHT
     }
     return panel + shellBottomClearance
 }
@@ -64,15 +75,19 @@ fun estimatedPlayerPanelOccupiedHeight(
 /**
  * Resolves the effective player-panel inset the shell threads to screens:
  *  - 0 when the panel is hidden (no excess blank space),
+ *  - the analytic visible height for NUB mode (the measured column would overshoot because
+ *    most of the NUB transport row is transparent),
  *  - the measured height once it is available,
  *  - otherwise the first-frame estimate.
  */
 fun resolvePlayerPanelInset(
     showMiniPlayer: Boolean,
+    controlsMode: PlayerControlsMode,
     measuredOccupiedHeight: Dp,
     estimatedOccupiedHeight: Dp,
 ): Dp = when {
     !showMiniPlayer -> 0.dp
+    controlsMode == PlayerControlsMode.NUB -> estimatedOccupiedHeight
     measuredOccupiedHeight > 0.dp -> measuredOccupiedHeight
     else -> estimatedOccupiedHeight
 }

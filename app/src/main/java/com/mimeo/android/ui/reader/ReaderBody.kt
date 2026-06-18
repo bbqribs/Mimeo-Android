@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -352,6 +353,12 @@ fun ReaderBody(
     val searchFocusExtraTopPx = with(density) { READER_SEARCH_FOCUS_EXTRA_TOP_PADDING.roundToPx().toFloat() }
     val topOverlayPx = topOverlayOcclusionPx.coerceAtLeast(0).toFloat()
     val bottomOverlayPx = bottomOverlayOcclusionPx.coerceAtLeast(0).toFloat()
+    // Trailing scroll headroom so the bottom-most text can be scrolled clear of the player
+    // dock, mirroring the bottom content padding on list screens. Crucially, autoscroll and
+    // search targets clamp to [followMaxValue] below (== the max BEFORE this spacer), so the
+    // headroom is reachable only by manual scrolling and never alters established follow
+    // behaviour at the end of the document.
+    val bottomContentSpacerPx = bottomOverlayOcclusionPx.coerceAtLeast(0)
     val anchorRange = fullTextHighlightRange
     val followRange = fullTextFollowRange
     val scrollAnchorRange = followRange ?: anchorRange
@@ -370,6 +377,10 @@ fun ReaderBody(
             .verticalScroll(scrollState),
         contentAlignment = Alignment.TopCenter,
     ) {
+      Column(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalAlignment = Alignment.CenterHorizontally,
+      ) {
         key(selectionResetSignal) {
             SelectionContainer {
                 if (effectiveFullText.isNotBlank()) {
@@ -457,6 +468,14 @@ fun ReaderBody(
                 }
             }
         }
+        if (bottomContentSpacerPx > 0) {
+            Spacer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(with(density) { bottomContentSpacerPx.toDp() }),
+            )
+        }
+      }
     }
 
     LaunchedEffect(scrollState, topOverlayOcclusionPx, bottomOverlayOcclusionPx) {
@@ -509,7 +528,7 @@ fun ReaderBody(
         val safeStart = range.first.coerceIn(0, maxOffset)
         val startBox = layout.getCursorRect(safeStart)
         val target = computeReaderSearchFocusScrollTarget(
-            scrollMaxValue = scrollState.maxValue,
+            scrollMaxValue = (scrollState.maxValue - bottomContentSpacerPx).coerceAtLeast(0),
             startBoxTop = startBox.top,
             topComfortPx = topComfortPx,
             searchFocusExtraTopPx = searchFocusExtraTopPx,
@@ -629,7 +648,11 @@ fun ReaderBody(
             lastAnchorRange = anchor
             return@LaunchedEffect
         }
-        if (externalTrigger && scrollState.maxValue == 0 && abs(deltaToTopAnchor) > 1f) {
+        if (
+            externalTrigger &&
+            (scrollState.maxValue - bottomContentSpacerPx).coerceAtLeast(0) == 0 &&
+            abs(deltaToTopAnchor) > 1f
+        ) {
             return@LaunchedEffect
         }
         val hiddenByBottom = endBottomInRoot > desiredBottomInRoot
@@ -698,7 +721,8 @@ fun ReaderBody(
                     latestVisibleTop + topComfortPx
                 }
                 val delta = latestStartTopInRoot - desiredAnchorInRoot
-                val target = (scrollState.value + delta).roundToInt().coerceIn(0, scrollState.maxValue)
+                val followMaxValue = (scrollState.maxValue - bottomContentSpacerPx).coerceAtLeast(0)
+                val target = (scrollState.value + delta).roundToInt().coerceIn(0, followMaxValue)
                 if (abs(target - scrollState.value) <= 1) return
                 isProgrammaticScroll = true
                 scrollState.scrollTo(target)

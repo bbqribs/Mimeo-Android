@@ -189,6 +189,7 @@ internal fun MainActivityShell(
     }
     val snapBottomClearance = resolvePlayerPanelInset(
         showMiniPlayer = showMiniPlayer,
+        controlsMode = settings.playerControlsMode,
         measuredOccupiedHeight = playerPanelInset.occupiedHeight,
         estimatedOccupiedHeight = estimatedPlayerPanelOccupiedHeight(
             showMiniPlayer = showMiniPlayer,

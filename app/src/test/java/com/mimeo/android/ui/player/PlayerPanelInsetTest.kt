@@ -38,8 +38,9 @@ class PlayerPanelInsetTest {
                 shellBottomClearance = 12.dp,
             ),
         )
+        // NUB renders only a 3.dp progress line above the shell clearance.
         assertEquals(
-            13.dp,
+            15.dp,
             estimatedPlayerPanelOccupiedHeight(
                 showMiniPlayer = true,
                 controlsMode = PlayerControlsMode.NUB,
@@ -54,6 +55,7 @@ class PlayerPanelInsetTest {
             0.dp,
             resolvePlayerPanelInset(
                 showMiniPlayer = false,
+                controlsMode = PlayerControlsMode.FULL,
                 measuredOccupiedHeight = 120.dp,
                 estimatedOccupiedHeight = 108.dp,
             ),
@@ -66,6 +68,7 @@ class PlayerPanelInsetTest {
             120.dp,
             resolvePlayerPanelInset(
                 showMiniPlayer = true,
+                controlsMode = PlayerControlsMode.FULL,
                 measuredOccupiedHeight = 120.dp,
                 estimatedOccupiedHeight = 108.dp,
             ),
@@ -78,8 +81,25 @@ class PlayerPanelInsetTest {
             108.dp,
             resolvePlayerPanelInset(
                 showMiniPlayer = true,
+                controlsMode = PlayerControlsMode.FULL,
                 measuredOccupiedHeight = 0.dp,
                 estimatedOccupiedHeight = 108.dp,
+            ),
+        )
+    }
+
+    @Test
+    fun resolveUsesAnalyticHeightForNubEvenWhenColumnMeasuresLarger() {
+        // The transparent NUB transport row would measure much taller than the visible
+        // progress line; the analytic estimate must win so the jump pill sits just above
+        // the progress bar rather than floating high.
+        assertEquals(
+            15.dp,
+            resolvePlayerPanelInset(
+                showMiniPlayer = true,
+                controlsMode = PlayerControlsMode.NUB,
+                measuredOccupiedHeight = 84.dp,
+                estimatedOccupiedHeight = 15.dp,
             ),
         )
     }
