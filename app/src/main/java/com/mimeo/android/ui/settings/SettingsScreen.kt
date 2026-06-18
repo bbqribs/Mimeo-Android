@@ -173,6 +173,40 @@ internal enum class SettingsSection(val title: String, val subtitle: String) {
 internal fun settingsHubSections(isDebugBuild: Boolean): List<SettingsSection> =
     SettingsSection.entries.filter { it != SettingsSection.DEVELOPER || isDebugBuild }
 
+/** A raw operator-style key/value line shown only on diagnostic/debug surfaces. */
+internal data class BlueskyDiagnosticLine(val label: String, val value: String)
+
+/**
+ * Raw, operator-style account diagnostics (handle, DID, connection mode, last validation
+ * code, backend message). These carry internal identifiers such as the account DID and
+ * un-humanized backend codes, so the diagnostics boundary keeps them out of ordinary
+ * surfaces: ordinary users get the friendly [BlueskyHealthCard] above instead. Returns an
+ * empty list unless this is a debug build with a connected account. Extracted as a pure
+ * function so the boundary is unit-testable without Compose.
+ */
+internal fun blueskyAccountDiagnosticLines(
+    account: BlueskyAccountConnectionResponse?,
+    isDebugBuild: Boolean,
+): List<BlueskyDiagnosticLine> {
+    if (!isDebugBuild || account == null || account.connected != true) return emptyList()
+    return buildList {
+        account.handle?.takeIf { it.isNotBlank() }?.let { add(BlueskyDiagnosticLine("Handle", it)) }
+        account.did?.takeIf { it.isNotBlank() }?.let { add(BlueskyDiagnosticLine("DID", it)) }
+        add(BlueskyDiagnosticLine("Mode", formatBlueskyModeLabel(account.mode)))
+        account.resolvedValidationState?.takeIf { it.isNotBlank() }
+            ?.let { add(BlueskyDiagnosticLine("Last validation", it)) }
+        account.message?.takeIf { it.isNotBlank() }?.let { add(BlueskyDiagnosticLine("Message", it)) }
+    }
+}
+
+/**
+ * Whether the raw scheduler & per-source diagnostics block (poll intervals, raw last-run
+ * status codes, raw backend error messages, actor identifiers, run counts) may render.
+ * This is operator/diagnostic content, so it is debug-only; ordinary users rely on the
+ * friendly "What happened?" disclosure inside [BlueskyHealthCard].
+ */
+internal fun blueskySchedulerDiagnosticsVisible(isDebugBuild: Boolean): Boolean = isDebugBuild
+
 @Composable
 fun SettingsScreen(
     vm: AppViewModel,
@@ -1048,18 +1082,11 @@ fun SettingsScreen(
                 val scheduler = blueskyOperatorStatus
                 if (account != null) {
                     if (account.connected == true) {
-                        SettingsKeyValueLine("Handle", account.handle ?: "Unknown")
-                        if (!account.did.isNullOrBlank()) {
-                            SettingsKeyValueLine("DID", account.did.orEmpty())
-                        }
-                        SettingsKeyValueLine("Mode", formatBlueskyModeLabel(account.mode))
-                        SettingsKeyValueLine("Last validation", account.resolvedValidationState ?: "Unavailable")
-                        if (!account.message.isNullOrBlank()) {
-                            Text(
-                                text = account.message.orEmpty(),
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                        // Raw account identifiers (DID) and un-humanized backend codes are
+                        // diagnostics: ordinary users see the friendly BlueskyHealthCard
+                        // above, so these only render in debug builds.
+                        blueskyAccountDiagnosticLines(account, BuildConfig.DEBUG).forEach { line ->
+                            SettingsKeyValueLine(line.label, line.value)
                         }
                         if (account.disconnectAvailable == true) {
                             Row(
@@ -1148,7 +1175,10 @@ fun SettingsScreen(
                         }
                     }
                 }
-                if (scheduler != null) {
+                // Scheduler internals, raw last-run codes, raw backend error messages, and
+                // per-source actor identifiers are operator diagnostics — debug-only. Ordinary
+                // users rely on the friendly "What happened?" disclosure in BlueskyHealthCard.
+                if (scheduler != null && blueskySchedulerDiagnosticsVisible(BuildConfig.DEBUG)) {
                     HorizontalDivider(
                         modifier = Modifier.fillMaxWidth(),
                         color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),

@@ -82,4 +82,20 @@ class BlueskyBrowseScreenTest {
         assertEquals("Checked 12 posts, found 1 links", renderedCopy[0])
         assertEquals("Bluesky list · List", renderedCopy[2])
     }
+
+    @Test
+    fun emptySourceAndNoLinkStatesUseUserFacingCopy() {
+        // The "no source chosen yet" and "no links found" empty states must read as plain
+        // user language — never raw provider/operator vocabulary.
+        val emptyStateCopy = listOf(blueskyChooseSourceCopy(), blueskyNoLinksCopy())
+        emptyStateCopy.forEach { copy ->
+            assertFalse(copy.isBlank())
+            assertFalse(copy, copy.contains("candidate", ignoreCase = true))
+            assertFalse(copy, copy.contains("at://", ignoreCase = true))
+            assertFalse(copy, copy.contains("harvest", ignoreCase = true))
+            assertFalse(copy, copy.contains("did:", ignoreCase = true))
+            assertFalse(copy, copy.contains("job", ignoreCase = true))
+        }
+        assertEquals("Choose a source to scan for links from Bluesky.", emptyStateCopy[0])
+    }
 }
