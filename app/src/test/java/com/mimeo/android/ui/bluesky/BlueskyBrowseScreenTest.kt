@@ -9,6 +9,7 @@ import com.mimeo.android.model.BlueskyCandidateSourceSelection
 import com.mimeo.android.model.BlueskyPickerPinItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class BlueskyBrowseScreenTest {
@@ -34,6 +35,53 @@ class BlueskyBrowseScreenTest {
         )
 
         assertEquals(42, sourceId)
+    }
+
+    @Test
+    fun pinnedFeedResolvesFromUri() {
+        // Feeds (feed_generator) pin by uri, like lists — this is the parity fix that lets
+        // the Unpin control appear for a pinned feed source.
+        val sourceId = findPinnedSourceId(
+            scan = null,
+            selected = BlueskyCandidateSourceSelection(
+                sourceKind = "feed_generator",
+                displayLabel = "For You",
+                uri = "at://did:plc:example/app.bsky.feed.generator/foryou",
+            ),
+            pins = listOf(
+                BlueskyPickerPinItem(
+                    sourceId = 77,
+                    kind = "feed_generator",
+                    uri = "at://did:plc:example/app.bsky.feed.generator/foryou",
+                    displayName = "For You",
+                ),
+            ),
+        )
+
+        assertEquals(77, sourceId)
+    }
+
+    @Test
+    fun pinnedFeedDoesNotMatchListWithSameUri() {
+        // A feed pin must not be matched for a list source (kind is part of the match).
+        val sourceId = findPinnedSourceId(
+            scan = null,
+            selected = BlueskyCandidateSourceSelection(
+                sourceKind = "list_feed",
+                displayLabel = "Shared URI",
+                uri = "at://did:plc:example/shared",
+            ),
+            pins = listOf(
+                BlueskyPickerPinItem(
+                    sourceId = 88,
+                    kind = "feed_generator",
+                    uri = "at://did:plc:example/shared",
+                    displayName = "Shared URI",
+                ),
+            ),
+        )
+
+        assertNull(sourceId)
     }
 
     @Test
