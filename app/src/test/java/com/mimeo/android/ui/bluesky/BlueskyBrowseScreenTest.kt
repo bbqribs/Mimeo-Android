@@ -111,6 +111,45 @@ class BlueskyBrowseScreenTest {
     }
 
     @Test
+    fun candidateSourceLine_usesFallbackNameWhenPerCandidateLabelIsRaw() {
+        // The per-candidate label is a raw at:// (resolves to nothing), so the real list name
+        // from the scan/selection fallback should fill in after the kind.
+        assertEquals(
+            "Bluesky List · UK Politics",
+            blueskyCandidateSourceLine(
+                sourceLabel = "at://did:plc:example/app.bsky.graph.list/uk",
+                sourceType = "list_feed",
+                fallbackName = "UK Politics",
+            ),
+        )
+    }
+
+    @Test
+    fun candidateSourceLine_prefersPerCandidateNameOverFallback() {
+        assertEquals(
+            "Bluesky List · Real List",
+            blueskyCandidateSourceLine(
+                sourceLabel = "Bluesky List: Real List",
+                sourceType = "list_feed",
+                fallbackName = "Fallback Name",
+            ),
+        )
+    }
+
+    @Test
+    fun candidateSourceLine_rawFallbackStillCollapsesToKind() {
+        // A raw/generic fallback resolves to nothing, leaving just the kind.
+        assertEquals(
+            "Bluesky List",
+            blueskyCandidateSourceLine(
+                sourceLabel = "at://did:plc:example/app.bsky.graph.list/uk",
+                sourceType = "list_feed",
+                fallbackName = "at://did:plc:example/app.bsky.graph.list/uk",
+            ),
+        )
+    }
+
+    @Test
     fun emptySourceAndNoLinkStatesUseUserFacingCopy() {
         // The "no source chosen yet" and "no links found" empty states must read as plain
         // user language — never raw provider/operator vocabulary.

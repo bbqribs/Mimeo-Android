@@ -31,6 +31,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -38,6 +39,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.collectAsState
@@ -160,10 +162,12 @@ fun BlueskyBrowseScreen(
     ) {
         LazyColumn(
             // Bleed outward past the shell's global 12dp horizontal padding so the Bluesky
-            // cards sit wider than other screens, leaving a slim edge margin.
+            // cards sit wider than other screens. The end bleed is larger than the start so
+            // the left margin is wider — balancing the scroll-thumb affordance that hugs the
+            // right edge, which would otherwise make the right side look more inset.
             modifier = Modifier
                 .fillMaxSize()
-                .horizontalBleed(8.dp),
+                .horizontalBleed(start = 4.dp, end = 8.dp),
             state = listState,
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -217,14 +221,22 @@ fun BlueskyBrowseScreen(
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
                     )
                 }
-                scan != null -> items(scan!!.candidates, key = { it.articleUrl }) { candidate ->
-                    CandidateRow(
-                        candidate = candidate,
-                        saving = savingUrls.contains(candidate.articleUrl),
-                        saveError = saveErrors[candidate.articleUrl],
-                        onSave = { vm.saveBlueskyCandidate(candidate) },
-                        onOpenItem = onOpenItem,
-                    )
+                scan != null -> {
+                    // Per-candidate source_label is often a raw/generic value; recover the
+                    // real list/feed name from the scan source or the picked selection, the
+                    // same way the web app falls back to its scanState label.
+                    val sourceFallbackName = resolveCandidateSourceName(scan!!.source.displayLabel)
+                        .ifBlank { resolveCandidateSourceName(selection?.displayLabel) }
+                    items(scan!!.candidates, key = { it.articleUrl }) { candidate ->
+                        CandidateRow(
+                            candidate = candidate,
+                            saving = savingUrls.contains(candidate.articleUrl),
+                            saveError = saveErrors[candidate.articleUrl],
+                            sourceFallbackName = sourceFallbackName,
+                            onSave = { vm.saveBlueskyCandidate(candidate) },
+                            onOpenItem = onOpenItem,
+                        )
+                    }
                 }
             }
         }
@@ -610,6 +622,7 @@ private fun CandidateRow(
     candidate: BlueskyCandidate,
     saving: Boolean,
     saveError: String?,
+    sourceFallbackName: String,
     onSave: () -> Unit,
     onOpenItem: (Int) -> Unit,
 ) {
@@ -651,19 +664,24 @@ private fun CandidateRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                SaveActionChip(
-                    candidate = candidate,
-                    saving = saving,
-                    onSave = onSave,
-                    onOpenItem = onOpenItem,
-                )
+                // Strip the chip's 48dp interactive touch-target inflation so a single-line
+                // title doesn't get out-sized by the chip and leave a dead gap above the
+                // post box; the chip then sizes to its ~32dp visual height.
+                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                    SaveActionChip(
+                        candidate = candidate,
+                        saving = saving,
+                        onSave = onSave,
+                        onOpenItem = onOpenItem,
+                    )
+                }
             }
             val postPreview = buildBlueskyPostPreview(candidate.bluesky)
             if (postPreview != null) {
                 BlueskyPostPreviewCard(preview = postPreview)
             }
             Text(
-                text = blueskyCandidateSourceLine(candidate.sourceLabel, candidate.sourceType),
+                text = blueskyCandidateSourceLine(candidate.sourceLabel, candidate.sourceType, sourceFallbackName),
                 style = if (isV1) mTypography.meta else MaterialTheme.typography.labelSmall,
                 color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -753,27 +771,33 @@ internal fun blueskyPinShortcutCopy(): String =
  * parent's padding. Used to make the Bluesky cards wider than the shell's global 12dp
  * horizontal inset without changing that shared padding (which would affect other screens).
  */
-private fun Modifier.horizontalBleed(amount: Dp): Modifier = layout { measurable, constraints ->
-    val extra = amount.roundToPx()
+private fun Modifier.horizontalBleed(start: Dp, end: Dp): Modifier = layout { measurable, constraints ->
+    val startPx = start.roundToPx()
+    val endPx = end.roundToPx()
     val widened = constraints.copy(
         minWidth = if (constraints.minWidth == constraints.maxWidth) {
-            constraints.maxWidth + extra * 2
+            constraints.maxWidth + startPx + endPx
         } else {
             constraints.minWidth
         },
-        maxWidth = constraints.maxWidth + extra * 2,
+        maxWidth = constraints.maxWidth + startPx + endPx,
     )
     val placeable = measurable.measure(widened)
     layout(placeable.width, placeable.height) {
-        placeable.place(-extra, 0)
+        placeable.place(-startPx, 0)
     }
 }
 
-internal fun blueskyCandidateSourceLine(sourceLabel: String, sourceType: String?): String {
+internal fun blueskyCandidateSourceLine(
+    sourceLabel: String,
+    sourceType: String?,
+    fallbackName: String = "",
+): String {
     // Mirror the web app: "{Bluesky Kind} · {real name}", or just the kind when no
-    // meaningful name is available (e.g. "Bluesky Home Timeline").
+    // meaningful name is available (e.g. "Bluesky Home Timeline"). When the per-candidate
+    // label has no real name, fall back to the scan/selection source name.
     val kind = blueskySourceKindLabel(sourceType)
-    val name = resolveCandidateSourceName(sourceLabel)
+    val name = resolveCandidateSourceName(sourceLabel).ifBlank { resolveCandidateSourceName(fallbackName) }
     return if (name.isBlank()) kind else "$kind · $name"
 }
 
