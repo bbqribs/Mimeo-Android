@@ -673,6 +673,10 @@ fun PlaylistDetailScreen(
                         }
                     }
                 }
+                // Reserve bottom space for the player panel so the last row clears it.
+                if (jumpPillBottomClearance > 0.dp) {
+                    Spacer(modifier = Modifier.height(jumpPillBottomClearance))
+                }
             }
             if (showJumpToTop) {
                 JumpPill(

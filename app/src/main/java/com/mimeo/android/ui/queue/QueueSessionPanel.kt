@@ -766,6 +766,11 @@ internal fun NowPlayingSessionPanel(
                 if (activeTailSpacerPx > 0f) {
                     Spacer(modifier = Modifier.height(with(density) { activeTailSpacerPx.toDp() }))
                 }
+                // Reserve bottom space for the player panel so the last upcoming row can
+                // scroll fully above it; collapses to 0 when no player is showing.
+                if (snapBottomClearance > 0.dp) {
+                    Spacer(modifier = Modifier.height(snapBottomClearance))
+                }
             }
             activeSessionStickyHeader(
                 scrollOffsetPx = listScrollState.value,

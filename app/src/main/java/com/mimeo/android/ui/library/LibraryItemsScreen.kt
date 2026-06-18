@@ -753,6 +753,9 @@ fun LibraryItemsScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 state = listState,
+                // Reserve bottom space equal to the player panel so the last row can scroll
+                // fully above it; collapses to 0 when no player is showing.
+                contentPadding = PaddingValues(bottom = jumpPillBottomClearance),
             ) {
                 // Pending section (inbox only)
                 if (pendingItems.isNotEmpty()) {

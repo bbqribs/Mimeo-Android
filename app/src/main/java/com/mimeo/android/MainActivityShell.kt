@@ -47,6 +47,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Dp
@@ -59,7 +61,6 @@ import androidx.navigation.navArgument
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.PlayerChevronSnapEdge
-import com.mimeo.android.model.PlayerControlsMode
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.model.StartupDestination
@@ -68,7 +69,10 @@ import com.mimeo.android.ui.library.LibraryBatchAction
 import com.mimeo.android.ui.library.LibraryItemsScreen
 import com.mimeo.android.ui.library.LibrarySortOption
 import com.mimeo.android.ui.player.MiniPlayer
+import com.mimeo.android.ui.player.PlayerPanelInsetState
 import com.mimeo.android.ui.player.PlayerScreen
+import com.mimeo.android.ui.player.estimatedPlayerPanelOccupiedHeight
+import com.mimeo.android.ui.player.resolvePlayerPanelInset
 import com.mimeo.android.ui.playlists.PlaylistDetailScreen
 import com.mimeo.android.ui.playlists.SmartPlaylistDetailScreen
 import com.mimeo.android.ui.playlists.SmartPlaylistFormDialog
@@ -99,20 +103,6 @@ private data class PlayerRouteHandlers(
     val onChevronSnapChange: (PlayerChevronSnapEdge) -> Unit,
     val onChevronTap: () -> Unit,
 )
-
-private fun snapToActiveBottomClearance(
-    showMiniPlayer: Boolean,
-    controlsMode: PlayerControlsMode,
-    shellBottomClearance: Dp,
-): Dp {
-    if (!showMiniPlayer) return 0.dp
-    val playerPanelHeight = when (controlsMode) {
-        PlayerControlsMode.FULL -> 96.dp
-        PlayerControlsMode.MINIMAL -> 72.dp
-        PlayerControlsMode.NUB -> 1.dp
-    }
-    return playerPanelHeight + shellBottomClearance
-}
 
 @Composable
 internal fun MainActivityShell(
@@ -188,10 +178,23 @@ internal fun MainActivityShell(
         else -> 16.dp
     }
     val shellBottomClearance = 12.dp
-    val snapBottomClearance = snapToActiveBottomClearance(
+    // Single source of truth for the bottom player-panel inset: the shell measures the
+    // rendered mini player (+ clearance strip) into [playerPanelInset] and every screen
+    // reads the resolved value below to anchor jump pills and reserve scrollable bottom
+    // space. The estimate is only a first-frame fall-back until measurement lands.
+    val density = LocalDensity.current
+    val playerPanelInset = remember { PlayerPanelInsetState() }
+    LaunchedEffect(showMiniPlayer) {
+        if (!showMiniPlayer) playerPanelInset.clear()
+    }
+    val snapBottomClearance = resolvePlayerPanelInset(
         showMiniPlayer = showMiniPlayer,
-        controlsMode = settings.playerControlsMode,
-        shellBottomClearance = shellBottomClearance,
+        measuredOccupiedHeight = playerPanelInset.occupiedHeight,
+        estimatedOccupiedHeight = estimatedPlayerPanelOccupiedHeight(
+            showMiniPlayer = showMiniPlayer,
+            controlsMode = settings.playerControlsMode,
+            shellBottomClearance = shellBottomClearance,
+        ),
     )
     val baseUrlHint = vm.baseUrlHintForDevice(isLikelyPhysicalDevice())
     val baseAddress = settings.baseUrl.trim().removePrefix("http://").removePrefix("https://")
@@ -861,7 +864,15 @@ internal fun MainActivityShell(
                             Column(
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
-                                    .fillMaxWidth(),
+                                    .fillMaxWidth()
+                                    // Measure the full occupied panel (mini player + clearance
+                                    // strip) so jump pills and screen bottom padding track the
+                                    // actual rendered height across modes and devices.
+                                    .onSizeChanged { size ->
+                                        playerPanelInset.update(
+                                            with(density) { size.height.toDp() },
+                                        )
+                                    },
                             ) {
                                 MiniPlayer(
                                     vm = vm,

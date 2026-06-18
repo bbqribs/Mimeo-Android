@@ -361,6 +361,8 @@ fun SmartPlaylistDetailScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 state = listState,
+                // Reserve bottom space for the player panel so the last row clears it.
+                contentPadding = PaddingValues(bottom = jumpPillBottomClearance),
             ) {
                 if (pinnedItems.isNotEmpty()) {
                     stickyHeader(key = "pinned-header") {

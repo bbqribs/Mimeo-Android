@@ -169,6 +169,8 @@ fun BlueskyBrowseScreen(
                 .fillMaxSize()
                 .horizontalBleed(start = 0.dp, end = 8.dp),
             state = listState,
+            // Reserve bottom space for the player panel so the last card clears it.
+            contentPadding = PaddingValues(bottom = jumpPillBottomClearance),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             item {
