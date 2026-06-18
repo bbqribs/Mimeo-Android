@@ -80,7 +80,34 @@ class BlueskyBrowseScreenTest {
             assertFalse(copy, copy.contains("operator", ignoreCase = true))
         }
         assertEquals("Checked 12 posts, found 1 links", renderedCopy[0])
-        assertEquals("Bluesky list · List", renderedCopy[2])
+        // A raw at:// list label resolves to no meaningful name, so just the kind shows.
+        assertEquals("Bluesky List", renderedCopy[2])
+    }
+
+    @Test
+    fun candidateSourceLine_matchesWebAppFormat() {
+        // Home timeline: kind only, no duplicated suffix.
+        assertEquals(
+            "Bluesky Home Timeline",
+            blueskyCandidateSourceLine("Bluesky Home Timeline", "home_timeline"),
+        )
+        // List with a real name: "Bluesky List · UK Politics" (prefix stripped).
+        assertEquals(
+            "Bluesky List · UK Politics",
+            blueskyCandidateSourceLine("Bluesky List: UK Politics", "list_feed"),
+        )
+        // Feed with a real name: "Bluesky Feed · For You".
+        assertEquals(
+            "Bluesky Feed · For You",
+            blueskyCandidateSourceLine("Bluesky Feed: For You", "feed_generator"),
+        )
+        // Account handle passes through after the kind.
+        assertEquals(
+            "Bluesky Account · alice.bsky.social",
+            blueskyCandidateSourceLine("alice.bsky.social", "author_feed"),
+        )
+        // A generic-only label collapses to just the kind (no "Bluesky Feed · Bluesky Feed").
+        assertEquals("Bluesky Feed", blueskyCandidateSourceLine("Bluesky Feed", "feed_generator"))
     }
 
     @Test

@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -51,6 +50,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -159,9 +159,13 @@ fun BlueskyBrowseScreen(
             ),
     ) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            // Bleed outward past the shell's global 12dp horizontal padding so the Bluesky
+            // cards sit wider than other screens, leaving a slim edge margin.
+            modifier = Modifier
+                .fillMaxSize()
+                .horizontalBleed(8.dp),
             state = listState,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             item {
                 BlueskyHealthHeader(
@@ -629,6 +633,7 @@ private fun CandidateRow(
                     modifier = Modifier
                         .weight(1f)
                         .clickable { uriHandler.openUri(candidate.articleUrl) },
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     Text(
                         text = candidate.title?.takeIf { it.isNotBlank() } ?: "Untitled link",
@@ -651,7 +656,6 @@ private fun CandidateRow(
                     saving = saving,
                     onSave = onSave,
                     onOpenItem = onOpenItem,
-                    modifier = Modifier.offset(y = (-8).dp),
                 )
             }
             val postPreview = buildBlueskyPostPreview(candidate.bluesky)
@@ -744,10 +748,33 @@ internal fun blueskyNoLinksCopy(): String =
 internal fun blueskyPinShortcutCopy(): String =
     "Pinning only stores the shortcut; it does not save links."
 
+/**
+ * Expands a composable horizontally by [amount] on each side, bleeding outward past the
+ * parent's padding. Used to make the Bluesky cards wider than the shell's global 12dp
+ * horizontal inset without changing that shared padding (which would affect other screens).
+ */
+private fun Modifier.horizontalBleed(amount: Dp): Modifier = layout { measurable, constraints ->
+    val extra = amount.roundToPx()
+    val widened = constraints.copy(
+        minWidth = if (constraints.minWidth == constraints.maxWidth) {
+            constraints.maxWidth + extra * 2
+        } else {
+            constraints.minWidth
+        },
+        maxWidth = constraints.maxWidth + extra * 2,
+    )
+    val placeable = measurable.measure(widened)
+    layout(placeable.width, placeable.height) {
+        placeable.place(-extra, 0)
+    }
+}
+
 internal fun blueskyCandidateSourceLine(sourceLabel: String, sourceType: String?): String {
-    val label = cleanSourceLabel(sourceLabel, sourceType)
-    val type = formatSourceType(sourceType)
-    return if (label.equals(type, ignoreCase = true)) label else "$label · $type"
+    // Mirror the web app: "{Bluesky Kind} · {real name}", or just the kind when no
+    // meaningful name is available (e.g. "Bluesky Home Timeline").
+    val kind = blueskySourceKindLabel(sourceType)
+    val name = resolveCandidateSourceName(sourceLabel)
+    return if (name.isBlank()) kind else "$kind · $name"
 }
 
 private data class SourceDropdownOption(

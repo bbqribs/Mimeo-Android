@@ -135,6 +135,34 @@ internal fun formatSourceType(sourceType: String?): String = when (sourceType) {
     else -> "Bluesky"
 }
 
+/**
+ * The Bluesky-branded label for a source kind, matching the web app's `sourceKindLabel`:
+ * "Bluesky Home Timeline", "Bluesky List", "Bluesky Feed", "Bluesky Account".
+ */
+internal fun blueskySourceKindLabel(sourceType: String?): String = when (sourceType) {
+    "home_timeline" -> "Bluesky Home Timeline"
+    "list_feed" -> "Bluesky List"
+    "feed_generator" -> "Bluesky Feed"
+    "author_feed", "account" -> "Bluesky Account"
+    else -> "Bluesky"
+}
+
+/**
+ * Resolves the real, human-facing name of a source from its raw `source_label`, matching the
+ * web app's `resolvedSourceLabel`: strips a "Bluesky List: " / "Bluesky Feed: " prefix, drops
+ * labels that are merely the generic kind name (so they don't duplicate the kind prefix), and
+ * drops raw identifiers (`at://`, `did:plc`). Returns "" when no meaningful name remains.
+ */
+internal fun resolveCandidateSourceName(rawLabel: String?): String {
+    val stripped = (rawLabel ?: "")
+        .trim()
+        .replace(Regex("^Bluesky\\s+(?:List|Feed):\\s*", RegexOption.IGNORE_CASE), "")
+    val generic = setOf("Bluesky Feed", "Bluesky List", "Bluesky Home Timeline", "Home Timeline")
+    if (stripped.isBlank() || stripped in generic) return ""
+    if (stripped.contains("at://") || stripped.contains("did:plc")) return ""
+    return stripped
+}
+
 internal fun blueskySourceDisplayName(resolvedName: String, typeLabel: String?): String {
     val candidate = resolvedName.trim()
     if (candidate.startsWith("at://", ignoreCase = true)) {
