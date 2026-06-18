@@ -161,7 +161,17 @@ internal enum class SettingsSection(val title: String, val subtitle: String) {
     AI_SUMMARIES("AI Summaries", "How article summaries work on this server."),
     BLUESKY("Bluesky", "Connection status, recovery, and feed sources."),
     DIAGNOSTICS("Diagnostics", "Connectivity tools and advanced diagnostics."),
+    DEVELOPER("Developer", "Debug-only diagnostics and playback instrumentation controls."),
 }
+
+/**
+ * The category rows shown on the Settings hub. [SettingsSection.DEVELOPER] is debug-only
+ * — its controls are all `BuildConfig.DEBUG`-gated, so it must not appear (as an empty
+ * spoke) in release builds. Extracted as a pure function so the build-aware visibility is
+ * unit-testable without Compose.
+ */
+internal fun settingsHubSections(isDebugBuild: Boolean): List<SettingsSection> =
+    SettingsSection.entries.filter { it != SettingsSection.DEVELOPER || isDebugBuild }
 
 @Composable
 fun SettingsScreen(
@@ -2225,8 +2235,10 @@ fun SettingsScreen(
                 }
             }
         }
-
-        if (BuildConfig.DEBUG) {
+        }
+        // Developer is its own spoke, reachable only from the debug-build hub. The
+        // BuildConfig.DEBUG guard is defense-in-depth so it can never render in release.
+        if (activeSection == SettingsSection.DEVELOPER && BuildConfig.DEBUG) {
             SettingsSectionHeader(
                 title = "Developer",
                 subtitle = "Debug-only diagnostics and playback instrumentation controls.",
@@ -2409,7 +2421,6 @@ fun SettingsScreen(
                     }
                 }
             }
-        }
         }
     }
 
@@ -2744,7 +2755,7 @@ private fun SettingsHubIndex(onSelect: (SettingsSection) -> Unit) {
         colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface),
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            val sections = SettingsSection.entries
+            val sections = settingsHubSections(BuildConfig.DEBUG)
             sections.forEachIndexed { index, section ->
                 Row(
                     modifier = Modifier

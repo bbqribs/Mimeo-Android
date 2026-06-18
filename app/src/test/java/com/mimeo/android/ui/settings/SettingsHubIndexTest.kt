@@ -19,21 +19,34 @@ import org.junit.Test
  */
 class SettingsHubIndexTest {
 
+    /** The ordered category titles ordinary (release) users see on the hub. */
+    private val releaseLabels = listOf(
+        "Account & Connection",
+        "General",
+        "Reading",
+        "Playback",
+        "Appearance",
+        "Library & Downloads",
+        "AI Summaries",
+        "Bluesky",
+        "Diagnostics",
+    )
+
     @Test
-    fun hubDisplaysExpectedCategoryLabelsInOrder() {
-        // The exact, ordered set of category titles a user sees on the hub index.
-        val expected = listOf(
-            "Account & Connection",
-            "General",
-            "Reading",
-            "Playback",
-            "Appearance",
-            "Library & Downloads",
-            "AI Summaries",
-            "Bluesky",
-            "Diagnostics",
-        )
-        assertEquals(expected, SettingsSection.entries.map { it.title })
+    fun releaseHubDisplaysExpectedCategoryLabelsInOrder() {
+        assertEquals(releaseLabels, settingsHubSections(isDebugBuild = false).map { it.title })
+    }
+
+    @Test
+    fun developerSpokeIsDebugBuildOnly() {
+        // Developer's controls are all BuildConfig.DEBUG-gated, so the row must never
+        // appear in release builds (which would lead to an empty spoke); in debug it is
+        // appended after Diagnostics as its own reachable spoke.
+        val releaseTitles = settingsHubSections(isDebugBuild = false).map { it.title }
+        assertFalse(releaseTitles.contains("Developer"))
+
+        val debugTitles = settingsHubSections(isDebugBuild = true).map { it.title }
+        assertEquals(releaseLabels + "Developer", debugTitles)
     }
 
     @Test
@@ -58,12 +71,12 @@ class SettingsHubIndexTest {
 
     @Test
     fun ordinaryHubRowsDoNotLeakDiagnosticOrRawVocabulary() {
-        // Diagnostics is the one spoke allowed intentionally technical vocabulary.
-        // Ordinary hub rows must not surface raw backend/debug phrasing: raw at:// or
-        // did: identifiers, job IDs, tokens/cookies/secrets values, stack traces, raw
-        // URLs, or provider payloads. NOTE: the *concept* "device token" is a legitimate
-        // user-facing setting (Account & Connection), so the guard targets raw/secret
-        // shapes — not the plain word "token".
+        // Diagnostics and Developer are the spokes allowed intentionally technical
+        // vocabulary. Ordinary hub rows must not surface raw backend/debug phrasing: raw
+        // at:// or did: identifiers, job IDs, tokens/cookies/secrets values, stack traces,
+        // raw URLs, or provider payloads. NOTE: the *concept* "device token" is a
+        // legitimate user-facing setting (Account & Connection), so the guard targets
+        // raw/secret shapes — not the plain word "token".
         val forbidden = listOf(
             "at://",
             "did:",
@@ -83,7 +96,7 @@ class SettingsHubIndexTest {
             "}",
         )
         SettingsSection.entries
-            .filter { it != SettingsSection.DIAGNOSTICS }
+            .filter { it != SettingsSection.DIAGNOSTICS && it != SettingsSection.DEVELOPER }
             .forEach { section ->
                 val copy = "${section.title}\n${section.subtitle}".lowercase()
                 forbidden.forEach { needle ->
