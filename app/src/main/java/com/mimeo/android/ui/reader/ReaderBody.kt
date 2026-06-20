@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -353,13 +352,16 @@ fun ReaderBody(
     val searchFocusExtraTopPx = with(density) { READER_SEARCH_FOCUS_EXTRA_TOP_PADDING.roundToPx().toFloat() }
     val topOverlayPx = topOverlayOcclusionPx.coerceAtLeast(0).toFloat()
     val bottomOverlayPx = bottomOverlayOcclusionPx.coerceAtLeast(0).toFloat()
-    // Trailing scroll headroom (== the dock height) appended below the text so the
-    // bottom-most lines can be scrolled clear of the player dock, mirroring the bottom
-    // content padding on list screens. The dock always covers this region during playback,
-    // so it shows no blank space. The follow/search targets intentionally use the FULL
-    // scrollState.maxValue (which now includes this room) so autoplay can keep the highlight
-    // above the dock at the end of the document — clamping it away breaks end-of-text follow.
+    // Trailing scroll headroom (== the dock height) added as bottom padding on the text so
+    // the bottom-most lines can be scrolled clear of the player dock, mirroring the bottom
+    // content padding on list screens. The dock always covers this region during playback so
+    // it shows no blank space. It is applied as bottom padding on the existing text node (not
+    // a wrapping layout) so the follow/anchor coordinate measurements are byte-for-byte the
+    // baseline; the follow/search targets use the full scrollState.maxValue (which now
+    // includes this room) so autoplay can keep the highlight above the dock at the end of the
+    // document — clamping it away breaks end-of-text follow.
     val bottomContentSpacerPx = bottomOverlayOcclusionPx.coerceAtLeast(0)
+    val bottomContentSpacerDp = with(density) { bottomContentSpacerPx.toDp() }
     val anchorRange = fullTextHighlightRange
     val followRange = fullTextFollowRange
     val scrollAnchorRange = followRange ?: anchorRange
@@ -378,16 +380,16 @@ fun ReaderBody(
             .verticalScroll(scrollState),
         contentAlignment = Alignment.TopCenter,
     ) {
-      Column(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalAlignment = Alignment.CenterHorizontally,
-      ) {
         key(selectionResetSignal) {
             SelectionContainer {
                 if (effectiveFullText.isNotBlank()) {
                     ClickableText(
                         text = fullTextAnnotated,
                         modifier = Modifier
+                            // Trailing headroom so the last lines clear the player dock. Bottom
+                            // padding only — it grows the scroll range without shifting the text
+                            // top, so anchor/viewport coordinates match the baseline exactly.
+                            .padding(bottom = bottomContentSpacerDp)
                             .widthIn(max = readingMaxWidthDp.dp)
                             .fillMaxWidth()
                             .onGloballyPositioned { coordinates ->
@@ -469,14 +471,6 @@ fun ReaderBody(
                 }
             }
         }
-        if (bottomContentSpacerPx > 0) {
-            Spacer(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(with(density) { bottomContentSpacerPx.toDp() }),
-            )
-        }
-      }
     }
 
     LaunchedEffect(scrollState, topOverlayOcclusionPx, bottomOverlayOcclusionPx) {
