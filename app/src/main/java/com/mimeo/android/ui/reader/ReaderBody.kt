@@ -352,6 +352,16 @@ fun ReaderBody(
     val searchFocusExtraTopPx = with(density) { READER_SEARCH_FOCUS_EXTRA_TOP_PADDING.roundToPx().toFloat() }
     val topOverlayPx = topOverlayOcclusionPx.coerceAtLeast(0).toFloat()
     val bottomOverlayPx = bottomOverlayOcclusionPx.coerceAtLeast(0).toFloat()
+    // Trailing scroll headroom (== the dock height) added as bottom padding on the text so
+    // the bottom-most lines can be scrolled clear of the player dock, mirroring the bottom
+    // content padding on list screens. The dock always covers this region during playback so
+    // it shows no blank space. It is applied as bottom padding on the existing text node (not
+    // a wrapping layout) so the follow/anchor coordinate measurements are byte-for-byte the
+    // baseline; the follow/search targets use the full scrollState.maxValue (which now
+    // includes this room) so autoplay can keep the highlight above the dock at the end of the
+    // document — clamping it away breaks end-of-text follow.
+    val bottomContentSpacerPx = bottomOverlayOcclusionPx.coerceAtLeast(0)
+    val bottomContentSpacerDp = with(density) { bottomContentSpacerPx.toDp() }
     val anchorRange = fullTextHighlightRange
     val followRange = fullTextFollowRange
     val scrollAnchorRange = followRange ?: anchorRange
@@ -376,6 +386,10 @@ fun ReaderBody(
                     ClickableText(
                         text = fullTextAnnotated,
                         modifier = Modifier
+                            // Trailing headroom so the last lines clear the player dock. Bottom
+                            // padding only — it grows the scroll range without shifting the text
+                            // top, so anchor/viewport coordinates match the baseline exactly.
+                            .padding(bottom = bottomContentSpacerDp)
                             .widthIn(max = readingMaxWidthDp.dp)
                             .fillMaxWidth()
                             .onGloballyPositioned { coordinates ->
@@ -558,22 +572,12 @@ fun ReaderBody(
         val externalTrigger = triggerKind != ReaderScrollTriggerKind.NONE
         val forceReattach = triggerKind == ReaderScrollTriggerKind.FORCE_REATTACH
         val anchorChanged = lastAnchorRange != anchor
-        if (followSuppressedByManualScroll && !forceReattach) {
-            if (BuildConfig.DEBUG) {
-                Log.d(
-                    READER_SCROLL_DEBUG_TAG,
-                    "skip_follow suppressed=true trigger=$triggerKind anchorChanged=$anchorChanged",
-                )
-            }
-            if (externalTrigger) {
-                lastHandledScrollTrigger = scrollTriggerSignal
-            }
-            if (anchorChanged) {
-                lastAnchorWasFullyVisible = fullyVisibleNow
-            }
-            lastAnchorRange = anchor
-            return@LaunchedEffect
-        }
+        // ORDER IS LOAD-BEARING: the auto-reattach and cooldown suppression-release must run
+        // BEFORE the "still suppressed -> skip follow" early-return below. If the early-return
+        // runs first, neither the reattach nor shouldClearFollowSuppression is ever reachable
+        // while suppressed, so a manual scroll suppresses follow forever (until an explicit
+        // force-reattach). That was the long-standing bug: the release logic was dead code
+        // sitting after the early-return.
         if (forceReattach) {
             followSuppressedByManualScroll = false
             if (BuildConfig.DEBUG) {
@@ -602,6 +606,22 @@ fun ReaderBody(
             )
         ) {
             followSuppressedByManualScroll = false
+        }
+        if (followSuppressedByManualScroll && !forceReattach) {
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    READER_SCROLL_DEBUG_TAG,
+                    "skip_follow suppressed=true trigger=$triggerKind anchorChanged=$anchorChanged",
+                )
+            }
+            if (externalTrigger) {
+                lastHandledScrollTrigger = scrollTriggerSignal
+            }
+            if (anchorChanged) {
+                lastAnchorWasFullyVisible = fullyVisibleNow
+            }
+            lastAnchorRange = anchor
+            return@LaunchedEffect
         }
         if (
             shouldSuppressStandardTriggerDuringCooldown(
@@ -698,7 +718,11 @@ fun ReaderBody(
                     latestVisibleTop + topComfortPx
                 }
                 val delta = latestStartTopInRoot - desiredAnchorInRoot
-                val target = (scrollState.value + delta).roundToInt().coerceIn(0, scrollState.maxValue)
+                val target = computeReaderFollowTarget(
+                    currentScroll = scrollState.value,
+                    deltaToAnchorPx = delta,
+                    scrollMaxValue = scrollState.maxValue,
+                )
                 if (abs(target - scrollState.value) <= 1) return
                 isProgrammaticScroll = true
                 scrollState.scrollTo(target)
@@ -967,6 +991,20 @@ internal fun shouldSuppressStandardTriggerDuringCooldown(
 ): Boolean {
     return triggerKind == ReaderScrollTriggerKind.STANDARD && nowMs < suppressUntilMs
 }
+
+/**
+ * Resolves the absolute scroll offset the follow should animate to so the active anchor
+ * lands at the desired position. [deltaToAnchorPx] is how far the anchor must move (positive
+ * = scroll down). The result clamps to `[0, scrollMaxValue]` using the FULL scroll range —
+ * including the trailing dock-clearing spacer — so end-of-document follow can lift the last
+ * anchor above the dock. Reducing [scrollMaxValue] here (e.g. by the spacer height) silently
+ * breaks autoplay follow once the highlight reaches the bottom of the visible text.
+ */
+internal fun computeReaderFollowTarget(
+    currentScroll: Int,
+    deltaToAnchorPx: Float,
+    scrollMaxValue: Int,
+): Int = (currentScroll + deltaToAnchorPx).roundToInt().coerceIn(0, scrollMaxValue.coerceAtLeast(0))
 
 internal fun computeReaderVisibleBounds(
     viewportTopInRoot: Float,

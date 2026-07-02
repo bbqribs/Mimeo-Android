@@ -652,7 +652,9 @@ fun SettingsScreen(
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface.copy(alpha = 0.26f),
                 )
                 .verticalScroll(scrollState)
-                .padding(bottom = 96.dp),
+                // Reserve bottom space for the player panel (when shown) so the last spoke
+                // setting clears it; collapses to 0 when no player is showing.
+                .padding(bottom = jumpPillBottomClearance),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
         val activeSection = selectedSection
