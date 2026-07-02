@@ -572,22 +572,12 @@ fun ReaderBody(
         val externalTrigger = triggerKind != ReaderScrollTriggerKind.NONE
         val forceReattach = triggerKind == ReaderScrollTriggerKind.FORCE_REATTACH
         val anchorChanged = lastAnchorRange != anchor
-        if (followSuppressedByManualScroll && !forceReattach) {
-            if (BuildConfig.DEBUG) {
-                Log.d(
-                    READER_SCROLL_DEBUG_TAG,
-                    "skip_follow suppressed=true trigger=$triggerKind anchorChanged=$anchorChanged",
-                )
-            }
-            if (externalTrigger) {
-                lastHandledScrollTrigger = scrollTriggerSignal
-            }
-            if (anchorChanged) {
-                lastAnchorWasFullyVisible = fullyVisibleNow
-            }
-            lastAnchorRange = anchor
-            return@LaunchedEffect
-        }
+        // ORDER IS LOAD-BEARING: the auto-reattach and cooldown suppression-release must run
+        // BEFORE the "still suppressed -> skip follow" early-return below. If the early-return
+        // runs first, neither the reattach nor shouldClearFollowSuppression is ever reachable
+        // while suppressed, so a manual scroll suppresses follow forever (until an explicit
+        // force-reattach). That was the long-standing bug: the release logic was dead code
+        // sitting after the early-return.
         if (forceReattach) {
             followSuppressedByManualScroll = false
             if (BuildConfig.DEBUG) {
@@ -616,6 +606,22 @@ fun ReaderBody(
             )
         ) {
             followSuppressedByManualScroll = false
+        }
+        if (followSuppressedByManualScroll && !forceReattach) {
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    READER_SCROLL_DEBUG_TAG,
+                    "skip_follow suppressed=true trigger=$triggerKind anchorChanged=$anchorChanged",
+                )
+            }
+            if (externalTrigger) {
+                lastHandledScrollTrigger = scrollTriggerSignal
+            }
+            if (anchorChanged) {
+                lastAnchorWasFullyVisible = fullyVisibleNow
+            }
+            lastAnchorRange = anchor
+            return@LaunchedEffect
         }
         if (
             shouldSuppressStandardTriggerDuringCooldown(
