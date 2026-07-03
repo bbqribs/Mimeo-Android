@@ -104,6 +104,17 @@ private data class PlayerRouteHandlers(
     val onChevronTap: () -> Unit,
 )
 
+internal fun startupStartDestination(
+    startupInitialRequiresSignIn: Boolean,
+    startupDestination: StartupDestination,
+): String {
+    return if (startupInitialRequiresSignIn) {
+        ROUTE_SIGN_IN
+    } else {
+        startupDestinationRoute(startupDestination)
+    }
+}
+
 @Composable
 internal fun MainActivityShell(
     vm: AppViewModel,
@@ -458,11 +469,10 @@ internal fun MainActivityShell(
                     ) {
                         NavHost(
                             navController = nav,
-                            startDestination = if (startupInitialRequiresSignIn) {
-                                ROUTE_SIGN_IN
-                            } else {
-                                startupDestinationRoute(settings.startupDestination)
-                            },
+                            startDestination = startupStartDestination(
+                                startupInitialRequiresSignIn = startupInitialRequiresSignIn,
+                                startupDestination = settings.startupDestination,
+                            ),
                             modifier = Modifier
                                 .fillMaxSize()
                                 .background(if (isV1) mColors.bg else MaterialTheme.colorScheme.background),

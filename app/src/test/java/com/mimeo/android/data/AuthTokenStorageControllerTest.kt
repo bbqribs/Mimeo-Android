@@ -19,6 +19,30 @@ class AuthTokenStorageControllerTest {
     }
 
     @Test
+    fun readToken_trimsSecureTokenWhenPresent() {
+        val secure = FakeTokenSlot("  secure-token  ")
+        val legacy = FakeTokenSlot("legacy-token")
+        val controller = AuthTokenStorageController(
+            secureSlotProvider = { secure },
+            legacySlot = legacy,
+        )
+
+        assertEquals("secure-token", controller.readToken())
+    }
+
+    @Test
+    fun readToken_usesLegacyWhenSecureTokenBlank() {
+        val secure = FakeTokenSlot("   ")
+        val legacy = FakeTokenSlot("legacy-token")
+        val controller = AuthTokenStorageController(
+            secureSlotProvider = { secure },
+            legacySlot = legacy,
+        )
+
+        assertEquals("legacy-token", controller.readToken())
+    }
+
+    @Test
     fun readToken_usesLegacyWhenSecureUnavailable() {
         val legacy = FakeTokenSlot("legacy-token")
         val controller = AuthTokenStorageController(
@@ -42,6 +66,22 @@ class AuthTokenStorageControllerTest {
 
         assertFalse(result.usedLegacyFallback)
         assertEquals("next-token", secure.token)
+        assertEquals("", legacy.token)
+    }
+
+    @Test
+    fun writeToken_blankClearsBothSlots() {
+        val secure = FakeTokenSlot("secure-token")
+        val legacy = FakeTokenSlot("legacy-token")
+        val controller = AuthTokenStorageController(
+            secureSlotProvider = { secure },
+            legacySlot = legacy,
+        )
+
+        val result = controller.writeToken("   ")
+
+        assertFalse(result.usedLegacyFallback)
+        assertEquals("", secure.token)
         assertEquals("", legacy.token)
     }
 

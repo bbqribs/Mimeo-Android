@@ -1,5 +1,6 @@
 package com.mimeo.android
 
+import com.mimeo.android.model.StartupDestination
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -39,15 +40,52 @@ class StartupAuthStateTest {
 
     @Test
     fun `startup nav route is sign-in when session is absent`() {
-        val ready = StartupAuthState.Ready(requiresSignIn = true)
-        val route = if (ready.requiresSignIn) ROUTE_SIGN_IN else ROUTE_UP_NEXT
-        assertEquals(ROUTE_SIGN_IN, route)
+        assertEquals(
+            ROUTE_SIGN_IN,
+            startupStartDestination(
+                startupInitialRequiresSignIn = true,
+                startupDestination = StartupDestination.UP_NEXT,
+            ),
+        )
     }
 
     @Test
     fun `startup nav route is up-next when session is restored`() {
-        val ready = StartupAuthState.Ready(requiresSignIn = false)
-        val route = if (ready.requiresSignIn) ROUTE_SIGN_IN else ROUTE_UP_NEXT
-        assertEquals(ROUTE_UP_NEXT, route)
+        assertEquals(
+            ROUTE_UP_NEXT,
+            startupStartDestination(
+                startupInitialRequiresSignIn = false,
+                startupDestination = StartupDestination.UP_NEXT,
+            ),
+        )
+    }
+
+    @Test
+    fun `startup nav route honors stored destination after session restore`() {
+        assertEquals(
+            ROUTE_INBOX,
+            startupStartDestination(
+                startupInitialRequiresSignIn = false,
+                startupDestination = StartupDestination.INBOX,
+            ),
+        )
+        assertEquals(
+            ROUTE_SMART_QUEUE,
+            startupStartDestination(
+                startupInitialRequiresSignIn = false,
+                startupDestination = StartupDestination.SMART_QUEUE,
+            ),
+        )
+    }
+
+    @Test
+    fun `startup nav route requires sign-in before stored destination`() {
+        assertEquals(
+            ROUTE_SIGN_IN,
+            startupStartDestination(
+                startupInitialRequiresSignIn = true,
+                startupDestination = StartupDestination.SMART_QUEUE,
+            ),
+        )
     }
 }

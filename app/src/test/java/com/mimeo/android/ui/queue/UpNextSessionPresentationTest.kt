@@ -102,6 +102,19 @@ class UpNextSessionPresentationTest {
     }
 
     @Test
+    fun activeAnchorSpacerNeverGoesNegativeWhenBelowContentFillsViewport() {
+        assertEquals(
+            0f,
+            activeAnchorTailSpacerPx(
+                hasRowsBeforeActive = true,
+                viewportHeightPx = 360,
+                activeHeightPx = 180f,
+                belowActiveContentHeightPx = 320f,
+            ),
+        )
+    }
+
+    @Test
     fun rowTrailingActionOrderPlacesJumpImmediatelyBeforeRemove() {
         assertEquals(
             listOf(SessionRowAction.JumpPlay, SessionRowAction.Remove),
