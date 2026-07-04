@@ -178,6 +178,25 @@ data class AuthTokenResponse(
 )
 
 @Serializable
+data class DeviceSession(
+    val id: Int,
+    val name: String,
+    @SerialName("token_prefix") val tokenPrefix: String,
+    val scope: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("expires_at") val expiresAt: String? = null,
+    @SerialName("is_expired") val isExpired: Boolean = false,
+    @SerialName("last_used_at") val lastUsedAt: String? = null,
+    @SerialName("is_current") val isCurrent: Boolean = false,
+)
+
+@Serializable
+data class RevokeDeviceResponse(val ok: Boolean = false)
+
+@Serializable
+data class RevokeOtherDevicesResponse(val revoked: Int = 0)
+
+@Serializable
 data class PlaybackQueueResponse(
     val count: Int,
     @SerialName("total_count") val totalCount: Int = 0,

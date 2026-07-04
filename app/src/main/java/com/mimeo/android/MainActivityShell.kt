@@ -83,6 +83,7 @@ import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.ui.queue.SmartQueueScreen
 import com.mimeo.android.ui.bluesky.BlueskyBrowseScreen
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
+import com.mimeo.android.ui.settings.DevicesAndSessionsScreen
 import com.mimeo.android.ui.settings.SettingsScreen
 import com.mimeo.android.data.ServerIdentityGuardState
 import com.mimeo.android.ui.signin.SignInScreen
@@ -784,6 +785,7 @@ internal fun MainActivityShell(
                                 SettingsScreen(
                                     vm = vm,
                                     onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
+                                    onOpenDevicesAndSessions = { nav.navigate(ROUTE_SETTINGS_DEVICES) },
                                     onCreateBlueskySmartPlaylist = {
                                         newSmartPlaylistInitialState = SmartPlaylistFormState(
                                             name = "Saved from Bluesky",
@@ -808,6 +810,9 @@ internal fun MainActivityShell(
                             }
                             composable(ROUTE_SETTINGS_DIAGNOSTICS) {
                                 ConnectivityDiagnosticsScreen(vm = vm)
+                            }
+                            composable(ROUTE_SETTINGS_DEVICES) {
+                                DevicesAndSessionsScreen(vm = vm)
                             }
                             composable(ROUTE_LOCUS) {
                                 LocusPlayerRoute(
