@@ -295,6 +295,27 @@ internal fun isStaleTokenAuthFailure(error: Throwable): Boolean {
 
 internal fun staleTokenSignInMessage(): String = "Session expired. Please sign in again."
 
+internal data class StaleTokenAuthResolution(
+    val handled: Boolean,
+    val clearToken: Boolean = false,
+    val signInMessage: String? = null,
+    val navigationRoute: String? = null,
+)
+
+internal fun resolveStaleTokenAuthFailure(
+    error: Throwable,
+    currentToken: String,
+): StaleTokenAuthResolution {
+    if (!isStaleTokenAuthFailure(error)) return StaleTokenAuthResolution(handled = false)
+    if (currentToken.isBlank()) return StaleTokenAuthResolution(handled = true)
+    return StaleTokenAuthResolution(
+        handled = true,
+        clearToken = true,
+        signInMessage = staleTokenSignInMessage(),
+        navigationRoute = ROUTE_SIGN_IN,
+    )
+}
+
 internal fun isNoActiveContentError(error: Throwable): Boolean {
     return error is ApiException &&
         error.statusCode == 409 &&

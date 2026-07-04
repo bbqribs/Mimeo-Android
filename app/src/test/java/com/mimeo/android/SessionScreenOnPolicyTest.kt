@@ -88,4 +88,18 @@ class SessionScreenOnPolicyTest {
             ),
         )
     }
+
+    @Test
+    fun `auth expiry during reader session clears keep-screen-on state`() {
+        assertFalse(
+            shouldKeepScreenOnForSession(
+                keepScreenOnEnabled = true,
+                requiresSignIn = true,
+                isOnLocusRoute = true,
+                requestedPlayerItemId = 321,
+                playbackActive = true,
+                manualReadingActive = true,
+            ),
+        )
+    }
 }
