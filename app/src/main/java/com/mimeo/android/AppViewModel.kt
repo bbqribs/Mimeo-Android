@@ -1571,15 +1571,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun handleAuthFailureIfNeeded(error: Throwable): Boolean {
-        if (!isStaleTokenAuthFailure(error)) return false
+        val initialResolution = resolveStaleTokenAuthFailure(error, settings.value.apiToken)
+        if (!initialResolution.handled) return false
         return authFailureMutex.withLock {
-            if (authFailureHandledThisSession || settings.value.apiToken.isBlank()) {
+            val resolution = resolveStaleTokenAuthFailure(error, settings.value.apiToken)
+            if (authFailureHandledThisSession || !resolution.clearToken) {
                 true
             } else {
                 authFailureHandledThisSession = true
                 settingsStore.saveTokenOnly("")
-                _signInState.value = SignInState.Error(staleTokenSignInMessage())
-                requestNavigation(ROUTE_SIGN_IN)
+                resolution.signInMessage?.let { _signInState.value = SignInState.Error(it) }
+                resolution.navigationRoute?.let { requestNavigation(it) }
                 true
             }
         }
