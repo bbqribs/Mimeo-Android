@@ -211,6 +211,7 @@ internal fun blueskySchedulerDiagnosticsVisible(isDebugBuild: Boolean): Boolean 
 fun SettingsScreen(
     vm: AppViewModel,
     onOpenDiagnostics: () -> Unit,
+    onOpenDevicesAndSessions: () -> Unit,
     onCreateBlueskySmartPlaylist: () -> Unit,
     onCreateSourceSmartPlaylist: (name: String, captureKinds: String, sort: String) -> Unit,
     onChangePassword: (String, String, String) -> Unit,
@@ -865,6 +866,9 @@ fun SettingsScreen(
                         },
                     ) { Text(if (testingConnection) "Testing..." else "Test") }
                     Button(onClick = onOpenDiagnostics) { Text("Diagnostics") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onOpenDevicesAndSessions) { Text("Devices & sessions") }
                 }
                 val testResultTimestamp = lastConnectionTestedAtMs?.let { millis ->
                     runCatching {

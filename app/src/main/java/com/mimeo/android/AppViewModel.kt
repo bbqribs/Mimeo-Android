@@ -197,10 +197,15 @@ import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
 import com.mimeo.android.ui.settings.ConnectionTestMessageResolver
+import com.mimeo.android.ui.settings.DevicesListState
 import com.mimeo.android.ui.settings.PasswordChangeState
 import com.mimeo.android.ui.settings.SettingsScreen
 import com.mimeo.android.ui.settings.passwordChangeSuccessMessage
+import com.mimeo.android.ui.settings.resolveDevicesListError
 import com.mimeo.android.ui.settings.resolvePasswordChangeError
+import com.mimeo.android.ui.settings.resolveRevokeDeviceError
+import com.mimeo.android.ui.settings.resolveRevokeOtherDevicesError
+import com.mimeo.android.ui.settings.revokeOtherDevicesSuccessMessage
 import com.mimeo.android.ui.settings.validatePasswordChangeInput
 import com.mimeo.android.ui.player.PlayerScreen
 import com.mimeo.android.ui.player.PlaybackEngine
@@ -507,6 +512,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _passwordChangeState = MutableStateFlow<PasswordChangeState>(PasswordChangeState.Idle)
     val passwordChangeState: StateFlow<PasswordChangeState> = _passwordChangeState.asStateFlow()
 
+    private val _devicesListState = MutableStateFlow<DevicesListState>(DevicesListState.Idle)
+    val devicesListState: StateFlow<DevicesListState> = _devicesListState.asStateFlow()
+    private val _revokingDeviceIds = MutableStateFlow<Set<Int>>(emptySet())
+    val revokingDeviceIds: StateFlow<Set<Int>> = _revokingDeviceIds.asStateFlow()
+    private val _revokeOthersInProgress = MutableStateFlow(false)
+    val revokeOthersInProgress: StateFlow<Boolean> = _revokeOthersInProgress.asStateFlow()
+
     private val _diagnosticsRows = MutableStateFlow<List<ConnectivityDiagnosticRow>>(emptyList())
     val diagnosticsRows: StateFlow<List<ConnectivityDiagnosticRow>> = _diagnosticsRows.asStateFlow()
 
@@ -715,6 +727,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     _smartPlaylists.value = emptyList()
                     _currentSmartPlaylistItems.value = emptyList()
                     blueskyCoordinator.resetOnSignOut()
+                    _devicesListState.value = DevicesListState.Idle
+                    _revokingDeviceIds.value = emptySet()
+                    _revokeOthersInProgress.value = false
                 }
                 if (previous.apiToken.isBlank() && next.apiToken.isNotBlank()) {
                     authFailureHandledThisSession = false
@@ -1500,6 +1515,72 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     _passwordChangeState.value = PasswordChangeState.Error(resolution.message)
                 }
+            }
+        }
+    }
+
+    fun loadDevices() {
+        val current = settings.value
+        if (current.apiToken.isBlank()) {
+            _devicesListState.value = DevicesListState.Error("Sign in to view your devices and sessions.")
+            return
+        }
+        viewModelScope.launch {
+            _devicesListState.value = DevicesListState.Loading
+            try {
+                val devices = apiClient.getAccountDevices(current.baseUrl, current.apiToken)
+                _devicesListState.value = DevicesListState.Success(devices)
+            } catch (error: Throwable) {
+                val resolution = resolveDevicesListError(error)
+                if (resolution.staleAuth && handleAuthFailureIfNeeded(error)) {
+                    _devicesListState.value = DevicesListState.Idle
+                } else {
+                    _devicesListState.value = DevicesListState.Error(resolution.message)
+                }
+            }
+        }
+    }
+
+    fun revokeDevice(deviceId: Int) {
+        val current = settings.value
+        if (current.apiToken.isBlank()) return
+        viewModelScope.launch {
+            _revokingDeviceIds.value = _revokingDeviceIds.value + deviceId
+            try {
+                apiClient.postRevokeDevice(current.baseUrl, current.apiToken, deviceId)
+                showSnackbar("Device signed out.")
+                loadDevices()
+            } catch (error: Throwable) {
+                val resolution = resolveRevokeDeviceError(error)
+                if (resolution.staleAuth && handleAuthFailureIfNeeded(error)) {
+                    // handled: navigated to re-auth
+                } else {
+                    showSnackbar(resolution.message)
+                }
+            } finally {
+                _revokingDeviceIds.value = _revokingDeviceIds.value - deviceId
+            }
+        }
+    }
+
+    fun revokeOtherDevices() {
+        val current = settings.value
+        if (current.apiToken.isBlank()) return
+        viewModelScope.launch {
+            _revokeOthersInProgress.value = true
+            try {
+                val result = apiClient.postRevokeOtherDevices(current.baseUrl, current.apiToken)
+                showSnackbar(revokeOtherDevicesSuccessMessage(result.revoked))
+                loadDevices()
+            } catch (error: Throwable) {
+                val resolution = resolveRevokeOtherDevicesError(error)
+                if (resolution.staleAuth && handleAuthFailureIfNeeded(error)) {
+                    // handled: navigated to re-auth
+                } else {
+                    showSnackbar(resolution.message)
+                }
+            } finally {
+                _revokeOthersInProgress.value = false
             }
         }
     }

@@ -5,6 +5,9 @@ import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.AuthTokenResponse
 import com.mimeo.android.model.DebugVersionResponse
 import com.mimeo.android.model.DebugPythonResponse
+import com.mimeo.android.model.DeviceSession
+import com.mimeo.android.model.RevokeDeviceResponse
+import com.mimeo.android.model.RevokeOtherDevicesResponse
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.ItemTextContentBlock
 import com.mimeo.android.model.ArticleSummary
@@ -375,6 +378,37 @@ class ApiClient(
             }
         }
         throw lastError ?: ApiException(500, "Couldn't change password. Please try again.")
+    }
+
+    suspend fun getAccountDevices(baseUrl: String, token: String): List<DeviceSession> = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/account/devices"))
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        executeJson(request) { payload ->
+            json.decodeFromString(ListSerializer(DeviceSession.serializer()), payload)
+        }
+    }
+
+    suspend fun postRevokeDevice(baseUrl: String, token: String, deviceId: Int): RevokeDeviceResponse = withContext(Dispatchers.IO) {
+        val body = "{}".toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/account/devices/$deviceId/revoke"))
+            .header("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<RevokeDeviceResponse>(payload) }
+    }
+
+    suspend fun postRevokeOtherDevices(baseUrl: String, token: String): RevokeOtherDevicesResponse = withContext(Dispatchers.IO) {
+        val body = "{}".toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(resolveUrl(baseUrl, "/account/devices/revoke-others"))
+            .header("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+        executeJson(request) { payload -> json.decodeFromString<RevokeOtherDevicesResponse>(payload) }
     }
 
     suspend fun getQueue(
