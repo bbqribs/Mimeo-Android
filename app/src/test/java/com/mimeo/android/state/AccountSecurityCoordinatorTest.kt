@@ -105,7 +105,7 @@ class AccountSecurityCoordinatorTest {
         runCoordinatorAction { it.loadDevices() }
 
         val error = state.devicesListState.value as DevicesListState.Error
-        assertEquals("Couldn't load your devices. Please try again.", error.message)
+        assertEquals("Couldn't load your devices. Try again.", error.message)
     }
 
     @Test
@@ -126,7 +126,7 @@ class AccountSecurityCoordinatorTest {
 
         runCoordinatorAction { it.revokeDevice(5) }
 
-        assertTrue(snackbarMessages.contains("Couldn't sign out that device. Please try again."))
+        assertTrue(snackbarMessages.contains("Couldn't sign out that device. Try again."))
         assertTrue(state.revokingDeviceIds.value.isEmpty())
     }
 

@@ -25,6 +25,7 @@ import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
 import com.mimeo.android.model.DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
+import com.mimeo.android.ui.common.LoadStatePane
 
 @Composable
 fun ConnectivityDiagnosticsScreen(vm: AppViewModel) {
@@ -56,7 +57,13 @@ fun ConnectivityDiagnosticsScreen(vm: AppViewModel) {
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { vm.runConnectivityDiagnostics(isPhysicalDevice) }, enabled = !running) {
-                Text(if (running) "Running..." else "Run diagnostics")
+                Text(
+                    when {
+                        running -> "Running..."
+                        lastError != null -> "Retry diagnostics"
+                        else -> "Run diagnostics"
+                    },
+                )
             }
             OutlinedButton(
                 enabled = rows.isNotEmpty() || !lastError.isNullOrBlank(),
@@ -93,27 +100,33 @@ fun ConnectivityDiagnosticsScreen(vm: AppViewModel) {
             }
         }
 
-        if (lastError != null) {
-            Text("Last error: $lastError", color = MaterialTheme.colorScheme.error)
-        }
-
-        rows.forEach { row ->
-            val color = when (row.outcome) {
-                ConnectivityDiagnosticOutcome.PASS -> MaterialTheme.colorScheme.primary
-                ConnectivityDiagnosticOutcome.FAIL -> MaterialTheme.colorScheme.error
-                ConnectivityDiagnosticOutcome.INFO -> MaterialTheme.colorScheme.secondary
+        LoadStatePane(
+            loading = running && rows.isEmpty(),
+        ) {
+            if (lastError != null) {
+                Text(
+                    "Couldn't complete the latest diagnostics run: $lastError",
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                Text("[${row.outcome}] ${row.name} @ ${row.checkedAt}", color = color)
-                Text("url=${row.url}", style = MaterialTheme.typography.bodySmall)
-                Text(row.detail, style = MaterialTheme.typography.bodySmall)
-                if (!row.hint.isNullOrBlank()) {
-                    Text("hint=${row.hint}", style = MaterialTheme.typography.bodySmall)
+            rows.forEach { row ->
+                val color = when (row.outcome) {
+                    ConnectivityDiagnosticOutcome.PASS -> MaterialTheme.colorScheme.primary
+                    ConnectivityDiagnosticOutcome.FAIL -> MaterialTheme.colorScheme.error
+                    ConnectivityDiagnosticOutcome.INFO -> MaterialTheme.colorScheme.secondary
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text("[${row.outcome}] ${row.name} @ ${row.checkedAt}", color = color)
+                    Text("url=${row.url}", style = MaterialTheme.typography.bodySmall)
+                    Text(row.detail, style = MaterialTheme.typography.bodySmall)
+                    if (!row.hint.isNullOrBlank()) {
+                        Text("hint=${row.hint}", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
         }

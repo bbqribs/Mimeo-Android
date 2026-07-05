@@ -812,7 +812,10 @@ internal fun MainActivityShell(
                                 ConnectivityDiagnosticsScreen(vm = vm)
                             }
                             composable(ROUTE_SETTINGS_DEVICES) {
-                                DevicesAndSessionsScreen(vm = vm)
+                                DevicesAndSessionsScreen(
+                                    vm = vm,
+                                    jumpPillBottomClearance = snapBottomClearance,
+                                )
                             }
                             composable(ROUTE_LOCUS) {
                                 LocusPlayerRoute(
