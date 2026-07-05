@@ -53,13 +53,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -69,9 +65,6 @@ import androidx.core.content.ContextCompat
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Share
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material.icons.outlined.Info
 import com.mimeo.android.AppViewModel
@@ -81,9 +74,6 @@ import com.mimeo.android.BuildConfig
 import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
-import com.mimeo.android.model.DEFAULT_PLAYBACK_SPEED_PRESETS
-import com.mimeo.android.model.DEFAULT_LAN_BASE_URL
-import com.mimeo.android.model.DEFAULT_LOCAL_BASE_URL
 import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
 import com.mimeo.android.model.DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL
 import com.mimeo.android.model.DrawerPanelSide
@@ -94,15 +84,11 @@ import com.mimeo.android.model.MAX_PARAGRAPH_SPACING_PRESETS
 import com.mimeo.android.model.MAX_PLAYBACK_SPEED_PRESETS
 import com.mimeo.android.model.PARAGRAPH_SPACING_PRESET_MAX
 import com.mimeo.android.model.PARAGRAPH_SPACING_PRESET_MIN
-import com.mimeo.android.model.PLAYBACK_SPEED_PRESET_MAX
-import com.mimeo.android.model.PLAYBACK_SPEED_PRESET_MIN
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.formatParagraphSpacingPresetValue
 import com.mimeo.android.model.formatPlaybackSpeedPresetValue
 import com.mimeo.android.model.isParagraphSpacingPresetEntryValid
-import com.mimeo.android.model.isPlaybackSpeedPresetEntryValid
 import com.mimeo.android.model.sanitizeParagraphSpacingPresets
-import com.mimeo.android.model.sanitizePlaybackSpeedPresets
 import com.mimeo.android.model.PlayerChevronSnapEdge
 import com.mimeo.android.model.ReaderFontOption
 import com.mimeo.android.model.VisualDensityPreference
@@ -110,18 +96,21 @@ import com.mimeo.android.model.VisualThemePreference
 import com.mimeo.android.model.BlueskyAccountConnectionResponse
 import com.mimeo.android.model.BlueskyOperatorStatusResponse
 import com.mimeo.android.model.BlueskySourceDiagnostic
-import com.mimeo.android.ui.bluesky.BlueskyHandleField
 import com.mimeo.android.ui.bluesky.BlueskyHealthState
 import com.mimeo.android.ui.bluesky.BlueskyRecoveryAction
 import com.mimeo.android.ui.bluesky.blueskyPlainStatus
 import com.mimeo.android.ui.bluesky.blueskySourceDisplayName
 import com.mimeo.android.ui.bluesky.resolveBlueskyHealth
-import com.mimeo.android.util.bluesky.normalizeBlueskyHandleInput
 import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.common.shouldShowJumpToTopScroll
 import com.mimeo.android.ui.queue.autoDownloadStatusLines
+import com.mimeo.android.ui.settings.sections.AccountSection
+import com.mimeo.android.ui.settings.sections.BlueskySection
+import com.mimeo.android.ui.settings.sections.PasswordChangeDialog
+import com.mimeo.android.ui.settings.sections.PlaybackSection
+import com.mimeo.android.ui.settings.sections.SignOutConfirmationDialog
 import com.mimeo.android.ui.theme.toFontFamily
 import java.net.URI
 import java.text.SimpleDateFormat
@@ -144,7 +133,7 @@ import com.mimeo.android.ui.theme.resolveThemeChoice
 import com.mimeo.android.ui.theme.toMimeoAccentScheme
 import kotlinx.coroutines.launch
 
-private const val TTS_PREVIEW_PHRASE = "The quick brown fox jumps over the lazy dog."
+internal const val TTS_PREVIEW_PHRASE = "The quick brown fox jumps over the lazy dog."
 
 /**
  * Hub-and-spoke index entries for Settings. The screen shows this index first; tapping
@@ -219,26 +208,12 @@ fun SettingsScreen(
     onSignOut: () -> Unit,
     jumpPillBottomClearance: Dp = 0.dp,
 ) {
-    val clipboardManager = LocalClipboardManager.current
-    val context = LocalContext.current
     val settings by vm.settings.collectAsState()
-    val pendingManualSaves by vm.pendingManualSaves.collectAsState()
     val settingsScrollOffset by vm.settingsScrollOffset.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     val testingConnection by vm.testingConnection.collectAsState()
-    val connectionTestSuccessByMode by vm.connectionTestSuccessByMode.collectAsState()
-    val blueskyStatusLoading by vm.blueskyStatusLoading.collectAsState()
-    val blueskyStatusError by vm.blueskyStatusError.collectAsState()
     val blueskyAccountConnection by vm.blueskyAccountConnection.collectAsState()
-    val blueskyOperatorStatus by vm.blueskyOperatorStatus.collectAsState()
-    val blueskyConnecting by vm.blueskyConnecting.collectAsState()
-    val blueskyConnectError by vm.blueskyConnectError.collectAsState()
-    val blueskyConnectIsReadOnlyScope by vm.blueskyConnectIsReadOnlyScope.collectAsState()
-    val blueskyDisconnecting by vm.blueskyDisconnecting.collectAsState()
     val blueskyScannerPreferences by vm.blueskyScannerPreferences.collectAsState()
-    val blueskyScannerPreferencesLoading by vm.blueskyScannerPreferencesLoading.collectAsState()
-    val blueskyScannerPreferencesSaving by vm.blueskyScannerPreferencesSaving.collectAsState()
-    val blueskyScannerPreferencesError by vm.blueskyScannerPreferencesError.collectAsState()
     val autoDownloadDiagnostics by vm.autoDownloadDiagnostics.collectAsState()
     val passwordChangeState by vm.passwordChangeState.collectAsState()
     val playlists by vm.playlists.collectAsState()
@@ -666,295 +641,36 @@ fun SettingsScreen(
             SettingsSpokeBackHeader(section = activeSection, onBack = { selectedSection = null })
         }
         if (activeSection == SettingsSection.ACCOUNT) {
-        SettingsSectionHeader(
-            title = "Account & Connection",
-            subtitle = "Choose Local, LAN, or Remote mode. Sign In is recommended; manual token entry replaces this device token.",
-        )
-        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            showPasswordChangeDialog = true
-                            onClearPasswordChangeState()
-                        },
-                    ) {
-                        Text("Change Password")
-                    }
-                    Button(
-                        onClick = { showSignOutDialog = true },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isV1) mColors.danger else androidx.compose.material3.MaterialTheme.colorScheme.error,
-                            contentColor = if (isV1) mColors.accentOn else androidx.compose.material3.MaterialTheme.colorScheme.onError,
-                        ),
-                    ) {
-                        Text("Sign Out")
-                    }
-                }
-                Text(
-                    text = "Connection",
-                    style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                    color = if (isV1) mColors.fg else Color.Unspecified,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    ConnectionMode.entries.forEach { mode ->
-                        FilterChip(
-                            selected = connectionMode == mode,
-                            onClick = { connectionMode = mode },
-                            label = { Text(mode.displayName()) },
-                        )
-                    }
-                }
-                Text(
-                    text = connectionMode.description(),
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedTextField(
-                    value = selectedModeBaseUrl(),
-                    onValueChange = {
-                        when (connectionMode) {
-                            ConnectionMode.LOCAL -> localBaseUrl = it
-                            ConnectionMode.LAN -> lanBaseUrl = it
-                            ConnectionMode.REMOTE -> remoteBaseUrl = it
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("${connectionMode.displayName()} Base URL") },
-                    singleLine = true,
-                )
-                val endpointValidation = validateConnectionEndpoint(connectionMode, selectedModeBaseUrl())
-                endpointValidation.blockingError?.let { message ->
-                    Text(
-                        text = message,
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.error,
-                    )
-                }
-                endpointValidation.warnings.forEach { warning ->
-                    Text(
-                        text = warning,
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                OutlinedTextField(
-                    value = token,
-                    onValueChange = { token = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Device token (advanced)") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                )
-                var connectionHelpExpanded by remember { mutableStateOf(false) }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Info,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = "Connection help",
-                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(start = 4.dp),
-                    )
-                    TextButton(onClick = { connectionHelpExpanded = !connectionHelpExpanded }) {
-                        Text(if (connectionHelpExpanded) "Hide" else "Show")
-                    }
-                }
-                AnimatedVisibility(visible = connectionHelpExpanded) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = connectionModeBaseUrlGuidance(connectionMode),
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = connectionModeTokenAuthHelp(connectionMode),
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = deviceTokenScopeHint(),
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = formatAuthSessionStatusSummary(
-                                savedToken = settings.apiToken,
-                                editedToken = token,
-                            ),
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = authSessionConsequenceSummary(),
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                val currentModeSnapshot = connectionTestSuccessByMode[connectionMode]
-                val hasUnsavedModeUrlEdit =
-                    normalizeConnectionBaseUrl(selectedModeBaseUrl()) != normalizeConnectionBaseUrl(savedModeBaseUrl())
-                Text(
-                    text = formatCurrentConnectionStatusSummary(
-                        mode = connectionMode,
-                        selectedBaseUrl = selectedModeBaseUrl(),
-                        snapshot = currentModeSnapshot,
-                    ),
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (hasUnsavedModeUrlEdit) {
-                    Text(
-                        text = "${connectionMode.displayName()}: unsaved URL edits in the field.",
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        enabled = endpointValidation.blockingError == null,
-                        onClick = {
-                            if (endpointValidation.blockingError != null) {
-                                vm.showSnackbar(endpointValidation.blockingError)
-                            } else {
-                                saveCurrent()
-                            }
-                        },
-                    ) { Text("Save") }
-                    Button(
-                        enabled = !testingConnection && endpointValidation.blockingError == null,
-                        onClick = {
-                            if (endpointValidation.blockingError != null) {
-                                lastConnectionTestResult = endpointValidation.blockingError
-                                lastConnectionTestedAtMs = System.currentTimeMillis()
-                                return@Button
-                            }
-                            saveCurrent()
-                            if (token.isBlank()) {
-                                testRequested = false
-                                lastConnectionTestResult = ConnectionTestMessageResolver.tokenRequired(
-                                    mode = connectionMode,
-                                    baseUrl = selectedModeBaseUrl(),
-                                )
-                                lastConnectionTestedAtMs = System.currentTimeMillis()
-                            } else {
-                                testRequested = true
-                                vm.testConnection()
-                            }
-                        },
-                    ) { Text(if (testingConnection) "Testing..." else "Test") }
-                    Button(onClick = onOpenDiagnostics) { Text("Diagnostics") }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onOpenDevicesAndSessions) { Text("Devices & sessions") }
-                }
-                val testResultTimestamp = lastConnectionTestedAtMs?.let { millis ->
-                    runCatching {
-                        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(millis))
-                    }.getOrDefault(null)
-                }
-                val pendingSummary = formatPendingSaveTestSummary(
-                    pendingItems = pendingManualSaves,
-                    selectedPlaylistId = settings.selectedPlaylistId,
-                )
-                Text(
-                    text = "Test results",
-                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                )
-                val fullTestResultText = buildConnectionTestResultText(
-                    baseResult = lastConnectionTestResult,
-                    pendingSummary = pendingSummary,
-                    timestamp = testResultTimestamp,
-                )
-                Text(
-                    text = fullTestResultText,
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SettingsActionIconButton(
-                        enabled = fullTestResultText.isNotBlank(),
-                        icon = { Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy test result") },
-                        tooltip = "Copy test result",
-                        onClick = {
-                            clipboardManager.setText(AnnotatedString(fullTestResultText))
-                            vm.showSnackbar("Test result copied")
-                        },
-                    )
-                    SettingsActionIconButton(
-                        enabled = fullTestResultText.isNotBlank(),
-                        icon = { Icon(Icons.Outlined.Share, contentDescription = "Share test result") },
-                        tooltip = "Share test result",
-                        onClick = { sharePlainText(context, "Mimeo connection test", fullTestResultText) },
-                    )
-                }
-                val lastSuccessItems = ConnectionMode.entries.mapNotNull { mode ->
-                    connectionTestSuccessByMode[mode]?.let { snapshot -> mode to snapshot }
-                }
-                if (lastSuccessItems.isNotEmpty()) {
-                    Text(
-                        text = "Last successful test",
-                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                    )
-                    lastSuccessItems.forEach { (_, snapshot) ->
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                text = formatConnectionTestSuccessSummary(snapshot),
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                SettingsActionIconButton(
-                                    icon = { Icon(Icons.Outlined.Check, contentDescription = "Use this URL") },
-                                    tooltip = "Use this URL",
-                                    onClick = { applyConnectionSnapshot(snapshot) },
-                                )
-                                SettingsActionIconButton(
-                                    icon = { Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy URL") },
-                                    tooltip = "Copy URL",
-                                    onClick = {
-                                        clipboardManager.setText(AnnotatedString(snapshot.baseUrl))
-                                        vm.showSnackbar("${snapshot.mode.displayName()} URL copied")
-                                    },
-                                )
-                                SettingsActionIconButton(
-                                    icon = { Icon(Icons.Outlined.Share, contentDescription = "Share URL") },
-                                    tooltip = "Share URL",
-                                    onClick = {
-                                        val shareText = "${snapshot.mode.displayName()} URL: ${snapshot.baseUrl}"
-                                        sharePlainText(context, "Mimeo connection URL", shareText)
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
+            AccountSection(
+                vm = vm,
+                settings = settings,
+                connectionMode = connectionMode,
+                onConnectionModeChange = { connectionMode = it },
+                localBaseUrl = localBaseUrl,
+                onLocalBaseUrlChange = { localBaseUrl = it },
+                lanBaseUrl = lanBaseUrl,
+                onLanBaseUrlChange = { lanBaseUrl = it },
+                remoteBaseUrl = remoteBaseUrl,
+                onRemoteBaseUrlChange = { remoteBaseUrl = it },
+                token = token,
+                onTokenChange = { token = it },
+                testingConnection = testingConnection,
+                testRequested = testRequested,
+                onTestRequestedChange = { testRequested = it },
+                lastConnectionTestResult = lastConnectionTestResult,
+                onLastConnectionTestResultChange = { lastConnectionTestResult = it },
+                lastConnectionTestedAtMs = lastConnectionTestedAtMs,
+                onLastConnectionTestedAtMsChange = { lastConnectionTestedAtMs = it },
+                selectedModeBaseUrl = { selectedModeBaseUrl() },
+                savedModeBaseUrl = { savedModeBaseUrl() },
+                saveCurrent = { saveCurrent() },
+                applyConnectionSnapshot = { applyConnectionSnapshot(it) },
+                onOpenDiagnostics = onOpenDiagnostics,
+                onOpenDevicesAndSessions = onOpenDevicesAndSessions,
+                onShowPasswordChangeDialogChange = { showPasswordChangeDialog = it },
+                onClearPasswordChangeState = onClearPasswordChangeState,
+                onShowSignOutDialogChange = { showSignOutDialog = it },
+            )
         }
         if (activeSection == SettingsSection.GENERAL) {
             SettingsSectionHeader(
@@ -1000,387 +716,26 @@ fun SettingsScreen(
             }
         }
         if (activeSection == SettingsSection.BLUESKY) {
-        SettingsSectionHeader(
-            title = "Bluesky",
-            subtitle = "Connect your Bluesky account and check its status. Saving from Bluesky never changes Up Next.",
-        )
-        BlueskyHealthCard(
-            account = blueskyAccountConnection,
-            operatorStatus = blueskyOperatorStatus,
-            loading = blueskyStatusLoading,
-            statusError = blueskyStatusError,
-            onConnectOrReconnect = { showBlueskyConnectForm = true },
-            onTryAgain = { vm.refreshBlueskyStatus() },
-        )
-
-        var blueskyExplainerExpanded by remember { mutableStateOf(false) }
-        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Info,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = "About Bluesky app passwords",
-                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = { blueskyExplainerExpanded = !blueskyExplainerExpanded }) {
-                        Text(if (blueskyExplainerExpanded) "Hide" else "Show")
-                    }
-                }
-                AnimatedVisibility(visible = blueskyExplainerExpanded) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = "Mimeo uses a Bluesky app password for authenticated read access — not your main Bluesky password.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = "App passwords grant limited access and can be created or revoked at any time in your Bluesky account settings (Settings → App Passwords).",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-        }
-
-        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    text = "Bluesky status",
-                    style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                    color = if (isV1) mColors.fg else Color.Unspecified,
-                )
-                if (blueskyStatusLoading) {
-                    Text(
-                        text = "Loading Bluesky status...",
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (!blueskyStatusError.isNullOrBlank()) {
-                    Text(
-                        text = blueskyStatusError.orEmpty(),
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.error,
-                    )
-                }
-                val account = blueskyAccountConnection
-                val scheduler = blueskyOperatorStatus
-                if (account != null) {
-                    if (account.connected == true) {
-                        // Raw account identifiers (DID) and un-humanized backend codes are
-                        // diagnostics: ordinary users see the friendly BlueskyHealthCard
-                        // above, so these only render in debug builds.
-                        blueskyAccountDiagnosticLines(account, BuildConfig.DEBUG).forEach { line ->
-                            SettingsKeyValueLine(line.label, line.value)
-                        }
-                        if (account.disconnectAvailable == true) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End,
-                            ) {
-                                Button(
-                                    enabled = !blueskyDisconnecting && !blueskyStatusLoading,
-                                    onClick = { vm.disconnectBluesky() },
-                                ) {
-                                    Text(if (blueskyDisconnecting) "Disconnecting..." else "Disconnect Bluesky account")
-                                }
-                            }
-                        }
-                    } else {
-                        Text(
-                            text = "No Bluesky account is connected.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    // The connect form is shared by first-time Connect and Reconnect
-                    // (re-entering an app password); the recovery action reveals it.
-                    val showConnectForm = account.connected != true || showBlueskyConnectForm
-                    if (showConnectForm) {
-                        HorizontalDivider(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                            thickness = 1.dp,
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = if (account.connected == true) "Reconnect Bluesky account" else "Connect Bluesky account",
-                                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.weight(1f),
-                            )
-                            if (account.connected == true) {
-                                TextButton(onClick = { showBlueskyConnectForm = false }) {
-                                    Text("Cancel")
-                                }
-                            }
-                        }
-                        BlueskyHandleField(
-                            value = blueskyHandle,
-                            onValueChange = { blueskyHandle = it },
-                            label = "Bluesky handle",
-                            enabled = !blueskyConnecting,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        OutlinedTextField(
-                            value = blueskyAppPassword,
-                            onValueChange = { blueskyAppPassword = it },
-                            label = { Text("Bluesky app password") },
-                            placeholder = { Text("App password — not your main Bluesky password") },
-                            visualTransformation = PasswordVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                            singleLine = true,
-                            enabled = !blueskyConnecting,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        if (!blueskyConnectError.isNullOrBlank()) {
-                            Text(
-                                text = blueskyConnectError!!,
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.error,
-                            )
-                            if (blueskyConnectIsReadOnlyScope) {
-                                TextButton(onClick = onSignOut) {
-                                    Text("Sign out")
-                                }
-                            }
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                        ) {
-                            Button(
-                                enabled = normalizeBlueskyHandleInput(blueskyHandle) != null && blueskyAppPassword.isNotBlank() && !blueskyConnecting,
-                                onClick = { vm.connectBluesky(normalizeBlueskyHandleInput(blueskyHandle)!!, blueskyAppPassword) },
-                            ) {
-                                Text(if (blueskyConnecting) "Connecting..." else "Connect")
-                            }
-                        }
-                    }
-                }
-                // Scheduler internals, raw last-run codes, raw backend error messages, and
-                // per-source actor identifiers are operator diagnostics — debug-only. Ordinary
-                // users rely on the friendly "What happened?" disclosure in BlueskyHealthCard.
-                if (scheduler != null && blueskySchedulerDiagnosticsVisible(BuildConfig.DEBUG)) {
-                    HorizontalDivider(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                        thickness = 1.dp,
-                    )
-                    var schedulerDetailsExpanded by remember { mutableStateOf(false) }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "Scheduler & sources",
-                            style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(onClick = { schedulerDetailsExpanded = !schedulerDetailsExpanded }) {
-                            Text(if (schedulerDetailsExpanded) "Hide" else "Show")
-                        }
-                    }
-                    AnimatedVisibility(visible = schedulerDetailsExpanded) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            SettingsKeyValueLine("Scheduler enabled", formatBlueskyBool(scheduler.resolvedSchedulerEnabled))
-                            SettingsKeyValueLine("State", scheduler.state ?: "Unknown")
-                            SettingsKeyValueLine("Enabled source count", scheduler.enabledSourceCount?.toString() ?: "0")
-                            SettingsKeyValueLine("Due source count", scheduler.dueSourceCount?.toString() ?: "0")
-                            SettingsKeyValueLine("Next due", scheduler.resolvedNextDue ?: "Not scheduled")
-                            SettingsKeyValueLine("Last run status", scheduler.lastRunStatus ?: "Unknown")
-                            SettingsKeyValueLine("Last error", scheduler.resolvedLastErrorMessage?.takeIf { it.isNotBlank() } ?: "None")
-                            HorizontalDivider(
-                                modifier = Modifier.fillMaxWidth(),
-                                color = if (isV1) mColors.line else androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                                thickness = 1.dp,
-                            )
-                            Text(
-                                text = "Bluesky sources",
-                                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                            )
-                            val visibleSources = scheduler.sources.filterNot { it.hidden == true || it.archived == true }
-                            if (visibleSources.isEmpty()) {
-                                Text(
-                                    text = "No visible Bluesky sources.",
-                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            } else {
-                                visibleSources.forEach { source ->
-                                    BlueskySourceRow(
-                                        source = source,
-                                        onCreateSmartPlaylist = { name, captureKinds, sort ->
-                                            onCreateSourceSmartPlaylist(name, captureKinds, sort)
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                if (!blueskyStatusLoading && blueskyStatusError.isNullOrBlank() && account == null && scheduler == null) {
-                    Text(
-                        text = "No Bluesky status data available.",
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
-                ) {
-                    TextButton(
-                        enabled = !blueskyStatusLoading,
-                        onClick = onCreateBlueskySmartPlaylist,
-                    ) {
-                        Text("Create smart playlist")
-                    }
-                    TextButton(
-                        enabled = !blueskyStatusLoading,
-                        onClick = { vm.refreshBlueskyStatus() },
-                    ) {
-                        Text(if (blueskyStatusLoading) "Refreshing..." else "Refresh")
-                    }
-                }
-            }
-        }
-        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                var scannerDefaultsExpanded by remember { mutableStateOf(false) }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Scan limits (advanced)",
-                        style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                        color = if (isV1) mColors.fg else Color.Unspecified,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = { scannerDefaultsExpanded = !scannerDefaultsExpanded }) {
-                        Text(if (scannerDefaultsExpanded) "Hide" else "Show")
-                    }
-                }
-                AnimatedVisibility(visible = scannerDefaultsExpanded) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = "Default live scan caps — explicit scan requests may override them. These do not enable auto-save or mutate Up Next.",
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                val prefs = blueskyScannerPreferences
-                if (blueskyScannerPreferencesLoading && prefs == null) {
-                    Text(
-                        text = "Loading scanner defaults...",
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (prefs != null) {
-                    OutlinedTextField(
-                        value = localMaxAgeHours,
-                        onValueChange = { localMaxAgeHours = it },
-                        label = { Text("Lookback window (hours, 1–${prefs.maxAgeHoursCeiling})") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        enabled = !blueskyScannerPreferencesSaving,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    OutlinedTextField(
-                        value = localMaxPosts,
-                        onValueChange = { localMaxPosts = it },
-                        label = { Text("Posts to check (1–${prefs.maxPostsCeiling})") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        enabled = !blueskyScannerPreferencesSaving,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    OutlinedTextField(
-                        value = localMaxLinks,
-                        onValueChange = { localMaxLinks = it },
-                        label = { Text("Links to show (1–${prefs.maxLinksCeiling})") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        enabled = !blueskyScannerPreferencesSaving,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                if (!blueskyScannerPreferencesError.isNullOrBlank()) {
-                    Text(
-                        text = blueskyScannerPreferencesError.orEmpty(),
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.error,
-                    )
-                }
-                if (prefs != null) {
-                    val saveAgeHours = localMaxAgeHours.trim().toIntOrNull()
-                    val savePosts = localMaxPosts.trim().toIntOrNull()
-                    val saveLinks = localMaxLinks.trim().toIntOrNull()
-                    val saveInputValid = saveAgeHours != null && saveAgeHours >= 1 &&
-                        savePosts != null && savePosts >= 1 &&
-                        saveLinks != null && saveLinks >= 1
-                    val localMatchesBackend = localMaxAgeHours.trim() == prefs.maxAgeHours.toString() &&
-                        localMaxPosts.trim() == prefs.maxPosts.toString() &&
-                        localMaxLinks.trim() == prefs.maxLinks.toString()
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        TextButton(
-                            enabled = !localMatchesBackend && !blueskyScannerPreferencesSaving,
-                            onClick = {
-                                localMaxAgeHours = prefs.maxAgeHours.toString()
-                                localMaxPosts = prefs.maxPosts.toString()
-                                localMaxLinks = prefs.maxLinks.toString()
-                            },
-                        ) {
-                            Text("Reset")
-                        }
-                        Button(
-                            enabled = saveInputValid && !blueskyScannerPreferencesSaving && !blueskyScannerPreferencesLoading,
-                            onClick = {
-                                if (saveAgeHours != null && savePosts != null && saveLinks != null) {
-                                    vm.saveBlueskyScannerPreferences(saveAgeHours, savePosts, saveLinks)
-                                }
-                            },
-                        ) {
-                            Text(if (blueskyScannerPreferencesSaving) "Saving..." else "Save scanner defaults")
-                        }
-                    }
-                }
-                }
-                }
-            }
-        }
+            BlueskySection(
+                vm = vm,
+                blueskyAccountConnection = blueskyAccountConnection,
+                blueskyScannerPreferences = blueskyScannerPreferences,
+                showBlueskyConnectForm = showBlueskyConnectForm,
+                onShowBlueskyConnectFormChange = { showBlueskyConnectForm = it },
+                blueskyHandle = blueskyHandle,
+                onBlueskyHandleChange = { blueskyHandle = it },
+                blueskyAppPassword = blueskyAppPassword,
+                onBlueskyAppPasswordChange = { blueskyAppPassword = it },
+                localMaxAgeHours = localMaxAgeHours,
+                onLocalMaxAgeHoursChange = { localMaxAgeHours = it },
+                localMaxPosts = localMaxPosts,
+                onLocalMaxPostsChange = { localMaxPosts = it },
+                localMaxLinks = localMaxLinks,
+                onLocalMaxLinksChange = { localMaxLinks = it },
+                onCreateBlueskySmartPlaylist = onCreateBlueskySmartPlaylist,
+                onCreateSourceSmartPlaylist = onCreateSourceSmartPlaylist,
+                onSignOut = onSignOut,
+            )
         }
         if (activeSection == SettingsSection.LIBRARY) {
         SettingsSectionHeader(
@@ -1474,457 +829,105 @@ fun SettingsScreen(
         }
         }
         if (activeSection == SettingsSection.PLAYBACK) {
-        SettingsSectionHeader(
-            title = "Playback",
-            subtitle = "Session and listening behavior across tabs and reading mode.",
-        )
-        ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface)) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    text = "Playback",
-                    style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                    color = if (isV1) mColors.fg else Color.Unspecified,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text("Auto-advance on completion")
-                    Switch(
-                        checked = autoAdvance,
-                        onCheckedChange = {
-                            autoAdvance = it
-                            vm.saveAutoAdvanceOnCompletion(it)
-                        },
+            PlaybackSection(
+                vm = vm,
+                settings = settings,
+                autoAdvance = autoAdvance,
+                onAutoAdvanceChange = {
+                    autoAdvance = it
+                    vm.saveAutoAdvanceOnCompletion(it)
+                },
+                speedPresetBoxes = speedPresetBoxes,
+                onSpeedPresetBoxChange = { index, entered ->
+                    speedPresetBoxes = speedPresetBoxes
+                        .toMutableList()
+                        .also { it[index] = entered }
+                },
+                autoArchiveAtArticleEnd = autoArchiveAtArticleEnd,
+                onAutoArchiveAtArticleEndChange = {
+                    autoArchiveAtArticleEnd = it
+                    vm.saveAutoArchiveAtArticleEnd(it)
+                },
+                speakTitleBeforeArticle = speakTitleBeforeArticle,
+                onSpeakTitleBeforeArticleChange = {
+                    speakTitleBeforeArticle = it
+                    vm.saveSpeakTitleBeforeArticle(it)
+                },
+                skipDuplicateOpeningAfterTitleIntro = skipDuplicateOpeningAfterTitleIntro,
+                onSkipDuplicateOpeningAfterTitleIntroChange = {
+                    skipDuplicateOpeningAfterTitleIntro = it
+                    vm.saveSkipDuplicateOpeningAfterTitleIntro(it)
+                },
+                keepScreenOnDuringSession = keepScreenOnDuringSession,
+                onKeepScreenOnDuringSessionChange = {
+                    keepScreenOnDuringSession = it
+                    vm.saveKeepScreenOnDuringSession(it)
+                },
+                persistentPlayerEnabled = persistentPlayerEnabled,
+                onPersistentPlayerEnabledChange = {
+                    persistentPlayerEnabled = it
+                    vm.savePersistentPlayerEnabled(it)
+                },
+                drawerPanelSide = drawerPanelSide,
+                onDrawerPanelSideCheckedChange = { checked ->
+                    drawerPanelSide = if (checked) DrawerPanelSide.RIGHT else DrawerPanelSide.LEFT
+                    vm.saveDrawerPanelSide(drawerPanelSide)
+                },
+                chevronOnRightSide = chevronOnRightSide,
+                onChevronOnRightSideCheckedChange = { checked ->
+                    chevronOnRightSide = checked
+                    vm.savePlayerChevronSnap(
+                        edge = if (checked) PlayerChevronSnapEdge.RIGHT else PlayerChevronSnapEdge.LEFT,
+                        edgeOffset = settings.playerChevronEdgeOffset,
                     )
-                }
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    val minLabel = formatPlaybackSpeedPresetValue(PLAYBACK_SPEED_PRESET_MIN)
-                    val maxLabel = formatPlaybackSpeedPresetValue(PLAYBACK_SPEED_PRESET_MAX)
-                    val presetBoxesValid =
-                        speedPresetBoxes.all { isPlaybackSpeedPresetEntryValid(it) }
-                    val presetBoxesAllBlank = speedPresetBoxes.all { it.isBlank() }
-                    // The preset list Apply would persist, compared against the
-                    // operative list so Apply stays disabled with no real change.
-                    val wouldBePresets = sanitizePlaybackSpeedPresets(
-                        speedPresetBoxes.mapNotNull { it.trim().toFloatOrNull() },
-                    ).ifEmpty { DEFAULT_PLAYBACK_SPEED_PRESETS }
-                    val presetBoxesDirty =
-                        wouldBePresets.map { formatPlaybackSpeedPresetValue(it) } !=
-                            settings.playbackSpeedPresets.map { formatPlaybackSpeedPresetValue(it) }
-                    Text("Speed presets")
-                    Text(
-                        text = "One box per quick-tap speed in the player panel. Each box takes " +
-                            "a number from ${minLabel}× to ${maxLabel}×, or leave it blank. " +
-                            "Duplicates are merged and the list is sorted ascending.",
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        speedPresetBoxes.forEachIndexed { index, boxValue ->
-                            OutlinedTextField(
-                                value = boxValue,
-                                onValueChange = { entered ->
-                                    speedPresetBoxes = speedPresetBoxes
-                                        .toMutableList()
-                                        .also { it[index] = entered }
-                                },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                isError = !isPlaybackSpeedPresetEntryValid(boxValue),
-                                keyboardOptions = KeyboardOptions(
-                                    keyboardType = KeyboardType.Decimal,
-                                ),
-                            )
-                        }
-                    }
-                    Text(
-                        text = when {
-                            !presetBoxesValid ->
-                                "Each box must be empty or a number from ${minLabel}× to ${maxLabel}×."
-                            presetBoxesAllBlank -> "Enter at least one preset speed."
-                            !presetBoxesDirty -> "These speeds are already saved."
-                            else -> "Apply saves these speeds to the player; Reset restores the defaults."
-                        },
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = if (!presetBoxesValid || presetBoxesAllBlank) {
-                            androidx.compose.material3.MaterialTheme.colorScheme.error
-                        } else {
-                            androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Button(
-                            enabled = presetBoxesValid && !presetBoxesAllBlank && presetBoxesDirty,
-                            onClick = {
-                                val values = speedPresetBoxes
-                                    .mapNotNull { it.trim().toFloatOrNull() }
-                                vm.savePlaybackSpeedPresets(values)
-                            },
-                        ) {
-                            Text("Apply")
-                        }
-                        TextButton(
-                            onClick = {
-                                vm.savePlaybackSpeedPresets(DEFAULT_PLAYBACK_SPEED_PRESETS)
-                            },
-                        ) {
-                            Text("Reset to defaults")
-                        }
-                    }
-                }
-                SettingsDescribedRow(
-                    title = "Auto-archive at end of article",
-                    description = "When playback reaches a real end-of-article, move that item to Archive.",
-                    trailing = {
-                        Switch(
-                            checked = autoArchiveAtArticleEnd,
-                            onCheckedChange = {
-                                autoArchiveAtArticleEnd = it
-                                vm.saveAutoArchiveAtArticleEnd(it)
-                            },
-                        )
-                    },
-                )
-                SettingsDescribedRow(
-                    title = "Speak title before article",
-                    description = "When enabled, playback speaks the title before body text (duplicate intros are skipped).",
-                    trailing = {
-                        Switch(
-                            checked = speakTitleBeforeArticle,
-                            onCheckedChange = {
-                                speakTitleBeforeArticle = it
-                                vm.saveSpeakTitleBeforeArticle(it)
-                            },
-                        )
-                    },
-                )
-                SettingsDescribedRow(
-                    title = "Skip duplicate intro",
-                    description = "When title intro is on, skip matching opening words in body playback.",
-                    trailing = {
-                        Switch(
-                            checked = skipDuplicateOpeningAfterTitleIntro,
-                            onCheckedChange = {
-                                skipDuplicateOpeningAfterTitleIntro = it
-                                vm.saveSkipDuplicateOpeningAfterTitleIntro(it)
-                            },
-                        )
-                    },
-                )
-                SettingsDescribedRow(
-                    title = "Keep screen on",
-                    description = "Keeps screen awake while speaking, or while manually reading in Reader mode on Locus.",
-                    trailing = {
-                        Switch(
-                            checked = keepScreenOnDuringSession,
-                            onCheckedChange = {
-                                keepScreenOnDuringSession = it
-                                vm.saveKeepScreenOnDuringSession(it)
-                            },
-                        )
-                    },
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text("Persistent player across tabs")
-                    Switch(
-                        checked = persistentPlayerEnabled,
-                        onCheckedChange = {
-                            persistentPlayerEnabled = it
-                            vm.savePersistentPlayerEnabled(it)
-                        },
-                    )
-                }
-                SettingsDescribedRow(
-                    title = "Drawer on right side",
-                    description = "Move the navigation drawer to the right edge instead of the left edge.",
-                    trailing = {
-                        Switch(
-                            checked = drawerPanelSide == DrawerPanelSide.RIGHT,
-                            onCheckedChange = { checked ->
-                                drawerPanelSide = if (checked) DrawerPanelSide.RIGHT else DrawerPanelSide.LEFT
-                                vm.saveDrawerPanelSide(drawerPanelSide)
-                            },
-                        )
-                    },
-                )
-                SettingsDescribedRow(
-                    title = "Chevron on right side",
-                    description = "Snap the player chevron button to the right edge instead of the left edge.",
-                    trailing = {
-                        Switch(
-                            checked = chevronOnRightSide,
-                            onCheckedChange = { checked ->
-                                chevronOnRightSide = checked
-                                vm.savePlayerChevronSnap(
-                                    edge = if (checked) PlayerChevronSnapEdge.RIGHT else PlayerChevronSnapEdge.LEFT,
-                                    edgeOffset = settings.playerChevronEdgeOffset,
-                                )
-                            },
-                        )
-                    },
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text("Auto-scroll while listening")
-                    Switch(
-                        checked = autoScrollWhileListening,
-                        onCheckedChange = { autoScrollWhileListening = it },
-                    )
-                }
-                SettingsDescribedRow(
-                    title = "Locus follows now-playing",
-                    description = "While previewing another item, tapping Locus returns to the now-playing item. On: jump to live playback line. Off: keep the last reader position.",
-                    trailing = {
-                        Switch(
-                            checked = locusTabReturnsToPlaybackPosition,
-                            onCheckedChange = {
-                                locusTabReturnsToPlaybackPosition = it
-                                vm.saveLocusTabReturnsToPlaybackPosition(it)
-                            },
-                        )
-                    },
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text("Continuous now-playing marquee")
-                    Switch(
-                        checked = continuousNowPlayingMarquee,
-                        onCheckedChange = {
-                            continuousNowPlayingMarquee = it
-                            vm.saveContinuousNowPlayingMarquee(it)
-                        },
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text("TTS voice")
-                        Text(
-                            text = if (!ttsEngineReady) {
-                                "TTS engine not ready."
-                            } else {
-                                val selected = ttsVoiceOptions.firstOrNull { it.name == ttsVoiceName.trim() }
-                                if (selected == null) {
-                                    "Selected: $engineDefaultTtsVoiceLabel"
-                                } else {
-                                    "Selected: ${selected.localeLabel} / ${selected.voiceLabel}"
-                                }
-                            },
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        if (!ttsFallbackMessage.isNullOrBlank()) {
-                            Text(
-                                text = ttsFallbackMessage.orEmpty(),
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-                SettingsDescribedRow(
-                    title = "End-of-article completion cue",
-                    description = "Play a short tone when an article finishes.",
-                    trailing = {
-                        Switch(
-                            checked = playCompletionCueAtArticleEnd,
-                            onCheckedChange = {
-                                playCompletionCueAtArticleEnd = it
-                                vm.savePlayCompletionCueAtArticleEnd(it)
-                            },
-                        )
-                    },
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(horizontalAlignment = Alignment.Start) {
-                        Text(
-                            text = if (selectedTtsLocaleTag.isBlank()) {
-                                "Language/accent: Any"
-                            } else {
-                                val selectedLocaleLabel = ttsLocaleOptions.firstOrNull { it.tag == selectedTtsLocaleTag }?.label
-                                "Language/accent: ${selectedLocaleLabel ?: selectedTtsLocaleTag}"
-                            },
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        TextButton(
-                            enabled = ttsEngineReady,
-                            onClick = { showTtsLocaleMenu = true },
-                        ) {
-                            val selectedLocaleLabel = ttsLocaleOptions.firstOrNull { it.tag == selectedTtsLocaleTag }?.label
-                            Text("Language: ${selectedLocaleLabel ?: "Any"} ▼")
-                        }
-                        DropdownMenu(
-                            expanded = showTtsLocaleMenu,
-                            onDismissRequest = { showTtsLocaleMenu = false },
-                        ) {
-                            if (ttsLocaleOptions.isEmpty()) {
-                                DropdownMenuItem(
-                                    text = { Text("No language options") },
-                                    onClick = { showTtsLocaleMenu = false },
-                                )
-                            }
-                            ttsLocaleOptions.forEach { option ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            if (option.tag == selectedTtsLocaleTag) {
-                                                "✓ ${option.label}"
-                                            } else {
-                                                option.label
-                                            },
-                                        )
-                                    },
-                                    onClick = {
-                                        showTtsLocaleMenu = false
-                                        selectedTtsLocaleTag = option.tag
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(horizontalAlignment = Alignment.Start) {
-                        val filteredVoiceOptions = ttsVoiceOptions.filter { option ->
-                            selectedTtsLocaleTag.isBlank() || option.localeTag == selectedTtsLocaleTag
-                        }
-                        val selected = ttsVoiceOptions.firstOrNull { it.name == ttsVoiceName.trim() }
-                        Text(
-                            text = if (selected == null) {
-                                "Voice: $engineDefaultTtsVoiceLabel"
-                            } else {
-                                "Voice: ${selected.voiceLabel}"
-                            },
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        TextButton(
-                            enabled = ttsEngineReady,
-                            onClick = { showTtsVoiceMenu = true },
-                        ) {
-                            val selectedVoiceLabel = selected?.voiceLabel ?: "System default"
-                            Text("Voice: $selectedVoiceLabel ▼")
-                        }
-                        TextButton(
-                            enabled = ttsEngineReady && ttsVoiceName.trim().isNotBlank(),
-                            onClick = {
-                                ttsVoiceName = ""
-                                selectedTtsLocaleTag = ttsVoiceOptions
-                                    .firstOrNull { it.name == engineDefaultTtsVoiceName }
-                                    ?.localeTag
-                                    .orEmpty()
-                                vm.saveTtsVoiceName("")
-                            },
-                        ) {
-                            Text("Use system default")
-                        }
-                        DropdownMenu(
-                            expanded = showTtsVoiceMenu,
-                            onDismissRequest = { showTtsVoiceMenu = false },
-                        ) {
-                            filteredVoiceOptions.forEach { option ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            if (option.name.equals(ttsVoiceName.trim(), ignoreCase = true)) {
-                                                "✓ ${option.voiceLabel}"
-                                            } else {
-                                                option.voiceLabel
-                                            },
-                                        )
-                                    },
-                                    onClick = {
-                                        showTtsVoiceMenu = false
-                                        ttsVoiceName = option.name
-                                        selectedTtsLocaleTag = option.localeTag
-                                        vm.saveTtsVoiceName(option.name)
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = if (ttsEngineReady && ttsVoiceOptions.size <= 1) {
-                            "No alternate voices available on this TTS engine."
-                        } else {
-                            "Preview phrase: \"$TTS_PREVIEW_PHRASE\". Online voices fall back to system default while offline."
-                        },
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Button(
-                        enabled = ttsEngineReady,
-                        onClick = {
-                            val engine = ttsEngine
-                            if (engine == null || !ttsEngineReady) {
-                                vm.showSnackbar("TTS preview unavailable")
-                                return@Button
-                            }
-                            applyCurrentTtsVoice(engine)
-                            ttsPreviewing = true
-                            engine.speak(
-                                TTS_PREVIEW_PHRASE,
-                                TextToSpeech.QUEUE_FLUSH,
-                                null,
-                                "mimeo-tts-preview-${System.currentTimeMillis()}",
-                            )
-                            ttsPreviewing = false
-                        },
-                    ) { Text(if (ttsPreviewing) "Playing..." else "Preview") }
-                }
-                Text("Defaults: Local=$DEFAULT_LOCAL_BASE_URL, LAN=$DEFAULT_LAN_BASE_URL, Remote=$DEFAULT_REMOTE_BASE_URL (fallback HTTP: $DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL)")
-            }
-        }
+                },
+                autoScrollWhileListening = autoScrollWhileListening,
+                onAutoScrollWhileListeningChange = { autoScrollWhileListening = it },
+                locusTabReturnsToPlaybackPosition = locusTabReturnsToPlaybackPosition,
+                onLocusTabReturnsToPlaybackPositionChange = {
+                    locusTabReturnsToPlaybackPosition = it
+                    vm.saveLocusTabReturnsToPlaybackPosition(it)
+                },
+                continuousNowPlayingMarquee = continuousNowPlayingMarquee,
+                onContinuousNowPlayingMarqueeChange = {
+                    continuousNowPlayingMarquee = it
+                    vm.saveContinuousNowPlayingMarquee(it)
+                },
+                playCompletionCueAtArticleEnd = playCompletionCueAtArticleEnd,
+                onPlayCompletionCueAtArticleEndChange = {
+                    playCompletionCueAtArticleEnd = it
+                    vm.savePlayCompletionCueAtArticleEnd(it)
+                },
+                ttsEngineReady = ttsEngineReady,
+                ttsEngine = ttsEngine,
+                ttsVoiceName = ttsVoiceName,
+                ttsVoiceOptions = ttsVoiceOptions,
+                ttsLocaleOptions = ttsLocaleOptions,
+                selectedTtsLocaleTag = selectedTtsLocaleTag,
+                showTtsLocaleMenu = showTtsLocaleMenu,
+                onShowTtsLocaleMenuChange = { showTtsLocaleMenu = it },
+                onLocaleSelected = { option -> selectedTtsLocaleTag = option.tag },
+                showTtsVoiceMenu = showTtsVoiceMenu,
+                onShowTtsVoiceMenuChange = { showTtsVoiceMenu = it },
+                onVoiceSelected = { option ->
+                    ttsVoiceName = option.name
+                    selectedTtsLocaleTag = option.localeTag
+                    vm.saveTtsVoiceName(option.name)
+                },
+                onUseSystemDefaultVoice = {
+                    ttsVoiceName = ""
+                    selectedTtsLocaleTag = ttsVoiceOptions
+                        .firstOrNull { it.name == engineDefaultTtsVoiceName }
+                        ?.localeTag
+                        .orEmpty()
+                    vm.saveTtsVoiceName("")
+                },
+                engineDefaultTtsVoiceLabel = engineDefaultTtsVoiceLabel,
+                ttsFallbackMessage = ttsFallbackMessage,
+                ttsPreviewing = ttsPreviewing,
+                onTtsPreviewingChange = { ttsPreviewing = it },
+                applyCurrentTtsVoice = { engine -> applyCurrentTtsVoice(engine) },
+            )
         }
         if (activeSection == SettingsSection.APPEARANCE) {
         SettingsSectionHeader(
@@ -2461,118 +1464,27 @@ fun SettingsScreen(
     }
 
     if (showSignOutDialog) {
-        AlertDialog(
-            onDismissRequest = { showSignOutDialog = false },
-            title = { Text("Sign out?") },
-            text = { Text(signOutConfirmationMessage()) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showSignOutDialog = false
-                        onSignOut()
-                    },
-                ) {
-                    Text(
-                        text = "Sign out",
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.error,
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSignOutDialog = false }) {
-                    Text("Cancel")
-                }
+        SignOutConfirmationDialog(
+            onDismiss = { showSignOutDialog = false },
+            onConfirm = {
+                showSignOutDialog = false
+                onSignOut()
             },
         )
     }
 
     if (showPasswordChangeDialog) {
-        val passwordChangeError = (passwordChangeState as? PasswordChangeState.Error)?.message
-        val isSubmittingPasswordChange = passwordChangeState is PasswordChangeState.Submitting
-        AlertDialog(
-            onDismissRequest = {
-                if (!isSubmittingPasswordChange) {
-                    showPasswordChangeDialog = false
-                    onClearPasswordChangeState()
-                }
-            },
-            title = { Text("Change password") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = currentPassword,
-                        onValueChange = {
-                            currentPassword = it
-                            if (passwordChangeState is PasswordChangeState.Error) onClearPasswordChangeState()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Current password") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        singleLine = true,
-                        enabled = !isSubmittingPasswordChange,
-                    )
-                    OutlinedTextField(
-                        value = newPassword,
-                        onValueChange = {
-                            newPassword = it
-                            if (passwordChangeState is PasswordChangeState.Error) onClearPasswordChangeState()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("New password") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        singleLine = true,
-                        enabled = !isSubmittingPasswordChange,
-                    )
-                    OutlinedTextField(
-                        value = confirmNewPassword,
-                        onValueChange = {
-                            confirmNewPassword = it
-                            if (passwordChangeState is PasswordChangeState.Error) onClearPasswordChangeState()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Confirm new password") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        singleLine = true,
-                        enabled = !isSubmittingPasswordChange,
-                    )
-                    Text(
-                        text = "Use at least $PASSWORD_CHANGE_MIN_LENGTH characters.",
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (!passwordChangeError.isNullOrBlank()) {
-                        Text(
-                            text = passwordChangeError,
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    enabled = !isSubmittingPasswordChange,
-                    onClick = {
-                        onChangePassword(currentPassword, newPassword, confirmNewPassword)
-                    },
-                ) {
-                    Text(if (isSubmittingPasswordChange) "Changing..." else "Change password")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    enabled = !isSubmittingPasswordChange,
-                    onClick = {
-                        showPasswordChangeDialog = false
-                        onClearPasswordChangeState()
-                    },
-                ) {
-                    Text("Cancel")
-                }
-            },
+        PasswordChangeDialog(
+            passwordChangeState = passwordChangeState,
+            currentPassword = currentPassword,
+            onCurrentPasswordChange = { currentPassword = it },
+            newPassword = newPassword,
+            onNewPasswordChange = { newPassword = it },
+            confirmNewPassword = confirmNewPassword,
+            onConfirmNewPasswordChange = { confirmNewPassword = it },
+            onClearPasswordChangeState = onClearPasswordChangeState,
+            onDismiss = { showPasswordChangeDialog = false },
+            onSubmit = { current, new, confirm -> onChangePassword(current, new, confirm) },
         )
     }
 
@@ -2624,7 +1536,7 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SettingsKeyValueLine(label: String, value: String) {
+internal fun SettingsKeyValueLine(label: String, value: String) {
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
@@ -2647,7 +1559,7 @@ private fun SettingsKeyValueLine(label: String, value: String) {
 }
 
 @Composable
-private fun BlueskySourceRow(
+internal fun BlueskySourceRow(
     source: BlueskySourceDiagnostic,
     onCreateSmartPlaylist: ((name: String, captureKinds: String, sort: String) -> Unit)? = null,
 ) {
@@ -2748,7 +1660,7 @@ private fun startupDestinationLabel(destination: StartupDestination): String = w
 }
 
 @Composable
-private fun SettingsSectionHeader(
+internal fun SettingsSectionHeader(
     title: String,
     subtitle: String? = null,
     modifier: Modifier = Modifier,
@@ -3043,7 +1955,7 @@ private fun AiSummariesStatusMessage(
 }
 
 @Composable
-private fun BlueskyHealthCard(
+internal fun BlueskyHealthCard(
     account: BlueskyAccountConnectionResponse?,
     operatorStatus: BlueskyOperatorStatusResponse?,
     loading: Boolean,
@@ -3253,13 +2165,13 @@ private fun LocusContentMode.displayName(): String = when (this) {
     LocusContentMode.PLAYBACK_FOCUSED -> "Playback focused"
 }
 
-private fun ConnectionMode.displayName(): String = when (this) {
+internal fun ConnectionMode.displayName(): String = when (this) {
     ConnectionMode.LOCAL -> "Local"
     ConnectionMode.LAN -> "LAN"
     ConnectionMode.REMOTE -> "Remote"
 }
 
-private fun ConnectionMode.description(): String = when (this) {
+internal fun ConnectionMode.description(): String = when (this) {
     ConnectionMode.LOCAL -> "Local emulator/dev mode (emulator host loopback via 10.0.2.2)."
     ConnectionMode.LAN -> "Same-network mode (phone + host on the same LAN/Wi-Fi)."
     ConnectionMode.REMOTE -> "Off-LAN mode (Tailscale/VPN or hosted endpoint). HTTPS-first: $DEFAULT_REMOTE_BASE_URL."
@@ -3274,7 +2186,7 @@ internal fun connectionModeBaseUrlGuidance(mode: ConnectionMode): String = when 
         "Use HTTPS-first Tailscale remote URL: https://<machine>.<tailnet>.ts.net (canonical $DEFAULT_REMOTE_BASE_URL). Raw Tailscale IP HTTP is fallback-only when TLS is unavailable: $DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL. If using 192.168.x.y or 10.x, use LAN mode instead."
 }
 
-private fun connectionModeTokenAuthHelp(mode: ConnectionMode): String = when (mode) {
+internal fun connectionModeTokenAuthHelp(mode: ConnectionMode): String = when (mode) {
     ConnectionMode.REMOTE ->
         "Use a per-device token for this remote host. Sign In creates one for this device; manual paste replaces the saved token."
     else ->
@@ -3315,7 +2227,7 @@ internal fun formatCurrentConnectionStatusSummary(
     }
 }
 
-private fun buildConnectionTestResultText(
+internal fun buildConnectionTestResultText(
     baseResult: String?,
     pendingSummary: String?,
     timestamp: String?,
@@ -3338,7 +2250,7 @@ private fun buildConnectionTestResultText(
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsActionIconButton(
+internal fun SettingsActionIconButton(
     icon: @Composable () -> Unit,
     tooltip: String,
     enabled: Boolean = true,
@@ -3359,7 +2271,7 @@ private fun SettingsActionIconButton(
 }
 
 @Composable
-private fun SettingsDescribedRow(
+internal fun SettingsDescribedRow(
     title: String,
     description: String,
     modifier: Modifier = Modifier,
@@ -3410,7 +2322,7 @@ private fun SettingsDescribedRow(
     }
 }
 
-private fun sharePlainText(context: android.content.Context, subject: String, text: String) {
+internal fun sharePlainText(context: android.content.Context, subject: String, text: String) {
     val send = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
         putExtra(Intent.EXTRA_SUBJECT, subject)
@@ -3420,7 +2332,7 @@ private fun sharePlainText(context: android.content.Context, subject: String, te
     ContextCompat.startActivity(context, chooser, null)
 }
 
-private fun formatPendingSaveTestSummary(
+internal fun formatPendingSaveTestSummary(
     pendingItems: List<PendingManualSaveItem>,
     selectedPlaylistId: Int?,
 ): String? {
@@ -3455,7 +2367,7 @@ private fun formatBlueskyModeLabel(mode: String?): String {
     }
 }
 
-private fun formatBlueskyBool(value: Boolean?): String {
+internal fun formatBlueskyBool(value: Boolean?): String {
     return when (value) {
         true -> "Yes"
         false -> "No"
