@@ -106,6 +106,8 @@ class DevicesApiTest {
             assertEquals("POST", request.method)
             assertEquals("/account/devices/5/revoke", request.path)
             assertEquals("Bearer device-token", request.getHeader("Authorization"))
+            assertEquals("application/json; charset=utf-8", request.getHeader("Content-Type"))
+            assertEquals("{}", request.body.readUtf8())
         } finally {
             server.shutdown()
         }
@@ -142,6 +144,8 @@ class DevicesApiTest {
             assertEquals("POST", request.method)
             assertEquals("/account/devices/revoke-others", request.path)
             assertEquals("Bearer device-token", request.getHeader("Authorization"))
+            assertEquals("application/json; charset=utf-8", request.getHeader("Content-Type"))
+            assertEquals("{}", request.body.readUtf8())
         } finally {
             server.shutdown()
         }
