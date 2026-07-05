@@ -24,7 +24,7 @@ class DevicesSupportTest {
         assertEquals("Devices & sessions isn't available on this server yet.", notFound.message)
 
         val serverError = resolveDevicesListError(ApiException(500, "HTTP 500: boom"))
-        assertEquals("Couldn't load your devices. Please try again.", serverError.message)
+        assertEquals("Couldn't load your devices. Try again.", serverError.message)
 
         val network = resolveDevicesListError(IOException("timeout"))
         assertEquals("Couldn't reach server. Check your connection and try again.", network.message)
@@ -56,7 +56,7 @@ class DevicesSupportTest {
         assertTrue(stale.staleAuth)
 
         val serverError = resolveRevokeOtherDevicesError(ApiException(500, "HTTP 500: boom"))
-        assertEquals("Couldn't sign out other sessions. Please try again.", serverError.message)
+        assertEquals("Couldn't sign out other sessions. Try again.", serverError.message)
 
         assertEquals("No other sessions to sign out.", revokeOtherDevicesSuccessMessage(0))
         assertEquals("Signed out 1 other session.", revokeOtherDevicesSuccessMessage(1))
@@ -91,8 +91,8 @@ class DevicesSupportTest {
         assertTrue(empty.devices.isEmpty())
         assertEquals(DevicesListState.Success(emptyList()), empty)
 
-        val error = DevicesListState.Error("Couldn't load your devices. Please try again.")
-        assertEquals("Couldn't load your devices. Please try again.", error.message)
+        val error = DevicesListState.Error("Couldn't load your devices. Try again.")
+        assertEquals("Couldn't load your devices. Try again.", error.message)
         assertEquals(DevicesListState.Loading, DevicesListState.Loading)
         assertEquals(DevicesListState.Idle, DevicesListState.Idle)
     }

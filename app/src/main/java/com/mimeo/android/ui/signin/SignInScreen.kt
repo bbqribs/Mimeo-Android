@@ -24,6 +24,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.mimeo.android.data.ServerIdentityGuardState
+import com.mimeo.android.ui.common.LoadStatePane
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -223,13 +224,7 @@ fun SignInScreen(
                         },
                     )
                 }
-                if (!errorMessage.isNullOrBlank()) {
-                    Text(
-                        text = errorMessage,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
+                LoadStatePane(error = errorMessage?.takeIf { it.isNotBlank() })
                 Button(
                     onClick = { submit() },
                     enabled = !loading && serverUrl.trim().isNotBlank() && username.trim().isNotBlank() && password.isNotBlank(),

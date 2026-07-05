@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.AiProviderEditResult
 import com.mimeo.android.model.AiProviderStatusState
+import com.mimeo.android.ui.common.LoadStatePane
 
 /**
  * BYOAI-A5 — the operator AI Provider edit screen.
@@ -144,6 +145,9 @@ internal fun AiProviderEditScreen(
             )
         }
 
+        LoadStatePane(
+            loading = statusState is AiProviderStatusState.Idle || statusState is AiProviderStatusState.Loading,
+        ) {
         // ----- Safe status (read-only) -----
         liveStatus?.let { status ->
             val view = aiProviderEditStatusView(providerOptions, status)
@@ -289,6 +293,7 @@ internal fun AiProviderEditScreen(
                     Switch(checked = enabled, onCheckedChange = { enabled = it })
                 }
             }
+        }
         }
         }
 

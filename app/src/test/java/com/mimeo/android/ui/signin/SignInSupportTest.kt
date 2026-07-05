@@ -27,7 +27,7 @@ class SignInSupportTest {
             resolveSignInErrorMessage(ApiException(429, """HTTP 429: {"detail":"Too many login attempts. Please wait 5 minutes before trying again."}""")),
         )
         assertEquals(
-            "Could not reach server. Check URL scheme (http/https), certificate trust, and network.",
+            "Couldn't reach server. Check URL scheme (http/https), certificate trust, and network.",
             resolveSignInErrorMessage(IOException("timeout")),
         )
     }

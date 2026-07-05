@@ -1,8 +1,8 @@
 package com.mimeo.android.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,7 +14,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -29,12 +28,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.DeviceSession
+import com.mimeo.android.ui.common.LoadStatePane
 
 @Composable
-fun DevicesAndSessionsScreen(vm: AppViewModel) {
+fun DevicesAndSessionsScreen(
+    vm: AppViewModel,
+    jumpPillBottomClearance: Dp = 0.dp,
+) {
     val devicesListState by vm.devicesListState.collectAsState()
     val revokingDeviceIds by vm.revokingDeviceIds.collectAsState()
     val revokeOthersInProgress by vm.revokeOthersInProgress.collectAsState()
@@ -71,32 +75,23 @@ fun DevicesAndSessionsScreen(vm: AppViewModel) {
             }
         }
 
-        when (val state = devicesListState) {
-            is DevicesListState.Idle, is DevicesListState.Loading -> {
-                Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            }
-            is DevicesListState.Error -> {
-                Text(state.message, color = MaterialTheme.colorScheme.error)
-            }
-            is DevicesListState.Success -> {
-                if (state.devices.isEmpty()) {
-                    Text(
-                        "No active sessions found.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        LoadStatePane(
+            loading = devicesListState is DevicesListState.Idle || devicesListState is DevicesListState.Loading,
+            error = (devicesListState as? DevicesListState.Error)?.message,
+            onRetry = { vm.loadDevices() },
+            empty = devices.isEmpty(),
+            emptyMessage = "No active sessions found.",
+        ) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = jumpPillBottomClearance),
+            ) {
+                items(devices, key = { it.id }) { device ->
+                    DeviceRow(
+                        device = device,
+                        revoking = revokingDeviceIds.contains(device.id),
+                        onSignOut = { deviceToRevoke = device },
                     )
-                } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(state.devices, key = { it.id }) { device ->
-                            DeviceRow(
-                                device = device,
-                                revoking = revokingDeviceIds.contains(device.id),
-                                onSignOut = { deviceToRevoke = device },
-                            )
-                        }
-                    }
                 }
             }
         }

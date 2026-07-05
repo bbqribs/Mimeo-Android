@@ -34,17 +34,17 @@ internal fun resolveDevicesListError(error: Throwable): DeviceActionResolution {
                 message = "Devices & sessions isn't available on this server yet.",
             )
             in 500..599 -> DeviceActionResolution(
-                message = "Couldn't load your devices. Please try again.",
+                message = "Couldn't load your devices. Try again.",
             )
             else -> DeviceActionResolution(
-                message = extractApiDetail(error.message) ?: "Couldn't load your devices. Please try again.",
+                message = extractApiDetail(error.message) ?: "Couldn't load your devices. Try again.",
             )
         }
         is IOException -> DeviceActionResolution(
             message = "Couldn't reach server. Check your connection and try again.",
         )
         else -> DeviceActionResolution(
-            message = "Couldn't load your devices. Please try again.",
+            message = "Couldn't load your devices. Try again.",
         )
     }
 }
@@ -66,17 +66,17 @@ internal fun resolveRevokeDeviceError(error: Throwable): DeviceActionResolution 
                 message = "That session is no longer available.",
             )
             in 500..599 -> DeviceActionResolution(
-                message = "Couldn't sign out that device. Please try again.",
+                message = "Couldn't sign out that device. Try again.",
             )
             else -> DeviceActionResolution(
-                message = extractApiDetail(error.message) ?: "Couldn't sign out that device. Please try again.",
+                message = extractApiDetail(error.message) ?: "Couldn't sign out that device. Try again.",
             )
         }
         is IOException -> DeviceActionResolution(
             message = "Couldn't reach server. Check your connection and try again.",
         )
         else -> DeviceActionResolution(
-            message = "Couldn't sign out that device. Please try again.",
+            message = "Couldn't sign out that device. Try again.",
         )
     }
 }
@@ -95,17 +95,17 @@ internal fun resolveRevokeOtherDevicesError(error: Throwable): DeviceActionResol
                 message = "Devices & sessions isn't available on this server yet.",
             )
             in 500..599 -> DeviceActionResolution(
-                message = "Couldn't sign out other sessions. Please try again.",
+                message = "Couldn't sign out other sessions. Try again.",
             )
             else -> DeviceActionResolution(
-                message = extractApiDetail(error.message) ?: "Couldn't sign out other sessions. Please try again.",
+                message = extractApiDetail(error.message) ?: "Couldn't sign out other sessions. Try again.",
             )
         }
         is IOException -> DeviceActionResolution(
             message = "Couldn't reach server. Check your connection and try again.",
         )
         else -> DeviceActionResolution(
-            message = "Couldn't sign out other sessions. Please try again.",
+            message = "Couldn't sign out other sessions. Try again.",
         )
     }
 }

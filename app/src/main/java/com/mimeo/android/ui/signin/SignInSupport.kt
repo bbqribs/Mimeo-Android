@@ -52,12 +52,12 @@ internal fun resolveSignInErrorMessage(error: Throwable): String {
                 401 -> "Invalid username or password"
                 429 -> detail ?: "Too many login attempts. Please wait before trying again."
                 400 -> detail ?: "Sign-in failed. Check your server URL and credentials."
-                in 500..599 -> "Sign-in failed. Please try again."
-                else -> detail ?: "Could not reach server. Check the URL and your network connection."
+                in 500..599 -> "Sign-in failed. Try again."
+                else -> detail ?: "Couldn't reach server. Check the URL and your network connection."
             }
         }
-        is IOException -> "Could not reach server. Check URL scheme (http/https), certificate trust, and network."
-        else -> "Could not reach server. Check the URL and your network connection."
+        is IOException -> "Couldn't reach server. Check URL scheme (http/https), certificate trust, and network."
+        else -> "Couldn't reach server. Check the URL and your network connection."
     }
 }
 
