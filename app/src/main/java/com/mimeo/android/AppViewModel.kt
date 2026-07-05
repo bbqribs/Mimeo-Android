@@ -186,6 +186,8 @@ import com.mimeo.android.player.PlaybackService
 import com.mimeo.android.player.PlaybackServiceBridge
 import com.mimeo.android.player.PlaybackServiceSnapshot
 import com.mimeo.android.share.ShareSaveCoordinator
+import com.mimeo.android.state.AccountSecurityCoordinator
+import com.mimeo.android.state.AccountSecurityStateHolder
 import com.mimeo.android.state.BlueskyStateHolder
 import com.mimeo.android.bluesky.BlueskyServiceCoordinator
 import com.mimeo.android.share.ShareRefreshEvent
@@ -200,13 +202,6 @@ import com.mimeo.android.ui.settings.ConnectionTestMessageResolver
 import com.mimeo.android.ui.settings.DevicesListState
 import com.mimeo.android.ui.settings.PasswordChangeState
 import com.mimeo.android.ui.settings.SettingsScreen
-import com.mimeo.android.ui.settings.passwordChangeSuccessMessage
-import com.mimeo.android.ui.settings.resolveDevicesListError
-import com.mimeo.android.ui.settings.resolvePasswordChangeError
-import com.mimeo.android.ui.settings.resolveRevokeDeviceError
-import com.mimeo.android.ui.settings.resolveRevokeOtherDevicesError
-import com.mimeo.android.ui.settings.revokeOtherDevicesSuccessMessage
-import com.mimeo.android.ui.settings.validatePasswordChangeInput
 import com.mimeo.android.ui.player.PlayerScreen
 import com.mimeo.android.ui.player.PlaybackEngine
 import com.mimeo.android.ui.player.PlaybackEngineEvent
@@ -509,15 +504,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         MutableStateFlow<ServerIdentityGuardState>(ServerIdentityGuardState.Idle)
     val serverIdentityGuardState: StateFlow<ServerIdentityGuardState> =
         _serverIdentityGuardState.asStateFlow()
-    private val _passwordChangeState = MutableStateFlow<PasswordChangeState>(PasswordChangeState.Idle)
-    val passwordChangeState: StateFlow<PasswordChangeState> = _passwordChangeState.asStateFlow()
-
-    private val _devicesListState = MutableStateFlow<DevicesListState>(DevicesListState.Idle)
-    val devicesListState: StateFlow<DevicesListState> = _devicesListState.asStateFlow()
-    private val _revokingDeviceIds = MutableStateFlow<Set<Int>>(emptySet())
-    val revokingDeviceIds: StateFlow<Set<Int>> = _revokingDeviceIds.asStateFlow()
-    private val _revokeOthersInProgress = MutableStateFlow(false)
-    val revokeOthersInProgress: StateFlow<Boolean> = _revokeOthersInProgress.asStateFlow()
+    internal val accountSecurityState = AccountSecurityStateHolder()
+    internal val accountSecurityCoordinator = AccountSecurityCoordinator(
+        apiClient = apiClient,
+        state = accountSecurityState,
+        settings = settings,
+        scope = viewModelScope,
+        showSnackbar = { message -> showSnackbar(message) },
+        handleAuthFailureIfNeeded = ::handleAuthFailureIfNeeded,
+    )
+    val passwordChangeState: StateFlow<PasswordChangeState> get() = accountSecurityState.passwordChangeState
+    val devicesListState: StateFlow<DevicesListState> get() = accountSecurityState.devicesListState
+    val revokingDeviceIds: StateFlow<Set<Int>> get() = accountSecurityState.revokingDeviceIds
+    val revokeOthersInProgress: StateFlow<Boolean> get() = accountSecurityState.revokeOthersInProgress
 
     private val _diagnosticsRows = MutableStateFlow<List<ConnectivityDiagnosticRow>>(emptyList())
     val diagnosticsRows: StateFlow<List<ConnectivityDiagnosticRow>> = _diagnosticsRows.asStateFlow()
@@ -727,9 +726,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     _smartPlaylists.value = emptyList()
                     _currentSmartPlaylistItems.value = emptyList()
                     blueskyCoordinator.resetOnSignOut()
-                    _devicesListState.value = DevicesListState.Idle
-                    _revokingDeviceIds.value = emptySet()
-                    _revokeOthersInProgress.value = false
+                    accountSecurityCoordinator.resetOnSignOut()
                 }
                 if (previous.apiToken.isBlank() && next.apiToken.isNotBlank()) {
                     authFailureHandledThisSession = false
@@ -1466,9 +1463,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun clearPasswordChangeState() {
-        _passwordChangeState.value = PasswordChangeState.Idle
-    }
+    fun clearPasswordChangeState() = accountSecurityCoordinator.clearPasswordChangeState()
 
     fun signOut() {
         viewModelScope.launch {
@@ -1484,106 +1479,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         currentPassword: String,
         newPassword: String,
         confirmNewPassword: String,
-    ) {
-        val validationError = validatePasswordChangeInput(
-            currentPassword = currentPassword,
-            newPassword = newPassword,
-            confirmNewPassword = confirmNewPassword,
-        )
-        if (validationError != null) {
-            _passwordChangeState.value = PasswordChangeState.Error(validationError)
-            return
-        }
+    ) = accountSecurityCoordinator.changePassword(currentPassword, newPassword, confirmNewPassword)
 
-        viewModelScope.launch {
-            _passwordChangeState.value = PasswordChangeState.Submitting
-            val current = settings.value
-            try {
-                apiClient.postChangePassword(
-                    baseUrl = current.baseUrl,
-                    token = current.apiToken,
-                    oldPassword = currentPassword,
-                    newPassword = newPassword,
-                )
-                val message = passwordChangeSuccessMessage()
-                _passwordChangeState.value = PasswordChangeState.Success(message)
-                showSnackbar(message)
-            } catch (error: Exception) {
-                val resolution = resolvePasswordChangeError(error)
-                if (resolution.staleAuth && handleAuthFailureIfNeeded(error)) {
-                    _passwordChangeState.value = PasswordChangeState.Idle
-                } else {
-                    _passwordChangeState.value = PasswordChangeState.Error(resolution.message)
-                }
-            }
-        }
-    }
+    fun loadDevices() = accountSecurityCoordinator.loadDevices()
 
-    fun loadDevices() {
-        val current = settings.value
-        if (current.apiToken.isBlank()) {
-            _devicesListState.value = DevicesListState.Error("Sign in to view your devices and sessions.")
-            return
-        }
-        viewModelScope.launch {
-            _devicesListState.value = DevicesListState.Loading
-            try {
-                val devices = apiClient.getAccountDevices(current.baseUrl, current.apiToken)
-                _devicesListState.value = DevicesListState.Success(devices)
-            } catch (error: Throwable) {
-                val resolution = resolveDevicesListError(error)
-                if (resolution.staleAuth && handleAuthFailureIfNeeded(error)) {
-                    _devicesListState.value = DevicesListState.Idle
-                } else {
-                    _devicesListState.value = DevicesListState.Error(resolution.message)
-                }
-            }
-        }
-    }
+    fun revokeDevice(deviceId: Int) = accountSecurityCoordinator.revokeDevice(deviceId)
 
-    fun revokeDevice(deviceId: Int) {
-        val current = settings.value
-        if (current.apiToken.isBlank()) return
-        viewModelScope.launch {
-            _revokingDeviceIds.value = _revokingDeviceIds.value + deviceId
-            try {
-                apiClient.postRevokeDevice(current.baseUrl, current.apiToken, deviceId)
-                showSnackbar("Device signed out.")
-                loadDevices()
-            } catch (error: Throwable) {
-                val resolution = resolveRevokeDeviceError(error)
-                if (resolution.staleAuth && handleAuthFailureIfNeeded(error)) {
-                    // handled: navigated to re-auth
-                } else {
-                    showSnackbar(resolution.message)
-                }
-            } finally {
-                _revokingDeviceIds.value = _revokingDeviceIds.value - deviceId
-            }
-        }
-    }
-
-    fun revokeOtherDevices() {
-        val current = settings.value
-        if (current.apiToken.isBlank()) return
-        viewModelScope.launch {
-            _revokeOthersInProgress.value = true
-            try {
-                val result = apiClient.postRevokeOtherDevices(current.baseUrl, current.apiToken)
-                showSnackbar(revokeOtherDevicesSuccessMessage(result.revoked))
-                loadDevices()
-            } catch (error: Throwable) {
-                val resolution = resolveRevokeOtherDevicesError(error)
-                if (resolution.staleAuth && handleAuthFailureIfNeeded(error)) {
-                    // handled: navigated to re-auth
-                } else {
-                    showSnackbar(resolution.message)
-                }
-            } finally {
-                _revokeOthersInProgress.value = false
-            }
-        }
-    }
+    fun revokeOtherDevices() = accountSecurityCoordinator.revokeOtherDevices()
 
     fun signIn(serverUrl: String, username: String, password: String) {
         viewModelScope.launch {
