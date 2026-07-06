@@ -128,10 +128,13 @@ private fun resolveAiSummariesStatus(
     }
 }
 
+// Aligned with the canonical AI connection states in docs/GLOSSARY.md
+// (Connected / Not connected / Needs attention). "Disabled" is a distinct
+// feature-toggle state, not an AI connection state, so it keeps its own label.
 private fun statusLabelFor(status: AiSummariesStatus): String = when (status) {
-    AiSummariesStatus.Enabled -> "Enabled"
-    AiSummariesStatus.ProviderUnavailable -> "Provider unavailable"
-    AiSummariesStatus.Unconfigured -> "Not configured"
+    AiSummariesStatus.Enabled -> "Connected"
+    AiSummariesStatus.ProviderUnavailable -> "Needs attention"
+    AiSummariesStatus.Unconfigured -> "Not connected"
     AiSummariesStatus.Disabled -> "Disabled"
 }
 

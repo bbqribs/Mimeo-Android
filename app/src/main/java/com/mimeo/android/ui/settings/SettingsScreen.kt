@@ -1862,7 +1862,7 @@ private fun AiSummariesCapabilitiesContent(
         style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
         color = if (isV1) mColors.fg else Color.Unspecified,
     )
-    SettingsKeyValueLine("Status", data.statusLabel)
+    SettingsKeyValueLine("AI connection", data.statusLabel)
     data.providerLine?.let { SettingsKeyValueLine("Provider", it) }
     data.modelLine?.let { SettingsKeyValueLine("Model", it) }
     data.dailyLimitLine?.let { SettingsKeyValueLine("Daily limit", it) }

@@ -36,7 +36,7 @@ class AiSummariesSettingsTest {
         val data = aiSummariesSettingsViewData(caps)
 
         assertTrue(data.enabled)
-        assertEquals("Enabled", data.statusLabel)
+        assertEquals("Connected", data.statusLabel)
         assertEquals("Anthropic", data.providerLine)
         assertEquals("claude-x", data.modelLine)
         assertEquals("3 of 20 used today", data.dailyLimitLine)
@@ -104,7 +104,7 @@ class AiSummariesSettingsTest {
         val data = aiSummariesSettingsViewData(caps)
 
         assertEquals(AiSummariesStatus.Enabled, data.status)
-        assertEquals("Enabled", data.statusLabel)
+        assertEquals("Connected", data.statusLabel)
         assertEquals(AI_SUMMARIES_ENABLED_MESSAGE, data.guidanceMessage)
         // Nothing to fix on the web when summaries are already usable.
         assertNull(data.configureOnWebMessage)
@@ -120,7 +120,7 @@ class AiSummariesSettingsTest {
         val data = aiSummariesSettingsViewData(caps)
 
         assertEquals(AiSummariesStatus.Unconfigured, data.status)
-        assertEquals("Not configured", data.statusLabel)
+        assertEquals("Not connected", data.statusLabel)
         assertEquals(
             "Set up an AI provider on your Mimeo server to enable summaries.",
             data.guidanceMessage,
@@ -139,7 +139,7 @@ class AiSummariesSettingsTest {
         val data = aiSummariesSettingsViewData(caps)
 
         assertEquals(AiSummariesStatus.ProviderUnavailable, data.status)
-        assertEquals("Provider unavailable", data.statusLabel)
+        assertEquals("Needs attention", data.statusLabel)
         assertEquals(AI_SUMMARIES_PROVIDER_UNAVAILABLE_MESSAGE, data.guidanceMessage)
         assertEquals(AI_SUMMARIES_CONFIGURE_ON_WEB_MESSAGE, data.configureOnWebMessage)
     }
