@@ -24,6 +24,13 @@ Planning-doc ownership decision: `docs/planning/DOCS_OWNERSHIP_DECISION.md`.
   or onboarding work unless the operator explicitly allocates spare Android
   capacity. Android P-2/P-4 remain sensible later follow-ups, not active work
   now.
+- **Household distribution carve-out (2026-07-08):** the household-ready
+  queue (Mimeo repo, `HOUSEHOLD_READY_REVIEW_2026_07.md` §11) explicitly
+  allocates **T-AND-DIST-MIN-1** — release signing + versioned signed APK +
+  sideload install/update runbook, and only that. Plan:
+  `docs/ANDROID_HOUSEHOLD_DISTRIBUTION_MINIMUM_2026_07.md`. The rest of the
+  productization pause (Play Console, CI, store packaging, onboarding polish)
+  stays in force.
 
 ## Open — priority order
 
