@@ -1,3 +1,78 @@
+import java.io.File
+import java.util.Properties
+import org.gradle.api.DefaultTask
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.TaskAction
+
+abstract class VerifyReleaseSigningInputsTask : DefaultTask() {
+    @get:Input
+    abstract val keystorePropertiesPresent: Property<Boolean>
+
+    @get:Input
+    abstract val keystorePropertiesPath: Property<String>
+
+    @get:Input
+    abstract val missingPropertyNames: ListProperty<String>
+
+    @get:Input
+    abstract val releaseStoreFilePath: Property<String>
+
+    @get:Input
+    abstract val releaseStoreFilePresent: Property<Boolean>
+
+    @TaskAction
+    fun verify() {
+        if (!keystorePropertiesPresent.get() || !File(keystorePropertiesPath.get()).isFile) {
+            throw GradleException(
+                "Release signing requires keystore.properties in the repo root. " +
+                    "Copy keystore.properties.example, keep the real file untracked, " +
+                    "and point storeFile at the operator-held release keystore. " +
+                    "Debug builds do not require signing secrets.",
+            )
+        }
+        val missingProperties = missingPropertyNames.get()
+        if (missingProperties.isNotEmpty()) {
+            throw GradleException(
+                "Release signing properties are incomplete. Missing keys in keystore.properties: " +
+                    missingProperties.joinToString(", "),
+            )
+        }
+        val storeFilePath = releaseStoreFilePath.get()
+        if (storeFilePath.isBlank() || !releaseStoreFilePresent.get() || !File(storeFilePath).isFile) {
+            throw GradleException(
+                "Release signing keystore file was not found. Check the storeFile value in keystore.properties.",
+            )
+        }
+    }
+}
+
+val householdVersionCode = 2
+val householdVersionName = "0.4.0"
+val releaseKeystorePropertiesFile = rootProject.file("keystore.properties")
+val releaseKeystoreProperties = Properties().apply {
+    if (releaseKeystorePropertiesFile.isFile) {
+        releaseKeystorePropertiesFile.inputStream().use(::load)
+    }
+}
+val releaseSigningPropertyNames = listOf(
+    "storeFile",
+    "storePassword",
+    "keyAlias",
+    "keyPassword",
+)
+val missingReleaseSigningPropertyNames = releaseSigningPropertyNames.filter {
+    releaseKeystoreProperties.getProperty(it).isNullOrBlank()
+}
+val releaseSigningReady = releaseKeystorePropertiesFile.isFile && missingReleaseSigningPropertyNames.isEmpty()
+val releaseKeystorePropertiesPath = releaseKeystorePropertiesFile.absolutePath
+val releaseStoreFileAbsolutePath = releaseKeystoreProperties
+    .getProperty("storeFile")
+    ?.takeIf { it.isNotBlank() }
+    ?.let { rootProject.file(it).absolutePath }
+    .orEmpty()
+
 plugins {
     id("com.android.application")
     id("com.google.devtools.ksp")
@@ -17,15 +92,29 @@ android {
         applicationId = "com.mimeo.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = householdVersionCode
+        versionName = householdVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            if (releaseSigningReady) {
+                storeFile = rootProject.file(releaseKeystoreProperties.getProperty("storeFile"))
+                storePassword = releaseKeystoreProperties.getProperty("storePassword")
+                keyAlias = releaseKeystoreProperties.getProperty("keyAlias")
+                keyPassword = releaseKeystoreProperties.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (releaseSigningReady) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -92,6 +181,27 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+tasks.register<Copy>("copyVersionedReleaseApk") {
+    dependsOn("assembleRelease")
+    from(layout.buildDirectory.file("outputs/apk/release/app-release.apk"))
+    into(rootProject.layout.buildDirectory.dir("household-distribution"))
+    rename("app-release.apk", "mimeo-android-v$householdVersionName-vc$householdVersionCode-release.apk")
+}
+
+tasks.register<VerifyReleaseSigningInputsTask>("verifyReleaseSigningInputs") {
+    keystorePropertiesPresent.set(releaseKeystorePropertiesFile.isFile)
+    keystorePropertiesPath.set(releaseKeystorePropertiesPath)
+    missingPropertyNames.set(missingReleaseSigningPropertyNames)
+    releaseStoreFilePath.set(releaseStoreFileAbsolutePath)
+    releaseStoreFilePresent.set(releaseStoreFileAbsolutePath.isNotBlank() && File(releaseStoreFileAbsolutePath).isFile)
+}
+
+tasks.configureEach {
+    if (name == "preReleaseBuild") {
+        dependsOn("verifyReleaseSigningInputs")
+    }
 }
 
 // Re-install the debug APK after instrumented tests so the app stays on device.

@@ -714,6 +714,28 @@ fun SettingsScreen(
                     }
                 }
             }
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.elevatedCardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = "App version",
+                        style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                        color = if (isV1) mColors.fg else Color.Unspecified,
+                    )
+                    Text(
+                        text = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = if (isV1) mColors.fg2 else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
         if (activeSection == SettingsSection.BLUESKY) {
             BlueskySection(
