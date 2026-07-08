@@ -78,11 +78,23 @@ v0.3 adds a persisted "Now Playing" queue snapshot so playback order stays stabl
 3. Build/run the `app` module on emulator or device.
 
 ## Household distribution (signed APK, no store)
-Plan for the minimum release/signing/sideload path for household members
-(signed release APK, `versionCode` discipline, install/update runbook, pilot
-readiness): `docs/ANDROID_HOUSEHOLD_DISTRIBUTION_MINIMUM_2026_07.md`.
-Implementation ticket: T-AND-DIST-MIN-1 (defined in that doc, §8). Member
-devices never need Android Studio.
+Household members get a signed release APK from the operator, not a debug build
+from Android Studio and not a Play Store install. The operator-held release
+keystore lives outside every git tree; local signing inputs come from untracked
+`keystore.properties` copied from `keystore.properties.example`.
+
+Release builds use monotonically increasing `versionCode` values and are kept as
+named artifacts:
+
+```text
+mimeo-android-v<versionName>-vc<versionCode>-release.apk
+```
+
+The install/update runbook, signing hygiene, fingerprint check, and manual
+device proof requirements live in
+`docs/ANDROID_HOUSEHOLD_DISTRIBUTION_MINIMUM_2026_07.md`. Member devices never
+need Android Studio, Gradle, or a dev-machine cable; the member-side flow uses
+the APK artifact only.
 
 ## Base URL notes
 - Android emulator -> host machine backend: `http://10.0.2.2:8000`
