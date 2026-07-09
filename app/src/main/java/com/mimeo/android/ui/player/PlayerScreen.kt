@@ -258,7 +258,9 @@ internal fun resolveProblemReportFailureMessage(error: Throwable): String {
     if (error is ApiException) {
         return when (error.statusCode) {
             401, 403 -> "Sign in to submit problem reports."
+            404 -> "Couldn't find this item for your account. Refresh and try again."
             429 -> "Too many reports sent recently. Please try again later."
+            400 -> "Problem report was rejected. Check the note and try again."
             else -> "Couldn't send problem report. Please try again."
         }
     }
