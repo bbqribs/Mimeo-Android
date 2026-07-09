@@ -1263,6 +1263,7 @@ class ApiClient(
     ): ProblemReportResponse = withContext(Dispatchers.IO) {
         val body = jsonBody(requestPayload)
         val request = authorizedRequest(baseUrl, "/feedback/problem-report", token)
+            .acceptJson()
             .post(body)
             .build()
         executeJson(request) { payload -> json.decodeFromString<ProblemReportResponse>(payload) }

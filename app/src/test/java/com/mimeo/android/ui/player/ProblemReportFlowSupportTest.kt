@@ -53,6 +53,20 @@ class ProblemReportFlowSupportTest {
     }
 
     @Test
+    fun failureMessageUsesItemRefreshGuidanceForNotFound() {
+        val message = resolveProblemReportFailureMessage(ApiException(404, "HTTP 404"))
+
+        assertEquals("Couldn't find this item for your account. Refresh and try again.", message)
+    }
+
+    @Test
+    fun failureMessageUsesRequestGuidanceForBadRequest() {
+        val message = resolveProblemReportFailureMessage(ApiException(400, "HTTP 400"))
+
+        assertEquals("Problem report was rejected. Check the note and try again.", message)
+    }
+
+    @Test
     fun failureMessageUsesNetworkMessageForConnectivityErrors() {
         val message = resolveProblemReportFailureMessage(IOException("timeout"))
 
