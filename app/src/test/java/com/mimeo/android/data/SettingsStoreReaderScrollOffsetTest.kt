@@ -77,7 +77,7 @@ class SettingsStoreReaderScrollOffsetTest {
     fun serverScopedClearRemovesReaderOffsets() = runBlocking {
         store.saveReaderScrollOffset(itemId = 100, offset = 640)
 
-        store.clearServerScopedDataStoreState()
+        store.clearAccountScopedDataStoreState()
 
         assertEquals(emptyMap<Int, Int>(), store.readerScrollOffsetByItemFlow.first())
     }

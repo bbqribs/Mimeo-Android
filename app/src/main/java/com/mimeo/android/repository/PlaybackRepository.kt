@@ -1499,6 +1499,12 @@ class PlaybackRepository(
         database.nowPlayingDao().clear()
     }
 
+    suspend fun clearAccountScopedLocalState() {
+        database.cachedItemDao().deleteAll()
+        database.pendingProgressDao().deleteAll()
+        database.nowPlayingDao().clear()
+    }
+
     private suspend fun enqueuePendingProgress(itemId: Int, percent: Int) {
         database.pendingProgressDao().upsert(
             PendingProgressEntity(
