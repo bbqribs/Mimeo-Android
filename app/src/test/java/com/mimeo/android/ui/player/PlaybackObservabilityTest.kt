@@ -307,6 +307,38 @@ class PlaybackObservabilityTest {
     }
 
     @Test
+    fun readerInitialOffsetUsesDurablePerItemStateOutsideNowPlayingSession() {
+        assertEquals(
+            640,
+            resolveReaderInitialOffset(
+                inMemoryOffset = null,
+                persistedOffset = 640,
+                sessionOffset = null,
+            ),
+        )
+    }
+
+    @Test
+    fun readerInitialOffsetPrefersLiveStateAndClampsLegacyNegativeValues() {
+        assertEquals(
+            720,
+            resolveReaderInitialOffset(
+                inMemoryOffset = 720,
+                persistedOffset = 640,
+                sessionOffset = 320,
+            ),
+        )
+        assertEquals(
+            0,
+            resolveReaderInitialOffset(
+                inMemoryOffset = null,
+                persistedOffset = -10,
+                sessionOffset = null,
+            ),
+        )
+    }
+
+    @Test
     fun locusTabTapPreviewDefaultsToReaderPositionOnReturn() {
         val action = resolveLocusTabTapAction(
             previewModeActive = true,
