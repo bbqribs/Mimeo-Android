@@ -219,6 +219,24 @@ class PlaybackEngine(
         stopInternal(forceSync = forceSync)
     }
 
+    /** Discards the in-memory playback session (article text/chunks/sync bookkeeping) for
+     * sign-out and account switches, so a new session never inherits a prior account's item. */
+    fun clear() {
+        stopInternal(forceSync = false)
+        textPayload = null
+        chunks = emptyList()
+        pendingBodyStartAfterTitleIntro = null
+        pendingSourceCueAfterTitleIntro = null
+        lastHandledDoneUtteranceId = null
+        lastProgressSyncAtMs = 0L
+        lastSyncedPercent = -1
+        lastSyncedAbsoluteChars = -1
+        _state.value = PlaybackEngineState(
+            currentItemId = -1,
+            openIntent = PlaybackOpenIntent.ManualOpen,
+        )
+    }
+
     fun seekToChunkOffset(chunkIndex: Int, offsetInChunkChars: Int, keepPlaying: Boolean) {
         if (chunks.isEmpty()) return
         val safe = normalizedPosition(PlaybackPosition(chunkIndex = chunkIndex, offsetInChunkChars = offsetInChunkChars))

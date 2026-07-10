@@ -85,7 +85,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavType
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -275,6 +274,37 @@ sealed class StartupAuthState {
  * [com.mimeo.android.repository.PlaybackRepository.archiveItem]/[moveItemToBin].
  */
 internal val CACHE_EVICTING_BATCH_ACTIONS: Set<String> = setOf("archive", "bin")
+
+/**
+ * Identifies which account/session an in-flight request was made under, so a response that
+ * resolves after a sign-out or account switch can be detected and discarded instead of
+ * repopulating the new session's UI with the previous account's data.
+ */
+internal data class AccountScopedRequestContext(
+    val baseUrl: String,
+    val apiToken: String,
+    val localStateOwner: String,
+)
+
+internal fun accountScopedRequestStillCurrent(
+    expected: AccountScopedRequestContext,
+    current: AccountScopedRequestContext,
+): Boolean =
+    expected.apiToken.isNotBlank() &&
+        expected.baseUrl.trim().trimEnd('/') == current.baseUrl.trim().trimEnd('/') &&
+        expected.apiToken.trim() == current.apiToken.trim() &&
+        expected.localStateOwner.isNotBlank() &&
+        expected.localStateOwner == current.localStateOwner
+
+/**
+ * The Settings screen's single save action bundles base URL + connection mode + token together,
+ * because it doubles as the LOCAL/LAN/REMOTE connection-mode switch for an already-signed-in
+ * account. Local-state ownership must key off the token only here: a base-URL-only change (e.g.
+ * switching from LAN to a Tailscale/remote URL for the *same* account) is not an account change,
+ * and treating it as one would silently wipe that account's offline cache and pending actions.
+ */
+internal fun settingsScreenAuthTargetChanged(previousToken: String, nextToken: String): Boolean =
+    previousToken.trim() != nextToken.trim()
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     data class SessionReseedResult(
@@ -705,30 +735,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsStore.migrateLegacyTokenIfNeeded()
             settingsStore.backfillServerIdentityIfNeeded()
+            settingsStore.backfillLocalStateOwnerIfNeeded()
             var previous = _settings.value
             var firstSettingsEmission = true
+            var signedOutLocalStateCleared = false
             settingsStore.settingsFlow.collect { next ->
                 _settings.value = next
                 refreshAutoDownloadDiagnostics()
                 if (next.apiToken.isBlank()) {
-                    initialPostSignInHydrationJob?.cancel()
-                    initialPostSignInHydrationJob = null
-                    _queueItems.value = emptyList()
-                    _inboxItems.value = emptyList()
-                    _favoriteItems.value = emptyList()
-                    _archivedItems.value = emptyList()
-                    _binItems.value = emptyList()
-                    _cachedItemIds.value = emptySet()
-                    _noActiveContentItemIds.value = emptySet()
-                    noActiveContentStore.clear()
-                    autoDownloadStatusStore.clear()
-                    refreshAutoDownloadDiagnostics()
-                    _queueOffline.value = false
-                    _playlists.value = emptyList()
-                    _smartPlaylists.value = emptyList()
-                    _currentSmartPlaylistItems.value = emptyList()
-                    blueskyCoordinator.resetOnSignOut()
-                    accountSecurityCoordinator.resetOnSignOut()
+                    resetAccountScopedUiState()
+                    if (!signedOutLocalStateCleared) {
+                        clearAccountScopedLocalState(clearOwner = true)
+                        signedOutLocalStateCleared = true
+                    }
+                } else {
+                    signedOutLocalStateCleared = false
                 }
                 if (previous.apiToken.isBlank() && next.apiToken.isNotBlank()) {
                     authFailureHandledThisSession = false
@@ -738,10 +759,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     blueskyCoordinator.loadBlueskyScannerPreferences()
                 } else if (previous.apiToken.isNotBlank() && next.apiToken.isBlank()) {
                     pendingInitialPostSignInHydration = false
-                    settingsStore.clearQueueSnapshots()
-                    settingsStore.clearPendingItemActions()
-                    settingsStore.clearPlaybackSegmentIndexes()
-                    settingsStore.clearReaderScrollOffsets()
+                    clearAccountScopedLocalState(clearOwner = true)
                 }
                 previous = next
                 if (firstSettingsEmission) {
@@ -1142,6 +1160,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         autoCacheFavoritedItems: Boolean,
     ) {
         viewModelScope.launch {
+            val current = settings.value
+            val authTargetChanged = settingsScreenAuthTargetChanged(
+                previousToken = current.apiToken,
+                nextToken = token,
+            )
+            if (authTargetChanged) {
+                clearAccountScopedLocalState(clearOwner = false)
+            }
             settingsStore.save(
                 baseUrl = baseUrl,
                 connectionMode = connectionMode,
@@ -1180,6 +1206,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 playerLastNonNubMode = settings.value.playerLastNonNubMode,
                 playerChevronSnapEdge = settings.value.playerChevronSnapEdge,
                 playerChevronEdgeOffset = settings.value.playerChevronEdgeOffset,
+                resetLocalStateOwner = authTargetChanged,
             )
             _statusMessage.value = "Settings saved"
         }
@@ -1477,8 +1504,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             authFailureHandledThisSession = false
             _signInState.value = SignInState.Idle
-            playerSurfaceContentState.reset()
+            // Token first, state wipe second: if the process dies mid-sign-out, a cleared token
+            // with leftover state converges to fully-signed-out on next launch (the settings
+            // collector wipes account state whenever the token is blank), whereas the reverse
+            // order can strand the user signed in with their positions/cache already wiped.
             settingsStore.saveTokenOnly("")
+            clearAccountScopedLocalState(clearOwner = true)
             requestNavigation(ROUTE_SIGN_IN)
         }
     }
@@ -1508,6 +1539,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 return@launch
             }
+            clearLocalStateForOwnerChangeIfNeeded(
+                baseUrl = normalizedNewUrl,
+                accountIdentity = username,
+            )
             performSignIn(serverUrl, username, password)
         }
     }
@@ -1517,7 +1552,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             as? ServerIdentityGuardState.AwaitingConfirmation ?: return
         _serverIdentityGuardState.value = ServerIdentityGuardState.Idle
         viewModelScope.launch {
-            clearServerScopedCache()
+            clearAccountScopedLocalState(clearOwner = true)
             performSignIn(pending.pendingServerUrl, pending.pendingUsername, pending.pendingPassword)
         }
     }
@@ -1526,13 +1561,75 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _serverIdentityGuardState.value = ServerIdentityGuardState.Idle
     }
 
-    private suspend fun clearServerScopedCache() {
-        database.cachedItemDao().deleteAll()
-        database.pendingProgressDao().deleteAll()
-        database.nowPlayingDao().clear()
-        playerSurfaceContentState.reset()
-        settingsStore.clearServerScopedDataStoreState()
+    /**
+     * Same server, different account (e.g. a second household member signing in without the
+     * base URL changing, so [detectServerIdentityMismatch] never fires): detect via the local
+     * state owner key and clear before the new session's token is written, so the new account
+     * never starts from the prior account's cache/queue/pending actions.
+     */
+    private suspend fun clearLocalStateForOwnerChangeIfNeeded(
+        baseUrl: String,
+        accountIdentity: String,
+    ) {
+        val expectedOwner = settingsStore.localStateOwnerKeyFor(
+            baseUrl = baseUrl,
+            accountIdentity = accountIdentity,
+        )
+        val storedOwner = settingsStore.readLocalStateOwner()
+        if (storedOwner.isNotBlank() && storedOwner != expectedOwner) {
+            clearAccountScopedLocalState(clearOwner = false)
+        }
     }
+
+    private fun resetAccountScopedUiState() {
+        initialPostSignInHydrationJob?.cancel()
+        initialPostSignInHydrationJob = null
+        _queueItems.value = emptyList()
+        _inboxItems.value = emptyList()
+        _favoriteItems.value = emptyList()
+        _archivedItems.value = emptyList()
+        _binItems.value = emptyList()
+        _cachedItemIds.value = emptySet()
+        _noActiveContentItemIds.value = emptySet()
+        _queueOffline.value = false
+        _playlists.value = emptyList()
+        _smartPlaylists.value = emptyList()
+        _currentSmartPlaylistItems.value = emptyList()
+        _nowPlayingSession.value = null
+        playerSurfaceContentState.reset()
+        blueskyCoordinator.resetOnSignOut()
+        accountSecurityCoordinator.resetOnSignOut()
+    }
+
+    /**
+     * Full account-scoped local-state wipe: Room (article cache/pending progress/now-playing),
+     * account-scoped DataStore records (queue snapshots, pending manual saves/actions, playback
+     * and reader positions, selected/default playlist), the in-memory playback engine and
+     * playback-service bridge, and dependent UI state. [clearOwner] should be true for sign-out
+     * and genuine account/server switches; false when re-stamping state for the same owner.
+     */
+    private suspend fun clearAccountScopedLocalState(clearOwner: Boolean) {
+        pendingInitialPostSignInHydration = false
+        initialPostSignInHydrationJob?.cancel()
+        initialPostSignInHydrationJob = null
+        repository.clearAccountScopedLocalState()
+        playerSurfaceContentState.reset()
+        PlaybackServiceBridge.clear()
+        playbackEngine.clear()
+        noActiveContentStore.clear()
+        autoDownloadStatusStore.clear()
+        refreshAutoDownloadDiagnostics()
+        settingsStore.clearAccountScopedDataStoreState(clearOwner = clearOwner)
+        resetAccountScopedUiState()
+    }
+
+    private suspend fun accountScopedRequestContext(
+        snapshot: AppSettings = settings.value,
+    ): AccountScopedRequestContext = AccountScopedRequestContext(
+        baseUrl = snapshot.baseUrl,
+        apiToken = snapshot.apiToken,
+        localStateOwner = settingsStore.readLocalStateOwner(),
+    )
 
     private suspend fun performSignIn(serverUrl: String, username: String, password: String) {
         _signInState.value = SignInState.Loading
@@ -1552,6 +1649,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 baseUrl = normalizedBaseUrl,
                 connectionMode = connectionMode,
                 apiToken = response.token,
+                accountIdentity = username,
             )
             authFailureHandledThisSession = false
             _signInState.value = SignInState.Idle
@@ -1903,8 +2001,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         notifyPendingFailureSnackbars: Boolean = true,
     ): Result<Unit> = queueLoadMutex.withLock {
         val current = settings.value
+        var requestContext = accountScopedRequestContext(current)
         val wasOffline = _queueOffline.value
         val previousVisibleItemIds = _queueItems.value.mapTo(linkedSetOf()) { it.itemId }
+        if (current.apiToken.isNotBlank() && requestContext.localStateOwner.isBlank()) {
+            clearAccountScopedLocalState(clearOwner = false)
+            requestContext = accountScopedRequestContext(current)
+        }
         val snapshotPreloaded = if (_queueItems.value.isEmpty()) {
             applySavedQueueSnapshot(
                 selectedPlaylistId = current.selectedPlaylistId,
@@ -1928,6 +2031,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 repository.listPlaylists(current.baseUrl, current.apiToken)
             }.getOrNull()?.let { loaded ->
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return@withLock Result.success(Unit)
+                }
                 _playlists.value = manualPlaylistsOnly(loaded)
                 queuePlaylistId = manualPlaylistIdOrNull(current.selectedPlaylistId)
                 if (current.selectedPlaylistId != null && queuePlaylistId == null) {
@@ -1939,6 +2045,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 repository.listSmartPlaylists(current.baseUrl, current.apiToken)
             }.getOrNull()?.let { loaded ->
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return@withLock Result.success(Unit)
+                }
                 _smartPlaylists.value = loaded
             }
             val queueResult = loadQueueForCurrentSurface(
@@ -1947,6 +2056,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 playlistId = queuePlaylistId,
                 prefetchCount = 0,
             )
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return@withLock Result.success(Unit)
+            }
             val queue = queueResult.payload
             val queueItems = applyPendingBinProjectionToNonBinItems(
                 applyFavoriteOverrides(queue.items),
@@ -2047,6 +2159,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     playlistId = queuePlaylistId,
                     prefetchCount = 0,
                 )
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return@withLock Result.success(Unit)
+                }
                 val refreshedQueue = refreshedQueueResult.payload
                 val refreshedQueueItems = applyPendingBinProjectionToNonBinItems(
                     applyFavoriteOverrides(refreshedQueue.items),
@@ -2886,8 +3001,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (current.apiToken.isBlank()) {
             return Result.failure(IllegalStateException("Token required"))
         }
+        val requestContext = accountScopedRequestContext(current)
         return try {
             val loaded = repository.listPlaylists(current.baseUrl, current.apiToken)
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.success(Unit)
+            }
             val manualPlaylists = manualPlaylistsOnly(loaded)
             _playlists.value = manualPlaylists
             val selected = current.selectedPlaylistId
@@ -2922,8 +3041,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (current.apiToken.isBlank()) {
             return Result.failure(IllegalStateException("Token required"))
         }
+        val requestContext = accountScopedRequestContext(current)
         return try {
-            _smartPlaylists.value = repository.listSmartPlaylists(current.baseUrl, current.apiToken)
+            val loaded = repository.listSmartPlaylists(current.baseUrl, current.apiToken)
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.success(Unit)
+            }
+            _smartPlaylists.value = loaded
             _queueOffline.value = false
             updateSyncBadgeState()
             Result.success(Unit)
@@ -2956,9 +3080,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (current.apiToken.isBlank()) {
             return Result.failure(IllegalStateException("Token required"))
         }
+        val requestContext = accountScopedRequestContext(current)
         return try {
             val detail = repository.getSmartPlaylist(current.baseUrl, current.apiToken, playlistId)
             val fetchedItems = repository.getSmartPlaylistItems(current.baseUrl, current.apiToken, playlistId)
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.failure(IllegalStateException("Account changed"))
+            }
             val pinnedItemIds = smartPlaylistPinnedItemIds(fetchedItems, detail.pinCount)
             val items = applyFavoriteOverrides(
                 applyPendingBinProjectionToNonBinItems(
@@ -3070,6 +3198,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (current.apiToken.isBlank()) {
             return Result.failure(IllegalStateException("Token required"))
         }
+        val requestContext = accountScopedRequestContext(current)
         return try {
             val created = repository.freezeSmartPlaylist(
                 baseUrl = current.baseUrl,
@@ -3077,6 +3206,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 playlistId = playlistId,
                 name = name,
             )
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.failure(IllegalStateException("Account changed"))
+            }
             if (created.kind.equals("smart", ignoreCase = true)) {
                 return Result.failure(
                     IllegalStateException("Freeze endpoint returned a smart playlist instead of a manual playlist."),
@@ -3111,12 +3243,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (current.apiToken.isBlank()) {
             return Result.failure(IllegalStateException("Token required"))
         }
+        val requestContext = accountScopedRequestContext(current)
         return try {
             val created = repository.createSmartPlaylist(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
                 payload = payload,
             )
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.failure(IllegalStateException("Account changed"))
+            }
             if (!created.kind.equals("smart", ignoreCase = true)) {
                 return Result.failure(
                     IllegalStateException("Create endpoint returned a manual playlist instead of a smart playlist."),
@@ -3154,6 +3290,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (current.apiToken.isBlank()) {
             return Result.failure(IllegalStateException("Token required"))
         }
+        val requestContext = accountScopedRequestContext(current)
         return try {
             val updated = repository.updateSmartPlaylist(
                 baseUrl = current.baseUrl,
@@ -3161,6 +3298,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 playlistId = playlistId,
                 payload = payload,
             )
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.failure(IllegalStateException("Account changed"))
+            }
             if (!updated.kind.equals("smart", ignoreCase = true)) {
                 return Result.failure(
                     IllegalStateException("Update endpoint returned a manual playlist instead of a smart playlist."),
@@ -3195,12 +3335,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (current.apiToken.isBlank()) {
             return Result.failure(IllegalStateException("Token required"))
         }
+        val requestContext = accountScopedRequestContext(current)
         return try {
             repository.deleteSmartPlaylist(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
                 playlistId = playlistId,
             )
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.failure(IllegalStateException("Account changed"))
+            }
             _smartPlaylists.update { rows -> rows.filterNot { it.id == playlistId } }
             _currentSmartPlaylistItems.value = emptyList()
             refreshSmartPlaylistsOnce()
@@ -3365,8 +3509,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
+            val requestContext = accountScopedRequestContext(current)
             try {
                 val created = repository.createPlaylist(current.baseUrl, current.apiToken, name.trim())
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return@launch
+                }
                 _playlists.update { listOf(created) + it.filterNot { existing -> existing.id == created.id } }
                 _statusMessage.value = "Playlist created"
             } catch (e: Exception) {
@@ -3378,11 +3526,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun saveQueueAsPlaylist(name: String, itemIds: List<Int>): Result<String> {
         val current = settings.value
         if (current.apiToken.isBlank()) return Result.failure(IllegalStateException("Token required"))
+        val requestContext = accountScopedRequestContext(current)
         return try {
             val created = repository.createPlaylist(current.baseUrl, current.apiToken, name.trim())
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.failure(IllegalStateException("Account changed"))
+            }
             _playlists.update { listOf(created) + it.filterNot { existing -> existing.id == created.id } }
             if (itemIds.isNotEmpty()) {
                 repository.batchAddItemsToPlaylist(current.baseUrl, current.apiToken, created.id, itemIds)
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return Result.failure(IllegalStateException("Account changed"))
+                }
             }
             Result.success(created.name)
         } catch (e: CancellationException) {
@@ -3399,8 +3554,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
+            val requestContext = accountScopedRequestContext(current)
             try {
                 val updated = repository.renamePlaylist(current.baseUrl, current.apiToken, playlistId, name.trim())
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return@launch
+                }
                 _playlists.update { rows -> rows.map { if (it.id == playlistId) updated else it } }
                 _statusMessage.value = "Playlist renamed"
             } catch (e: Exception) {
@@ -3416,8 +3575,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
+            val requestContext = accountScopedRequestContext(current)
             try {
                 repository.deletePlaylist(current.baseUrl, current.apiToken, playlistId)
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return@launch
+                }
                 _playlists.update { rows -> rows.filterNot { it.id == playlistId } }
                 if (settings.value.selectedPlaylistId == playlistId) {
                     _settings.update { it.copy(selectedPlaylistId = null) }
@@ -3447,6 +3610,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (current.apiToken.isBlank()) {
             return Result.failure(IllegalStateException("Token required"))
         }
+        val requestContext = accountScopedRequestContext(current)
 
         val currentMembership = isItemInPlaylist(itemId, playlistId)
         return try {
@@ -3457,6 +3621,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 itemId = itemId,
                 isCurrentlyMember = currentMembership,
             )
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.failure(IllegalStateException("Account changed"))
+            }
             updatePlaylistEntriesLocally(
                 playlistId = playlistId,
                 itemId = itemId,
@@ -5092,8 +5259,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         itemIds: List<Int>,
     ): Result<Unit> {
         val current = settings.value
+        if (current.apiToken.isBlank()) {
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        val requestContext = accountScopedRequestContext(current)
         return try {
             val response = repository.batchAddItemsToPlaylist(current.baseUrl, current.apiToken, playlistId, itemIds)
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.failure(IllegalStateException("Account changed"))
+            }
             val msg = when {
                 response.failureCount == 0 -> "Added ${response.successCount} to \u201c$playlistName\u201d"
                 response.successCount == 0 -> "Failed to add all ${response.failureCount} item(s) to \u201c$playlistName\u201d"
@@ -5162,6 +5336,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val ids = snapshot.removedItemIds
         if (ids.isEmpty()) return Result.failure(Exception("Nothing to undo"))
         val current = settings.value
+        if (current.apiToken.isBlank()) {
+            return Result.failure(IllegalStateException("Token required"))
+        }
+        val requestContext = accountScopedRequestContext(current)
         return try {
             var restoredCount = 0
             ids.forEach { itemId ->
@@ -5172,6 +5350,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     itemId = itemId,
                     isCurrentlyMember = false,
                 )
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return Result.failure(IllegalStateException("Account changed"))
+                }
                 if (result.added) {
                     restoredCount += 1
                     updatePlaylistEntriesLocally(
@@ -5202,6 +5383,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         playlistId,
                         orderedEntryIds,
                     )
+                    if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                        return Result.failure(IllegalStateException("Account changed"))
+                    }
                     refreshPlaylistsOnce().getOrThrow()
                 }
             }

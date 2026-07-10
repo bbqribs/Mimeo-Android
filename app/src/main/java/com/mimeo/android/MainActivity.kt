@@ -82,7 +82,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavType
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -734,7 +733,12 @@ private fun MimeoApp(vm: AppViewModel) {
         pendingNavigationRoute?.let { route ->
             if (route == ROUTE_SIGN_IN) {
                 nav.navigate(route) {
-                    popUpTo(nav.graph.findStartDestination().id) { inclusive = true }
+                    // popUpTo(0) clears the whole back stack without resolving any destination.
+                    // findStartDestination() cannot be used here: the Up Next start destination
+                    // is declared with an optional query parameter ("upNext?focusItemId=..."),
+                    // so the graph's exact-id start-node lookup finds nothing and throws,
+                    // crashing every sign-out for users whose startup destination is Up Next.
+                    popUpTo(0) { inclusive = true }
                     launchSingleTop = true
                 }
             } else if (route == ROUTE_UP_NEXT && currentRoute == ROUTE_SIGN_IN) {

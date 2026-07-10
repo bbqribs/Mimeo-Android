@@ -45,13 +45,17 @@ import com.mimeo.android.model.VisualThemePreference
 import com.mimeo.android.model.decodeSelectedPlaylistId
 import com.mimeo.android.model.encodeSelectedPlaylistId
 import com.mimeo.android.model.inferConnectionModeForHost
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.security.MessageDigest
+import java.util.Locale
 
 private val Context.dataStore by preferencesDataStore(name = "mimeo_settings")
 
@@ -159,6 +163,8 @@ class SettingsStore(private val context: Context) {
         stringPreferencesKey("connection_test_success_json")
     private val serverIdentityKey: Preferences.Key<String> =
         stringPreferencesKey("server_identity")
+    private val localStateOwnerKey: Preferences.Key<String> =
+        stringPreferencesKey("local_state_owner")
     private val libSortInboxKey: Preferences.Key<String> =
         stringPreferencesKey("lib_sort_inbox")
     private val libSortFavoritesKey: Preferences.Key<String> =
@@ -316,6 +322,7 @@ class SettingsStore(private val context: Context) {
         playerLastNonNubMode: PlayerControlsMode = PlayerControlsMode.FULL,
         playerChevronSnapEdge: PlayerChevronSnapEdge,
         playerChevronEdgeOffset: Float,
+        resetLocalStateOwner: Boolean = false,
     ) {
         val trimmedBaseUrl = baseUrl.trim()
         val trimmedToken = apiToken.trim()
@@ -324,7 +331,7 @@ class SettingsStore(private val context: Context) {
             .ifBlank { previousPrefs[tokenKey].orEmpty().trim() }
         val readerAccountContextChanged = previousToken != trimmedToken ||
             normalizeServerIdentity(previousPrefs[baseUrlKey].orEmpty()) != normalizeServerIdentity(trimmedBaseUrl)
-        val tokenWriteResult = authTokenStorage.writeToken(trimmedToken)
+        val tokenWriteResult = withContext(Dispatchers.IO) { authTokenStorage.writeToken(trimmedToken) }
         context.dataStore.edit { prefs ->
             prefs[baseUrlKey] = trimmedBaseUrl
             prefs[connectionModeKey] = connectionMode.name
@@ -335,6 +342,15 @@ class SettingsStore(private val context: Context) {
             prefs[authTokenVersionKey] = (prefs[authTokenVersionKey] ?: 0) + 1
             if (readerAccountContextChanged) {
                 prefs[readerScrollOffsetByItemJsonKey] = encodeReaderScrollOffsetRecords(emptyList())
+            }
+            // Local-state ownership is keyed off the token only, not the base URL: this save()
+            // path is also used to switch connection mode (LOCAL/LAN/REMOTE) for the *same*
+            // signed-in account, and a base-URL-only change here must not look like an account
+            // switch or it would silently wipe that account's offline cache and pending actions.
+            if (trimmedToken.isBlank()) {
+                prefs.remove(localStateOwnerKey)
+            } else if (resetLocalStateOwner) {
+                prefs[localStateOwnerKey] = legacyLocalStateOwnerKey(trimmedBaseUrl, trimmedToken)
             }
             prefs[autoAdvanceOnCompletionKey] = autoAdvanceOnCompletion
             prefs[autoArchiveAtArticleEndKey] = autoArchiveAtArticleEnd
@@ -580,16 +596,22 @@ class SettingsStore(private val context: Context) {
         baseUrl: String,
         connectionMode: ConnectionMode,
         apiToken: String,
+        accountIdentity: String? = null,
     ) {
         val trimmedBaseUrl = baseUrl.trim()
         val trimmedToken = apiToken.trim()
-        val tokenWriteResult = authTokenStorage.writeToken(trimmedToken)
+        val tokenWriteResult = withContext(Dispatchers.IO) { authTokenStorage.writeToken(trimmedToken) }
         context.dataStore.edit { prefs ->
             prefs[baseUrlKey] = trimmedBaseUrl
             prefs[connectionModeKey] = connectionMode.name
             prefs[tokenKey] = if (tokenWriteResult.usedLegacyFallback) trimmedToken else ""
             prefs[authTokenVersionKey] = (prefs[authTokenVersionKey] ?: 0) + 1
             prefs[serverIdentityKey] = normalizeServerIdentity(trimmedBaseUrl)
+            prefs[localStateOwnerKey] = localStateOwnerKeyFor(
+                baseUrl = trimmedBaseUrl,
+                accountIdentity = accountIdentity,
+                fallbackToken = trimmedToken,
+            )
             // A successful sign-in may replace a different account on the same server.
             // Reader viewport state is local-only, so start the new authenticated session
             // without any prior account's per-item offsets.
@@ -604,6 +626,9 @@ class SettingsStore(private val context: Context) {
 
     suspend fun readServerIdentity(): String =
         context.dataStore.data.first()[serverIdentityKey].orEmpty()
+
+    suspend fun readLocalStateOwner(): String =
+        context.dataStore.data.first()[localStateOwnerKey].orEmpty()
 
     /**
      * One-time backfill so the cache guard protects sessions that were already
@@ -626,22 +651,58 @@ class SettingsStore(private val context: Context) {
         }
     }
 
-    suspend fun clearServerScopedDataStoreState() {
+    /**
+     * One-time backfill so installs that were already signed in before the owner record
+     * existed get retroactively scoped, instead of being treated as ownerless (which the
+     * queue-load guard would otherwise keep trying to "fix" by clearing on every load).
+     */
+    suspend fun backfillLocalStateOwnerIfNeeded() {
+        val prefs = context.dataStore.data.first()
+        if (!prefs[localStateOwnerKey].isNullOrBlank()) return
+        val storedBaseUrl = prefs[baseUrlKey]?.trim().orEmpty()
+        if (storedBaseUrl.isBlank()) return
+        val legacyToken = prefs[tokenKey]?.trim().orEmpty()
+        val token = authTokenStorage.readToken().ifBlank { legacyToken }
+        if (token.isBlank()) return
+        val owner = legacyLocalStateOwnerKey(storedBaseUrl, token)
+        context.dataStore.edit { mutablePrefs ->
+            if (mutablePrefs[localStateOwnerKey].isNullOrBlank()) {
+                mutablePrefs[localStateOwnerKey] = owner
+            }
+        }
+    }
+
+    /**
+     * Clears local state scoped to the signed-in account: offline queue/playlist snapshots,
+     * pending offline saves/actions (so they cannot replay under a different account), and
+     * per-item playback/reader position records. [clearOwner] should be true for sign-out and
+     * genuine account/server switches, and false when re-stamping state for the same owner
+     * (e.g. after detecting the owner record was missing).
+     */
+    suspend fun clearAccountScopedDataStoreState(clearOwner: Boolean = false) {
         context.dataStore.edit { prefs ->
             prefs[queueSnapshotsJsonKey] = json.encodeToString(QueueSnapshotState())
             prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(emptyList())
             prefs[pendingItemActionsJsonKey] = encodePendingItemActions(emptyList())
             prefs[playbackSegmentIndexByItemJsonKey] = encodePlaybackSegmentIndexRecords(emptyList())
             prefs[readerScrollOffsetByItemJsonKey] = encodeReaderScrollOffsetRecords(emptyList())
+            prefs[selectedPlaylistIdKey] = encodeSelectedPlaylistId(null)
+            prefs[defaultSavePlaylistIdKey] = encodeSelectedPlaylistId(null)
+            if (clearOwner) {
+                prefs.remove(localStateOwnerKey)
+            }
         }
     }
 
     suspend fun saveTokenOnly(apiToken: String) {
         val trimmedToken = apiToken.trim()
-        val tokenWriteResult = authTokenStorage.writeToken(trimmedToken)
+        val tokenWriteResult = withContext(Dispatchers.IO) { authTokenStorage.writeToken(trimmedToken) }
         context.dataStore.edit { prefs ->
             prefs[tokenKey] = if (tokenWriteResult.usedLegacyFallback) trimmedToken else ""
             prefs[authTokenVersionKey] = (prefs[authTokenVersionKey] ?: 0) + 1
+            if (trimmedToken.isBlank()) {
+                prefs.remove(localStateOwnerKey)
+            }
         }
     }
 
@@ -649,7 +710,7 @@ class SettingsStore(private val context: Context) {
         val prefs = context.dataStore.data.first()
         val legacyToken = prefs[tokenKey]?.trim().orEmpty()
         if (legacyToken.isBlank()) return
-        val tokenWriteResult = authTokenStorage.migrateLegacyToken(legacyToken)
+        val tokenWriteResult = withContext(Dispatchers.IO) { authTokenStorage.migrateLegacyToken(legacyToken) }
         context.dataStore.edit { mutablePrefs ->
             mutablePrefs[tokenKey] = if (tokenWriteResult.usedLegacyFallback) legacyToken else ""
             mutablePrefs[authTokenVersionKey] = (mutablePrefs[authTokenVersionKey] ?: 0) + 1
@@ -1128,6 +1189,41 @@ class SettingsStore(private val context: Context) {
         return raw
             ?.let { runCatching { StartupDestination.valueOf(it) }.getOrNull() }
             ?: StartupDestination.UP_NEXT
+    }
+
+    /**
+     * Derives the local-state ownership key for a signed-in session. When [accountIdentity]
+     * (the sign-in username) is known, the key is scoped to server + account so two members
+     * signing into the same backend are never treated as the same owner. When it isn't known
+     * (e.g. the Settings-screen manual token-edit path, which never collects a username), falls
+     * back to a server + token key so a genuine credential change is still detected.
+     */
+    internal fun localStateOwnerKeyFor(
+        baseUrl: String,
+        accountIdentity: String?,
+        fallbackToken: String? = null,
+    ): String {
+        val normalizedBaseUrl = normalizeServerIdentity(baseUrl)
+        val normalizedAccount = accountIdentity
+            ?.trim()
+            ?.lowercase(Locale.US)
+            ?.takeIf { it.isNotBlank() }
+        return if (normalizedAccount != null) {
+            "v1:${sha256Hex("$normalizedBaseUrl\n$normalizedAccount")}"
+        } else {
+            legacyLocalStateOwnerKey(baseUrl, fallbackToken.orEmpty())
+        }
+    }
+
+    private fun legacyLocalStateOwnerKey(baseUrl: String, token: String): String {
+        val normalizedBaseUrl = normalizeServerIdentity(baseUrl)
+        val normalizedToken = token.trim()
+        return "legacy-v1:${sha256Hex("$normalizedBaseUrl\n$normalizedToken")}"
+    }
+
+    private fun sha256Hex(value: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 
     companion object {

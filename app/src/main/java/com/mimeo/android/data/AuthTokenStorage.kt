@@ -80,10 +80,10 @@ internal class AuthTokenStorage(
         Log.w(TAG, "Token write failed; using legacy fallback", error)
         val trimmed = token.trim()
         if (trimmed.isBlank()) {
-            legacyPrefs.edit().remove(TOKEN_KEY).apply()
+            legacyPrefs.edit().remove(TOKEN_KEY).commit()
             AuthTokenWriteResult(usedLegacyFallback = false)
         } else {
-            legacyPrefs.edit().putString(TOKEN_KEY, trimmed).apply()
+            legacyPrefs.edit().putString(TOKEN_KEY, trimmed).commit()
             AuthTokenWriteResult(usedLegacyFallback = true)
         }
     }
@@ -92,7 +92,7 @@ internal class AuthTokenStorage(
         runCatching { controller.clearToken() }
             .onFailure { error ->
                 Log.w(TAG, "Token clear failed; clearing legacy fallback", error)
-                legacyPrefs.edit().remove(TOKEN_KEY).apply()
+                legacyPrefs.edit().remove(TOKEN_KEY).commit()
             }
     }
 
@@ -106,12 +106,18 @@ internal class AuthTokenStorage(
     private fun prefsSlot(prefs: SharedPreferences): AuthTokenSlot {
         return object : AuthTokenSlot {
             override fun readToken(): String = prefs.getString(TOKEN_KEY, "")?.trim().orEmpty()
+
+            // commit(), not apply(): the sign-out path must know the token state is settled on
+            // disk before it proceeds, because an apply() write queued at sign-out is lost if
+            // the process crashes moments later — leaving the user signed in on next launch
+            // after their account-scoped state was already wiped. Token writes are rare
+            // (sign-in/out, settings save) and the file is tiny.
             override fun writeToken(token: String) {
-                prefs.edit().putString(TOKEN_KEY, token.trim()).apply()
+                prefs.edit().putString(TOKEN_KEY, token.trim()).commit()
             }
 
             override fun clearToken() {
-                prefs.edit().remove(TOKEN_KEY).apply()
+                prefs.edit().remove(TOKEN_KEY).commit()
             }
         }
     }
