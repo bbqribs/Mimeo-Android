@@ -45,9 +45,11 @@ import com.mimeo.android.model.VisualThemePreference
 import com.mimeo.android.model.decodeSelectedPlaylistId
 import com.mimeo.android.model.encodeSelectedPlaylistId
 import com.mimeo.android.model.inferConnectionModeForHost
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -329,7 +331,7 @@ class SettingsStore(private val context: Context) {
             .ifBlank { previousPrefs[tokenKey].orEmpty().trim() }
         val readerAccountContextChanged = previousToken != trimmedToken ||
             normalizeServerIdentity(previousPrefs[baseUrlKey].orEmpty()) != normalizeServerIdentity(trimmedBaseUrl)
-        val tokenWriteResult = authTokenStorage.writeToken(trimmedToken)
+        val tokenWriteResult = withContext(Dispatchers.IO) { authTokenStorage.writeToken(trimmedToken) }
         context.dataStore.edit { prefs ->
             prefs[baseUrlKey] = trimmedBaseUrl
             prefs[connectionModeKey] = connectionMode.name
@@ -598,7 +600,7 @@ class SettingsStore(private val context: Context) {
     ) {
         val trimmedBaseUrl = baseUrl.trim()
         val trimmedToken = apiToken.trim()
-        val tokenWriteResult = authTokenStorage.writeToken(trimmedToken)
+        val tokenWriteResult = withContext(Dispatchers.IO) { authTokenStorage.writeToken(trimmedToken) }
         context.dataStore.edit { prefs ->
             prefs[baseUrlKey] = trimmedBaseUrl
             prefs[connectionModeKey] = connectionMode.name
@@ -694,7 +696,7 @@ class SettingsStore(private val context: Context) {
 
     suspend fun saveTokenOnly(apiToken: String) {
         val trimmedToken = apiToken.trim()
-        val tokenWriteResult = authTokenStorage.writeToken(trimmedToken)
+        val tokenWriteResult = withContext(Dispatchers.IO) { authTokenStorage.writeToken(trimmedToken) }
         context.dataStore.edit { prefs ->
             prefs[tokenKey] = if (tokenWriteResult.usedLegacyFallback) trimmedToken else ""
             prefs[authTokenVersionKey] = (prefs[authTokenVersionKey] ?: 0) + 1
@@ -708,7 +710,7 @@ class SettingsStore(private val context: Context) {
         val prefs = context.dataStore.data.first()
         val legacyToken = prefs[tokenKey]?.trim().orEmpty()
         if (legacyToken.isBlank()) return
-        val tokenWriteResult = authTokenStorage.migrateLegacyToken(legacyToken)
+        val tokenWriteResult = withContext(Dispatchers.IO) { authTokenStorage.migrateLegacyToken(legacyToken) }
         context.dataStore.edit { mutablePrefs ->
             mutablePrefs[tokenKey] = if (tokenWriteResult.usedLegacyFallback) legacyToken else ""
             mutablePrefs[authTokenVersionKey] = (mutablePrefs[authTokenVersionKey] ?: 0) + 1

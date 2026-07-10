@@ -85,7 +85,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavType
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -1505,8 +1504,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             authFailureHandledThisSession = false
             _signInState.value = SignInState.Idle
-            clearAccountScopedLocalState(clearOwner = true)
+            // Token first, state wipe second: if the process dies mid-sign-out, a cleared token
+            // with leftover state converges to fully-signed-out on next launch (the settings
+            // collector wipes account state whenever the token is blank), whereas the reverse
+            // order can strand the user signed in with their positions/cache already wiped.
             settingsStore.saveTokenOnly("")
+            clearAccountScopedLocalState(clearOwner = true)
             requestNavigation(ROUTE_SIGN_IN)
         }
     }
