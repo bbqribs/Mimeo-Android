@@ -438,6 +438,12 @@ internal fun updateReaderScrollOffsets(
     return offsets + (itemId to safeOffset)
 }
 
+internal fun resolveReaderInitialOffset(
+    inMemoryOffset: Int?,
+    persistedOffset: Int?,
+    sessionOffset: Int?,
+): Int = (inMemoryOffset ?: persistedOffset ?: sessionOffset ?: 0).coerceAtLeast(0)
+
 internal fun resetReaderScrollOffset(
     offsets: Map<Int, Int>,
     itemId: Int,
@@ -1017,10 +1023,17 @@ fun PlayerScreen(
         ?.firstOrNull { it.itemId == readerScrollItemId }
         ?.readerScrollOffset
         ?.coerceAtLeast(0)
-    val readerInitialOffset = readerScrollOffsets[readerScrollItemId]?.coerceAtLeast(0)
-        ?: persistedReaderOffset
-        ?: 0
-    val readerScrollState = rememberSaveable(readerScrollItemId, readerViewportSessionNonce, saver = ScrollState.Saver) {
+    val readerInitialOffset = resolveReaderInitialOffset(
+        inMemoryOffset = readerScrollOffsets[readerScrollItemId],
+        persistedOffset = vm.getReaderScrollOffset(readerScrollItemId),
+        sessionOffset = persistedReaderOffset,
+    )
+    val readerScrollState = rememberSaveable(
+        readerScrollItemId,
+        readerViewportSessionNonce,
+        playbackResumeStateReady,
+        saver = ScrollState.Saver,
+    ) {
         ScrollState(readerInitialOffset)
     }
     val density = LocalDensity.current
@@ -1553,7 +1566,8 @@ fun PlayerScreen(
         isLoading = false
     }
 
-    LaunchedEffect(readerScrollItemId, readerScrollState) {
+    LaunchedEffect(readerScrollItemId, readerScrollState, playbackResumeStateReady) {
+        if (!playbackResumeStateReady) return@LaunchedEffect
         snapshotFlow { readerScrollState.value }
             .distinctUntilChanged()
             .collect { offset ->

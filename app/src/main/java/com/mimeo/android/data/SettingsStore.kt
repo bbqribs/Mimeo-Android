@@ -153,6 +153,8 @@ class SettingsStore(private val context: Context) {
         stringPreferencesKey("pending_item_actions_json")
     private val playbackSegmentIndexByItemJsonKey: Preferences.Key<String> =
         stringPreferencesKey("playback_segment_index_by_item_json")
+    private val readerScrollOffsetByItemJsonKey: Preferences.Key<String> =
+        stringPreferencesKey("reader_scroll_offset_by_item_json")
     private val connectionTestSuccessJsonKey: Preferences.Key<String> =
         stringPreferencesKey("connection_test_success_json")
     private val serverIdentityKey: Preferences.Key<String> =
@@ -265,6 +267,11 @@ class SettingsStore(private val context: Context) {
             }
     }
 
+    val readerScrollOffsetByItemFlow: Flow<Map<Int, Int>> = context.dataStore.data.map { prefs ->
+        decodeReaderScrollOffsetRecords(prefs[readerScrollOffsetByItemJsonKey])
+            .associate { record -> record.itemId to record.offset.coerceAtLeast(0) }
+    }
+
     val connectionTestSuccessFlow: Flow<Map<ConnectionMode, ConnectionTestSuccessSnapshot>> = context.dataStore.data.map { prefs ->
         decodeConnectionTestSuccesses(prefs[connectionTestSuccessJsonKey])
             .associateBy { it.mode }
@@ -310,15 +317,25 @@ class SettingsStore(private val context: Context) {
         playerChevronSnapEdge: PlayerChevronSnapEdge,
         playerChevronEdgeOffset: Float,
     ) {
-        val tokenWriteResult = authTokenStorage.writeToken(apiToken.trim())
+        val trimmedBaseUrl = baseUrl.trim()
+        val trimmedToken = apiToken.trim()
+        val previousPrefs = context.dataStore.data.first()
+        val previousToken = authTokenStorage.readToken()
+            .ifBlank { previousPrefs[tokenKey].orEmpty().trim() }
+        val readerAccountContextChanged = previousToken != trimmedToken ||
+            normalizeServerIdentity(previousPrefs[baseUrlKey].orEmpty()) != normalizeServerIdentity(trimmedBaseUrl)
+        val tokenWriteResult = authTokenStorage.writeToken(trimmedToken)
         context.dataStore.edit { prefs ->
-            prefs[baseUrlKey] = baseUrl.trim()
+            prefs[baseUrlKey] = trimmedBaseUrl
             prefs[connectionModeKey] = connectionMode.name
             prefs[localBaseUrlKey] = localBaseUrl.trim()
             prefs[lanBaseUrlKey] = lanBaseUrl.trim()
             prefs[remoteBaseUrlKey] = remoteBaseUrl.trim()
-            prefs[tokenKey] = if (tokenWriteResult.usedLegacyFallback) apiToken.trim() else ""
+            prefs[tokenKey] = if (tokenWriteResult.usedLegacyFallback) trimmedToken else ""
             prefs[authTokenVersionKey] = (prefs[authTokenVersionKey] ?: 0) + 1
+            if (readerAccountContextChanged) {
+                prefs[readerScrollOffsetByItemJsonKey] = encodeReaderScrollOffsetRecords(emptyList())
+            }
             prefs[autoAdvanceOnCompletionKey] = autoAdvanceOnCompletion
             prefs[autoArchiveAtArticleEndKey] = autoArchiveAtArticleEnd
             prefs[speakTitleBeforeArticleKey] = speakTitleBeforeArticle
@@ -573,6 +590,10 @@ class SettingsStore(private val context: Context) {
             prefs[tokenKey] = if (tokenWriteResult.usedLegacyFallback) trimmedToken else ""
             prefs[authTokenVersionKey] = (prefs[authTokenVersionKey] ?: 0) + 1
             prefs[serverIdentityKey] = normalizeServerIdentity(trimmedBaseUrl)
+            // A successful sign-in may replace a different account on the same server.
+            // Reader viewport state is local-only, so start the new authenticated session
+            // without any prior account's per-item offsets.
+            prefs[readerScrollOffsetByItemJsonKey] = encodeReaderScrollOffsetRecords(emptyList())
             when (connectionMode) {
                 ConnectionMode.LOCAL -> prefs[localBaseUrlKey] = trimmedBaseUrl
                 ConnectionMode.LAN -> prefs[lanBaseUrlKey] = trimmedBaseUrl
@@ -611,6 +632,7 @@ class SettingsStore(private val context: Context) {
             prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(emptyList())
             prefs[pendingItemActionsJsonKey] = encodePendingItemActions(emptyList())
             prefs[playbackSegmentIndexByItemJsonKey] = encodePlaybackSegmentIndexRecords(emptyList())
+            prefs[readerScrollOffsetByItemJsonKey] = encodeReaderScrollOffsetRecords(emptyList())
         }
     }
 
@@ -905,6 +927,28 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun saveReaderScrollOffset(itemId: Int, offset: Int) {
+        if (itemId <= 0) return
+        context.dataStore.edit { prefs ->
+            val existing = decodeReaderScrollOffsetRecords(prefs[readerScrollOffsetByItemJsonKey])
+            val updated = listOf(
+                ReaderScrollOffsetRecord(
+                    itemId = itemId,
+                    offset = offset.coerceAtLeast(0),
+                ),
+            ) + existing.filterNot { record -> record.itemId == itemId }
+            prefs[readerScrollOffsetByItemJsonKey] = encodeReaderScrollOffsetRecords(
+                updated.take(MAX_READER_SCROLL_OFFSET_RECORDS),
+            )
+        }
+    }
+
+    suspend fun clearReaderScrollOffsets() {
+        context.dataStore.edit { prefs ->
+            prefs[readerScrollOffsetByItemJsonKey] = encodeReaderScrollOffsetRecords(emptyList())
+        }
+    }
+
     suspend fun markPendingManualSaveRetryFailure(
         itemId: Long,
         failureMessage: String,
@@ -1013,6 +1057,17 @@ class SettingsStore(private val context: Context) {
         }.getOrDefault(emptyList())
     }
 
+    private fun encodeReaderScrollOffsetRecords(records: List<ReaderScrollOffsetRecord>): String {
+        return json.encodeToString(ReaderScrollOffsetState(records = records))
+    }
+
+    private fun decodeReaderScrollOffsetRecords(raw: String?): List<ReaderScrollOffsetRecord> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return runCatching {
+            json.decodeFromString<ReaderScrollOffsetState>(raw).records
+        }.getOrDefault(emptyList())
+    }
+
     private fun pendingItemActionFamily(actionType: PendingItemActionType): String {
         return when (actionType) {
             PendingItemActionType.SET_FAVORITE -> "favorite"
@@ -1078,6 +1133,7 @@ class SettingsStore(private val context: Context) {
     companion object {
         private const val MAX_QUEUE_SNAPSHOT_RECORDS = 16
         private const val MAX_PLAYBACK_SEGMENT_INDEX_RECORDS = 256
+        private const val MAX_READER_SCROLL_OFFSET_RECORDS = 256
     }
 
     internal suspend fun clearAllSettingsForTesting() {
@@ -1126,6 +1182,17 @@ private data class PlaybackSegmentIndexRecord(
 @Serializable
 private data class PlaybackSegmentIndexState(
     val records: List<PlaybackSegmentIndexRecord> = emptyList(),
+)
+
+@Serializable
+private data class ReaderScrollOffsetRecord(
+    val itemId: Int,
+    val offset: Int,
+)
+
+@Serializable
+private data class ReaderScrollOffsetState(
+    val records: List<ReaderScrollOffsetRecord> = emptyList(),
 )
 
 @Serializable

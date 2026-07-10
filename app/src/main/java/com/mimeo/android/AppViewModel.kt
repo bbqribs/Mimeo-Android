@@ -237,6 +237,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.debounce
@@ -533,6 +534,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _playbackPositionByItem = MutableStateFlow<Map<Int, PlaybackPosition>>(emptyMap())
     val playbackPositionByItem: StateFlow<Map<Int, PlaybackPosition>> = _playbackPositionByItem.asStateFlow()
     private val _persistedPlaybackSegmentIndexByItem = MutableStateFlow<Map<Int, PlaybackPosition>>(emptyMap())
+    private val _persistedReaderScrollOffsetByItem = MutableStateFlow<Map<Int, Int>>(emptyMap())
     private val _playbackResumeStateReady = MutableStateFlow(false)
     val playbackResumeStateReady: StateFlow<Boolean> = _playbackResumeStateReady.asStateFlow()
     private var initialSessionStateLoaded = false
@@ -739,6 +741,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     settingsStore.clearQueueSnapshots()
                     settingsStore.clearPendingItemActions()
                     settingsStore.clearPlaybackSegmentIndexes()
+                    settingsStore.clearReaderScrollOffsets()
                 }
                 previous = next
                 if (firstSettingsEmission) {
@@ -750,14 +753,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             var initialLoaded = false
-            settingsStore.playbackSegmentIndexByItemFlow.collect { persisted ->
-                _persistedPlaybackSegmentIndexByItem.value = persisted
-                if (!initialLoaded) {
-                    initialLoaded = true
-                    initialPersistedPlaybackStateLoaded = true
-                    markPlaybackResumeStateReadyIfComplete()
+            combine(
+                settingsStore.playbackSegmentIndexByItemFlow,
+                settingsStore.readerScrollOffsetByItemFlow,
+            ) { playbackPositions, readerOffsets -> playbackPositions to readerOffsets }
+                .collect { (playbackPositions, readerOffsets) ->
+                    _persistedPlaybackSegmentIndexByItem.value = playbackPositions
+                    _persistedReaderScrollOffsetByItem.value = readerOffsets
+                    if (!initialLoaded) {
+                        initialLoaded = true
+                        initialPersistedPlaybackStateLoaded = true
+                        markPlaybackResumeStateReadyIfComplete()
+                    }
                 }
-            }
         }
         viewModelScope.launch {
             settingsStore.pendingManualSavesFlow.collect { pending ->
@@ -4259,10 +4267,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             ?: playbackPositionFromPersistedSegment(itemId)
-        val readerPointer = nowPlayingSession.value
-            ?.items
-            ?.firstOrNull { it.itemId == itemId }
-            ?.readerScrollOffset
+        val readerPointer = getReaderScrollOffset(itemId)
         return try {
             val result = repository.postProgress(
                 baseUrl = current.baseUrl,
@@ -6278,8 +6283,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setReaderScrollOffset(itemId: Int, offset: Int) {
+        if (itemId <= 0) return
         val safeOffset = offset.coerceAtLeast(0)
+        _persistedReaderScrollOffsetByItem.update { previous ->
+            if (previous[itemId] == safeOffset) previous else previous + (itemId to safeOffset)
+        }
         viewModelScope.launch {
+            settingsStore.saveReaderScrollOffset(itemId = itemId, offset = safeOffset)
             val updated = repository.setCurrentReaderScrollOffset(
                 itemId = itemId,
                 readerScrollOffset = safeOffset,
@@ -6288,6 +6298,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _nowPlayingSession.value = updated
             }
         }
+    }
+
+    fun getReaderScrollOffset(itemId: Int): Int? {
+        if (itemId <= 0) return null
+        return _persistedReaderScrollOffsetByItem.value[itemId]
+            ?: nowPlayingSession.value
+                ?.items
+                ?.firstOrNull { it.itemId == itemId }
+                ?.readerScrollOffset
     }
 
     private suspend fun refreshPendingCount(): Int {
