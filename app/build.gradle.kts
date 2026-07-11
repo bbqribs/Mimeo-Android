@@ -48,8 +48,8 @@ abstract class VerifyReleaseSigningInputsTask : DefaultTask() {
     }
 }
 
-val householdVersionCode = 8
-val householdVersionName = "0.4.2"
+val householdVersionCode = 9
+val householdVersionName = "0.4.3"
 val releaseKeystorePropertiesFile = rootProject.file("keystore.properties")
 val releaseKeystoreProperties = Properties().apply {
     if (releaseKeystorePropertiesFile.isFile) {

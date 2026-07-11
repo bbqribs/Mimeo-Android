@@ -8,6 +8,20 @@ Keep this fingerprint matched to `apksigner verify --print-certs` before any
 household APK is distributed. Do not record keystore paths, passwords, or key
 material here.
 
+## 0.4.3 (versionCode 9) - 2026-07-11
+
+Artifact: `mimeo-android-v0.4.3-vc9-release.apk`
+
+- Includes account-scoped local-state isolation from PR #455, so persisted
+  local state does not cross account or server boundaries.
+- Includes stale-library response guards from PR #456, preventing late
+  responses from replacing newer library state.
+- Advances `versionCode` beyond the prior signed 0.4.2 (versionCode 8) APK so
+  household devices can install this release as an update without clearing app
+  data.
+
+Backend: no contract dependency.
+
 ## 0.4.2 (versionCode 8) - 2026-07-10
 
 Artifact: `mimeo-android-v0.4.2-vc8-release.apk`
