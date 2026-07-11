@@ -1,6 +1,12 @@
 package com.mimeo.android
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -44,6 +50,67 @@ class AccountScopedRequestContextTest {
         val current = expected.copy(apiToken = "token-b")
 
         assertFalse(accountScopedRequestStillCurrent(expected, current))
+    }
+
+    @Test
+    fun signedOutCurrentSession_isStale() {
+        val expected = AccountScopedRequestContext(
+            baseUrl = "https://reader.example.com",
+            apiToken = "token-a",
+            localStateOwner = "owner-a",
+        )
+        val current = expected.copy(apiToken = "", localStateOwner = "")
+
+        assertFalse(accountScopedRequestStillCurrent(expected, current))
+    }
+
+    @Test
+    fun delayedResponseAfterAccountSwitch_doesNotApplyLibraryState() = runBlocking {
+        val accountA = AccountScopedRequestContext(
+            baseUrl = "https://reader.example.com",
+            apiToken = "token-a",
+            localStateOwner = "owner-a",
+        )
+        var current = accountA
+        var appliedItems: List<String>? = null
+        val delayedResponse = CompletableDeferred<List<String>>()
+        val load = async(start = CoroutineStart.UNDISPATCHED) {
+            applyAccountScopedResponseIfStillCurrent(
+                requestContext = accountA,
+                currentContext = { current },
+                response = delayedResponse.await(),
+            ) { appliedItems = it }
+        }
+
+        current = accountA.copy(apiToken = "token-b", localStateOwner = "owner-b")
+        delayedResponse.complete(listOf("account-a-item"))
+
+        assertFalse(load.await())
+        assertNull(appliedItems)
+    }
+
+    @Test
+    fun delayedResponseForCurrentAccount_appliesLibraryState() = runBlocking {
+        val account = AccountScopedRequestContext(
+            baseUrl = "https://reader.example.com",
+            apiToken = "token-a",
+            localStateOwner = "owner-a",
+        )
+        var appliedItems: List<String>? = null
+        val delayedResponse = CompletableDeferred<List<String>>()
+        val load = async(start = CoroutineStart.UNDISPATCHED) {
+            applyAccountScopedResponseIfStillCurrent(
+                requestContext = account,
+                currentContext = { account },
+                response = delayedResponse.await(),
+            ) { appliedItems = it }
+        }
+
+        val expectedItems = listOf("current-account-item")
+        delayedResponse.complete(expectedItems)
+
+        assertTrue(load.await())
+        assertEquals(expectedItems, appliedItems)
     }
 
     @Test
