@@ -297,6 +297,22 @@ internal fun accountScopedRequestStillCurrent(
         expected.localStateOwner == current.localStateOwner
 
 /**
+ * Applies a completed account-scoped response only if the session that started the request is
+ * still active. Keeping the state write inside this helper makes delayed-response behavior
+ * directly testable without relying on timing or a real network connection.
+ */
+internal suspend fun <T> applyAccountScopedResponseIfStillCurrent(
+    requestContext: AccountScopedRequestContext,
+    currentContext: suspend () -> AccountScopedRequestContext,
+    response: T,
+    apply: (T) -> Unit,
+): Boolean {
+    if (!accountScopedRequestStillCurrent(requestContext, currentContext())) return false
+    apply(response)
+    return true
+}
+
+/**
  * The Settings screen's single save action bundles base URL + connection mode + token together,
  * because it doubles as the LOCAL/LAN/REMOTE connection-mode switch for an already-signed-in
  * account. Local-state ownership must key off the token only here: a base-URL-only change (e.g.
@@ -2515,11 +2531,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return pendingItemActionFlushMutex.withLock {
             val current = settings.value
             if (current.apiToken.isBlank()) return 0
+            val requestContext = accountScopedRequestContext(current)
             val pending = _pendingItemActions.value
             if (pending.isEmpty()) return 0
             val coalesced = coalescePendingItemActions(pending)
             var successCount = 0
             coalesced.forEach { entry ->
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return successCount
+                }
                 val action = entry.action
                 val result = runCatching {
                     when (action.actionType) {
@@ -2581,6 +2601,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             )
                         }
                     }
+                }
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return successCount
                 }
                 if (result.isSuccess) {
                     entry.sourceIds.forEach { sourceId ->
@@ -4787,10 +4810,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun loadBinItems(): Result<Unit> {
         val current = settings.value
+        val requestContext = accountScopedRequestContext(current)
         val sort = _binSort.value
         val query = _binSearchQuery.value
         return try {
             val flushedPendingActions = flushPendingItemActions()
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.success(Unit)
+            }
             val trashed = repository.listItemsByView(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
@@ -4799,9 +4826,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 dir = sort.sortDir,
                 q = query.takeIf { it.isNotBlank() },
             )
-            _binItems.value = applyPendingBinProjectionToBinItems(
+            val projected = applyPendingBinProjectionToBinItems(
                 trashed.map { it.toPlaybackQueueItem() },
             )
+            if (!applyAccountScopedResponseIfStillCurrent(
+                    requestContext = requestContext,
+                    currentContext = ::accountScopedRequestContext,
+                    response = projected,
+                ) { _binItems.value = it }
+            ) {
+                return Result.success(Unit)
+            }
             _queueOffline.value = false
             if (flushedPendingActions > 0) {
                 _statusMessage.value = "Synced offline actions"
@@ -4811,6 +4846,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.success(Unit)
+            }
             if (handleAuthFailureIfNeeded(error)) {
                 return Result.failure(error)
             }
@@ -4846,10 +4884,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun loadArchivedItems(): Result<Unit> {
         val current = settings.value
+        val requestContext = accountScopedRequestContext(current)
         val sort = _archiveSort.value
         val query = _archiveSearchQuery.value
         return try {
             val flushedPendingActions = flushPendingItemActions()
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.success(Unit)
+            }
             val archived = repository.listItemsByView(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
@@ -4858,9 +4900,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 dir = sort.sortDir,
                 q = query.takeIf { it.isNotBlank() },
             )
-            _archivedItems.value = applyPendingBinProjectionToNonBinItems(
+            val projected = applyPendingBinProjectionToNonBinItems(
                 archived.map { it.toPlaybackQueueItem() },
             )
+            if (!applyAccountScopedResponseIfStillCurrent(
+                    requestContext = requestContext,
+                    currentContext = ::accountScopedRequestContext,
+                    response = projected,
+                ) { _archivedItems.value = it }
+            ) {
+                return Result.success(Unit)
+            }
             val combined = (_queueItems.value + _archivedItems.value).distinctBy { item -> item.itemId }
             val offlineReadyIds = resolveOfflineReadyIds(combined)
             _cachedItemIds.update { previous -> previous + offlineReadyIds }
@@ -4878,6 +4928,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.success(Unit)
+            }
             if (handleAuthFailureIfNeeded(error)) {
                 return Result.failure(error)
             }
@@ -4897,8 +4950,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         onLoaded: (List<PlaybackQueueItem>) -> Unit,
     ): Result<Unit> {
         val current = settings.value
+        val requestContext = accountScopedRequestContext(current)
         return try {
             val flushedPendingActions = flushPendingItemActions()
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.success(Unit)
+            }
             val items = repository.listItemsByView(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
@@ -4912,7 +4969,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 applyPendingBinProjectionToNonBinItems(items)
             }
-            onLoaded(projected)
+            if (!applyAccountScopedResponseIfStillCurrent(
+                    requestContext = requestContext,
+                    currentContext = ::accountScopedRequestContext,
+                    response = projected,
+                    apply = onLoaded,
+                )
+            ) {
+                return Result.success(Unit)
+            }
             _queueOffline.value = false
             if (flushedPendingActions > 0) {
                 _statusMessage.value = "Synced offline actions"
@@ -4922,6 +4987,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.success(Unit)
+            }
             if (handleAuthFailureIfNeeded(error)) {
                 return Result.failure(error)
             }
