@@ -3,6 +3,15 @@
 Ticket: T-AND-DIST-MIN-PLAN-1 (docs-only plan). Date: 2026-07-08.
 Executes as: **T-AND-DIST-MIN-1** (implementation ticket, §8 of this doc).
 
+Status update (2026-07-15): **shipped.** T-AND-DIST-MIN-1 merged as PR #451; the
+signed household release line is live (currently `0.4.3` / versionCode 9, PR
+#457) with `RELEASE_NOTES.md` discipline, and debug/production package
+identities are isolated (PR #458). The "current repo state (verified
+2026-07-08)" line below describes the pre-implementation snapshot. Members can
+now also install/update via the Mimeo repo's authenticated **Account → Android
+app** download and guarded device installer (Mimeo PRs #759–#760). Household GO
+was recorded 2026-07-11. This doc is retained as the design record.
+
 Purpose: define the minimum Android release/signing/distribution path required for
 the household pilot, so T-AND-DIST-MIN-1 can be implemented without product/ops
 ambiguity. This is **not** productized Play distribution — it is a safe,

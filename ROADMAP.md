@@ -24,13 +24,29 @@ Planning-doc ownership decision: `docs/planning/DOCS_OWNERSHIP_DECISION.md`.
   or onboarding work unless the operator explicitly allocates spare Android
   capacity. Android P-2/P-4 remain sensible later follow-ups, not active work
   now.
-- **Household distribution carve-out (2026-07-08):** the household-ready
-  queue (Mimeo repo, `HOUSEHOLD_READY_REVIEW_2026_07.md` §11) explicitly
-  allocates **T-AND-DIST-MIN-1** — release signing + versioned signed APK +
-  sideload install/update runbook, and only that. Plan:
-  `docs/ANDROID_HOUSEHOLD_DISTRIBUTION_MINIMUM_2026_07.md`. The rest of the
-  productization pause (Play Console, CI, store packaging, onboarding polish)
-  stays in force.
+- **Household distribution is shipped (2026-07-15 status).** The 2026-07-08
+  carve-out (**T-AND-DIST-MIN-1** — release signing + versioned signed APK +
+  sideload install/update runbook; plan:
+  `docs/ANDROID_HOUSEHOLD_DISTRIBUTION_MINIMUM_2026_07.md`) is complete:
+  - Signed household release line shipped (PR #451; currently `0.4.3` /
+    versionCode 9 via PR #457) with versioned artifacts and
+    `RELEASE_NOTES.md` discipline. **No member path requires Android
+    Studio.**
+  - Distribution/installation now also runs through the Mimeo repo's
+    operator-authorised path: authenticated same-origin **Account → Android
+    app** APK download and Mimeo Control publish workflow (Mimeo PR #759),
+    plus a guarded signer-aware device installer (Mimeo PR #760).
+  - Debug and production apps have isolated package identities (PR #458):
+    distinct debug package ID, debug version suffix, "Mimeo Debug" label.
+  - Household GO was recorded 2026-07-11 and the first trusted member is
+    onboarded (Mimeo repo, `HOUSEHOLD_READY_REVIEW_2026_07.md` §4; PRs
+    #757–#758). The household-readiness lane is closed; the active
+    cross-repo queue is Mimeo `ROADMAP.md` → "Current focus — household
+    operation and product parity".
+  - No Play Store/app-store readiness claim is made. The rest of the
+    productization pause (Play Console, CI, store packaging, onboarding
+    polish beyond the crowned username/onboarding UX polish item) stays in
+    force.
 
 ## Open — priority order
 
@@ -192,6 +208,7 @@ Non-goals still in force:
 History of shipped work, kept for reference. Newest at the top of each
 block. Not a forward-looking list.
 
+- [x] **Household distribution + launch-support series shipped** (2026-07-08 → 2026-07-15): signed household release line (T-AND-DIST-MIN-1, PR #451: dedicated release key, versionCode discipline, versioned artifacts, `RELEASE_NOTES.md`, sideload runbook, Settings version display); Android problem-report submission fix (PR #452); reader viewport resume + signed 0.4.2/vc8 (PRs #453–#454); account-scoped local-state ownership so persisted state never crosses account/server boundaries (T-AND-STATE-OWNER-LAND-1, PR #455) with crash-safe sign-out; stale-library response guards (PR #456); signed `0.4.3` / versionCode 9 release provenance (PR #457); isolated debug package identity — distinct debug application ID, debug version suffix, "Mimeo Debug" label (PR #458). Distribution to members now also flows through the Mimeo repo's authenticated Account → Android app download and guarded installer (Mimeo PRs #759–#760). Household GO recorded 2026-07-11; first trusted member onboarded (Mimeo repo).
 - [x] **Devices & sessions Android UI shipped** (T-AND-DEVICES-1, 2026-07-05): Settings → Account & Connection gains a "Devices & sessions" screen backed by the existing backend `GET/POST /account/devices*` surface (T-HH-DEVICES-1, no backend/API changes). Lists the signed-in user's active sessions with name, signed-in/last-used/expiry times, and a "Current device" marker; never displays token values. Supports revoking a non-current session and "Sign out everywhere else" (current session always preserved), with plain-language confirmation dialogs and stable loading/empty/error states. Reuses the existing authenticated API client and T-AND-AUTH-EXPIRY-1 stale-token re-auth routing on 401. Verified end-to-end on a physical device against the remote runtime. Unit tests, `assembleDebug`, and `assembleRelease` all passed.
 - [x] **Android visual v1 surface streamlining shipped** (2026-05-14): Smart Queue search already uses compact row treatment via `LibraryItemsScreen`. Up Next session panel header simplified to seed-source label only (redundant Re-seed button removed; remains in overflow menu). Bluesky candidate cards redesigned: title clickable→article, post area clickable→post, `SaveActionChip` (FilterChip) replaces saved-state text and bottom-row duplicate buttons. Smart Playlist detail header gains Play All IconButton (replaces "Use as Up Next") and collapsible metadata panel with FlowRow filter chips (collapse/expand arrow with rotation animation). Settings screen: connection help collapsed behind info toggle, Bluesky verbose explanations trimmed, scheduler/source diagnostics collapsed behind show/hide toggle, scanner defaults collapsed by default, "Open candidate browser" and "Open Bluesky smart playlist" navigation buttons removed. `SettingsScreen` signature cleaned of now-dead `onOpenBlueskyBrowse`/`onOpenSmartPlaylist` params. Unit tests and assembleDebug both passed. Follow-ups (not in this ticket): filter chip editing/remove/add in smart playlist header, Bluesky candidate browser accessible from other entry points.
 - [x] **Bluesky app-password connect/disconnect UI shipped** (PR #290, 2026-04-30): Settings → Bluesky now shows a connect form (handle + app password) when no account is connected, and a connected panel (handle, DID, mode, last-validation, Disconnect button) when an account is connected. Password field clears on success. All credential material goes to the Mimeo backend only; nothing stored locally. Existing scheduler/source diagnostics preserved. Build and unit tests passed.

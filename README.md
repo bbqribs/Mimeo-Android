@@ -96,6 +96,13 @@ device proof requirements live in
 need Android Studio, Gradle, or a dev-machine cable; the member-side flow uses
 the APK artifact only.
 
+Signed-in members can also download the operator-authorised release themselves
+from the Mimeo web app (**Account → Android app**, private Tailscale HTTPS
+only); publication and guarded device installs run through Mimeo Control in the
+Mimeo repo (`docs/ANDROID_AUTHORISED_RELEASES.md` there). Debug builds install
+side-by-side with the release app: they use an isolated debug package ID and
+show as "Mimeo Debug".
+
 ## Base URL notes
 - Android emulator -> host machine backend: `http://10.0.2.2:8000`
 - Physical device on same LAN -> use host LAN IP (for example `http://192.168.x.y:8000`)
