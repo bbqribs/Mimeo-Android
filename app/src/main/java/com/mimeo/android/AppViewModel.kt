@@ -914,22 +914,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             try {
-                val loadResult = repository.getSessionLoadResult()
-                val session = loadResult.session
-                _nowPlayingSession.value = session
-                _sessionIssueMessage.value = if (loadResult.wasCorrupt) {
-                    "Saved Now Playing session was invalid. Clear session metadata if this repeats."
-                } else {
-                    null
-                }
-                if (session != null) {
-                    _playbackPositionByItem.value = (session.items + session.historyItems).associate { item ->
-                        item.itemId to PlaybackPosition(
-                            chunkIndex = item.chunkIndex.coerceAtLeast(0),
-                            offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
-                        )
+                // A startup restore and first server adoption can race. Sharing the sync mutex
+                // prevents an earlier null Room read from overwriting a newly adopted session.
+                upNextSyncMutex.withLock {
+                    val loadResult = repository.getSessionLoadResult()
+                    val session = loadResult.session
+                    _nowPlayingSession.value = session
+                    _sessionIssueMessage.value = if (loadResult.wasCorrupt) {
+                        "Saved Now Playing session was invalid. Clear session metadata if this repeats."
+                    } else {
+                        null
                     }
-                    _cachedItemIds.value = resolveOfflineReadyIdsForSession(session.items + session.historyItems)
+                    if (session != null) {
+                        _playbackPositionByItem.value = (session.items + session.historyItems).associate { item ->
+                            item.itemId to PlaybackPosition(
+                                chunkIndex = item.chunkIndex.coerceAtLeast(0),
+                                offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
+                            )
+                        }
+                        _cachedItemIds.value = resolveOfflineReadyIdsForSession(session.items + session.historyItems)
+                    }
                 }
             } finally {
                 initialSessionStateLoaded = true
