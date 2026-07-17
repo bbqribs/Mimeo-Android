@@ -5,6 +5,10 @@ sign-in, Up Next navigation and evidence capture. The helper favors UI hierarchy
 text and bounds over fixed coordinates, so it remains usable across devices and
 font/navigation-bar changes.
 
+The helper verifies that the requested Mimeo package remains foreground after
+launch. If Android returns to the previous app, inspect `adb logcat` for a Mimeo
+crash before debugging drawer coordinates or sign-in state.
+
 ## Fast path
 
 Connect and manually unlock the device once. The script wakes the display,

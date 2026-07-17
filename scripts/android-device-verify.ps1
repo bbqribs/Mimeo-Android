@@ -137,6 +137,23 @@ function Test-DeviceLocked {
     return $window -match 'mDreamingLockscreen=true|mShowingLockscreen=true|isStatusBarKeyguard=true'
 }
 
+function Get-FocusedPackageFromWindowText {
+    param([Parameter(Mandatory)][string]$WindowText)
+    if ($WindowText -match 'mCurrentFocus=.*?\s([A-Za-z0-9._]+)/[A-Za-z0-9._$]+') {
+        return $Matches[1]
+    }
+    return ""
+}
+
+function Assert-MimeoForeground {
+    $window = (Invoke-Adb -Arguments @("shell", "dumpsys", "window")) -join "`n"
+    $focusedPackage = Get-FocusedPackageFromWindowText -WindowText $window
+    if ($focusedPackage -ne $PackageId) {
+        $detail = if ([string]::IsNullOrWhiteSpace($focusedPackage)) { "unknown" } else { $focusedPackage }
+        throw "Mimeo did not remain foreground after launch (focusedPackage=$detail). Check adb logcat for an app crash before attempting UI navigation."
+    }
+}
+
 function Prepare-Device {
     [void](Invoke-Adb -Arguments @("get-state"))
     [void](Invoke-Adb -Arguments @("shell", "input", "keyevent", "KEYCODE_WAKEUP") -AllowFailure)
@@ -176,6 +193,7 @@ function Start-MimeoApp {
     }
     [void](Invoke-Adb -Arguments @("shell", "am", "start", "-W", "-n", $resolved.Trim()))
     Start-Sleep -Seconds 2
+    Assert-MimeoForeground
 }
 
 function Dismiss-AutofillUiIfPresent {
@@ -543,6 +561,9 @@ function Invoke-SelfTest {
     if ($deleteArguments.Count -ne 15 -or @($deleteArguments | Where-Object { $_ -eq "KEYCODE_DEL" }).Count -ne 12) {
         throw "Exact delete-count self-test failed."
     }
+    $focusedPackage = Get-FocusedPackageFromWindowText -WindowText `
+        'mCurrentFocus=Window{123 u0 com.mimeo.android.debug/com.mimeo.android.MainActivity}'
+    if ($focusedPackage -ne 'com.mimeo.android.debug') { throw "Focused-package parsing self-test failed." }
     Write-Host "Self-test passed: semantic bounds, OnePlus 7T 1080x2287 fallbacks, and safe adb input rules."
 }
 

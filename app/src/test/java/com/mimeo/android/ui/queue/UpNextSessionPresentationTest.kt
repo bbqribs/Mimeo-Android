@@ -12,6 +12,22 @@ class UpNextSessionPresentationTest {
     }
 
     @Test
+    fun missingActiveItemLeavesNoEarlierRows() {
+        assertEquals(
+            emptyList<Int>(),
+            sessionPanelEarlierItems(localItems = listOf(7, 8), currentIndex = -1),
+        )
+    }
+
+    @Test
+    fun presentActiveItemKeepsOnlyPrecedingRowsEarlier() {
+        assertEquals(
+            listOf(7),
+            sessionPanelEarlierItems(localItems = listOf(7, 8, 9), currentIndex = 1),
+        )
+    }
+
+    @Test
     fun initialScrollTargetUsesMeasuredNowPlayingTop() {
         assertEquals(480, nowPlayingScrollTargetPx(480.8f))
     }

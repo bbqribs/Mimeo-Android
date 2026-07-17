@@ -100,6 +100,11 @@ internal fun sessionPanelActiveIndex(
     localItemIds: List<Int>,
 ): Int = currentItemId?.let(localItemIds::indexOf)?.takeIf { it >= 0 } ?: -1
 
+internal fun <T> sessionPanelEarlierItems(
+    localItems: List<T>,
+    currentIndex: Int,
+): List<T> = if (currentIndex >= 0) localItems.take(currentIndex) else emptyList()
+
 internal data class SessionStickyHeaderBounds(
     val title: String,
     val count: Int,
@@ -377,7 +382,10 @@ internal fun NowPlayingSessionPanel(
     val historyItemsForDisplay = historyItems.asReversed()
     // Earlier-in-queue items already sit in play order (oldest at the top,
     // most recently passed nearest Now Playing), so they need no reordering.
-    val earlierItems = localItems.take(currentIndex)
+    // Authoritative lifecycle reconciliation can remove the active item while the
+    // remembered presentation list is catching up. Treat that transient state as
+    // no active item: nothing is earlier and every surviving row remains upcoming.
+    val earlierItems = sessionPanelEarlierItems(localItems, currentIndex)
     val hasRowsBeforeActive = historyItems.isNotEmpty() || earlierItems.isNotEmpty()
     val upcomingStartIndex = (currentIndex + 1).coerceIn(0, localItems.size)
     val upcomingItems = localItems.drop(upcomingStartIndex)
