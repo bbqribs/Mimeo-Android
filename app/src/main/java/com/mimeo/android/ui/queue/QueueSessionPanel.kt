@@ -95,6 +95,11 @@ internal fun nowPlayingScrollTargetPx(activeTopOffsetPx: Float?): Int? {
     return activeTopOffsetPx?.toInt()
 }
 
+internal fun sessionPanelActiveIndex(
+    currentItemId: Int?,
+    localItemIds: List<Int>,
+): Int = currentItemId?.let(localItemIds::indexOf)?.takeIf { it >= 0 } ?: -1
+
 internal data class SessionStickyHeaderBounds(
     val title: String,
     val count: Int,
@@ -253,11 +258,10 @@ internal fun NowPlayingSessionPanel(
     fun avgItemHeight(): Float =
         if (itemHeights.isEmpty()) 72f else itemHeights.values.average().toFloat()
 
-    fun activeIndex(): Int =
-        session.currentItem?.itemId?.let { currentItemId ->
-            localItems.indexOfFirst { it.itemId == currentItemId }
-        }?.takeIf { it >= 0 }
-            ?: session.currentIndex.coerceIn(0, (localItems.size - 1).coerceAtLeast(0))
+    fun activeIndex(): Int = sessionPanelActiveIndex(
+        currentItemId = session.currentItem?.itemId,
+        localItemIds = localItems.map { it.itemId },
+    )
 
     fun upcomingStartIndex(): Int = (activeIndex() + 1).coerceIn(0, localItems.size)
 
@@ -361,9 +365,10 @@ internal fun NowPlayingSessionPanel(
     }
 
     val currentItemId = session.currentItem?.itemId
-    val currentIndex = localItems.indexOfFirst { it.itemId == currentItemId }
-        .takeIf { it >= 0 }
-        ?: session.currentIndex.coerceIn(0, (localItems.size - 1).coerceAtLeast(0))
+    val currentIndex = sessionPanelActiveIndex(
+        currentItemId = currentItemId,
+        localItemIds = localItems.map { it.itemId },
+    )
     val activeItem = localItems.getOrNull(currentIndex)
     val historyItems = session.historyItems
     // Session history is stored most-recent-first (each newly passed item is

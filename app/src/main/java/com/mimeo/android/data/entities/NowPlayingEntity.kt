@@ -10,4 +10,6 @@ data class NowPlayingEntity(
     val currentIndex: Int,
     val updatedAt: Long,
     val sourcePlaylistId: Int? = null,
+    val seedSourceKind: String = "custom",
+    val seedSourceLabel: String = "Android Up Next",
 )

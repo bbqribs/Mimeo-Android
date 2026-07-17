@@ -9,11 +9,21 @@ Mini-player control spec (v1 shipped; time-based skip deferred): `docs/ANDROID_M
 Up Next layout spec for history / active / upcoming / snap-to-active: `docs/ANDROID_UP_NEXT_LAYOUT_SPEC.md`.
 Playback Actions v2 (row [Play] [⋮], tap-row-play, Play All, Play from Here, overflow ordering; Smart Queue as a playlist-like source): `docs/ANDROID_PLAYBACK_ACTIONS_V2_SPEC.md`.
 Up Next History / Earlier in queue spec: `docs/ANDROID_UP_NEXT_HISTORY_EARLIER_QUEUE_SPEC.md`.
+Server-authoritative Up Next continuity: `docs/ANDROID_UP_NEXT_CONTINUITY.md`.
 Post-redesign product model planning (canonical in Mimeo): `C:\Users\brend\Documents\Coding\Mimeo\docs\planning\PRODUCT_MODEL_POST_REDESIGN.md` (Android pointer: `docs/planning/PRODUCT_MODEL_POST_REDESIGN.md`).
 Workflow + transition guidance: `docs/planning/AGENT_WORKFLOW.md` and `docs/planning/PROJECT_HANDOFF.md`.
 Planning-doc ownership decision: `docs/planning/DOCS_OWNERSHIP_DECISION.md`.
 
 ## Productization state memo
+
+- [x] **Server-authoritative Up Next continuity implemented** (2026-07-17;
+  pending ticket PR merge): Android
+  now adopts and synchronizes the per-user `/up-next/session` projection with
+  ratified first-adoption, offline/reconnect and stale-conflict semantics.
+  The existing Room-backed owner and offline playback remain intact; continuity
+  metadata is isolated by account + canonical endpoint, lifecycle removals are
+  compacted safely, Smart Queue and `/playback/state` remain independent, and
+  playback history remains deferred. See `docs/ANDROID_UP_NEXT_CONTINUITY.md`.
 
 - [x] **Android P-1 host externalization is closed.** Release defaults no
   longer expose personal hosts or IPs; developer presets remain in the debug

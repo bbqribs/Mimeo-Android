@@ -9,23 +9,27 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.mimeo.android.data.dao.CachedItemDao
 import com.mimeo.android.data.dao.NowPlayingDao
 import com.mimeo.android.data.dao.PendingProgressDao
+import com.mimeo.android.data.dao.UpNextSyncDao
 import com.mimeo.android.data.entities.CachedItemEntity
 import com.mimeo.android.data.entities.NowPlayingEntity
 import com.mimeo.android.data.entities.PendingProgressEntity
+import com.mimeo.android.data.entities.UpNextSyncEntity
 
 @Database(
     entities = [
         CachedItemEntity::class,
         PendingProgressEntity::class,
         NowPlayingEntity::class,
+        UpNextSyncEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun cachedItemDao(): CachedItemDao
     abstract fun pendingProgressDao(): PendingProgressDao
     abstract fun nowPlayingDao(): NowPlayingDao
+    abstract fun upNextSyncDao(): UpNextSyncDao
 
     companion object {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -102,6 +106,30 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE now_playing ADD COLUMN seedSourceKind TEXT NOT NULL DEFAULT 'custom'",
+                )
+                db.execSQL(
+                    "ALTER TABLE now_playing ADD COLUMN seedSourceLabel TEXT NOT NULL DEFAULT 'Android Up Next'",
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS up_next_sync_metadata (
+                        id INTEGER NOT NULL,
+                        ownerKey TEXT NOT NULL,
+                        serverIdentity TEXT NOT NULL,
+                        capability TEXT NOT NULL,
+                        serverVersion INTEGER,
+                        dirty INTEGER NOT NULL,
+                        PRIMARY KEY(id)
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -111,7 +139,14 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "mimeo_android.db",
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build().also { INSTANCE = it }
+                ).addMigrations(
+                    MIGRATION_1_2,
+                    MIGRATION_2_3,
+                    MIGRATION_3_4,
+                    MIGRATION_4_5,
+                    MIGRATION_5_6,
+                    MIGRATION_6_7,
+                ).build().also { INSTANCE = it }
             }
         }
     }

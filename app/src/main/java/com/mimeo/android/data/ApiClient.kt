@@ -41,6 +41,11 @@ import com.mimeo.android.model.SmartPlaylistPinRequest
 import com.mimeo.android.model.SmartPlaylistPinReorderItem
 import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.model.SmartPlaylistWriteRequest
+import com.mimeo.android.model.UpNextConflictResponse
+import com.mimeo.android.model.UpNextSession
+import com.mimeo.android.model.UpNextSessionClearRequest
+import com.mimeo.android.model.UpNextSessionEnvelope
+import com.mimeo.android.model.UpNextSessionWriteRequest
 import com.mimeo.android.model.ProgressPayload
 import com.mimeo.android.model.QueueFetchDebugSnapshot
 import com.mimeo.android.model.RawHttpResponse
@@ -63,6 +68,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 
 class ApiException(val statusCode: Int, message: String) : Exception(message)
+
+class UpNextVersionConflictException(
+    val currentSession: UpNextSession?,
+) : Exception("up_next_version_conflict")
 
 /**
  * BYOAI-A5 — failure of an operator provider write/test/delete, carrying only a
@@ -231,6 +240,44 @@ class ApiClient(
         private const val DEBUG_TARGET_ITEM_ID = 409
         private const val QUEUE_FETCH_LIMIT = 100
         const val QUEUE_LOAD_MORE_LIMIT = 50
+    }
+
+    suspend fun getUpNextSession(baseUrl: String, token: String): UpNextSession? = withContext(Dispatchers.IO) {
+        val request = authorizedRequest(baseUrl, "/up-next/session", token)
+            .acceptJson()
+            .get()
+            .build()
+        executeUpNextJson(request) { payload ->
+            json.decodeFromString<UpNextSessionEnvelope>(payload).session
+        }
+    }
+
+    suspend fun putUpNextSession(
+        baseUrl: String,
+        token: String,
+        payload: UpNextSessionWriteRequest,
+    ): UpNextSession = withContext(Dispatchers.IO) {
+        val request = authorizedRequest(baseUrl, "/up-next/session", token)
+            .acceptJson()
+            .put(jsonBody(payload))
+            .build()
+        executeUpNextJson(request) { responseBody ->
+            checkNotNull(json.decodeFromString<UpNextSessionEnvelope>(responseBody).session)
+        }
+    }
+
+    suspend fun clearUpNextSession(
+        baseUrl: String,
+        token: String,
+        expectedVersion: Long,
+    ): UpNextSession = withContext(Dispatchers.IO) {
+        val request = authorizedRequest(baseUrl, "/up-next/session", token)
+            .acceptJson()
+            .delete(jsonBody(UpNextSessionClearRequest(expectedVersion)))
+            .build()
+        executeUpNextJson(request) { responseBody ->
+            checkNotNull(json.decodeFromString<UpNextSessionEnvelope>(responseBody).session)
+        }
     }
 
     suspend fun getDebugVersion(baseUrl: String, token: String): DebugVersionResponse = withContext(Dispatchers.IO) {
@@ -1315,6 +1362,27 @@ class ApiClient(
     ): T {
         client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                throwApiException(response.code, body)
+            }
+            return parser(body)
+        }
+    }
+
+    private inline fun <T> executeUpNextJson(
+        request: Request,
+        parser: (String) -> T,
+    ): T {
+        okHttpClient.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (response.code == 409) {
+                val conflict = runCatching {
+                    json.decodeFromString<UpNextConflictResponse>(body)
+                }.getOrNull()
+                if (conflict?.error?.code == "up_next_version_conflict") {
+                    throw UpNextVersionConflictException(conflict.currentSession)
+                }
+            }
             if (!response.isSuccessful) {
                 throwApiException(response.code, body)
             }

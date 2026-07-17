@@ -207,6 +207,73 @@ data class PlaybackQueueResponse(
 )
 
 @Serializable
+data class UpNextSessionEnvelope(
+    val session: UpNextSession? = null,
+)
+
+@Serializable
+data class UpNextSession(
+    val version: Long,
+    val items: List<UpNextSessionItem>,
+    @SerialName("current_item_id") val currentItemId: Int? = null,
+    @SerialName("seed_source_kind") val seedSourceKind: String,
+    @SerialName("seed_source_label") val seedSourceLabel: String,
+    @SerialName("seeded_at") val seededAt: String,
+    @SerialName("updated_at") val updatedAt: String,
+    @SerialName("dirty_since_seed") val dirtySinceSeed: Boolean,
+)
+
+@Serializable
+data class UpNextSessionItem(
+    @SerialName("item_id") val itemId: Int,
+    val position: Int,
+    val title: String? = null,
+    val url: String,
+    val host: String,
+    val status: String? = null,
+    @SerialName("active_content_version_id") val activeContentVersionId: Int? = null,
+    @SerialName("strategy_used") val strategyUsed: String? = null,
+    @SerialName("word_count") val wordCount: Int? = null,
+    @SerialName("estimated_listen_minutes") val estimatedListenMinutes: Int? = null,
+    @SerialName("has_active_content") val hasActiveContent: Boolean,
+    @SerialName("resume_read_percent") val resumeReadPercent: Int? = null,
+    @SerialName("last_read_percent") val lastReadPercent: Int? = null,
+    @SerialName("progress_percent") val progressPercent: Int? = null,
+    @SerialName("furthest_percent") val furthestPercent: Int? = null,
+    @SerialName("last_opened_at") val lastOpenedAt: String? = null,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("archived_at") val archivedAt: String? = null,
+    @SerialName("is_archived") val isArchived: Boolean,
+    @SerialName("is_muted") val isMuted: Boolean,
+)
+
+@Serializable
+data class UpNextSessionWriteRequest(
+    @SerialName("expected_version") val expectedVersion: Long?,
+    @SerialName("item_ids") val itemIds: List<Int>,
+    @SerialName("current_item_id") val currentItemId: Int?,
+    @SerialName("seed_source_kind") val seedSourceKind: String,
+    @SerialName("seed_source_label") val seedSourceLabel: String,
+)
+
+@Serializable
+data class UpNextSessionClearRequest(
+    @SerialName("expected_version") val expectedVersion: Long,
+)
+
+@Serializable
+data class UpNextConflictError(
+    val code: String,
+    val message: String? = null,
+)
+
+@Serializable
+data class UpNextConflictResponse(
+    val error: UpNextConflictError,
+    @SerialName("current_session") val currentSession: UpNextSession? = null,
+)
+
+@Serializable
 data class PlaylistSummary(
     val id: Int,
     val name: String,

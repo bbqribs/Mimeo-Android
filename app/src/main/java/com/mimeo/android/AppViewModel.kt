@@ -92,6 +92,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mimeo.android.data.ApiClient
 import com.mimeo.android.data.ApiException
+import com.mimeo.android.data.UpNextVersionConflictException
 import com.mimeo.android.data.ItemBatchResponse
 import com.mimeo.android.data.AutoDownloadStatusStore
 import com.mimeo.android.data.AppDatabase
@@ -142,6 +143,7 @@ import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.SmartPlaylistDetail
 import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.model.SmartPlaylistWriteRequest
+import com.mimeo.android.model.UpNextSessionWriteRequest
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PendingItemAction
@@ -180,6 +182,11 @@ import com.mimeo.android.repository.NowPlayingSessionItem
 import com.mimeo.android.repository.OfflineReadyCandidate
 import com.mimeo.android.repository.PlaylistMembershipToggleResult
 import com.mimeo.android.repository.PlaybackRepository
+import com.mimeo.android.repository.UpNextCapability
+import com.mimeo.android.repository.UpNextSyncPlan
+import com.mimeo.android.repository.planFirstUpNextAdoption
+import com.mimeo.android.repository.planUpNextReconnect
+import com.mimeo.android.repository.shouldMutateUpNextActiveItem
 import com.mimeo.android.repository.resolveOfflineReadyItemIds
 import com.mimeo.android.player.PlaybackService
 import com.mimeo.android.player.PlaybackServiceBridge
@@ -322,6 +329,9 @@ internal suspend fun <T> applyAccountScopedResponseIfStillCurrent(
 internal fun settingsScreenAuthTargetChanged(previousToken: String, nextToken: String): Boolean =
     previousToken.trim() != nextToken.trim()
 
+internal fun settingsScreenEndpointChanged(previousBaseUrl: String, nextBaseUrl: String): Boolean =
+    normalizeServerIdentity(previousBaseUrl) != normalizeServerIdentity(nextBaseUrl)
+
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     data class SessionReseedResult(
         val sourceLabel: String,
@@ -428,6 +438,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _queueReloadGeneration = MutableStateFlow(0)
     val queueReloadGeneration: StateFlow<Int> = _queueReloadGeneration.asStateFlow()
     private val queueLoadMutex = Mutex()
+    private val upNextSyncMutex = Mutex()
     private val _lastQueueFetchDebug = MutableStateFlow(QueueFetchDebugSnapshot())
     val lastQueueFetchDebug: StateFlow<QueueFetchDebugSnapshot> = _lastQueueFetchDebug.asStateFlow()
 
@@ -683,6 +694,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val shareRefreshLastExecutedAtByKeyMs = mutableMapOf<String, Long>()
     private var shareRefreshDebugSnapshot = ShareRefreshDebugSnapshot()
 
+    private data class UpNextSeedMetadata(val kind: String, val label: String)
+
     init {
         bindPlaybackService()
         viewModelScope.launch {
@@ -771,6 +784,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     authFailureHandledThisSession = false
                     pendingInitialPostSignInHydration = true
                     loadQueue()
+                    scheduleUpNextSynchronization()
                     blueskyCoordinator.refreshBlueskyStatus()
                     blueskyCoordinator.loadBlueskyScannerPreferences()
                 } else if (previous.apiToken.isNotBlank() && next.apiToken.isBlank()) {
@@ -920,6 +934,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } finally {
                 initialSessionStateLoaded = true
                 markPlaybackResumeStateReadyIfComplete()
+                scheduleUpNextSynchronization()
             }
         }
         startConnectivityMonitoring()
@@ -1181,7 +1196,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 previousToken = current.apiToken,
                 nextToken = token,
             )
-            if (authTargetChanged) {
+            val endpointChanged = settingsScreenEndpointChanged(current.baseUrl, baseUrl)
+            val continuityOwnerChanged = authTargetChanged || endpointChanged
+            if (continuityOwnerChanged) {
                 clearAccountScopedLocalState(clearOwner = false)
             }
             settingsStore.save(
@@ -1222,7 +1239,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 playerLastNonNubMode = settings.value.playerLastNonNubMode,
                 playerChevronSnapEdge = settings.value.playerChevronSnapEdge,
                 playerChevronEdgeOffset = settings.value.playerChevronEdgeOffset,
-                resetLocalStateOwner = authTargetChanged,
+                resetLocalStateOwner = continuityOwnerChanged,
             )
             _statusMessage.value = "Settings saved"
         }
@@ -2254,6 +2271,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             lastQueueLoadCompletedAtMs = System.currentTimeMillis()
             _queueReloadGeneration.value++
+            scheduleUpNextSynchronization()
             Result.success(Unit)
         } catch (e: ApiException) {
             if (handleAuthFailureIfNeeded(e)) {
@@ -2993,6 +3011,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun maybeRefreshAfterConnectivityRestored() {
+        viewModelScope.launch { synchronizeUpNextSession() }
         if (!_queueOffline.value && _pendingManualSaves.value.isEmpty() && _pendingItemActions.value.isEmpty()) return
         val now = System.currentTimeMillis()
         if (now - lastConnectivityRefreshAtMs < 2_000L) return
@@ -5589,6 +5608,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             _archivedSessionHistoryIds.update { it - snapshot.item.itemId }
             // Restore item to its session position for History/Earlier bin undos.
+            var restoredServerSessionMembership = false
             when (archiveUndoSessionRestoreTarget(snapshot)) {
                 ArchiveUndoSessionRestoreTarget.HISTORY -> {
                     repository.restoreHistoryItemToSession(snapshot.item, snapshot.originalSessionIndex.coerceAtLeast(0))?.let { _nowPlayingSession.value = it }
@@ -5597,15 +5617,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 ArchiveUndoSessionRestoreTarget.SESSION_ITEMS -> {
                     repository.insertItemAtIndexInSession(snapshot.item, snapshot.originalSessionIndex)
                         ?.let { _nowPlayingSession.value = it }
+                    restoredServerSessionMembership = true
                     runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
                 }
                 ArchiveUndoSessionRestoreTarget.NONE -> {
                     if (snapshot.source == ArchiveActionSource.UP_NEXT && snapshot.originalSessionIndex >= 0) {
                         repository.insertItemAtIndexInSession(snapshot.item, snapshot.originalSessionIndex)
                             ?.let { _nowPlayingSession.value = it }
+                        restoredServerSessionMembership = true
                     }
                 }
             }
+            if (restoredServerSessionMembership) markAndScheduleUpNextMutation()
             val reopenItemId = archiveUndoReopenItemId(snapshot)
             _statusMessage.value = if (snapshot.actionType == UndoableActionType.BIN) {
                 "Bin move undone"
@@ -5860,10 +5883,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         val queue = queueItems.value
         if (queue.isNotEmpty()) {
+            val sourceId = resolveSessionSourcePlaylistId(settings.value.selectedPlaylistId)
+            val seed = resolveUpNextSeedMetadata(sourceId)
             val session = repository.startSession(
                 queueItems = queue,
                 startItemId = fallbackItemId,
-                sourcePlaylistId = resolveSessionSourcePlaylistId(settings.value.selectedPlaylistId),
+                sourcePlaylistId = sourceId,
+                seedSourceKind = seed.kind,
+                seedSourceLabel = seed.label,
             )
             applySessionSnapshot(session)
             return session.currentItem?.itemId ?: fallbackItemId
@@ -5877,10 +5904,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
+            val sourceId = resolveSessionSourcePlaylistId(settings.value.selectedPlaylistId)
+            val seed = resolveUpNextSeedMetadata(sourceId)
             val session = repository.startSession(
                 queueItems = queue,
                 startItemId = startItemId,
-                sourcePlaylistId = resolveSessionSourcePlaylistId(settings.value.selectedPlaylistId),
+                sourcePlaylistId = sourceId,
+                seedSourceKind = seed.kind,
+                seedSourceLabel = seed.label,
             )
             applySessionSnapshot(session)
         }
@@ -5895,10 +5926,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val snapshot = playbackActionSnapshot(sourceItems)
         if (snapshot.isEmpty()) return
         viewModelScope.launch {
+            val seed = resolveUpNextSeedMetadata(sourcePlaylistId, statusLabel)
             val session = repository.startSession(
                 queueItems = snapshot,
                 startItemId = startItemId,
                 sourcePlaylistId = sourcePlaylistId,
+                seedSourceKind = seed.kind,
+                seedSourceLabel = seed.label,
             )
             applySessionSnapshot(session, preserveExistingPositions = true)
             val activeItemId = session.currentItem?.itemId ?: startItemId
@@ -6047,15 +6081,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun reseedNowPlayingSessionFromCurrentSource(): Result<SessionReseedResult> {
         val sourceLabel = currentSourceContextLabel()
         return runCatching {
+            val sourceId = resolveSessionSourcePlaylistId(settings.value.selectedPlaylistId)
+            val seed = resolveUpNextSeedMetadata(sourceId, sourceLabel)
             val session = repository.reseedSessionFromSource(
                 sourceItems = queueItems.value,
                 preferredCurrentItemId = nowPlayingSession.value?.currentItem?.itemId,
-                sourcePlaylistId = resolveSessionSourcePlaylistId(settings.value.selectedPlaylistId),
+                sourcePlaylistId = sourceId,
+                seedSourceKind = seed.kind,
+                seedSourceLabel = seed.label,
             )
             if (session == null) {
                 _nowPlayingSession.value = null
                 _playbackPositionByItem.value = emptyMap()
                 _sessionIssueMessage.value = null
+                markAndScheduleUpNextMutation()
                 SessionReseedResult(sourceLabel = sourceLabel, rebuiltItemCount = 0)
             } else {
                 applySessionSnapshot(session)
@@ -6071,15 +6110,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     ): Result<SessionReseedResult> {
         val sourceLabel = smartPlaylistSessionSourceLabel(playlistName)
         return runCatching {
+            val sourceId = resolveSmartPlaylistSessionSourceId(playlistId)
+            val seed = resolveUpNextSeedMetadata(sourceId, sourceLabel)
             val session = repository.reseedSessionFromSource(
                 sourceItems = items,
                 preferredCurrentItemId = nowPlayingSession.value?.currentItem?.itemId,
-                sourcePlaylistId = resolveSmartPlaylistSessionSourceId(playlistId),
+                sourcePlaylistId = sourceId,
+                seedSourceKind = seed.kind,
+                seedSourceLabel = seed.label,
             )
             if (session == null) {
                 _nowPlayingSession.value = null
                 _playbackPositionByItem.value = emptyMap()
                 _sessionIssueMessage.value = null
+                markAndScheduleUpNextMutation()
                 SessionReseedResult(sourceLabel = sourceLabel, rebuiltItemCount = 0)
             } else {
                 applySessionSnapshot(session)
@@ -6096,6 +6140,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _playbackPositionByItem.value = emptyMap()
                 _sessionIssueMessage.value = null
             }
+            markAndScheduleUpNextMutation()
         }
     }
 
@@ -6257,6 +6302,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (result.isSuccess) {
                 val updated = repository.removeItemFromSession(itemId) ?: return@launch
                 _nowPlayingSession.value = updated
+                markAndScheduleUpNextMutation()
                 if (!_queueOffline.value) {
                     if (lastArchiveUndoSnapshot != null) {
                         showSnackbar("Moved to Bin (14 days)", "Undo", ACTION_KEY_UNDO_ARCHIVE)
@@ -6282,6 +6328,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _nowPlayingSession.value = null
                 _playbackPositionByItem.value = emptyMap()
                 _sessionIssueMessage.value = null
+                markAndScheduleUpNextMutation()
             } else {
                 applySessionSnapshot(session)
             }
@@ -6309,10 +6356,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun clearNowPlayingSessionNow() {
         repository.clearSession()
+        playbackEngine.clear()
         _nowPlayingSession.value = null
         _playbackPositionByItem.value = emptyMap()
         _sessionIssueMessage.value = null
         _statusMessage.value = "Now Playing session cleared."
+        markAndScheduleUpNextMutation()
     }
 
     fun currentSourceContextLabel(): String {
@@ -6329,8 +6378,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun shouldAutoAdvanceAfterCompletion(): Boolean = settings.value.autoAdvanceOnCompletion
     fun shouldAutoScrollWhileListening(): Boolean = settings.value.autoScrollWhileListening
     fun isCurrentSessionPlaylistScoped(): Boolean {
-        val sourcePlaylistId = nowPlayingSession.value?.sourcePlaylistId ?: return false
-        return sourcePlaylistId != SMART_QUEUE_SESSION_CONTEXT_ID
+        val session = nowPlayingSession.value ?: return false
+        val sourcePlaylistId = session.sourcePlaylistId
+        return when {
+            sourcePlaylistId != null -> sourcePlaylistId != SMART_QUEUE_SESSION_CONTEXT_ID
+            else -> session.seedSourceKind == "playlist" || session.seedSourceKind == "smart_playlist"
+        }
     }
 
     fun baseUrlHintForDevice(isPhysicalDevice: Boolean): String? {
@@ -6384,9 +6437,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun setNowPlayingCurrentItem(itemId: Int) {
         val session = nowPlayingSession.value ?: return
+        if (!shouldMutateUpNextActiveItem(session.currentItem?.itemId, itemId)) return
         val idx = session.items.indexOfFirst { it.itemId == itemId }
         if (idx < 0) return
         _nowPlayingSession.value = repository.setCurrentIndex(idx) ?: session.copy(currentIndex = idx)
+        markAndScheduleUpNextMutation()
     }
 
     /**
@@ -6482,10 +6537,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         nowPlayingSession.value?.let { return it }
         val queue = queueItems.value
         if (queue.isEmpty()) return null
+        val sourceId = resolveSessionSourcePlaylistId(settings.value.selectedPlaylistId)
+        val seed = resolveUpNextSeedMetadata(sourceId)
         val session = repository.startSession(
             queueItems = queue,
             startItemId = currentId,
-            sourcePlaylistId = resolveSessionSourcePlaylistId(settings.value.selectedPlaylistId),
+            sourcePlaylistId = sourceId,
+            seedSourceKind = seed.kind,
+            seedSourceLabel = seed.label,
         )
         applySessionSnapshot(session)
         return session
@@ -6606,7 +6665,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun applySessionSnapshot(
+    private suspend fun applySessionSnapshot(
         session: NowPlayingSession,
         preserveExistingPositions: Boolean = false,
     ) {
@@ -6628,6 +6687,168 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _playbackPositionByItem.value + sessionPositions
         } else {
             sessionPositions
+        }
+        _sessionIssueMessage.value = null
+        repository.markUpNextDirty()
+        scheduleUpNextSynchronization()
+    }
+
+    private fun resolveUpNextSeedMetadata(
+        sourcePlaylistId: Int?,
+        explicitLabel: String? = null,
+    ): UpNextSeedMetadata {
+        val label = explicitLabel?.trim()?.takeIf { it.isNotEmpty() } ?: when {
+            resolveSmartPlaylistIdFromSessionSourceId(sourcePlaylistId) != null -> {
+                val id = checkNotNull(resolveSmartPlaylistIdFromSessionSourceId(sourcePlaylistId))
+                val name = smartPlaylists.value.firstOrNull { it.id == id }?.name
+                smartPlaylistSessionSourceLabel(name ?: "Smart playlist ($id)")
+            }
+            sourcePlaylistId != null && sourcePlaylistId >= 0 ->
+                playlists.value.firstOrNull { it.id == sourcePlaylistId }?.name ?: "Playlist ($sourcePlaylistId)"
+            sourcePlaylistId == SMART_QUEUE_SESSION_CONTEXT_ID -> "Smart queue"
+            else -> "Android Up Next"
+        }
+        val kind = when {
+            label.equals("Inbox", ignoreCase = true) -> "inbox"
+            resolveSmartPlaylistIdFromSessionSourceId(sourcePlaylistId) != null -> "smart_playlist"
+            sourcePlaylistId != null && sourcePlaylistId >= 0 -> "playlist"
+            else -> "custom"
+        }
+        return UpNextSeedMetadata(kind = kind, label = label.take(255))
+    }
+
+    private fun scheduleUpNextSynchronization() {
+        viewModelScope.launch { synchronizeUpNextSession() }
+    }
+
+    private suspend fun markAndScheduleUpNextMutation() {
+        repository.markUpNextDirty()
+        scheduleUpNextSynchronization()
+    }
+
+    private suspend fun synchronizeUpNextSession() {
+        upNextSyncMutex.withLock { synchronizeUpNextSessionLocked() }
+    }
+
+    private suspend fun synchronizeUpNextSessionLocked() {
+        val current = settings.value
+        if (current.apiToken.isBlank() || current.baseUrl.isBlank()) return
+        val requestContext = accountScopedRequestContext(current)
+        if (requestContext.localStateOwner.isBlank()) return
+        val serverIdentity = normalizeServerIdentity(current.baseUrl)
+        val metadata = repository.prepareUpNextSyncScope(
+            ownerKey = requestContext.localStateOwner,
+            serverIdentity = serverIdentity,
+        )
+        val capability = runCatching { UpNextCapability.valueOf(metadata.capability) }
+            .getOrDefault(UpNextCapability.UNKNOWN)
+        if (capability == UpNextCapability.UNSUPPORTED) return
+
+        try {
+            val localSnapshot = repository.localUpNextSnapshot()
+            val plan: UpNextSyncPlan = when {
+                capability == UpNextCapability.UNKNOWN -> {
+                    val server = apiClient.getUpNextSession(current.baseUrl, current.apiToken)
+                    planFirstUpNextAdoption(server, localSnapshot)
+                }
+                metadata.dirty -> planUpNextReconnect(
+                    dirty = true,
+                    observedVersion = metadata.serverVersion,
+                    localSnapshot = localSnapshot,
+                )
+                else -> {
+                    val server = apiClient.getUpNextSession(current.baseUrl, current.apiToken)
+                    planUpNextReconnect(
+                        dirty = false,
+                        observedVersion = metadata.serverVersion,
+                        localSnapshot = localSnapshot,
+                        refreshedServerSession = server,
+                    )
+                }
+            }
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) return
+            when (plan) {
+                UpNextSyncPlan.MarkCleanAbsent -> {
+                    repository.markUpNextCleanAbsent(requestContext.localStateOwner, serverIdentity)
+                }
+                is UpNextSyncPlan.Adopt -> applyAuthoritativeUpNext(plan.session, requestContext, serverIdentity)
+                is UpNextSyncPlan.Replace -> {
+                    val acknowledged = apiClient.putUpNextSession(
+                        baseUrl = current.baseUrl,
+                        token = current.apiToken,
+                        payload = UpNextSessionWriteRequest(
+                            expectedVersion = plan.expectedVersion,
+                            itemIds = plan.snapshot.itemIds,
+                            currentItemId = plan.snapshot.currentItemId,
+                            seedSourceKind = plan.snapshot.seedSourceKind,
+                            seedSourceLabel = plan.snapshot.seedSourceLabel,
+                        ),
+                    )
+                    if (accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                        applyAuthoritativeUpNext(acknowledged, requestContext, serverIdentity)
+                    }
+                }
+                is UpNextSyncPlan.Clear -> {
+                    val acknowledged = apiClient.clearUpNextSession(
+                        current.baseUrl,
+                        current.apiToken,
+                        plan.expectedVersion,
+                    )
+                    if (accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                        applyAuthoritativeUpNext(acknowledged, requestContext, serverIdentity)
+                    }
+                }
+            }
+        } catch (conflict: UpNextVersionConflictException) {
+            if (accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                applyAuthoritativeUpNext(conflict.currentSession, requestContext, serverIdentity)
+                showSnackbar("Up Next changed on another device. The newer session was kept.")
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: ApiException) {
+            when {
+                error.statusCode == 404 || error.statusCode == 405 ->
+                    repository.markUpNextUnsupported(requestContext.localStateOwner, serverIdentity)
+                handleAuthFailureIfNeeded(error) -> Unit
+                isNetworkError(error) -> _queueOffline.value = true
+            }
+        } catch (error: Exception) {
+            if (isNetworkError(error)) _queueOffline.value = true
+        }
+    }
+
+    private suspend fun applyAuthoritativeUpNext(
+        session: com.mimeo.android.model.UpNextSession?,
+        requestContext: AccountScopedRequestContext,
+        serverIdentity: String,
+    ) {
+        val priorPlaybackItemId = playbackEngineState.value.currentItemId.takeIf { it > 0 }
+        val applied = repository.applyAuthoritativeUpNextSession(
+            session = session,
+            ownerKey = requestContext.localStateOwner,
+            serverIdentity = serverIdentity,
+        )
+        val authoritativeActiveId = applied?.currentItem?.itemId
+        if (priorPlaybackItemId != null && priorPlaybackItemId != authoritativeActiveId) {
+            playbackEngine.clear()
+        }
+        if (applied == null) {
+            _nowPlayingSession.value = null
+            _playbackPositionByItem.value = emptyMap()
+            _sessionIssueMessage.value = null
+        } else {
+            applyAuthoritativeSessionSnapshot(applied)
+        }
+    }
+
+    private fun applyAuthoritativeSessionSnapshot(session: NowPlayingSession) {
+        _nowPlayingSession.value = session
+        _playbackPositionByItem.value = (session.items + session.historyItems).associate { item ->
+            item.itemId to PlaybackPosition(
+                chunkIndex = item.chunkIndex.coerceAtLeast(0),
+                offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),
+            )
         }
         _sessionIssueMessage.value = null
     }
