@@ -48,3 +48,10 @@ If the locally playing item is no longer the authoritative active item,
 playback is stopped and the media-service snapshot is cleared before exposing
 the new pointer; the control bridge remains wired for later playback.
 Restore/unarchive does not invent a former server position.
+
+## Device verification
+
+Use `scripts/android-device-verify.ps1` and
+`docs/ANDROID_DEVICE_VERIFICATION_RUNBOOK.md` for repeatable sign-in, navigation,
+no-active lifecycle assertions and sanitized evidence capture on physical
+devices.
