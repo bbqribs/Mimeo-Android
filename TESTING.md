@@ -66,7 +66,8 @@ Use `scripts/android-device-verify.ps1` instead of ad hoc coordinates for
 physical-device preparation, sign-in, Up Next navigation and evidence capture.
 The helper is UI-hierarchy-first, handles the debug-package/activity-name split,
 avoids delayed-delete credential corruption, dismisses common password-manager
-prompts, checks secure lock state, and records model/dimensions with evidence.
+prompts, verifies every entered field before submission, checks secure lock
+state, and records model/dimensions with evidence.
 
 ```powershell
 .\scripts\android-device-verify.ps1 -Action SelfTest

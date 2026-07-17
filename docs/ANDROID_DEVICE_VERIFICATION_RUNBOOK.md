@@ -7,15 +7,27 @@ font/navigation-bar changes.
 
 ## Fast path
 
-Connect and manually unlock the device once. The script enables stay-awake over
-USB, wakes the display, attempts only Android's safe keyguard dismissal, resolves
-the installed launch activity, and stops if the secure pattern is still present.
-It never stores or attempts the unlock pattern.
+Connect and manually unlock the device once. The script wakes the display,
+attempts USB stay-awake, reports whether the firmware accepted it, attempts only
+Android's safe keyguard dismissal, resolves the installed launch activity, and
+stops if the secure pattern is still present. It never stores or attempts the
+unlock pattern.
 
 ```powershell
 .\scripts\android-device-verify.ps1 -Action Prepare
 .\scripts\android-device-verify.ps1 -Action Status
 ```
+
+The stock OnePlus 7T (`HD1905`) build used for this ticket rejects shell writes
+to the stay-awake setting (`WRITE_SECURE_SETTINGS`) and kills `svc power stayon`.
+Its observed screen timeout is 120,000 ms. Enable the Developer Options **Stay
+awake** toggle once when running a long device session:
+
+```powershell
+.\scripts\android-device-verify.ps1 -Action OpenDeveloperOptions
+```
+
+The helper verifies and reports the setting rather than claiming it succeeded.
 
 Use a disposable `test-` account with an alphanumeric password. Keeping the
 password alphanumeric avoids `adb shell input text` metacharacter corruption.
@@ -23,7 +35,7 @@ Prefer an interactive secure prompt; for unattended local use, set the password
 environment variable only for the lifetime of the current PowerShell process.
 
 ```powershell
-$env:MIMEO_DEVICE_TEST_USERNAME = "test-example"
+$env:MIMEO_DEVICE_TEST_USERNAME = Read-Host "Existing disposable test-account username"
 .\scripts\android-device-verify.ps1 `
   -Action SignInAndOpenUpNext `
   -ServerUrl "https://beh-august2015.taildacac5.ts.net"
@@ -36,10 +48,19 @@ history. The helper does not print or write the password and redacts the command
 if credential entry fails. Use only a disposable credential because Android's
 input process still receives the text transiently.
 
-It clears fields by moving to the end and sending all delete key events through
-one `adb` process, waits for the event queue to drain, then types. This prevents
-delayed deletes from erasing the first characters of the newly entered password.
-It also dismisses the LastPass `Later` prompt when present.
+Before touching a field, the helper runs Android's system `curl` against the
+configured server with certificate verification and bounded timeouts. A down
+canonical runtime, broken Tailscale route, Wi-Fi problem or certificate failure
+therefore stops as `backend unreachable` before credential entry instead of
+falling through to the app's broad URL/scheme/certificate error.
+
+It clears each field by observing its current UI length, moving to the end and
+sending exactly that many delete keys. The helper requires two stable empty
+observations, types, and verifies the exact server/username or masked-password
+length before advancing. This prevents surplus delayed deletes from erasing the
+first characters of the next value. It detects Android's full `Autofill UI`
+window and safely backs out before reading or typing the next field; it also
+dismisses the LastPass `Later` prompt when present.
 
 ## Up Next lifecycle assertion
 
@@ -113,9 +134,15 @@ the release assemble and release lint once after the device fix is stable.
   than repeatedly dumping the lock screen.
 - Verify entered field text and masked-password length before tapping Sign In;
   never infer success from a tap coordinate alone.
+- Run the HTTPS preflight from the device, not only the development PC. The two
+  network paths are separate evidence, and sign-in should not begin unless the
+  device path succeeds.
 - A password-manager save sheet can cover the app immediately after successful
   authentication. Treat `Later` as a successful transition marker and dismiss
   it before navigation.
+- LastPass can also open a full Android `Autofill UI` between server, username
+  and password fields. Detect it from `dumpsys window` and dismiss it with Back
+  before dumping hierarchy or sending input.
 - Use `wm dismiss-keyguard` only after the operator unlocks or Smart Lock marks
   the device trusted. Never automate a secure pattern.
 - Capture evidence outside the repository so verification artifacts cannot dirty

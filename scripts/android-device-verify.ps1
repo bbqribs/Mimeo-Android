@@ -2,6 +2,7 @@
 param(
     [ValidateSet(
         "Prepare",
+        "OpenDeveloperOptions",
         "Status",
         "SignIn",
         "OpenUpNext",
@@ -140,7 +141,6 @@ function Prepare-Device {
     [void](Invoke-Adb -Arguments @("get-state"))
     [void](Invoke-Adb -Arguments @("shell", "input", "keyevent", "KEYCODE_WAKEUP") -AllowFailure)
     [void](Invoke-Adb -Arguments @("shell", "svc", "power", "stayon", "true") -AllowFailure)
-    [void](Invoke-Adb -Arguments @("shell", "settings", "put", "global", "stay_on_while_plugged_in", "7") -AllowFailure)
     [void](Invoke-Adb -Arguments @("shell", "wm", "dismiss-keyguard") -AllowFailure)
     [void](Invoke-Adb -Arguments @("shell", "input", "keyevent", "KEYCODE_MENU") -AllowFailure)
     Start-Sleep -Milliseconds 700
@@ -148,11 +148,22 @@ function Prepare-Device {
     $model = ((Invoke-Adb -Arguments @("shell", "getprop", "ro.product.model")) -join "").Trim()
     $size = ((Invoke-Adb -Arguments @("shell", "wm", "size")) -join " ").Trim()
     $density = ((Invoke-Adb -Arguments @("shell", "wm", "density")) -join " ").Trim()
-    Write-Host "Device ready: model=$model; $size; $density"
+    $stayAwakeValue = ((Invoke-Adb -Arguments @("shell", "settings", "get", "global", "stay_on_while_plugged_in") -AllowFailure) -join "").Trim()
+    $screenTimeoutMs = ((Invoke-Adb -Arguments @("shell", "settings", "get", "system", "screen_off_timeout") -AllowFailure) -join "").Trim()
+    $stayAwakeEnabled = $stayAwakeValue -match '^[1-7]$'
+    Write-Host "Device ready: model=$model; $size; $density; usbStayAwake=$stayAwakeEnabled; screenTimeoutMs=$screenTimeoutMs"
+    if (-not $stayAwakeEnabled) {
+        Write-Host "USB stay-awake is unavailable through adb on this firmware. Keep interacting within the timeout, or run -Action OpenDeveloperOptions and enable Stay awake manually."
+    }
 
     if (Test-DeviceLocked) {
         throw "Device is still securely locked. Unlock the pattern manually, leave the screen on, then rerun. The helper never guesses or stores a device unlock pattern."
     }
+}
+
+function Open-DeveloperOptions {
+    [void](Invoke-Adb -Arguments @("shell", "am", "start", "-W", "-a", "android.settings.APPLICATION_DEVELOPMENT_SETTINGS"))
+    Write-Host "Developer Options opened. Enable 'Stay awake' (screen will never sleep while charging), then return to Mimeo."
 }
 
 function Start-MimeoApp {
@@ -167,7 +178,18 @@ function Start-MimeoApp {
     Start-Sleep -Seconds 2
 }
 
+function Dismiss-AutofillUiIfPresent {
+    foreach ($attempt in 1..3) {
+        $window = (Invoke-Adb -Arguments @("shell", "dumpsys", "window")) -join "`n"
+        if ($window -notmatch 'mCurrentFocus=.*Autofill UI') { return }
+        [void](Invoke-Adb -Arguments @("shell", "input", "keyevent", "KEYCODE_BACK"))
+        Start-Sleep -Milliseconds 500
+    }
+    throw "Android Autofill UI remained visible after three safe dismiss attempts. Close the password-manager overlay manually."
+}
+
 function Get-UiDocument {
+    Dismiss-AutofillUiIfPresent
     $safePackage = $PackageId -replace '[^A-Za-z0-9._-]', '_'
     $remotePath = "/sdcard/$safePackage-device-verify.xml"
     $localPath = Join-Path ([IO.Path]::GetTempPath()) "$safePackage-device-verify.xml"
@@ -211,26 +233,77 @@ function Invoke-UiTap {
     [void](Invoke-Adb -Arguments @("shell", "input", "tap", [string]$point.X, [string]$point.Y))
 }
 
+function Get-EditableFields {
+    param([Parameter(Mandatory)][xml]$Document)
+    return @(Get-UiNodes -Document $Document | Where-Object {
+        [string]$_.class -eq "android.widget.EditText"
+    } | Sort-Object { (ConvertFrom-UiBounds -Bounds ([string]$_.bounds)).Y })
+}
+
+function New-DeleteKeyArguments {
+    param([Parameter(Mandatory)][ValidateRange(1, 4096)][int]$Length)
+    $arguments = @("shell", "input", "keyevent")
+    $arguments += (1..$Length | ForEach-Object { "KEYCODE_DEL" })
+    return $arguments
+}
+
 function Clear-AndSetField {
     param(
-        [Parameter(Mandatory)]$Node,
+        [Parameter(Mandatory)][int]$FieldIndex,
         [Parameter(Mandatory)][string]$Value,
         [Parameter(Mandatory)][string]$Label,
         [switch]$Password
     )
 
     Assert-AdbInputSafe -Value $Value -Label $Label -Password:$Password
-    Invoke-UiTap -Node $Node
-    [void](Invoke-Adb -Arguments @("shell", "input", "keyevent", "KEYCODE_MOVE_END"))
+    $cleared = $false
+    foreach ($attempt in 1..5) {
+        $document = Get-UiDocument
+        $fields = @(Get-EditableFields -Document $document)
+        if ($fields.Count -le $FieldIndex) {
+            throw "$Label field disappeared while preparing input."
+        }
+        $node = $fields[$FieldIndex]
+        $currentLength = ([string]$node.text).Length
+        if ($currentLength -eq 0) {
+            # Confirm a second stable empty observation. We send exactly the observed number
+            # of deletes, so an empty field means no surplus delete events can reach new text.
+            Start-Sleep -Milliseconds 500
+            $confirmFields = @(Get-EditableFields -Document (Get-UiDocument))
+            if ($confirmFields.Count -gt $FieldIndex -and ([string]$confirmFields[$FieldIndex].text).Length -eq 0) {
+                $cleared = $true
+                break
+            }
+            continue
+        }
 
-    # One adb process sends every delete before text entry. Starting a separate adb process
-    # per delete can leave input events queued and erase the first characters subsequently typed.
-    $deleteArguments = @("shell", "input", "keyevent")
-    $deleteArguments += (1..128 | ForEach-Object { "KEYCODE_DEL" })
-    [void](Invoke-Adb -Arguments $deleteArguments)
-    Start-Sleep -Milliseconds 500
+        Invoke-UiTap -Node $node
+        Start-Sleep -Milliseconds 250
+        Dismiss-AutofillUiIfPresent
+        [void](Invoke-Adb -Arguments @("shell", "input", "keyevent", "KEYCODE_MOVE_END"))
+        $deleteArguments = New-DeleteKeyArguments -Length $currentLength
+        [void](Invoke-Adb -Arguments $deleteArguments)
+        Start-Sleep -Milliseconds 500
+    }
+    if (-not $cleared) {
+        throw "$Label field could not be cleared and stabilized. Submission was stopped."
+    }
+
+    $readyFields = @(Get-EditableFields -Document (Get-UiDocument))
+    Invoke-UiTap -Node $readyFields[$FieldIndex]
+    Start-Sleep -Milliseconds 250
+    Dismiss-AutofillUiIfPresent
     [void](Invoke-Adb -Arguments @("shell", "input", "text", $Value) -Sensitive:$Password)
-    Start-Sleep -Milliseconds 500
+    Start-Sleep -Milliseconds 750
+
+    $enteredFields = @(Get-EditableFields -Document (Get-UiDocument))
+    if ($enteredFields.Count -le $FieldIndex) { throw "$Label field disappeared after input." }
+    $enteredText = [string]$enteredFields[$FieldIndex].text
+    $matches = if ($Password) { $enteredText.Length -eq $Value.Length } else { $enteredText -eq $Value }
+    if (-not $matches) {
+        $detail = if ($Password) { "length did not match" } else { "text did not match" }
+        throw "$Label entry $detail the requested value. Submission was stopped."
+    }
 }
 
 function Get-PlainPassword {
@@ -246,6 +319,21 @@ function Get-PlainPassword {
     } finally {
         [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
     }
+}
+
+function Assert-ServerReachableFromDevice {
+    try {
+        $response = Invoke-Adb -Arguments @(
+            "shell", "curl", "--head", "--silent", "--show-error",
+            "--connect-timeout", "5", "--max-time", "8", $ServerUrl
+        )
+        if (($response -join "`n") -notmatch '^HTTP/') {
+            throw "No HTTP status line returned."
+        }
+    } catch {
+        throw "Backend is not reachable from the Android device at $ServerUrl. Verify the canonical runtime and Tailscale/Wi-Fi path before entering credentials. No sign-in submission was attempted."
+    }
+    Write-Host "Device HTTPS preflight passed: $ServerUrl"
 }
 
 function Wait-ForUiState {
@@ -274,10 +362,9 @@ function Invoke-MimeoSignIn {
         Write-Host "Sign-in screen is not present; keeping the current authenticated session."
         return
     }
+    Assert-ServerReachableFromDevice
 
-    $editFields = Get-UiNodes -Document $document | Where-Object {
-        [string]$_.class -eq "android.widget.EditText"
-    } | Sort-Object { (ConvertFrom-UiBounds -Bounds ([string]$_.bounds)).Y }
+    $editFields = @(Get-EditableFields -Document $document)
     $nonPasswordFields = @($editFields | Where-Object { [string]$_.password -ne "true" })
     $passwordField = $editFields | Where-Object { [string]$_.password -eq "true" } | Select-Object -First 1
     if ($nonPasswordFields.Count -lt 2 -or $null -eq $passwordField) {
@@ -286,16 +373,14 @@ function Invoke-MimeoSignIn {
 
     $plainPassword = Get-PlainPassword
     try {
-        Clear-AndSetField -Node $nonPasswordFields[0] -Value $ServerUrl -Label "Server URL"
-        Clear-AndSetField -Node $nonPasswordFields[1] -Value $Username -Label "Username"
-        Clear-AndSetField -Node $passwordField -Value $plainPassword -Label "Password" -Password
+        Clear-AndSetField -FieldIndex 0 -Value $ServerUrl -Label "Server URL"
+        Clear-AndSetField -FieldIndex 1 -Value $Username -Label "Username"
+        Clear-AndSetField -FieldIndex 2 -Value $plainPassword -Label "Password" -Password
 
         # Verify the hierarchy received the complete values before submitting. This catches
         # delayed deletes or dropped input without revealing the password itself.
         $enteredDocument = Get-UiDocument
-        $enteredFields = Get-UiNodes -Document $enteredDocument | Where-Object {
-            [string]$_.class -eq "android.widget.EditText"
-        } | Sort-Object { (ConvertFrom-UiBounds -Bounds ([string]$_.bounds)).Y }
+        $enteredFields = @(Get-EditableFields -Document $enteredDocument)
         $enteredNonPassword = @($enteredFields | Where-Object { [string]$_.password -ne "true" })
         $enteredPassword = $enteredFields | Where-Object { [string]$_.password -eq "true" } | Select-Object -First 1
         if ($enteredNonPassword.Count -lt 2 -or ([string]$enteredNonPassword[0].text) -ne $ServerUrl -or
@@ -320,10 +405,14 @@ function Invoke-MimeoSignIn {
         param($ui)
         (Test-UiText -Document $ui -Text "Mimeo") -or
             (Test-UiText -Document $ui -Text "Later") -or
+            (Test-UiText -Document $ui -Text "Couldn't reach server" -Contains) -or
             (Test-UiText -Document $ui -Text "Invalid username or password" -Contains)
     }
     if (Test-UiText -Document $document -Text "Invalid username or password" -Contains) {
         throw "Mimeo rejected the credentials. The helper did not log or persist the password."
+    }
+    if (Test-UiText -Document $document -Text "Couldn't reach server" -Contains) {
+        throw "Mimeo could not reach the backend after credential entry. Re-run the device HTTPS preflight before retrying; the password was not logged or persisted by the helper."
     }
     if ((Test-DeviceLocked) -or -not (
         (Test-UiText -Document $document -Text "Mimeo") -or
@@ -450,6 +539,10 @@ function Invoke-SelfTest {
     $secret = "NeverPrintMe123"
     $summary = Get-AdbCommandSummary -Arguments @("shell", "input", "text", $secret) -Sensitive
     if ($summary.Contains($secret) -or -not $summary.Contains("redacted")) { throw "Sensitive adb summary self-test failed." }
+    $deleteArguments = New-DeleteKeyArguments -Length 12
+    if ($deleteArguments.Count -ne 15 -or @($deleteArguments | Where-Object { $_ -eq "KEYCODE_DEL" }).Count -ne 12) {
+        throw "Exact delete-count self-test failed."
+    }
     Write-Host "Self-test passed: semantic bounds, OnePlus 7T 1080x2287 fallbacks, and safe adb input rules."
 }
 
@@ -463,6 +556,10 @@ Assert-AdbTarget
 switch ($Action) {
     "Prepare" {
         Prepare-Device
+    }
+    "OpenDeveloperOptions" {
+        Prepare-Device
+        Open-DeveloperOptions
     }
     "Status" {
         Show-DeviceStatus
