@@ -14,6 +14,18 @@ import org.junit.Test
 class SessionSourcePresentationTest {
 
     @Test
+    fun authoritativeSeedLabelIsPreservedWithoutLocalPlaylistIdentity() {
+        val presentation = resolveSessionSeedSourcePresentation(
+            sessionSourcePlaylistId = null,
+            sessionSeedSourceLabel = "Shared reading list",
+            selectedPlaylistId = null,
+            playlists = emptyList(),
+        )
+
+        assertEquals("Shared reading list", presentation.seededFromLabel)
+    }
+
+    @Test
     fun resolvesSeedPresentation_whenSessionSeedAndCurrentSourceDiffer() {
         val presentation = resolveSessionSeedSourcePresentation(
             sessionSourcePlaylistId = 10,

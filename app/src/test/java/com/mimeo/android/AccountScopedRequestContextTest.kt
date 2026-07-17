@@ -177,4 +177,24 @@ class SettingsScreenAuthTargetChangedTest {
     fun blankToBlankToken_isNotAnAuthTargetChange() {
         assertFalse(settingsScreenAuthTargetChanged(previousToken = "", nextToken = " "))
     }
+
+    @Test
+    fun canonicalEndpointSwitchIsAContinuityBoundary() {
+        assertTrue(
+            settingsScreenEndpointChanged(
+                previousBaseUrl = "https://one.example.com",
+                nextBaseUrl = "https://two.example.com",
+            ),
+        )
+    }
+
+    @Test
+    fun trailingSlashAndHostCaseDoNotCreateFalseEndpointSwitch() {
+        assertFalse(
+            settingsScreenEndpointChanged(
+                previousBaseUrl = "https://Reader.Example.com/",
+                nextBaseUrl = "https://reader.example.com",
+            ),
+        )
+    }
 }

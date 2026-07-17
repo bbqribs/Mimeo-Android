@@ -60,6 +60,25 @@ Local verification stays broader than the PR gate — run the full
 `.\gradlew.bat :app:testDebugUnitTest` and any ticket-specific suites (e.g. the
 Playback Scroll Guard suite below) before pushing.
 
+## Physical-device verification helper
+
+Use `scripts/android-device-verify.ps1` instead of ad hoc coordinates for
+physical-device preparation, sign-in, Up Next navigation and evidence capture.
+The helper is UI-hierarchy-first, handles the debug-package/activity-name split,
+avoids delayed-delete credential corruption, dismisses common password-manager
+prompts, verifies every entered field before submission, checks secure lock
+state, and records model/dimensions with evidence.
+
+```powershell
+.\scripts\android-device-verify.ps1 -Action SelfTest
+.\scripts\android-device-verify.ps1 -Action Prepare
+.\scripts\android-device-verify.ps1 -Action SignInAndOpenUpNext
+```
+
+Full usage, credential handling, OnePlus 7T (`HD1905`, `1080x2287`) reference
+geometry, and lifecycle assertions are documented in
+`docs/ANDROID_DEVICE_VERIFICATION_RUNBOOK.md`.
+
 ## Locus UI invariants
 
 Copy this checklist into any PR that changes Locus or player UI:

@@ -94,4 +94,11 @@ class UpNextSectionPresentationTest {
     fun `scroll target matches active offset truncated to int`() {
         assertEquals(342, nowPlayingScrollTargetPx(342.9f))
     }
+
+    @Test
+    fun `session panel keeps every item upcoming when authority has no active item`() {
+        assertEquals(-1, sessionPanelActiveIndex(currentItemId = null, localItemIds = listOf(7, 8)))
+        assertEquals(-1, sessionPanelActiveIndex(currentItemId = 9, localItemIds = listOf(7, 8)))
+        assertEquals(1, sessionPanelActiveIndex(currentItemId = 8, localItemIds = listOf(7, 8)))
+    }
 }

@@ -2,6 +2,7 @@ package com.mimeo.android.repository
 
 import android.content.Context
 import android.util.Log
+import androidx.room.withTransaction
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.data.ApiClient
 import com.mimeo.android.data.ApiException
@@ -10,6 +11,7 @@ import com.mimeo.android.data.QueueFetchResult
 import com.mimeo.android.data.entities.NowPlayingEntity
 import com.mimeo.android.data.entities.CachedItemEntity
 import com.mimeo.android.data.entities.PendingProgressEntity
+import com.mimeo.android.data.entities.UpNextSyncEntity
 import com.mimeo.android.model.ArticleSummary
 import com.mimeo.android.model.ContentSummaryOut
 import com.mimeo.android.model.AiProviderConfigIn
@@ -24,6 +26,8 @@ import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.model.SmartPlaylistDetail
 import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.model.SmartPlaylistWriteRequest
+import com.mimeo.android.model.UpNextSession
+import com.mimeo.android.model.UpNextSessionItem
 import com.mimeo.android.work.WorkScheduler
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -79,6 +83,8 @@ data class NowPlayingSession(
     val updatedAt: Long,
     val sourcePlaylistId: Int?,
     val historyItems: List<NowPlayingSessionItem> = emptyList(),
+    val seedSourceKind: String = "custom",
+    val seedSourceLabel: String = "Android Up Next",
 ) {
     val currentItem: NowPlayingSessionItem?
         get() = items.getOrNull(currentIndex)
@@ -128,6 +134,15 @@ internal fun <T> computeNowPlayingSessionSections(
             upNext = emptyList(),
         )
     }
+    if (currentIndex == -1) {
+        val sessionItemIds = items.mapTo(hashSetOf(), itemId)
+        return NowPlayingSessionSections(
+            history = historyItems.filterNot { itemId(it) in sessionItemIds },
+            earlierInQueue = emptyList(),
+            active = null,
+            upNext = items,
+        )
+    }
     val sessionItemIds = items.mapTo(hashSetOf(), itemId)
     val safeCurrent = currentIndex.coerceIn(0, items.lastIndex)
     return NowPlayingSessionSections(
@@ -152,6 +167,13 @@ internal fun computeSessionIndexMovePlan(
     priorActiveToHistory: Boolean,
 ): SessionIndexMovePlan? {
     if (itemIds.isEmpty()) return null
+    if (currentIndex == -1) {
+        return SessionIndexMovePlan(
+            itemIds = itemIds,
+            currentIndex = targetIndex.coerceIn(0, itemIds.lastIndex),
+            historyItemIds = historyItemIds.filterNot { it in itemIds },
+        )
+    }
     val safeCurrent = currentIndex.coerceIn(0, itemIds.lastIndex)
     val safeTarget = targetIndex.coerceIn(0, itemIds.lastIndex)
     if (safeTarget == safeCurrent) {
@@ -187,6 +209,14 @@ internal fun computeSessionHistoryJumpPlan(
 ): SessionIndexMovePlan? {
     if (itemIds.isEmpty()) return null
     if (selectedHistoryItemId !in historyItemIds) return null
+    if (currentIndex == -1) {
+        val plannedItems = (listOf(selectedHistoryItemId) + itemIds).distinct()
+        return SessionIndexMovePlan(
+            itemIds = plannedItems,
+            currentIndex = 0,
+            historyItemIds = historyItemIds.filter { it != selectedHistoryItemId && it !in plannedItems },
+        )
+    }
     val safeCurrent = currentIndex.coerceIn(0, itemIds.lastIndex)
     val priorActiveItemId = itemIds[safeCurrent]
     val earlier = itemIds.take(safeCurrent)
@@ -206,6 +236,7 @@ internal fun computePreviousSessionPlan(
     historyItemIds: List<Int>,
 ): SessionIndexMovePlan? {
     if (itemIds.isEmpty()) return null
+    if (currentIndex == -1) return null
     val safeCurrent = currentIndex.coerceIn(0, itemIds.lastIndex)
     if (safeCurrent > 0) {
         return SessionIndexMovePlan(
@@ -234,7 +265,7 @@ internal fun computeSessionReorderPlan(
     val normalizedFrom = fromIndex.coerceIn(0, maxIndex)
     val normalizedTo = toIndex.coerceIn(0, maxIndex)
     if (normalizedFrom == normalizedTo) return null
-    val safeCurrent = currentIndex.coerceIn(0, maxIndex)
+    val safeCurrent = if (currentIndex == -1) -1 else currentIndex.coerceIn(0, maxIndex)
     val normalizedCurrent = when {
         safeCurrent == normalizedFrom -> normalizedTo
         normalizedFrom < safeCurrent && normalizedTo >= safeCurrent -> safeCurrent - 1
@@ -253,6 +284,7 @@ internal fun computeClearUpcomingKeepCount(
     currentIndex: Int,
 ): Int {
     if (itemCount <= 0) return 0
+    if (currentIndex == -1) return 0
     return currentIndex.coerceIn(0, itemCount - 1) + 1
 }
 
@@ -262,6 +294,9 @@ internal fun computePlayNowSessionItemOrder(
     selectedItemId: Int,
 ): List<Int> {
     if (itemIds.isEmpty()) return listOf(selectedItemId)
+    if (currentIndex == -1) {
+        return listOf(selectedItemId) + itemIds.filterNot { it == selectedItemId }
+    }
     val safeCurrentIndex = currentIndex.coerceIn(0, itemIds.lastIndex)
     val existingIndex = itemIds.indexOf(selectedItemId)
     if (existingIndex == safeCurrentIndex) return itemIds
@@ -855,6 +890,8 @@ class PlaybackRepository(
         queueItems: List<PlaybackQueueItem>,
         startItemId: Int,
         sourcePlaylistId: Int?,
+        seedSourceKind: String = "custom",
+        seedSourceLabel: String = "Android Up Next",
     ): NowPlayingSession {
         if (queueItems.isEmpty()) {
             throw IllegalArgumentException("Cannot start now playing session from empty queue")
@@ -868,6 +905,8 @@ class PlaybackRepository(
             currentIndex = currentIndex,
             updatedAt = updatedAt,
             sourcePlaylistId = sourcePlaylistId,
+            seedSourceKind = seedSourceKind,
+            seedSourceLabel = seedSourceLabel,
         )
         database.nowPlayingDao().upsert(row)
         return row.toSession(stored)
@@ -877,6 +916,8 @@ class PlaybackRepository(
         sourceItems: List<PlaybackQueueItem>,
         preferredCurrentItemId: Int?,
         sourcePlaylistId: Int?,
+        seedSourceKind: String = "custom",
+        seedSourceLabel: String = "Android Up Next",
     ): NowPlayingSession? {
         if (sourceItems.isEmpty()) {
             database.nowPlayingDao().clear()
@@ -889,7 +930,150 @@ class PlaybackRepository(
             queueItems = sourceItems,
             startItemId = startItemId,
             sourcePlaylistId = sourcePlaylistId,
+            seedSourceKind = seedSourceKind,
+            seedSourceLabel = seedSourceLabel,
         )
+    }
+
+    suspend fun readUpNextSyncMetadata(): UpNextSyncEntity? = database.upNextSyncDao().get()
+
+    suspend fun prepareUpNextSyncScope(
+        ownerKey: String,
+        serverIdentity: String,
+    ): UpNextSyncEntity = database.withTransaction {
+        val dao = database.upNextSyncDao()
+        val existing = dao.get()
+        if (existing == null || existing.ownerKey.isBlank() || existing.serverIdentity.isBlank()) {
+            val initialized = (existing ?: UpNextSyncEntity(
+                ownerKey = ownerKey,
+                serverIdentity = serverIdentity,
+                capability = UpNextCapability.UNKNOWN.name,
+            )).copy(ownerKey = ownerKey, serverIdentity = serverIdentity)
+            dao.upsert(initialized)
+            return@withTransaction initialized
+        }
+        if (existing.ownerKey != ownerKey || existing.serverIdentity != serverIdentity) {
+            database.nowPlayingDao().clear()
+            val reset = UpNextSyncEntity(
+                ownerKey = ownerKey,
+                serverIdentity = serverIdentity,
+                capability = UpNextCapability.UNKNOWN.name,
+            )
+            dao.upsert(reset)
+            return@withTransaction reset
+        }
+        existing
+    }
+
+    suspend fun markUpNextDirty() {
+        val dao = database.upNextSyncDao()
+        val existing = dao.get()
+        dao.upsert(
+            (existing ?: UpNextSyncEntity(
+                ownerKey = "",
+                serverIdentity = "",
+                capability = UpNextCapability.UNKNOWN.name,
+            )).copy(dirty = true),
+        )
+    }
+
+    suspend fun markUpNextUnsupported(ownerKey: String, serverIdentity: String) {
+        database.upNextSyncDao().upsert(
+            UpNextSyncEntity(
+                ownerKey = ownerKey,
+                serverIdentity = serverIdentity,
+                capability = UpNextCapability.UNSUPPORTED.name,
+            ),
+        )
+    }
+
+    suspend fun markUpNextCleanAbsent(ownerKey: String, serverIdentity: String) {
+        database.upNextSyncDao().upsert(
+            UpNextSyncEntity(
+                ownerKey = ownerKey,
+                serverIdentity = serverIdentity,
+                capability = UpNextCapability.SUPPORTED.name,
+                serverVersion = null,
+                dirty = false,
+            ),
+        )
+    }
+
+    internal suspend fun localUpNextSnapshot(): LocalUpNextSnapshot? {
+        val row = database.nowPlayingDao().getSession() ?: return null
+        val items = parseStoredNowPlaying(row.queueJson)
+        if (items.isEmpty()) return null
+        val currentItemId = row.currentIndex
+            .takeIf { it >= 0 }
+            ?.let(items::getOrNull)
+            ?.itemId
+        return LocalUpNextSnapshot(
+            itemIds = items.map { it.itemId },
+            currentItemId = currentItemId,
+            seedSourceKind = row.seedSourceKind,
+            seedSourceLabel = row.seedSourceLabel,
+        )
+    }
+
+    suspend fun applyAuthoritativeUpNextSession(
+        session: UpNextSession?,
+        ownerKey: String,
+        serverIdentity: String,
+    ): NowPlayingSession? = database.withTransaction {
+        val nowPlayingDao = database.nowPlayingDao()
+        val existingRow = nowPlayingDao.getSession()
+        val existingItems = existingRow?.let { parseStoredNowPlaying(it.queueJson) }.orEmpty()
+        val existingHistory = existingRow?.let { parseStoredNowPlayingHistory(it.queueJson) }.orEmpty()
+        if (session == null || session.items.isEmpty()) {
+            nowPlayingDao.clear()
+            database.upNextSyncDao().upsert(
+                UpNextSyncEntity(
+                    ownerKey = ownerKey,
+                    serverIdentity = serverIdentity,
+                    capability = UpNextCapability.SUPPORTED.name,
+                    serverVersion = session?.version,
+                    dirty = false,
+                ),
+            )
+            return@withTransaction null
+        }
+
+        val priorById = (existingItems + existingHistory).associateBy { it.itemId }
+        val authoritativeItems = session.items
+            .sortedBy { it.position }
+            .distinctBy { it.itemId }
+            .map { item -> priorById[item.itemId]?.mergeAuthoritative(item) ?: item.toStoredNowPlayingItem() }
+        val authoritativeIds = authoritativeItems.mapTo(hashSetOf()) { it.itemId }
+        val retainedHistory = existingHistory.filterNot { it.itemId in authoritativeIds }
+        val currentIndex = session.currentItemId
+            ?.let { activeId -> authoritativeItems.indexOfFirst { it.itemId == activeId } }
+            ?.takeIf { it >= 0 }
+            ?: -1
+        val preserveSourceId = existingRow
+            ?.takeIf {
+                it.seedSourceKind == session.seedSourceKind &&
+                    it.seedSourceLabel == session.seedSourceLabel
+            }
+            ?.sourcePlaylistId
+        val row = NowPlayingEntity(
+            queueJson = encodeStoredNowPlaying(authoritativeItems, retainedHistory),
+            currentIndex = currentIndex,
+            updatedAt = System.currentTimeMillis(),
+            sourcePlaylistId = preserveSourceId,
+            seedSourceKind = session.seedSourceKind,
+            seedSourceLabel = session.seedSourceLabel,
+        )
+        nowPlayingDao.upsert(row)
+        database.upNextSyncDao().upsert(
+            UpNextSyncEntity(
+                ownerKey = ownerKey,
+                serverIdentity = serverIdentity,
+                capability = UpNextCapability.SUPPORTED.name,
+                serverVersion = session.version,
+                dirty = false,
+            ),
+        )
+        row.toSession(authoritativeItems)
     }
 
     suspend fun getSession(): NowPlayingSession? {
@@ -1229,13 +1413,13 @@ class PlaybackRepository(
             dao.clear()
             return null
         }
-        val currentItemId = stored.getOrNull(row.currentIndex.coerceIn(0, stored.lastIndex))?.itemId
+        val currentItemId = row.currentIndex.takeIf { it in stored.indices }?.let(stored::getOrNull)?.itemId
         val insertItemIds = orderedItems.map { it.itemId }.filter { it != currentItemId }.toSet()
         if (insertItemIds.isEmpty()) return row.toSession(stored)
         stored.removeAll { it.itemId in insertItemIds }
         val newCurrentIndex = currentItemId
             ?.let { id -> stored.indexOfFirst { it.itemId == id }.takeIf { it >= 0 } }
-            ?: row.currentIndex.coerceIn(0, stored.lastIndex)
+            ?: -1
         val insertAt = (newCurrentIndex + 1).coerceIn(0, stored.size)
         orderedItems
             .filter { it.itemId in insertItemIds }
@@ -1261,9 +1445,9 @@ class PlaybackRepository(
             dao.clear()
             return startSession(listOf(item), item.itemId, null)
         }
-        var currentIndex = row.currentIndex.coerceIn(0, stored.lastIndex)
+        var currentIndex = row.currentIndex.takeIf { it in stored.indices } ?: -1
         val existingIdx = stored.indexOfFirst { it.itemId == item.itemId }
-        if (existingIdx == currentIndex) {
+        if (currentIndex >= 0 && existingIdx == currentIndex) {
             // Item is already the active item — no-op.
             return row.toSession(stored)
         }
@@ -1330,7 +1514,7 @@ class PlaybackRepository(
             return null
         }
 
-        val currentItemId = stored.getOrNull(row.currentIndex.coerceIn(0, stored.lastIndex))?.itemId
+        val currentItemId = row.currentIndex.takeIf { it in stored.indices }?.let(stored::getOrNull)?.itemId
         val appendItemIds = orderedItems
             .map { it.itemId }
             .filter { it != currentItemId }
@@ -1340,7 +1524,7 @@ class PlaybackRepository(
         stored.removeAll { it.itemId in appendItemIds }
         val updatedCurrentIndex = currentItemId
             ?.let { id -> stored.indexOfFirst { it.itemId == id }.takeIf { it >= 0 } }
-            ?: row.currentIndex.coerceIn(0, stored.lastIndex)
+            ?: -1
 
         orderedItems
             .filter { it.itemId in appendItemIds }
@@ -1373,6 +1557,7 @@ class PlaybackRepository(
         }
         // Adjust currentIndex if needed so it still points to a valid item.
         val newCurrentIndex = when {
+            row.currentIndex !in (0..stored.size) -> -1
             removeIdx < row.currentIndex -> (row.currentIndex - 1).coerceAtLeast(0)
             else -> row.currentIndex.coerceIn(0, stored.lastIndex)
         }
@@ -1484,6 +1669,10 @@ class PlaybackRepository(
         if (keepCount >= stored.size) {
             return row.toSession(stored)
         }
+        if (keepCount == 0) {
+            dao.clear()
+            return null
+        }
         val retained = stored.take(keepCount)
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
@@ -1503,6 +1692,7 @@ class PlaybackRepository(
         database.cachedItemDao().deleteAll()
         database.pendingProgressDao().deleteAll()
         database.nowPlayingDao().clear()
+        database.upNextSyncDao().clear()
     }
 
     private suspend fun enqueuePendingProgress(itemId: Int, percent: Int) {
@@ -1644,7 +1834,11 @@ class PlaybackRepository(
     }
 
     private fun NowPlayingEntity.toSession(stored: List<StoredNowPlayingItem>): NowPlayingSession {
-        val safeIndex = if (stored.isEmpty()) 0 else currentIndex.coerceIn(0, stored.lastIndex)
+        val safeIndex = if (stored.isEmpty() || currentIndex == -1) {
+            -1
+        } else {
+            currentIndex.coerceIn(0, stored.lastIndex)
+        }
         val activeItemIds = stored.mapTo(hashSetOf()) { it.itemId }
         val history = parseStoredNowPlayingHistory(queueJson).filterNot { it.itemId in activeItemIds }
         return NowPlayingSession(
@@ -1670,6 +1864,8 @@ class PlaybackRepository(
             currentIndex = safeIndex,
             updatedAt = updatedAt,
             sourcePlaylistId = sourcePlaylistId,
+            seedSourceKind = seedSourceKind,
+            seedSourceLabel = seedSourceLabel,
             historyItems = history.map { item ->
                 NowPlayingSessionItem(
                     itemId = item.itemId,
@@ -1691,6 +1887,25 @@ class PlaybackRepository(
             },
         )
     }
+
+    private fun StoredNowPlayingItem.mergeAuthoritative(item: UpNextSessionItem): StoredNowPlayingItem = copy(
+        title = item.title,
+        url = item.url,
+        host = item.host,
+        status = item.status,
+        activeContentVersionId = item.activeContentVersionId,
+        lastReadPercent = item.furthestPercent ?: item.lastReadPercent ?: lastReadPercent,
+    )
+
+    private fun UpNextSessionItem.toStoredNowPlayingItem(): StoredNowPlayingItem = StoredNowPlayingItem(
+        itemId = itemId,
+        title = title,
+        url = url,
+        host = host,
+        status = status,
+        activeContentVersionId = activeContentVersionId,
+        lastReadPercent = furthestPercent ?: lastReadPercent,
+    )
 
 }
 

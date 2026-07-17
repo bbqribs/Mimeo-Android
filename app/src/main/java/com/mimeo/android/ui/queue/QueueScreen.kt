@@ -172,12 +172,14 @@ internal fun autoDownloadStatusLines(status: AutoDownloadDiagnostics): List<Stri
 
 internal fun resolveSessionSeedSourcePresentation(
     sessionSourcePlaylistId: Int?,
+    sessionSeedSourceLabel: String? = null,
     selectedPlaylistId: Int?,
     playlists: List<PlaylistSummary>,
     smartPlaylists: List<SmartPlaylistSummary> = emptyList(),
 ): SessionSeedSourcePresentation =
     resolveSessionSeedSourcePresentationCommon(
         sessionSourcePlaylistId = sessionSourcePlaylistId,
+        sessionSeedSourceLabel = sessionSeedSourceLabel,
         selectedPlaylistId = selectedPlaylistId,
         playlists = playlists,
         smartPlaylists = smartPlaylists,
@@ -325,10 +327,11 @@ fun QueueScreen(
         playlists.firstOrNull { it.id == id }?.name
     } ?: "Smart queue"
     val canReseedFromCurrentSource = !loading
-    val hasQueueContent = nowPlayingSession?.currentItem != null
+    val hasQueueContent = nowPlayingSession?.items?.isNotEmpty() == true
     val sessionSeedPresentation = nowPlayingSession?.let { session ->
         resolveSessionSeedSourcePresentation(
             sessionSourcePlaylistId = session.sourcePlaylistId,
+            sessionSeedSourceLabel = session.seedSourceLabel,
             selectedPlaylistId = settings.selectedPlaylistId,
             playlists = playlists,
             smartPlaylists = smartPlaylists,

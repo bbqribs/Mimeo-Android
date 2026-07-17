@@ -15,15 +15,18 @@ internal data class SessionSeedSourcePresentation(
 
 internal fun resolveSessionSeedSourcePresentation(
     sessionSourcePlaylistId: Int?,
+    sessionSeedSourceLabel: String? = null,
     selectedPlaylistId: Int?,
     playlists: List<PlaylistSummary>,
     smartPlaylists: List<SmartPlaylistSummary> = emptyList(),
 ): SessionSeedSourcePresentation {
-    val seededFrom = if (sessionSourcePlaylistId == null) {
-        "Unknown source"
-    } else {
-        resolveQueueSourceLabel(sessionSourcePlaylistId, playlists, smartPlaylists)
-    }
+    val seededFrom = sessionSeedSourceLabel
+        ?.takeIf { it.isNotBlank() }
+        ?: if (sessionSourcePlaylistId == null) {
+            "Unknown source"
+        } else {
+            resolveQueueSourceLabel(sessionSourcePlaylistId, playlists, smartPlaylists)
+        }
     val currentSource = resolveQueueSourceLabel(
         selectedPlaylistId = resolveSessionSourcePlaylistId(selectedPlaylistId),
         playlists = playlists,
