@@ -1,5 +1,6 @@
 package com.mimeo.android.player
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -10,6 +11,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioFocusRequest
@@ -24,6 +26,7 @@ import android.util.Log
 import android.view.KeyEvent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import androidx.media.session.MediaButtonReceiver
 import androidx.media.session.MediaButtonReceiver.handleIntent
@@ -31,6 +34,26 @@ import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import com.mimeo.android.MainActivity
+
+internal fun postPlaybackNotificationIfAllowed(
+    context: Context,
+    notificationId: Int,
+    notification: android.app.Notification,
+): Boolean {
+    if (
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+        PackageManager.PERMISSION_GRANTED
+    ) {
+        return false
+    }
+    return try {
+        NotificationManagerCompat.from(context).notify(notificationId, notification)
+        true
+    } catch (_: SecurityException) {
+        false
+    }
+}
 
 class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     private val mediaButtonLogTag = "MimeoMediaButton"
@@ -241,7 +264,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                 isForeground = true
                 emitAudit("foregroundStart")
             } else {
-                NotificationManagerCompat.from(this).notify(notificationId, notification)
+                postPlaybackNotificationIfAllowed(this, notificationId, notification)
             }
         } else if (isForeground) {
             stopForeground(STOP_FOREGROUND_REMOVE)

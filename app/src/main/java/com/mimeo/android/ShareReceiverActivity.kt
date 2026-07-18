@@ -241,7 +241,7 @@ class ShareReceiverActivity : ComponentActivity() {
     }
 }
 
-private class ShareResultNotifications(
+internal class ShareResultNotifications(
     private val context: Context,
 ) {
     suspend fun postAccepted(): Int? {
@@ -258,8 +258,7 @@ private class ShareResultNotifications(
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setAutoCancel(true)
             .setTimeoutAfter(3_000L)
-        NotificationManagerCompat.from(context).notify(notificationId, builder.build())
-        return notificationId
+        return if (postNotificationIfAllowed(notificationId, builder.build())) notificationId else null
     }
 
     suspend fun post(result: ShareSaveResult, notificationId: Int? = null) {
@@ -298,7 +297,7 @@ private class ShareResultNotifications(
             )
         }
 
-        NotificationManagerCompat.from(context).notify(notificationId ?: nextNotificationId(), builder.build())
+        postNotificationIfAllowed(notificationId ?: nextNotificationId(), builder.build())
     }
 
     private fun ensureChannel() {
@@ -325,6 +324,19 @@ private class ShareResultNotifications(
             context,
             android.Manifest.permission.POST_NOTIFICATIONS,
         ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    internal fun postNotificationIfAllowed(
+        notificationId: Int,
+        notification: android.app.Notification,
+    ): Boolean {
+        if (!canPostNotifications()) return false
+        return try {
+            NotificationManagerCompat.from(context).notify(notificationId, notification)
+            true
+        } catch (_: SecurityException) {
+            false
+        }
     }
 
     private fun pendingIntentMutableFlag(): Int {
@@ -354,8 +366,8 @@ private class ShareResultNotifications(
     }
 }
 
-private fun deriveSourceAppPackage(intent: Intent): String? {
-    val referrerUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+internal fun deriveSourceAppPackage(intent: Intent): String? {
+    val referrerUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         intent.getParcelableExtra(Intent.EXTRA_REFERRER, Uri::class.java)
             ?: runCatching {
                 @Suppress("DEPRECATION")
