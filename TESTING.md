@@ -19,12 +19,42 @@ ones run elsewhere:
     Actions UI; the Gradle build summary (added to each run) reports the
     executed Gradle work.
 
-- **Release / full verification** — `.github/workflows/android-release-check.yml`
-  - Triggers: `main` pushes, a weekly schedule (Mondays 07:00 UTC), and manual
-    `workflow_dispatch`.
-  - Runs: `:app:assembleRelease` (unsigned; no signing secrets). This is the
-    relocated release-assemble coverage — it is moved out of the PR gate, not
-    deleted.
+- **Unsigned release / full verification** — `.github/workflows/android-release-check.yml`
+  - Triggers: every PR to `main`, `main` pushes, a weekly schedule (Mondays
+    07:00 UTC), and manual `workflow_dispatch`.
+  - Runs: `:app:verifyUnsignedRelease` with no signing secrets. The task runs
+    the complete debug unit-test suite, production `lintRelease`, release-like
+    compilation and manifest/resource processing, and packages the isolated
+    `unsignedRelease` variant. It also proves the variant has no signing config,
+    is not debuggable, and preserves the production shrinker setting.
+  - Output: package `com.mimeo.android.unsigned`, version suffix `-unsigned`.
+    It is build-failure evidence only: non-production, non-publishable, and not
+    a household distribution artifact. CI success never authorizes publication.
+  - The focused signing-lane script then proves signed-production tasks still
+    fail closed for absent, malformed, missing-keystore, invalid-credential,
+    invalid-alias, and wrong-certificate fixtures without logging fixture values.
+
+- **Signed production release** — operator machine only
+  - Requires the untracked root `keystore.properties` and the operator-held
+    keystore outside every git tree.
+  - Runs: `:app:assembleSignedProductionRelease`. The task validates the
+    production `com.mimeo.android` release variant, keystore and credentials,
+    private-key alias, and the certificate fingerprint recorded in
+    `RELEASE_NOTES.md` before producing the signed APK.
+  - `assembleRelease`, `bundleRelease`, signing/packaging/install tasks, and
+    `copyVersionedReleaseApk` remain fail-closed callers of signing validation.
+    The unsigned variant cannot be selected by a signed-production task.
+
+Local command handoff:
+
+```powershell
+# No secrets; CI-equivalent and explicitly non-publishable.
+.\gradlew.bat :app:verifyUnsignedRelease --no-daemon
+.\scripts\test-release-signing-lanes.ps1
+
+# Operator-held inputs required; does not publish or install.
+.\gradlew.bat :app:assembleSignedProductionRelease --no-daemon
+```
 
 - **Playback Scroll Guard Suite** — `.github/workflows/playback-scroll-guard.yml`
   - Path-scoped: runs only when reader/player/MainActivity paths or the scroll
@@ -45,7 +75,7 @@ ones run elsewhere:
   in 1m44s (`27615458757`, job `81650149873`). `setup-gradle` restored Gradle
   home, dependency, transform, wrapper, generated-jar, and DSL cache entries;
   the Gradle build completed in 1m6s with 18 tasks executed and 28 from cache.
-- `Android Release Check` was verified on `main` after PR #430 via manual
+- Before production signing was introduced, `Android Release Check` was verified on `main` after PR #430 via manual
   dispatch run `27614793587`: `Assemble release` succeeded in 11m28s and ran
   `:app:assembleRelease`. Release assemble was moved out of the PR gate, not
   deleted.

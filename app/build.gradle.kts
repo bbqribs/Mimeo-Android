@@ -1,26 +1,37 @@
 import java.io.File
+import java.security.KeyStore
+import java.security.MessageDigest
+import java.security.PrivateKey
+import java.util.Arrays
 import java.util.Properties
 import org.gradle.api.DefaultTask
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.TaskAction
 
 abstract class VerifyReleaseSigningInputsTask : DefaultTask() {
     @get:Input
     abstract val keystorePropertiesPresent: Property<Boolean>
 
-    @get:Input
+    @get:Internal
     abstract val keystorePropertiesPath: Property<String>
+
+    @get:Input
+    abstract val keystorePropertiesMalformed: Property<Boolean>
 
     @get:Input
     abstract val missingPropertyNames: ListProperty<String>
 
-    @get:Input
+    @get:Internal
     abstract val releaseStoreFilePath: Property<String>
 
     @get:Input
     abstract val releaseStoreFilePresent: Property<Boolean>
+
+    @get:Internal
+    abstract val releaseNotesPath: Property<String>
 
     @TaskAction
     fun verify() {
@@ -30,6 +41,12 @@ abstract class VerifyReleaseSigningInputsTask : DefaultTask() {
                     "Copy keystore.properties.example, keep the real file untracked, " +
                     "and point storeFile at the operator-held release keystore. " +
                     "Debug builds do not require signing secrets.",
+            )
+        }
+        if (keystorePropertiesMalformed.get()) {
+            throw GradleException(
+                "Release signing properties are malformed or unreadable. " +
+                    "Check keystore.properties without printing its values.",
             )
         }
         val missingProperties = missingPropertyNames.get()
@@ -45,15 +62,150 @@ abstract class VerifyReleaseSigningInputsTask : DefaultTask() {
                 "Release signing keystore file was not found. Check the storeFile value in keystore.properties.",
             )
         }
+
+        val signingProperties = Properties()
+        try {
+            File(keystorePropertiesPath.get()).inputStream().use(signingProperties::load)
+        } catch (_: Exception) {
+            throw GradleException(
+                "Release signing properties are malformed or unreadable. " +
+                    "Check keystore.properties without printing its values.",
+            )
+        }
+
+        val storePassword = signingProperties.getProperty("storePassword").toCharArray()
+        val keyPassword = signingProperties.getProperty("keyPassword").toCharArray()
+        try {
+            val keyStore = try {
+                KeyStore.getInstance(File(storeFilePath), storePassword)
+            } catch (_: Exception) {
+                throw GradleException(
+                    "Release signing keystore could not be opened with the configured storePassword.",
+                )
+            }
+            val keyAlias = signingProperties.getProperty("keyAlias")
+            if (!keyStore.containsAlias(keyAlias)) {
+                throw GradleException("Release signing keyAlias was not found in the configured keystore.")
+            }
+            val signingKey = try {
+                keyStore.getKey(keyAlias, keyPassword)
+            } catch (_: Exception) {
+                throw GradleException(
+                    "Release signing key could not be opened with the configured keyPassword.",
+                )
+            }
+            if (signingKey !is PrivateKey) {
+                throw GradleException("Release signing keyAlias does not reference a private key.")
+            }
+            val signingCertificate = keyStore.getCertificate(keyAlias)
+                ?: throw GradleException("Release signing keyAlias has no certificate.")
+            val expectedFingerprint = Regex("""SHA-256:\s*`?([0-9a-fA-F]{64})`?""")
+                .find(File(releaseNotesPath.get()).readText())
+                ?.groupValues
+                ?.get(1)
+                ?: throw GradleException(
+                    "Release signing certificate fingerprint is missing from RELEASE_NOTES.md.",
+                )
+            val actualFingerprint = MessageDigest.getInstance("SHA-256")
+                .digest(signingCertificate.encoded)
+                .joinToString("") { "%02x".format(it) }
+            if (!actualFingerprint.equals(expectedFingerprint, ignoreCase = true)) {
+                throw GradleException(
+                    "Release signing certificate does not match the fingerprint recorded in RELEASE_NOTES.md.",
+                )
+            }
+        } finally {
+            Arrays.fill(storePassword, '\u0000')
+            Arrays.fill(keyPassword, '\u0000')
+        }
+    }
+}
+
+abstract class VerifyUnsignedReleaseConfigurationTask : DefaultTask() {
+    @get:Input
+    abstract val applicationId: Property<String>
+
+    @get:Input
+    abstract val expectedApplicationId: Property<String>
+
+    @get:Input
+    abstract val signingConfigName: Property<String>
+
+    @get:Input
+    abstract val debuggable: Property<Boolean>
+
+    @get:Input
+    abstract val minifyEnabled: Property<Boolean>
+
+    @get:Input
+    abstract val productionMinifyEnabled: Property<Boolean>
+
+    @TaskAction
+    fun verify() {
+        if (applicationId.get() != expectedApplicationId.get()) {
+            throw GradleException("Unsigned release verification must use the isolated unsigned application ID.")
+        }
+        if (signingConfigName.get().isNotEmpty()) {
+            throw GradleException("Unsigned release verification must not select any signing configuration.")
+        }
+        if (debuggable.get()) {
+            throw GradleException("Unsigned release verification must not create a debuggable build.")
+        }
+        if (minifyEnabled.get() != productionMinifyEnabled.get()) {
+            throw GradleException("Unsigned release verification must preserve the production shrinker setting.")
+        }
+        logger.lifecycle(
+            "UNSIGNED RELEASE VERIFICATION: uses an isolated package, has no signing config, " +
+                "and is non-production/non-publishable.",
+        )
+    }
+}
+
+abstract class VerifySignedProductionReleaseConfigurationTask : DefaultTask() {
+    @get:Input
+    abstract val applicationId: Property<String>
+
+    @get:Input
+    abstract val expectedApplicationId: Property<String>
+
+    @get:Input
+    abstract val signingConfigName: Property<String>
+
+    @get:Input
+    abstract val debuggable: Property<Boolean>
+
+    @TaskAction
+    fun verify() {
+        if (applicationId.get() != expectedApplicationId.get()) {
+            throw GradleException("Signed production release must use the production application ID.")
+        }
+        if (signingConfigName.get() != "release") {
+            throw GradleException("Signed production release must use the release signing configuration.")
+        }
+        if (debuggable.get()) {
+            throw GradleException("Signed production release must not be debuggable.")
+        }
+        logger.lifecycle(
+            "SIGNED PRODUCTION RELEASE VERIFICATION: operator inputs, credentials, alias, " +
+                "certificate identity, package, and release variant are valid.",
+        )
     }
 }
 
 val householdVersionCode = 9
 val householdVersionName = "0.4.3"
+val productionApplicationId = "com.mimeo.android"
+val unsignedReleaseApplicationIdSuffix = ".unsigned"
 val releaseKeystorePropertiesFile = rootProject.file("keystore.properties")
+var releaseKeystorePropertiesMalformed = false
 val releaseKeystoreProperties = Properties().apply {
     if (releaseKeystorePropertiesFile.isFile) {
-        releaseKeystorePropertiesFile.inputStream().use(::load)
+        try {
+            releaseKeystorePropertiesFile.inputStream().use(::load)
+        } catch (_: Exception) {
+            releaseKeystorePropertiesMalformed = true
+            clear()
+        }
     }
 }
 val releaseSigningPropertyNames = listOf(
@@ -65,7 +217,9 @@ val releaseSigningPropertyNames = listOf(
 val missingReleaseSigningPropertyNames = releaseSigningPropertyNames.filter {
     releaseKeystoreProperties.getProperty(it).isNullOrBlank()
 }
-val releaseSigningReady = releaseKeystorePropertiesFile.isFile && missingReleaseSigningPropertyNames.isEmpty()
+val releaseSigningReady = releaseKeystorePropertiesFile.isFile &&
+    !releaseKeystorePropertiesMalformed &&
+    missingReleaseSigningPropertyNames.isEmpty()
 val releaseKeystorePropertiesPath = releaseKeystorePropertiesFile.absolutePath
 val releaseStoreFileAbsolutePath = releaseKeystoreProperties
     .getProperty("storeFile")
@@ -89,7 +243,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.mimeo.android"
+        applicationId = productionApplicationId
         minSdk = 26
         targetSdk = 35
         versionCode = householdVersionCode
@@ -124,6 +278,16 @@ android {
                 "proguard-rules.pro"
             )
         }
+        create("unsignedRelease") {
+            initWith(getByName("release"))
+            applicationIdSuffix = unsignedReleaseApplicationIdSuffix
+            versionNameSuffix = "-unsigned"
+            signingConfig = null
+        }
+    }
+
+    sourceSets.getByName("unsignedRelease") {
+        kotlin.directories += "src/release/java"
     }
 
     compileOptions {
@@ -187,24 +351,91 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
+val verifyReleaseSigningInputs = tasks.register<VerifyReleaseSigningInputsTask>("verifyReleaseSigningInputs") {
+    keystorePropertiesPresent.set(releaseKeystorePropertiesFile.isFile)
+    keystorePropertiesPath.set(releaseKeystorePropertiesPath)
+    keystorePropertiesMalformed.set(releaseKeystorePropertiesMalformed)
+    missingPropertyNames.set(missingReleaseSigningPropertyNames)
+    releaseStoreFilePath.set(releaseStoreFileAbsolutePath)
+    releaseStoreFilePresent.set(releaseStoreFileAbsolutePath.isNotBlank() && File(releaseStoreFileAbsolutePath).isFile)
+    releaseNotesPath.set(rootProject.file("RELEASE_NOTES.md").absolutePath)
+}
+
+val releaseBuildType = android.buildTypes.getByName("release")
+val unsignedReleaseBuildType = android.buildTypes.getByName("unsignedRelease")
+
+val verifyUnsignedReleaseConfiguration = tasks.register<VerifyUnsignedReleaseConfigurationTask>(
+    "verifyUnsignedReleaseConfiguration",
+) {
+    applicationId.set(productionApplicationId + unsignedReleaseBuildType.applicationIdSuffix.orEmpty())
+    expectedApplicationId.set(productionApplicationId + unsignedReleaseApplicationIdSuffix)
+    signingConfigName.set(unsignedReleaseBuildType.signingConfig?.name.orEmpty())
+    debuggable.set(unsignedReleaseBuildType.isDebuggable)
+    minifyEnabled.set(unsignedReleaseBuildType.isMinifyEnabled)
+    productionMinifyEnabled.set(releaseBuildType.isMinifyEnabled)
+}
+
+tasks.register("verifyUnsignedRelease") {
+    group = "verification"
+    description = "Runs no-secrets release checks and packages a non-production unsigned APK."
+    dependsOn(
+        verifyUnsignedReleaseConfiguration,
+        "testDebugUnitTest",
+        "lintRelease",
+        "assembleUnsignedRelease",
+    )
+    doLast {
+        logger.lifecycle(
+            "UNSIGNED RELEASE VERIFICATION PASSED: the APK is for CI build verification only; " +
+                "it is not production-signed and must not be published, distributed, or installed.",
+        )
+    }
+}
+
+val verifySignedProductionRelease = tasks.register<VerifySignedProductionReleaseConfigurationTask>(
+    "verifySignedProductionRelease",
+) {
+    group = "verification"
+    description = "Fails closed unless operator-held production signing inputs and identity are valid."
+    dependsOn(verifyReleaseSigningInputs)
+    applicationId.set(productionApplicationId + releaseBuildType.applicationIdSuffix.orEmpty())
+    expectedApplicationId.set(productionApplicationId)
+    signingConfigName.set(releaseBuildType.signingConfig?.name.orEmpty())
+    debuggable.set(releaseBuildType.isDebuggable)
+}
+
+val assembleSignedProductionRelease = tasks.register("assembleSignedProductionRelease") {
+    group = "build"
+    description = "Builds the production release only after signed-production verification passes."
+    dependsOn("assembleRelease", verifySignedProductionRelease)
+    doLast {
+        logger.lifecycle("SIGNED PRODUCTION RELEASE ASSEMBLED: operator verification is still required before publication.")
+    }
+}
+
 tasks.register<Copy>("copyVersionedReleaseApk") {
-    dependsOn("assembleRelease")
+    dependsOn(assembleSignedProductionRelease)
     from(layout.buildDirectory.file("outputs/apk/release/app-release.apk"))
     into(rootProject.layout.buildDirectory.dir("household-distribution"))
     rename("app-release.apk", "mimeo-android-v$householdVersionName-vc$householdVersionCode-release.apk")
 }
 
-tasks.register<VerifyReleaseSigningInputsTask>("verifyReleaseSigningInputs") {
-    keystorePropertiesPresent.set(releaseKeystorePropertiesFile.isFile)
-    keystorePropertiesPath.set(releaseKeystorePropertiesPath)
-    missingPropertyNames.set(missingReleaseSigningPropertyNames)
-    releaseStoreFilePath.set(releaseStoreFileAbsolutePath)
-    releaseStoreFilePresent.set(releaseStoreFileAbsolutePath.isNotBlank() && File(releaseStoreFileAbsolutePath).isFile)
-}
+val signedReleaseArtifactTaskNames = setOf(
+    "assembleRelease",
+    "bundleRelease",
+    "installRelease",
+    "makeApkFromBundleForRelease",
+    "packageRelease",
+    "packageReleaseBundle",
+    "packageReleaseUniversalApk",
+    "signReleaseBundle",
+    "validateSigningRelease",
+    "zipApksForRelease",
+)
 
 tasks.configureEach {
-    if (name == "preReleaseBuild") {
-        dependsOn("verifyReleaseSigningInputs")
+    if (name in signedReleaseArtifactTaskNames) {
+        dependsOn(verifyReleaseSigningInputs)
     }
 }
 
