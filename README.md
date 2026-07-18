@@ -83,6 +83,23 @@ from Android Studio and not a Play Store install. The operator-held release
 keystore lives outside every git tree; local signing inputs come from untracked
 `keystore.properties` copied from `keystore.properties.example`.
 
+There are deliberately separate verification commands:
+
+```powershell
+# GitHub/no-secrets lane: isolated package, unsigned, and never publishable.
+.\gradlew.bat :app:verifyUnsignedRelease --no-daemon
+
+# Operator-only lane: fails closed unless production signing inputs and identity validate.
+.\gradlew.bat :app:assembleSignedProductionRelease --no-daemon
+```
+
+The unsigned output uses `com.mimeo.android.unsigned` and an `-unsigned`
+version suffix. It must not be installed, uploaded, published, renamed as a
+household artifact, or treated as evidence that production signing succeeded.
+The signed command targets only production `com.mimeo.android`; it validates
+the configured keystore, credentials, private-key alias, and the release
+certificate fingerprint recorded in `RELEASE_NOTES.md` before packaging.
+
 Release builds use monotonically increasing `versionCode` values and are kept as
 named artifacts:
 
@@ -96,7 +113,7 @@ device proof requirements live in
 need Android Studio, Gradle, or a dev-machine cable; the member-side flow uses
 the APK artifact only.
 
-Signed-in members can also download the operator-authorised release themselves
+Signed-in members can also download the operator-authorised signed release themselves
 from the Mimeo web app (**Account → Android app**, private Tailscale HTTPS
 only); publication and guarded device installs run through Mimeo Control in the
 Mimeo repo (`docs/ANDROID_AUTHORISED_RELEASES.md` there). Debug builds install

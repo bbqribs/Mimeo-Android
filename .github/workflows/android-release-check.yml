@@ -1,11 +1,13 @@
 name: Android Release Check
 
-# Non-blocking release-assemble lane.
-# Moved out of the required PR gate so PR feedback stays fast, while release
-# build coverage is preserved on main pushes, on a weekly schedule, and on
-# manual dispatch. Produces an unsigned release APK (no signing secrets used).
+# No-secrets release verification lane. It compiles, lints, tests, and packages
+# an explicitly unsigned/non-publishable release-check APK. Production signing
+# remains an operator-only local action and no signing inputs enter GitHub.
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
@@ -19,8 +21,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  assemble-release:
-    name: Assemble release
+  verify-unsigned-release:
+    name: Verify unsigned release
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -37,5 +39,9 @@ jobs:
         with:
           add-job-summary: always
 
-      - name: Assemble release APK
-        run: .\gradlew.bat :app:assembleRelease --no-daemon --build-cache
+      - name: Verify unsigned non-publishable release
+        run: .\gradlew.bat :app:verifyUnsignedRelease --no-daemon --build-cache
+
+      - name: Test release signing lane boundaries
+        shell: powershell
+        run: powershell -ExecutionPolicy Bypass -File .\scripts\test-release-signing-lanes.ps1

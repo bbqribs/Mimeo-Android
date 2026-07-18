@@ -32,7 +32,9 @@ Authority / context:
 
 This plan supersedes the `ROADMAP.md` "productization pause" for exactly this
 narrow scope: release signing + versioned APK + sideload runbook. Play Console,
-CI, store packaging, icon/onboarding productization remain paused.
+signed CI/CD, store packaging, icon/onboarding productization remain paused.
+GitHub runs build verification only through the unsigned lane documented in
+§3.1; it does not produce a household release.
 
 ---
 
@@ -40,8 +42,10 @@ CI, store packaging, icon/onboarding productization remain paused.
 
 T-AND-DIST-MIN-1 is done when all of the following are true:
 
-1. **Signed release APK.** `.\gradlew.bat :app:assembleRelease` produces an APK
-   signed with a dedicated household release key (not a debug key).
+1. **Signed release APK.**
+   `.\gradlew.bat :app:assembleSignedProductionRelease` produces an APK signed
+   with the dedicated household release key (not a debug key). Generic
+   production release packaging remains fail closed on the same validation.
 2. **Versioned APK artifact.** Every household-distributed build is a named,
    dated artifact the operator keeps (naming in §4); "whatever APK is lying
    around" is not a distribution channel.
@@ -70,8 +74,9 @@ Work on these must not be justified by this ticket:
   endpoint). Updates are operator-delivered per §5.2.
 - **No crash-reporting SDK.** Problem reports remain the in-app opt-in flow.
 - **No app-store privacy work** (data-safety forms, privacy policy URLs).
-- **No CI/CD requirement.** Builds run on the operator's machine. If a trivial
-  script helps (§8), fine; a pipeline is out of scope.
+- **No signed-release CI/CD.** Production-signed builds run on the operator's
+  machine. GitHub's no-secrets lane verifies build health only and cannot
+  produce or publish a household release.
 - No OAuth/MFA, no household GO claim, no backend changes — those belong to
   other lanes of the household queue.
 
@@ -118,6 +123,23 @@ Work on these must not be justified by this ticket:
   `signature mismatch` error; the only path is uninstall-then-install, with the
   local-data loss above. This is why the key is backed up and why debug builds
   never go to member devices.
+
+### 3.1 Unsigned CI versus signed production
+
+- GitHub-hosted CI runs `.\gradlew.bat :app:verifyUnsignedRelease`. That task
+  compiles and packages the explicit `unsignedRelease` variant, runs production
+  release lint and unit tests, and verifies that the variant has no signing
+  configuration. Its package is `com.mimeo.android.unsigned`, its version has
+  an `-unsigned` suffix, and its output is non-production/non-publishable.
+- The release operator runs
+  `.\gradlew.bat :app:assembleSignedProductionRelease` with the real untracked
+  `keystore.properties`. Before production packaging, Gradle validates the
+  properties file, keystore, credentials, private-key alias, production
+  package/variant, and the certificate fingerprint recorded in
+  `RELEASE_NOTES.md`.
+- CI never receives signing inputs. A green unsigned check proves build health,
+  not publishability. No unsigned task is a dependency of the signed-production
+  path, and no signed-production task can select the unsigned variant.
 
 ## 4. Versioning policy
 
