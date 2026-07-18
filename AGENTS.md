@@ -1,8 +1,7 @@
 # Mimeo Android - Shared Agent Rules
 
 ## Multi-agent workflow (Codex + Claude + humans)
-- **Lane model**: Claude is the primary implementer for Mimeo-Android. Codex is secondary in this repo unless explicitly assigned an Android ticket.
-- **Default scope**: In Mimeo-Android, Codex defaults to read-only validation/support unless explicitly assigned implementation work.
+- **Model routing**: Use Mimeo's canonical [AI model routing policy](https://github.com/bbqribs/Mimeo/blob/master/docs/AI_MODEL_ROUTING_POLICY.md). Select by capability fit, harness fit, expected token efficiency, and live subscription headroom; repository ownership and agent familiarity are secondary tie-breakers only.
 - **Single-writer per PR/branch**: Exactly one agent may push commits to a given PR branch. No tag-team pushing.
 - **Merge authority**: The agent owning the ticket/branch may merge its PR.
 - **Serialized merges**: Only one merge operation may happen at a time across BOTH repos (Mimeo + Mimeo-Android).
