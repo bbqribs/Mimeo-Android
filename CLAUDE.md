@@ -1,7 +1,7 @@
 # Mimeo Android - Claude Instructions
 
 ## Multi-agent workflow (Codex + Claude + humans)
-- **Lane model**: Claude is the primary implementer for Mimeo-Android. Codex is secondary in this repo unless explicitly assigned an Android ticket.
+- **Model routing**: Use Mimeo's canonical [AI model routing policy](https://github.com/bbqribs/Mimeo/blob/master/docs/AI_MODEL_ROUTING_POLICY.md). Select by capability fit, harness fit, expected token efficiency, and live subscription headroom; repository ownership and agent familiarity are secondary tie-breakers only.
 - **Cross-repo writes**: Claude may inspect backend code for contract verification, but must require explicit cross-repo authorization before making backend changes.
 - **Single-writer per PR/branch**: Exactly one agent may push commits to a given PR branch. No tag-team pushing.
 - **Merge authority**: The agent owning the ticket/branch may merge its PR.
