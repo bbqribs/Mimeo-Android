@@ -192,8 +192,8 @@ abstract class VerifySignedProductionReleaseConfigurationTask : DefaultTask() {
     }
 }
 
-val householdVersionCode = 9
-val householdVersionName = "0.4.3"
+val householdVersionCode = 10
+val householdVersionName = "0.4.4"
 val productionApplicationId = "com.mimeo.android"
 val unsignedReleaseApplicationIdSuffix = ".unsigned"
 val releaseKeystorePropertiesFile = rootProject.file("keystore.properties")
