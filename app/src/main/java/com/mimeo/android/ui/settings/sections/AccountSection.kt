@@ -200,7 +200,7 @@ internal fun AccountSection(
                 value = token,
                 onValueChange = onTokenChange,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Device token (advanced)") },
+                label = { Text("Advanced token access (device token)") },
                 visualTransformation = PasswordVisualTransformation(),
                 singleLine = true,
             )
