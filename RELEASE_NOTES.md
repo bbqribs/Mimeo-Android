@@ -8,6 +8,30 @@ Keep this fingerprint matched to `apksigner verify --print-certs` before any
 household APK is distributed. Do not record keystore paths, passwords, or key
 material here.
 
+## 0.4.5 (versionCode 11) - 2026-07-20
+
+Artifact: `mimeo-android-v0.4.5-vc11-release.apk`
+
+- Clearer first sign-in: the sign-in screen now explains that household
+  accounts are created by the operator and set up once on the service's
+  welcome page - the app itself never creates accounts.
+- Username entry behaves like a username: no auto-capitalization, no
+  autocorrect, an exact-name hint ("not an email address"), and
+  username/password autofill hints for supported password managers.
+- "Set up or recover your account" link opens the configured service's
+  `/welcome` page in the browser - only when the entered server URL passes
+  the existing endpoint validation, and only ever to that origin.
+- Sign-in failures are easier to act on: wrong credentials (with a
+  setup-not-completed reminder), rate limiting, server temporarily
+  unavailable, and connection/URL problems now read as distinct messages.
+- The password field is cleared after a failed attempt and is no longer
+  kept across process recreation; the username is preserved.
+- Terminology aligned with the web: "Username", "Set up or recover your
+  account", "Advanced token access" for the manual device-token path.
+
+Backend: pairs with the Mimeo web onboarding pass (Mimeo PR #777); no API
+contract changes.
+
 ## 0.4.4 (versionCode 10) - 2026-07-19
 
 Artifact: `mimeo-android-v0.4.4-vc10-release.apk`

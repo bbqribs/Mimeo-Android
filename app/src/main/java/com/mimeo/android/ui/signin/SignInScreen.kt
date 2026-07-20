@@ -26,15 +26,20 @@ import androidx.compose.material3.TextButton
 import com.mimeo.android.data.ServerIdentityGuardState
 import com.mimeo.android.ui.common.LoadStatePane
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.contentType
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -60,13 +65,21 @@ fun SignInScreen(
         mutableStateOf(buildPresetServerUrl(serverPreset, scheme, defaultSignInServerUrl(initialServerUrl)))
     }
     var username by rememberSaveable { mutableStateOf("") }
-    var password by rememberSaveable { mutableStateOf("") }
+    // Deliberately not rememberSaveable: the plaintext password must not be written
+    // into the saved-instance-state bundle across process recreation.
+    var password by remember { mutableStateOf("") }
     var autoDownloadEnabled by rememberSaveable(initialAutoDownloadEnabled) { mutableStateOf(initialAutoDownloadEnabled) }
     val loading = signInState is SignInState.Loading
     val errorMessage = (signInState as? SignInState.Error)?.message
     val focusManager = LocalFocusManager.current
     val usernameFocusRequester = remember { FocusRequester() }
     val passwordFocusRequester = remember { FocusRequester() }
+    val uriHandler = LocalUriHandler.current
+
+    // A failed attempt keeps the username but never redisplays the password.
+    LaunchedEffect(signInState) {
+        if (signInState is SignInState.Error) password = ""
+    }
 
     fun submit() {
         val trimmedUrl = serverUrl.trim()
@@ -95,7 +108,9 @@ fun SignInScreen(
                     style = MaterialTheme.typography.headlineSmall,
                 )
                 Text(
-                    text = "Enter your server URL and account credentials to get a device token for this app.",
+                    text = "Sign in with the username and password for your household Mimeo account. " +
+                        "The server URL and your credentials are separate: the URL says where the service lives, " +
+                        "and your account was created for you by the household operator - the app can't create accounts.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -169,11 +184,13 @@ fun SignInScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .focusRequester(usernameFocusRequester),
-                    label = { Text("Username or email") },
+                        .focusRequester(usernameFocusRequester)
+                        .semantics { contentType = ContentType.Username },
+                    label = { Text("Username") },
+                    supportingText = { Text("The short name assigned by your household operator - not an email address.") },
                     singleLine = true,
                     enabled = !loading,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardOptions = signInUsernameKeyboardOptions(),
                     keyboardActions = KeyboardActions(
                         onNext = { passwordFocusRequester.requestFocus() },
                     ),
@@ -186,15 +203,13 @@ fun SignInScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .focusRequester(passwordFocusRequester),
+                        .focusRequester(passwordFocusRequester)
+                        .semantics { contentType = ContentType.Password },
                     label = { Text("Password") },
                     singleLine = true,
                     enabled = !loading,
                     visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Password,
-                        imeAction = ImeAction.Done,
-                    ),
+                    keyboardOptions = signInPasswordKeyboardOptions(),
                     keyboardActions = KeyboardActions(onDone = { submit() }),
                 )
                 Row(
@@ -242,6 +257,26 @@ fun SignInScreen(
                     } else {
                         Text("Sign In")
                     }
+                }
+                val welcomeUrl = buildWelcomeUrl(serverUrl)
+                if (welcomeUrl != null) {
+                    Text(
+                        text = "Set up or recover your account",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable(enabled = !loading) { uriHandler.openUri(welcomeUrl) },
+                    )
+                    Text(
+                        text = "Opens the service's welcome page in your browser, where a setup or reset code from the operator is redeemed and you choose your password.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Text(
+                        text = "To set up or recover your account, enter your server URL above, then open the service's welcome page in a browser and redeem the setup or reset code from your operator.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 Text(
                     text = "Advanced settings",
