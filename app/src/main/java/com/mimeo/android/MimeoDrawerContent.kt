@@ -382,23 +382,16 @@ private fun DrawerAccountIdentityBlock(
 ) {
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
-    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 1.dp)) {
         Text(
             text = identity.usernameDisplay,
-            style = if (isV1) mTypography.row else MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = if (isV1) mColors.fg else Color.Unspecified,
-        )
-        Text(
-            text = if (identity.isSignedIn) identity.endpointDisplay else identity.authenticationState,
             style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         HorizontalDivider(
-            modifier = Modifier.padding(top = 10.dp),
+            modifier = Modifier.padding(top = 8.dp),
             color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant,
         )
     }
