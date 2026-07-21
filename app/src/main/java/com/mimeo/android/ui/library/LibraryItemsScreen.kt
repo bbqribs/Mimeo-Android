@@ -78,6 +78,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -473,6 +477,25 @@ fun LibraryItemsScreen(
         }
     }
 
+    fun submitReorder(reorderedItems: List<PlaybackQueueItem>) {
+        if (!reorderActive || reorderedItems.map { it.itemId } == readyItems.map { it.itemId }) return
+        localReorderItems = reorderedItems
+        val persistReorder = requireNotNull(onDragReorder)
+        actionScope.launch {
+            val result = persistReorder(reorderedItems.map { it.itemId })
+            if (result.isFailure) {
+                // Revert on failure. On success the authoritative ViewModel response replaces
+                // this optimistic list and the effect below clears the local state.
+                localReorderItems = null
+                refreshActionState = RefreshActionVisualState.Failure
+                delay(700)
+                if (refreshActionState == RefreshActionVisualState.Failure) {
+                    refreshActionState = RefreshActionVisualState.Idle
+                }
+            }
+        }
+    }
+
     fun finishDrag() {
         val from = draggingIndex
         val target = currentTargetIndex
@@ -480,14 +503,10 @@ fun LibraryItemsScreen(
             from in readyItems.indices &&
             target in readyItems.indices &&
             target != from
-        val reorderedItems = if (shouldReorder) {
-            readyItems.toMutableList().apply {
-                val moved = removeAt(from)
-                add(target, moved)
-            }
-        } else {
-            readyItems
-        }
+        val reorderedItems = if (shouldReorder) readyItems.toMutableList().apply {
+            val moved = removeAt(from)
+            add(target, moved)
+        } else readyItems
         val firstVisibleIndex = listState.firstVisibleItemIndex
         val firstVisibleOffset = listState.firstVisibleItemScrollOffset
         draggingIndex = -1
@@ -498,24 +517,7 @@ fun LibraryItemsScreen(
         dragStartHeights = emptyMap()
         if (!shouldReorder) return
         listState.requestScrollToItem(firstVisibleIndex, firstVisibleOffset)
-        localReorderItems = reorderedItems
-        val persistReorder = onDragReorder
-        actionScope.launch {
-            val result = persistReorder(reorderedItems.map { it.itemId })
-            if (result.isFailure) {
-                // Revert on failure. On success we do NOT clear localReorderItems here —
-                // the LaunchedEffect (keyed on items.map { it.itemId }) will clear it when
-                // the ViewModel's _queueItems updates with the confirmed order. If the backend
-                // returns the same item IDs in the same order, the LaunchedEffect won't fire
-                // and localReorderItems stays non-null, preserving the user's drag order.
-                localReorderItems = null
-                refreshActionState = RefreshActionVisualState.Failure
-                delay(700)
-                if (refreshActionState == RefreshActionVisualState.Failure) {
-                    refreshActionState = RefreshActionVisualState.Idle
-                }
-            }
-        }
+        submitReorder(reorderedItems)
     }
 
     val sectionedReadyItems: List<LibraryListEntry> = remember(readyItems, sortOption, searchQuery, isBin) {
@@ -842,6 +844,33 @@ fun LibraryItemsScreen(
                                         } else if (showSourceListRule) {
                                             Modifier.drawBehind {
                                                 drawRect(ruleColor, Offset.Zero, Size(3.dp.toPx(), size.height))
+                                            }
+                                        } else Modifier,
+                                    )
+                                    .then(
+                                        if (reorderActive && readyIndex >= 0) {
+                                            Modifier.semantics {
+                                                stateDescription = when (readyIndex) {
+                                                    0 -> "First item; Move up unavailable"
+                                                    readyItems.lastIndex -> "Last item; Move down unavailable"
+                                                    else -> "Reorder available"
+                                                }
+                                                customActions = buildList {
+                                                    if (readyIndex > 0) add(CustomAccessibilityAction("Move up") {
+                                                        submitReorder(readyItems.toMutableList().apply {
+                                                            val moved = removeAt(readyIndex)
+                                                            add(readyIndex - 1, moved)
+                                                        })
+                                                        true
+                                                    })
+                                                    if (readyIndex < readyItems.lastIndex) add(CustomAccessibilityAction("Move down") {
+                                                        submitReorder(readyItems.toMutableList().apply {
+                                                            val moved = removeAt(readyIndex)
+                                                            add(readyIndex + 1, moved)
+                                                        })
+                                                        true
+                                                    })
+                                                }
                                             }
                                         } else Modifier,
                                     )

@@ -201,9 +201,44 @@ data class PlaybackQueueResponse(
     val count: Int,
     @SerialName("total_count") val totalCount: Int = 0,
     @SerialName("active_scope_limit") val activeScopeLimit: Int? = null,
+    /** Present only on the user-scoped, unfiltered Smart Queue projection. */
+    val revision: String? = null,
     @SerialName("reorder_allowed") val reorderAllowed: Boolean = false,
     @SerialName("reorder_unavailable_reason") val reorderUnavailableReason: String? = null,
     val items: List<PlaybackQueueItem>,
+)
+
+@Serializable
+data class SmartQueueReorderEntry(
+    @SerialName("item_id") val itemId: Int,
+    val position: Double,
+)
+
+@Serializable
+data class SmartQueueReorderResponse(
+    val revision: String,
+    @SerialName("reorder_allowed") val reorderAllowed: Boolean,
+    val count: Int,
+    val items: List<SmartQueueReorderEntry>,
+)
+
+@Serializable
+data class SmartQueueConflictError(
+    val code: String,
+    val message: String? = null,
+)
+
+@Serializable
+data class SmartQueueConflictCurrentQueue(
+    val revision: String,
+    @SerialName("item_ids") val itemIds: List<Int>,
+    @SerialName("active_scope_limit") val activeScopeLimit: Int,
+)
+
+@Serializable
+data class SmartQueueConflictResponse(
+    val error: SmartQueueConflictError,
+    @SerialName("current_queue") val currentQueue: SmartQueueConflictCurrentQueue? = null,
 )
 
 @Serializable

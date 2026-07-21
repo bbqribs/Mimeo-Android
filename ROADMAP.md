@@ -93,9 +93,9 @@ gated on the final QA matrix in
    Next. New items default to the top; user-adjusted relative order persists
    below/around new arrivals. Android reorder UI is blocked until the Mimeo
    backend owns a Smart Queue ordinal/rank contract and reorder endpoint
-   (CONTRACT CHANGE). V1 search remains supported, but drag reorder should be
-   disabled while search/filter is active unless filtered-reorder semantics
-   are explicitly specified.
+   (CONTRACT CHANGE). Android now adopts the server revision precondition and
+   conflict recovery for persisted Smart Queue order; V1 search remains
+   supported, but every reorder path is disabled while search/filter is active.
    Smart Queue source idiom (accent left rule on header, reorder status,
    per-row source-list rule) shipped in M-V2-03; drag reorder preserved.
 5. [ ] **Startup polish cluster.** No sign-in flash for restored sessions,
