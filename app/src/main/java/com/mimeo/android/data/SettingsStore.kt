@@ -66,6 +66,8 @@ class SettingsStore(private val context: Context) {
     private val lanBaseUrlKey: Preferences.Key<String> = stringPreferencesKey("lan_base_url")
     private val remoteBaseUrlKey: Preferences.Key<String> = stringPreferencesKey("remote_base_url")
     private val tokenKey: Preferences.Key<String> = stringPreferencesKey("api_token")
+    private val authenticatedUsernameKey: Preferences.Key<String> =
+        stringPreferencesKey("authenticated_username")
     private val authTokenVersionKey: Preferences.Key<Int> = intPreferencesKey("auth_token_version")
     private val autoAdvanceOnCompletionKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("auto_advance_on_completion")
@@ -196,6 +198,7 @@ class SettingsStore(private val context: Context) {
             lanBaseUrl = lanBaseUrl,
             remoteBaseUrl = remoteBaseUrl,
             apiToken = persistedToken,
+            authenticatedUsername = if (persistedToken.isBlank()) "" else prefs[authenticatedUsernameKey].orEmpty().trim(),
             autoAdvanceOnCompletion = prefs[autoAdvanceOnCompletionKey] ?: true,
             autoArchiveAtArticleEnd = prefs[autoArchiveAtArticleEndKey] ?: false,
             speakTitleBeforeArticle = prefs[speakTitleBeforeArticleKey] ?: true,
@@ -329,7 +332,8 @@ class SettingsStore(private val context: Context) {
         val previousPrefs = context.dataStore.data.first()
         val previousToken = authTokenStorage.readToken()
             .ifBlank { previousPrefs[tokenKey].orEmpty().trim() }
-        val readerAccountContextChanged = previousToken != trimmedToken ||
+        val tokenChanged = previousToken != trimmedToken
+        val readerAccountContextChanged = tokenChanged ||
             normalizeServerIdentity(previousPrefs[baseUrlKey].orEmpty()) != normalizeServerIdentity(trimmedBaseUrl)
         val tokenWriteResult = withContext(Dispatchers.IO) { authTokenStorage.writeToken(trimmedToken) }
         context.dataStore.edit { prefs ->
@@ -340,6 +344,14 @@ class SettingsStore(private val context: Context) {
             prefs[remoteBaseUrlKey] = remoteBaseUrl.trim()
             prefs[tokenKey] = if (tokenWriteResult.usedLegacyFallback) trimmedToken else ""
             prefs[authTokenVersionKey] = (prefs[authTokenVersionKey] ?: 0) + 1
+            if (trimmedToken.isNotBlank()) {
+                prefs[serverIdentityKey] = normalizeServerIdentity(trimmedBaseUrl)
+            }
+            // The advanced token field has no username assertion, so a replacement cannot
+            // inherit the previous account label.
+            if (tokenChanged || trimmedToken.isBlank()) {
+                prefs.remove(authenticatedUsernameKey)
+            }
             if (readerAccountContextChanged) {
                 prefs[readerScrollOffsetByItemJsonKey] = encodeReaderScrollOffsetRecords(emptyList())
             }
@@ -607,6 +619,7 @@ class SettingsStore(private val context: Context) {
             prefs[tokenKey] = if (tokenWriteResult.usedLegacyFallback) trimmedToken else ""
             prefs[authTokenVersionKey] = (prefs[authTokenVersionKey] ?: 0) + 1
             prefs[serverIdentityKey] = normalizeServerIdentity(trimmedBaseUrl)
+            prefs[authenticatedUsernameKey] = accountIdentity.orEmpty().trim()
             prefs[localStateOwnerKey] = localStateOwnerKeyFor(
                 baseUrl = trimmedBaseUrl,
                 accountIdentity = accountIdentity,
@@ -702,6 +715,7 @@ class SettingsStore(private val context: Context) {
             prefs[authTokenVersionKey] = (prefs[authTokenVersionKey] ?: 0) + 1
             if (trimmedToken.isBlank()) {
                 prefs.remove(localStateOwnerKey)
+                prefs.remove(authenticatedUsernameKey)
             }
         }
     }

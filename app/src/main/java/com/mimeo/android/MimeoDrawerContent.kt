@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.SmartPlaylistSummary
+import com.mimeo.android.ui.common.AuthenticatedIdentityPresentation
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
@@ -63,6 +64,7 @@ internal fun MimeoDrawerContent(
     drawerItems: List<DrawerDestination>,
     playlists: List<PlaylistSummary>,
     smartPlaylists: List<SmartPlaylistSummary>,
+    identity: AuthenticatedIdentityPresentation,
     selectedDrawerRoute: String,
     onNavItemClick: (route: String) -> Unit,
     onPlaylistClick: (playlistId: Int) -> Unit,
@@ -143,6 +145,7 @@ internal fun MimeoDrawerContent(
                         style = if (isV1) mTypography.title else MaterialTheme.typography.titleMedium,
                         color = if (isV1) mColors.fg else Color.Unspecified,
                     )
+                    DrawerAccountIdentityBlock(identity = identity, isV1 = isV1)
                     primaryDrawerItems.forEach { destination ->
                         DrawerDestinationItem(
                             destination = destination,
@@ -369,6 +372,35 @@ internal fun MimeoDrawerContent(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun DrawerAccountIdentityBlock(
+    identity: AuthenticatedIdentityPresentation,
+    isV1: Boolean,
+) {
+    val mColors = LocalMimeoColorTokens.current
+    val mTypography = LocalMimeoTypographyTokens.current
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
+        Text(
+            text = identity.usernameDisplay,
+            style = if (isV1) mTypography.row else MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = if (isV1) mColors.fg else Color.Unspecified,
+        )
+        Text(
+            text = if (identity.isSignedIn) identity.endpointDisplay else identity.authenticationState,
+            style = if (isV1) mTypography.meta else MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        HorizontalDivider(
+            modifier = Modifier.padding(top = 10.dp),
+            color = if (isV1) mColors.line else MaterialTheme.colorScheme.outlineVariant,
+        )
     }
 }
 

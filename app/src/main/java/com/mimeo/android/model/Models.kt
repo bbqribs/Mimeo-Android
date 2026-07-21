@@ -707,6 +707,8 @@ data class AppSettings(
     val lanBaseUrl: String = DEFAULT_LAN_BASE_URL,
     val remoteBaseUrl: String = DEFAULT_REMOTE_BASE_URL,
     val apiToken: String = "",
+    /** Presentation metadata for the device session established by username/password sign-in. */
+    val authenticatedUsername: String = "",
     val autoAdvanceOnCompletion: Boolean = true,
     val autoArchiveAtArticleEnd: Boolean = false,
     val speakTitleBeforeArticle: Boolean = true,
