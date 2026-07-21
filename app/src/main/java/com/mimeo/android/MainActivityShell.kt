@@ -79,6 +79,7 @@ import com.mimeo.android.ui.playlists.SmartPlaylistFormDialog
 import com.mimeo.android.ui.playlists.SmartPlaylistFormState
 import com.mimeo.android.ui.queue.JumpToNowPlayingPill
 import com.mimeo.android.ui.common.jumpPillBottomPadding
+import com.mimeo.android.ui.common.authenticatedIdentityPresentation
 import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.ui.queue.SmartQueueScreen
 import com.mimeo.android.ui.bluesky.BlueskyBrowseScreen
@@ -179,6 +180,7 @@ internal fun MainActivityShell(
     val isOnUpNextRoute = currentRoute.startsWith(ROUTE_UP_NEXT)
     val presentingLocus = isOnLocusRoute
     val drawerAvailable = !requiresSignIn
+    val authenticatedIdentity = authenticatedIdentityPresentation(settings)
     val requestedPlayerItemId = shellState.requestedPlayerItemId
     val readerChromeHidden = shellState.readerChromeHidden
     val playerControlsVisible = !requiresSignIn && requestedPlayerItemId != null && !(presentingLocus && readerChromeHidden)
@@ -313,6 +315,7 @@ internal fun MainActivityShell(
                         drawerItems = drawerItems,
                         playlists = playlists,
                         smartPlaylists = smartPlaylists,
+                        identity = authenticatedIdentity,
                         selectedDrawerRoute = selectedDrawerRoute,
                         onNavItemClick = { route ->
                             if (route == ROUTE_UP_NEXT && selectedDrawerRoute == ROUTE_UP_NEXT) {

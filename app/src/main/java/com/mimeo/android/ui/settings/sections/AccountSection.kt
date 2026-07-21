@@ -43,6 +43,7 @@ import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
+import com.mimeo.android.ui.common.authenticatedIdentityPresentation
 import com.mimeo.android.ui.settings.ConnectionTestMessageResolver
 import com.mimeo.android.ui.settings.PASSWORD_CHANGE_MIN_LENGTH
 import com.mimeo.android.ui.settings.PasswordChangeState
@@ -115,6 +116,7 @@ internal fun AccountSection(
     val context = LocalContext.current
     val pendingManualSaves by vm.pendingManualSaves.collectAsState()
     val connectionTestSuccessByMode by vm.connectionTestSuccessByMode.collectAsState()
+    val authenticatedIdentity = authenticatedIdentityPresentation(settings)
 
     SettingsSectionHeader(
         title = "Account & Connection",
@@ -127,6 +129,26 @@ internal fun AccountSection(
                 .padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            Text(
+                text = "Account and server currently in use",
+                style = if (isV1) mTypography.row else androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                color = if (isV1) mColors.fg else Color.Unspecified,
+            )
+            Text(
+                text = "Account: ${authenticatedIdentity.usernameDisplay}",
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "Server: ${authenticatedIdentity.endpointDisplay}",
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "Authentication: ${authenticatedIdentity.authenticationState}",
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = {
@@ -180,6 +202,11 @@ internal fun AccountSection(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("${connectionMode.displayName()} Base URL") },
                 singleLine = true,
+            )
+            Text(
+                text = "Editable ${connectionMode.displayName()} endpoint. It does not change the server currently in use until Save.",
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
             )
             val endpointValidation = validateConnectionEndpoint(connectionMode, selectedModeBaseUrl())
             endpointValidation.blockingError?.let { message ->

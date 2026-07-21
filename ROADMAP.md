@@ -16,6 +16,13 @@ Planning-doc ownership decision: `docs/planning/DOCS_OWNERSHIP_DECISION.md`.
 
 ## Productization state memo
 
+- [x] **Authenticated account and endpoint identity surfaced**
+  (T-AND-ACCOUNT-IDENTITY-VISIBILITY-1; pending ticket closeout): Drawer and
+  Settings → Account & Connection now show the active session's submitted
+  account identifier, canonical endpoint origin, and sign-in state. The
+  identity is persisted with the actual device session, never comes from the
+  editable endpoint field, and clears when that token is cleared or replaced.
+
 - [x] **Server-authoritative Up Next continuity implemented** (2026-07-17;
   pending ticket PR merge): Android
   now adopts and synchronizes the per-user `/up-next/session` projection with
