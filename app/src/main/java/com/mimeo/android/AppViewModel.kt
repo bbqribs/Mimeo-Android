@@ -92,6 +92,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mimeo.android.data.ApiClient
 import com.mimeo.android.data.ApiException
+import com.mimeo.android.data.SmartQueueReorderConflictException
 import com.mimeo.android.data.UpNextVersionConflictException
 import com.mimeo.android.data.ItemBatchResponse
 import com.mimeo.android.data.AutoDownloadStatusStore
@@ -140,6 +141,7 @@ import com.mimeo.android.model.PlaylistEntrySummary
 import com.mimeo.android.model.PlaybackChunk
 import com.mimeo.android.model.PlaybackPosition
 import com.mimeo.android.model.PlaybackQueueItem
+import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.model.SmartPlaylistDetail
 import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.model.SmartPlaylistWriteRequest
@@ -293,6 +295,13 @@ internal data class AccountScopedRequestContext(
     val localStateOwner: String,
 )
 
+/** The precise server snapshot on which a Smart Queue reorder may be based. */
+private data class SmartQueueReorderSnapshot(
+    val requestContext: AccountScopedRequestContext,
+    val revision: String,
+    val itemIds: List<Int>,
+)
+
 internal fun accountScopedRequestStillCurrent(
     expected: AccountScopedRequestContext,
     current: AccountScopedRequestContext,
@@ -434,6 +443,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val smartQueueReorderUnavailableReason: StateFlow<String?> = _smartQueueReorderUnavailableReason.asStateFlow()
     private val _smartQueueReorderSaving = MutableStateFlow(false)
     val smartQueueReorderSaving: StateFlow<Boolean> = _smartQueueReorderSaving.asStateFlow()
+    private var smartQueueReorderSnapshot: SmartQueueReorderSnapshot? = null
+    private var smartQueueReorderMutationContext: AccountScopedRequestContext? = null
     private var lastQueueLoadCompletedAtMs: Long = 0L
     private val _queueReloadGeneration = MutableStateFlow(0)
     val queueReloadGeneration: StateFlow<Int> = _queueReloadGeneration.asStateFlow()
@@ -1622,6 +1633,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         initialPostSignInHydrationJob?.cancel()
         initialPostSignInHydrationJob = null
         _queueItems.value = emptyList()
+        smartQueueReorderSnapshot = null
+        smartQueueReorderMutationContext = null
+        _smartQueueReorderSaving.value = false
+        _smartQueueReorderAllowed.value = false
+        _smartQueueReorderUnavailableReason.value = null
         _inboxItems.value = emptyList()
         _favoriteItems.value = emptyList()
         _archivedItems.value = emptyList()
@@ -2131,6 +2147,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
             queueBackendReorderAllowed = queue.reorderAllowed
             queueBackendReorderUnavailableReason = queue.reorderUnavailableReason
+            updateSmartQueueReorderSnapshot(queuePlaylistId, queue, requestContext)
             updateSmartQueueReorderAvailability(queuePlaylistId)
             if (BuildConfig.DEBUG) {
                 Log.d(QUEUE_DEBUG_TAG, "pagination reset: fetched=${queueItems.size} totalCount=${queue.totalCount} activeScopeLimit=${queue.activeScopeLimit} hasMore=${_queueHasMorePages.value}")
@@ -2229,6 +2246,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 queueBackendReorderAllowed = refreshedQueue.reorderAllowed
                 queueBackendReorderUnavailableReason = refreshedQueue.reorderUnavailableReason
+                updateSmartQueueReorderSnapshot(queuePlaylistId, refreshedQueue, requestContext)
                 updateSmartQueueReorderAvailability(queuePlaylistId)
                 val refreshedSnapshot = refreshedQueueResult.debugSnapshot.copy(
                     appliedItemCount = _queueItems.value.size,
@@ -2389,6 +2407,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             selectedPlaylistId != null -> "playlist"
             queueServerSortField.isNotBlank() || queueServerSortDir.isNotBlank() -> "filtered_or_sorted"
             !queueBackendReorderAllowed -> queueBackendReorderUnavailableReason ?: "backend_unavailable"
+            smartQueueReorderSnapshot?.let { it.itemIds == itemIds && it.revision.isNotBlank() } != true -> "revision_unavailable"
             _queueHasMorePages.value -> "incomplete_response"
             itemIds.size <= 1 -> "not_enough_items"
             itemIds.distinct().size != itemIds.size -> "duplicate_items"
@@ -2396,6 +2415,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         _smartQueueReorderAllowed.value = reason == null
         _smartQueueReorderUnavailableReason.value = reason
+    }
+
+    /**
+     * Keeps the revision only when it describes this exact default-Smart-Queue item list.
+     * It is intentionally in-memory: the server, not Android, owns persisted queue ordering.
+     */
+    private fun updateSmartQueueReorderSnapshot(
+        selectedPlaylistId: Int?,
+        queue: PlaybackQueueResponse,
+        requestContext: AccountScopedRequestContext,
+    ) {
+        val displayedIds = _queueItems.value.map { it.itemId }
+        val responseIds = queue.items.map { it.itemId }
+        smartQueueReorderSnapshot = if (
+            isDefaultSmartQueueSurface(selectedPlaylistId) &&
+            queue.reorderAllowed &&
+            !queue.revision.isNullOrBlank() &&
+            displayedIds == responseIds
+        ) {
+            SmartQueueReorderSnapshot(
+                requestContext = requestContext,
+                revision = checkNotNull(queue.revision),
+                itemIds = responseIds,
+            )
+        } else {
+            null
+        }
     }
 
     fun loadMoreQueueItems() {
@@ -2667,6 +2713,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _queueHasMorePages.value = false
         queueBackendReorderAllowed = false
         queueBackendReorderUnavailableReason = "offline_snapshot"
+        smartQueueReorderSnapshot = null
         updateSmartQueueReorderAvailability(selectedPlaylistId)
         _cachedItemIds.value = resolveOfflineReadyIds(snapshot.items)
         reconcileCachedItemVisibility()
@@ -3712,6 +3759,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (!_smartQueueReorderAllowed.value) {
             return Result.failure(IllegalStateException("Smart Queue reorder is unavailable"))
         }
+        val requestContext = accountScopedRequestContext(current)
+        val snapshot = smartQueueReorderSnapshot
+            ?: return Result.failure(IllegalStateException("Smart Queue revision is unavailable; refresh and try again"))
+        if (!accountScopedRequestStillCurrent(snapshot.requestContext, requestContext)) {
+            return Result.failure(IllegalStateException("Smart Queue changed account or server; refresh and try again"))
+        }
         val currentItemIds = _queueItems.value.map { it.itemId }
         val activeScopeLimit = _queueActiveScopeLimit.value
         if (
@@ -3719,34 +3772,89 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             orderedItemIds.distinct().size != orderedItemIds.size ||
             orderedItemIds.size != currentItemIds.size ||
             orderedItemIds.toSet() != currentItemIds.toSet() ||
+            currentItemIds != snapshot.itemIds ||
             (activeScopeLimit != null && orderedItemIds.size > activeScopeLimit)
         ) {
             return Result.failure(IllegalArgumentException("Smart Queue reorder requires the current active-scope item list"))
         }
         _smartQueueReorderSaving.value = true
+        smartQueueReorderMutationContext = requestContext
         return try {
-            repository.reorderSmartQueue(current.baseUrl, current.apiToken, orderedItemIds)
-            val refresh = loadQueueOnce(autoRetryPendingSaves = false)
-            if (refresh.isSuccess) {
-                _statusMessage.value = "Smart Queue order saved"
+            val response = repository.reorderSmartQueue(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                expectedRevision = snapshot.revision,
+                itemIds = orderedItemIds,
+            )
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.failure(IllegalStateException("Smart Queue changed account or server"))
             }
-            refresh
+            if (!applySmartQueueReorderResponse(snapshot, orderedItemIds, response)) {
+                val refresh = loadQueueOnce(autoRetryPendingSaves = false)
+                if (refresh.isSuccess) {
+                    showSnackbar("Reorder response changed — queue refreshed")
+                }
+                return refresh
+            }
+            _statusMessage.value = "Smart Queue order saved"
+            Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            if (handleAuthFailureIfNeeded(e)) return Result.failure(e)
-            if (e is ApiException && e.statusCode == 409) {
-                loadQueueOnce(autoRetryPendingSaves = false)
-                showSnackbar("Reorder failed — queue updated, try again")
+        } catch (e: SmartQueueReorderConflictException) {
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
                 return Result.failure(e)
             }
+            // The conflict only carries IDs/revision. Refetch full rows and atomically replace
+            // both the visible order and the revision before permitting another reorder.
+            val refresh = loadQueueOnce(autoRetryPendingSaves = false)
+            showSnackbar("Reorder failed — queue updated, try again")
+            if (refresh.isFailure) _statusMessage.value = "Couldn't refresh Smart Queue"
+            Result.failure(e)
+        } catch (e: Exception) {
+            if (handleAuthFailureIfNeeded(e)) return Result.failure(e)
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.failure(e)
+            }
+            // A timeout can be a committed write whose response was lost. Never retry the
+            // old revision; refresh authoritative truth instead.
+            loadQueueOnce(autoRetryPendingSaves = false)
             val errorMsg = userFacingRequestErrorMessage(e, fallback = "Couldn't save Smart Queue order")
             _statusMessage.value = errorMsg
             showSnackbar(errorMsg)
             Result.failure(e)
         } finally {
-            _smartQueueReorderSaving.value = false
+            if (smartQueueReorderMutationContext == requestContext) {
+                smartQueueReorderMutationContext = null
+                _smartQueueReorderSaving.value = false
+            }
         }
+    }
+
+    private fun applySmartQueueReorderResponse(
+        snapshot: SmartQueueReorderSnapshot,
+        requestedItemIds: List<Int>,
+        response: com.mimeo.android.model.SmartQueueReorderResponse,
+    ): Boolean {
+        val responseIds = response.items.map { it.itemId }
+        if (
+            !response.reorderAllowed ||
+            response.revision.isBlank() ||
+            response.count != snapshot.itemIds.size ||
+            responseIds != requestedItemIds
+        ) {
+            return false
+        }
+        val itemById = _queueItems.value.associateBy { it.itemId }
+        if (itemById.keys != snapshot.itemIds.toSet()) return false
+        _queueItems.value = responseIds.map { itemById.getValue(it) }
+        smartQueueReorderSnapshot = snapshot.copy(
+            revision = response.revision,
+            itemIds = responseIds,
+        )
+        queueBackendReorderAllowed = true
+        queueBackendReorderUnavailableReason = null
+        updateSmartQueueReorderAvailability(selectedPlaylistId = null)
+        return true
     }
 
     fun runConnectivityDiagnostics(isPhysicalDevice: Boolean) {
@@ -4408,6 +4516,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (current.apiToken.isBlank()) {
             return Result.failure(IllegalStateException("Token required"))
         }
+        val requestContext = accountScopedRequestContext(current)
         return try {
             var queuePlaylistId = current.selectedPlaylistId
             runCatching {
@@ -4423,6 +4532,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 playlistId = queuePlaylistId,
                 prefetchCount = 0,
             )
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.success(Unit)
+            }
             val queue = queueResult.payload
             val queueItems = applyFavoriteOverrides(queue.items)
             _queueItems.value = queueItems
@@ -4437,6 +4549,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
             queueBackendReorderAllowed = queue.reorderAllowed
             queueBackendReorderUnavailableReason = queue.reorderUnavailableReason
+            updateSmartQueueReorderSnapshot(queuePlaylistId, queue, requestContext)
             updateSmartQueueReorderAvailability(queuePlaylistId)
             val appliedSnapshot = queueResult.debugSnapshot.copy(
                 appliedItemCount = _queueItems.value.size,

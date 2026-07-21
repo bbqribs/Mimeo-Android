@@ -805,9 +805,12 @@ class PlaybackRepository(
         apiClient.reorderPlaylistEntries(baseUrl, token, playlistId, entryIds)
     }
 
-    suspend fun reorderSmartQueue(baseUrl: String, token: String, itemIds: List<Int>) {
-        apiClient.reorderSmartQueue(baseUrl, token, itemIds)
-    }
+    suspend fun reorderSmartQueue(
+        baseUrl: String,
+        token: String,
+        expectedRevision: String,
+        itemIds: List<Int>,
+    ) = apiClient.reorderSmartQueue(baseUrl, token, expectedRevision, itemIds)
 
     suspend fun batchAddItemsToPlaylist(
         baseUrl: String,

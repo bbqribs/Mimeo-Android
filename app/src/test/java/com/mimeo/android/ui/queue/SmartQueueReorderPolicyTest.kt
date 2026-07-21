@@ -67,6 +67,8 @@ class SmartQueueReorderPolicyTest {
     @Test
     fun movedSmartQueueItemIdsKeepsFullOrderedMembership() {
         assertEquals(listOf(1, 3, 4, 2), movedSmartQueueItemIds(listOf(1, 2, 3, 4), 1, 3))
+        assertEquals(listOf(2, 1, 3, 4), movedSmartQueueItemIds(listOf(1, 2, 3, 4), 1, 0))
+        assertEquals(listOf(1, 3, 2, 4), movedSmartQueueItemIds(listOf(1, 2, 3, 4), 1, 2))
         assertEquals(listOf(1, 2, 3, 4), movedSmartQueueItemIds(listOf(1, 2, 3, 4), -1, 3))
     }
 

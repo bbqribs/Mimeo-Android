@@ -36,6 +36,8 @@ import com.mimeo.android.model.SummaryCapabilitiesOut
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaybackQueueResponse
+import com.mimeo.android.model.SmartQueueConflictResponse
+import com.mimeo.android.model.SmartQueueReorderResponse
 import com.mimeo.android.model.SmartPlaylistDetail
 import com.mimeo.android.model.SmartPlaylistPinRequest
 import com.mimeo.android.model.SmartPlaylistPinReorderItem
@@ -72,6 +74,11 @@ class ApiException(val statusCode: Int, message: String) : Exception(message)
 class UpNextVersionConflictException(
     val currentSession: UpNextSession?,
 ) : Exception("up_next_version_conflict")
+
+class SmartQueueReorderConflictException(
+    val code: String,
+    val currentQueue: com.mimeo.android.model.SmartQueueConflictCurrentQueue?,
+) : Exception(code)
 
 /**
  * BYOAI-A5 — failure of an operator provider write/test/delete, carrying only a
@@ -191,6 +198,7 @@ private data class PlaylistReorderItem(
 
 @Serializable
 private data class SmartQueueReorderPayload(
+    @kotlinx.serialization.SerialName("expected_revision") val expectedRevision: String,
     @kotlinx.serialization.SerialName("item_ids") val itemIds: List<Int>,
     val filtered: Boolean,
 )
@@ -906,14 +914,22 @@ class ApiClient(
     suspend fun reorderSmartQueue(
         baseUrl: String,
         token: String,
+        expectedRevision: String,
         itemIds: List<Int>,
-    ) = withContext(Dispatchers.IO) {
-        val payload = SmartQueueReorderPayload(itemIds = itemIds, filtered = false)
+    ): SmartQueueReorderResponse = withContext(Dispatchers.IO) {
+        val payload = SmartQueueReorderPayload(
+            expectedRevision = expectedRevision,
+            itemIds = itemIds,
+            filtered = false,
+        )
         val body = jsonBody(payload)
         val request = authorizedRequest(baseUrl, "/playback/queue/reorder", token)
+            .acceptJson()
             .put(body)
             .build()
-        executeNoBody(request)
+        executeSmartQueueReorderJson(request) { responseBody ->
+            json.decodeFromString<SmartQueueReorderResponse>(responseBody)
+        }
     }
 
     suspend fun getDebugPython(baseUrl: String, token: String): DebugPythonResponse = withContext(Dispatchers.IO) {
@@ -1381,6 +1397,30 @@ class ApiClient(
                 }.getOrNull()
                 if (conflict?.error?.code == "up_next_version_conflict") {
                     throw UpNextVersionConflictException(conflict.currentSession)
+                }
+            }
+            if (!response.isSuccessful) {
+                throwApiException(response.code, body)
+            }
+            return parser(body)
+        }
+    }
+
+    private inline fun <T> executeSmartQueueReorderJson(
+        request: Request,
+        parser: (String) -> T,
+    ): T {
+        okHttpClient.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (response.code == 409) {
+                val conflict = runCatching {
+                    json.decodeFromString<SmartQueueConflictResponse>(body)
+                }.getOrNull()
+                if (conflict != null) {
+                    throw SmartQueueReorderConflictException(
+                        code = conflict.error.code,
+                        currentQueue = conflict.currentQueue,
+                    )
                 }
             }
             if (!response.isSuccessful) {

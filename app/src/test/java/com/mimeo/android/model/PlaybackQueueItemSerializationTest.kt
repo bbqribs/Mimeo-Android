@@ -5,6 +5,26 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class PlaybackQueueItemSerializationTest {
+    @Test
+    fun decodesSmartQueueRevisionWithItsResponseSnapshot() {
+        val response = json.decodeFromString<PlaybackQueueResponse>(
+            """
+            {
+              "count": 2,
+              "revision": "sq1.account.7",
+              "reorder_allowed": true,
+              "items": [
+                {"item_id": 20, "url": "https://example.com/twenty"},
+                {"item_id": 10, "url": "https://example.com/ten"}
+              ]
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals("sq1.account.7", response.revision)
+        assertEquals(listOf(20, 10), response.items.map { it.itemId })
+    }
+
     private val json = Json { ignoreUnknownKeys = true }
 
     @Test

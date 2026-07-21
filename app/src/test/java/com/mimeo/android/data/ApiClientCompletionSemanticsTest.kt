@@ -137,18 +137,60 @@ class ApiClientCompletionSemanticsTest {
     @Test
     fun reorderSmartQueueUsesPersistedContractPayload() = runBlocking {
         val server = MockWebServer()
-        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"reorder_allowed":true,"count":3,"items":[]}"""))
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """{"revision":"sq1.account.8","reorder_allowed":true,"count":3,"items":[{"item_id":30,"position":1.0},{"item_id":10,"position":2.0},{"item_id":20,"position":3.0}]}""",
+            ),
+        )
         server.start()
         try {
             val client = ApiClient(okHttpClient = OkHttpClient.Builder().followRedirects(false).build())
-            client.reorderSmartQueue(server.url("/").toString(), "token", listOf(30, 10, 20))
+            val response = client.reorderSmartQueue(
+                baseUrl = server.url("/").toString(),
+                token = "token",
+                expectedRevision = "sq1.account.7",
+                itemIds = listOf(30, 10, 20),
+            )
 
             val request = server.takeRequest()
             val body = request.body.readUtf8()
             assertEquals("PUT", request.method)
             assertEquals("/playback/queue/reorder", request.path)
             assertTrue(body, body.contains("\"item_ids\":[30,10,20]"))
+            assertTrue(body, body.contains("\"expected_revision\":\"sq1.account.7\""))
             assertTrue(body, body.contains("\"filtered\":false"))
+            assertEquals("sq1.account.8", response.revision)
+            assertEquals(listOf(30, 10, 20), response.items.map { it.itemId })
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun reorderSmartQueueExposesAuthoritativeConflictRecovery() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setResponseCode(409).setBody(
+                """{"error":{"code":"smart_queue_revision_conflict","message":"changed"},"current_queue":{"revision":"sq1.account.9","item_ids":[20,10,30],"active_scope_limit":100}}""",
+            ),
+        )
+        server.start()
+        try {
+            val client = ApiClient(okHttpClient = OkHttpClient.Builder().followRedirects(false).build())
+            val failure = runCatching {
+                client.reorderSmartQueue(
+                    baseUrl = server.url("/").toString(),
+                    token = "token",
+                    expectedRevision = "sq1.account.8",
+                    itemIds = listOf(30, 10, 20),
+                )
+            }.exceptionOrNull()
+
+            val conflict = failure as? SmartQueueReorderConflictException
+            requireNotNull(conflict)
+            assertEquals("smart_queue_revision_conflict", conflict.code)
+            assertEquals("sq1.account.9", conflict.currentQueue?.revision)
+            assertEquals(listOf(20, 10, 30), conflict.currentQueue?.itemIds)
         } finally {
             server.shutdown()
         }
