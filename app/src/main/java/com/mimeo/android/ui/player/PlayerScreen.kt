@@ -1470,7 +1470,8 @@ fun PlayerScreen(
                     "autoPlayAfterLoad=$autoPlayAfterLoad speaking=$isSpeaking auto=$isAutoPlaying",
             )
         }
-        vm.setNowPlayingCurrentItem(currentItemId)
+        // Opening an Up Next row in Locus is reader-only. The session pointer changes only
+        // through an explicit Jump/Previous/Play action, so row tap cannot masquerade as Jump.
         isLoading = !preservingVisibleContent
         bodyRevealReady = preservingVisibleContent
         uiMessage = null
@@ -4368,7 +4369,7 @@ private fun PlayerControlBar(
                     IconButton(onClick = onPreviousItem, modifier = Modifier.size(controlSlotSize)) {
                         Icon(
                             painter = painterResource(id = R.drawable.msr_skip_previous_24),
-                            contentDescription = "Previous item",
+                            contentDescription = "Previous item; moves through Earlier in queue, then History",
                             modifier = Modifier.size(24.dp),
                         )
                     }

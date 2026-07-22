@@ -92,9 +92,10 @@ and cleared app data while stored user opt-outs remain honored; merge is
 gated on the final QA matrix in
 `docs/ANDROID_VISUAL_V1_FINAL_QA_2026_05.md`.
 
-4. [ ] **Playback / queue UX cluster.** Smart Queue as playlist-like source,
-   Up Next History / Earlier in queue implementation, and expanded Save
-   queue-as-playlist options.
+4. [ ] **Playback / queue UX cluster.** Smart Queue as playlist-like source
+   and Up Next History / Earlier in queue implementation. History is bounded
+   session-local state; default Save queue-as-playlist remains Active + Up Next
+   only.
    Smart Queue reorder decision: Smart Queue should become a persisted,
    reorderable inbox view, distinct from chronological Inbox and local Up
    Next. New items default to the top; user-adjusted relative order persists

@@ -10,6 +10,18 @@ import org.junit.Test
 
 class PlaybackServiceObservabilityTest {
     @Test
+    fun mediaPreviousMapsToThePreviousDispatchActionWithoutChangingPlaybackState() {
+        val action = resolveMediaButtonDispatchAction(
+            KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+            isCurrentlyPlaying = true,
+        )
+
+        assertEquals(MediaButtonDispatchAction.Previous, action)
+        val snapshot = PlaybackServiceSnapshot(itemId = 9, title = "Current", isPlaying = true)
+        assertEquals(snapshot, optimisticSnapshotAfterDispatch(snapshot, action))
+    }
+
+    @Test
     fun `media pause key resolves to pause while playing`() {
         val action = resolveMediaButtonDispatchAction(
             keyCode = KeyEvent.KEYCODE_MEDIA_PAUSE,

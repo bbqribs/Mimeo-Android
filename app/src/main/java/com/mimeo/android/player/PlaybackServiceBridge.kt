@@ -22,12 +22,16 @@ object PlaybackServiceBridge {
     var onTogglePlayPause: (() -> Unit)? = null
 
     @Volatile
+    var onPrevious: (() -> Unit)? = null
+
+    @Volatile
     var snapshotProvider: (() -> PlaybackServiceSnapshot)? = null
 
     fun clear() {
         onPlay = null
         onPause = null
         onTogglePlayPause = null
+        onPrevious = null
         snapshotProvider = null
     }
 }

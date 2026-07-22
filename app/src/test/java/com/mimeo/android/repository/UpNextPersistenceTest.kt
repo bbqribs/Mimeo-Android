@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.mimeo.android.data.ApiClient
 import com.mimeo.android.data.AppDatabase
+import com.mimeo.android.data.entities.NowPlayingEntity
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.UpNextSession
 import com.mimeo.android.model.UpNextSessionItem
@@ -119,6 +120,28 @@ class UpNextPersistenceTest {
         assertEquals(-1, compacted.currentIndex)
         assertEquals(5L, repository.readUpNextSyncMetadata()!!.serverVersion)
         assertFalse(repository.readUpNextSyncMetadata()!!.dirty)
+    }
+
+    @Test
+    fun legacyPersistedHistoryIsDroppedAndNeverEntersTheContinuitySnapshot() = runBlocking {
+        database.nowPlayingDao().upsert(
+            NowPlayingEntity(
+                queueJson = """{
+                    "items":[{"itemId":1,"url":"https://example.com/1"}],
+                    "historyItems":[{"itemId":9,"url":"https://example.com/9"}]
+                }""",
+                currentIndex = 0,
+                updatedAt = 1L,
+            ),
+        )
+
+        val restored = repository.getSession()!!
+        assertEquals(listOf(1), restored.items.map { it.itemId })
+        assertTrue(restored.historyItems.isEmpty())
+
+        repository.setCurrentIndex(0)
+        assertFalse(database.nowPlayingDao().getSession()!!.queueJson.contains("historyItems"))
+        assertEquals(listOf(1), repository.localUpNextSnapshot()!!.itemIds)
     }
 
     @Test
