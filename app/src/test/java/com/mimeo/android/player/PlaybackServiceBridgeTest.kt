@@ -11,6 +11,7 @@ class PlaybackServiceBridgeTest {
         PlaybackServiceBridge.onPlay = {}
         PlaybackServiceBridge.onPause = {}
         PlaybackServiceBridge.onTogglePlayPause = {}
+        PlaybackServiceBridge.onPrevious = {}
         PlaybackServiceBridge.snapshotProvider = { PlaybackServiceSnapshot(itemId = 1, title = "A", isPlaying = true) }
 
         PlaybackServiceBridge.clear()
@@ -18,6 +19,7 @@ class PlaybackServiceBridgeTest {
         assertNull(PlaybackServiceBridge.onPlay)
         assertNull(PlaybackServiceBridge.onPause)
         assertNull(PlaybackServiceBridge.onTogglePlayPause)
+        assertNull(PlaybackServiceBridge.onPrevious)
         assertNull(PlaybackServiceBridge.snapshotProvider)
     }
 

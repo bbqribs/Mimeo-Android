@@ -1131,8 +1131,13 @@ class PlaybackRepository(
         }
         val normalized = currentIndex.coerceIn(0, stored.lastIndex)
         val updatedAt = System.currentTimeMillis()
-        dao.updateCurrentIndex(currentIndex = normalized, updatedAt = updatedAt)
-        return row.copy(currentIndex = normalized, updatedAt = updatedAt).toSession(stored)
+        val updatedRow = row.copy(
+            queueJson = encodeStoredNowPlaying(stored),
+            currentIndex = normalized,
+            updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(stored)
     }
 
     suspend fun moveCurrentIndex(
@@ -1212,6 +1217,30 @@ class PlaybackRepository(
         )
         dao.upsert(updatedRow)
         return updatedRow.toSession(plannedItems)
+    }
+
+    /**
+     * Promotes an item held by the ViewModel's process-local History into the active slot.
+     * The existing active item remains immediately after it, preserving the Previous contract.
+     */
+    suspend fun insertTransientHistoryItemAsCurrent(item: NowPlayingSessionItem): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson).toMutableList()
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        if (stored.any { it.itemId == item.itemId }) return row.toSession(stored)
+        val insertAt = row.currentIndex.coerceIn(0, stored.size)
+        stored.add(insertAt, item.toStoredNowPlayingItem())
+        val updatedRow = row.copy(
+            queueJson = encodeStoredNowPlaying(stored),
+            currentIndex = insertAt,
+            updatedAt = System.currentTimeMillis(),
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(stored)
     }
 
     suspend fun moveToPreviousItem(): NowPlayingSession? {
@@ -1814,26 +1843,20 @@ class PlaybackRepository(
     }
 
     private fun parseStoredNowPlayingHistory(queueJson: String): List<StoredNowPlayingItem> {
-        val envelope = runCatching {
-            json.decodeFromString(StoredNowPlayingSessionEnvelope.serializer(), queueJson)
-        }.getOrNull() ?: return emptyList()
-        val activeItemIds = envelope.items.mapTo(hashSetOf()) { it.itemId }
-        return envelope.historyItems.distinctBy { it.itemId }.filterNot { it.itemId in activeItemIds }
+        // Legacy builds wrote History inside Room's session JSON. History is now deliberately
+        // process-local, so persisted entries are ignored and dropped on the next session write.
+        return emptyList()
     }
 
     private fun encodeStoredNowPlaying(
         items: List<StoredNowPlayingItem>,
         historyItems: List<StoredNowPlayingItem> = emptyList(),
     ): String {
-        val activeItemIds = items.mapTo(hashSetOf()) { it.itemId }
-        val dedupedHistory = historyItems.distinctBy { it.itemId }.filterNot { it.itemId in activeItemIds }
-        return json.encodeToString(
-            StoredNowPlayingSessionEnvelope.serializer(),
-            StoredNowPlayingSessionEnvelope(
-                items = items,
-                historyItems = dedupedHistory,
-            ),
-        )
+        // Keep the parameter during the migration so existing mutation callers stay simple,
+        // but never serialize History. The Room payload is only the continuity projection.
+        @Suppress("UNUSED_VARIABLE")
+        val ignoredTransientHistory = historyItems
+        return json.encodeToString(ListSerializer(StoredNowPlayingItem.serializer()), items)
     }
 
     private fun NowPlayingEntity.toSession(stored: List<StoredNowPlayingItem>): NowPlayingSession {
@@ -1842,8 +1865,6 @@ class PlaybackRepository(
         } else {
             currentIndex.coerceIn(0, stored.lastIndex)
         }
-        val activeItemIds = stored.mapTo(hashSetOf()) { it.itemId }
-        val history = parseStoredNowPlayingHistory(queueJson).filterNot { it.itemId in activeItemIds }
         return NowPlayingSession(
             items = stored.map { item ->
                 NowPlayingSessionItem(
@@ -1869,27 +1890,28 @@ class PlaybackRepository(
             sourcePlaylistId = sourcePlaylistId,
             seedSourceKind = seedSourceKind,
             seedSourceLabel = seedSourceLabel,
-            historyItems = history.map { item ->
-                NowPlayingSessionItem(
-                    itemId = item.itemId,
-                    title = item.title,
-                    url = item.url,
-                    host = item.host,
-                    sourceType = item.sourceType,
-                    sourceLabel = item.sourceLabel,
-                    sourceUrl = item.sourceUrl,
-                    captureKind = item.captureKind,
-                    sourceAppPackage = item.sourceAppPackage,
-                    status = item.status,
-                    activeContentVersionId = item.activeContentVersionId,
-                    lastReadPercent = item.lastReadPercent,
-                    chunkIndex = item.chunkIndex,
-                    offsetInChunkChars = item.offsetInChunkChars,
-                    readerScrollOffset = item.readerScrollOffset,
-                )
-            },
+            historyItems = emptyList(),
         )
     }
+
+    private fun NowPlayingSessionItem.toStoredNowPlayingItem(): StoredNowPlayingItem =
+        StoredNowPlayingItem(
+            itemId = itemId,
+            title = title,
+            url = url,
+            host = host,
+            sourceType = sourceType,
+            sourceLabel = sourceLabel,
+            sourceUrl = sourceUrl,
+            captureKind = captureKind,
+            sourceAppPackage = sourceAppPackage,
+            status = status,
+            activeContentVersionId = activeContentVersionId,
+            lastReadPercent = lastReadPercent,
+            chunkIndex = chunkIndex,
+            offsetInChunkChars = offsetInChunkChars,
+            readerScrollOffset = readerScrollOffset,
+        )
 
     private fun StoredNowPlayingItem.mergeAuthoritative(item: UpNextSessionItem): StoredNowPlayingItem = copy(
         title = item.title,

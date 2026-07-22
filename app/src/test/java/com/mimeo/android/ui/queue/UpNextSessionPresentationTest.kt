@@ -7,6 +7,18 @@ import org.junit.Test
 
 class UpNextSessionPresentationTest {
     @Test
+    fun collapsedHistoryAnnouncesItsCountStateAndPreviousTraversal() {
+        assertEquals(
+            "History, 3 items, collapsed; reachable through Previous",
+            historyToggleContentDescription(count = 3, expanded = false),
+        )
+        assertEquals(
+            "History, 3 items, expanded",
+            historyToggleContentDescription(count = 3, expanded = true),
+        )
+    }
+
+    @Test
     fun nowPlayingHeadingCopyIsPlainNowPlaying() {
         assertEquals("Now Playing", NOW_PLAYING_SECTION_TITLE)
     }

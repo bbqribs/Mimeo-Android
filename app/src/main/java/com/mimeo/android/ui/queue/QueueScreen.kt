@@ -10,7 +10,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,7 +35,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -107,7 +105,6 @@ import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.NowPlayingSessionItem
-import com.mimeo.android.repository.computeNowPlayingSessionSections
 import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.extractFirstHttpUrl
 import com.mimeo.android.share.isRetryablePendingSaveResult
@@ -283,7 +280,6 @@ fun QueueScreen(
     val pendingManualSaves by vm.pendingManualSaves.collectAsState()
     val pendingManualRetryInProgress by vm.pendingManualRetryInProgress.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
-    val archivedSessionHistoryIds by vm.archivedSessionHistoryIds.collectAsState()
     val actionScope = rememberCoroutineScope()
 
     var topActionsMenuExpanded by remember { mutableStateOf(false) }
@@ -291,9 +287,6 @@ fun QueueScreen(
     var showClearUpcomingConfirmation by remember { mutableStateOf(false) }
     var showClearAllSessionConfirmation by remember { mutableStateOf(false) }
     var showSaveQueueAsPlaylistDialog by remember { mutableStateOf(false) }
-    var showSaveQueueScopeDialog by remember { mutableStateOf(false) }
-    var saveQueueIncludeEarlier by remember { mutableStateOf(false) }
-    var saveQueueIncludeHistory by remember { mutableStateOf(false) }
     var saveQueuePlaylistNameInput by rememberSaveable { mutableStateOf("") }
     var saveQueueNameError by remember { mutableStateOf<String?>(null) }
     var saveQueueInProgress by remember { mutableStateOf(false) }
@@ -552,23 +545,7 @@ fun QueueScreen(
                                             topActionsMenuExpanded = false
                                             saveQueuePlaylistNameInput = ""
                                             saveQueueNameError = null
-                                            val session = nowPlayingSession
-                                            if (session != null) {
-                                                val activeIdx = session.currentIndex.coerceIn(
-                                                    0, (session.items.size - 1).coerceAtLeast(0),
-                                                )
-                                                val hasEarlier = activeIdx > 0
-                                                val hasHistory = session.historyItems.isNotEmpty()
-                                                if (hasEarlier || hasHistory) {
-                                                    saveQueueIncludeEarlier = false
-                                                    saveQueueIncludeHistory = false
-                                                    showSaveQueueScopeDialog = true
-                                                } else {
-                                                    showSaveQueueAsPlaylistDialog = true
-                                                }
-                                            } else {
-                                                showSaveQueueAsPlaylistDialog = true
-                                            }
+                                            showSaveQueueAsPlaylistDialog = true
                                         },
                                     )
                                 }
@@ -728,17 +705,11 @@ fun QueueScreen(
                 seededFromLabel = sessionSeedPresentation?.seededFromLabel ?: selectedPlaylistName,
                 onOpenItem = { itemId -> onOpenPlayer(itemId) },
                 onJumpToQueueItem = { itemId -> vm.jumpToUpcomingSessionItem(itemId) },
-                onJumpToHistoryItem = { itemId -> vm.jumpToHistorySessionItem(itemId) },
                 onReorderItem = { from, to ->
                     vm.reorderNowPlayingSessionItem(fromIndex = from, toIndex = to)
                 },
                 onRemoveItem = { itemId -> vm.removeItemFromSession(itemId) },
                 onClearUpcoming = { showClearUpcomingConfirmation = true },
-                onArchiveSessionItem = { itemId -> vm.archiveSessionItem(itemId) },
-                onUnarchiveSessionHistoryItem = { itemId -> vm.unarchiveSessionHistoryItem(itemId) },
-                onBinSessionHistoryItem = { itemId -> vm.binSessionHistoryItem(itemId) },
-                onBinSessionEarlierItem = { itemId -> vm.binSessionEarlierItem(itemId) },
-                archivedHistoryItemIds = archivedSessionHistoryIds,
                 snapBottomClearance = snapBottomClearance,
                 snapToActiveSignal = snapToActiveSignal,
                 renderSnapPillLocally = renderSnapPillLocally,
@@ -853,76 +824,6 @@ fun QueueScreen(
         )
     }
 
-    // Save queue scope selection dialog
-    if (showSaveQueueScopeDialog) {
-        val scopeSession = nowPlayingSession
-        val scopeSections = scopeSession?.let {
-            computeNowPlayingSessionSections(
-                items = it.items,
-                currentIndex = it.currentIndex,
-                historyItems = it.historyItems,
-                itemId = { item -> item.itemId },
-            )
-        }
-        val scopeHasEarlier = scopeSections?.earlierInQueue?.isNotEmpty() == true
-        val scopeHasHistory = scopeSections?.history?.isNotEmpty() == true
-        AlertDialog(
-            onDismissRequest = { showSaveQueueScopeDialog = false },
-            title = { Text("Save queue as playlist…") },
-            text = {
-                Column {
-                    Text("Choose what to include. Saving a queue snapshot does not change playback.")
-                    Spacer(Modifier.height(12.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = true, onCheckedChange = null, enabled = false)
-                        Text("Now Playing + Up Next")
-                    }
-                    if (scopeHasEarlier) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.clickable {
-                                saveQueueIncludeEarlier = !saveQueueIncludeEarlier
-                            },
-                        ) {
-                            Checkbox(
-                                checked = saveQueueIncludeEarlier,
-                                onCheckedChange = null,
-                            )
-                            Text("Earlier in queue — skipped items before Now Playing")
-                        }
-                    }
-                    if (scopeHasHistory) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.clickable {
-                                saveQueueIncludeHistory = !saveQueueIncludeHistory
-                            },
-                        ) {
-                            Checkbox(
-                                checked = saveQueueIncludeHistory,
-                                onCheckedChange = null,
-                            )
-                            Text("History — previously active items")
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showSaveQueueScopeDialog = false
-                    showSaveQueueAsPlaylistDialog = true
-                }) {
-                    Text("Continue")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSaveQueueScopeDialog = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
-    }
-
     // Save queue as playlist dialog
     if (showSaveQueueAsPlaylistDialog) {
         suspend fun executeSaveQueueAsPlaylist() {
@@ -935,20 +836,8 @@ fun QueueScreen(
                 showSaveQueueAsPlaylistDialog = false
                 return
             }
-            val saveSections = computeNowPlayingSessionSections(
-                items = session.items,
-                currentIndex = session.currentIndex,
-                historyItems = session.historyItems,
-                itemId = { it.itemId },
-            )
-            val itemIds = buildSaveQueueItemIds(
-                historyIds = saveSections.history.map { it.itemId },
-                earlierIds = saveSections.earlierInQueue.map { it.itemId },
-                nowPlayingId = saveSections.active?.itemId,
-                upNextIds = saveSections.upNext.map { it.itemId },
-                includeEarlier = saveQueueIncludeEarlier,
-                includeHistory = saveQueueIncludeHistory,
-            )
+            val activeIndex = session.currentIndex.coerceIn(0, session.items.lastIndex)
+            val itemIds = session.items.drop(activeIndex).map { it.itemId }
             if (itemIds.isEmpty()) {
                 saveQueueNameError = "No items to save"
                 return

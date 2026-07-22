@@ -104,6 +104,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                 object : MediaSessionCompat.Callback() {
                     override fun onPlay() = dispatchPlay()
                     override fun onPause() = dispatchPause()
+                    override fun onSkipToPrevious() = dispatchPrevious()
                     override fun onMediaButtonEvent(mediaButtonEvent: Intent?): Boolean {
                         val handled = handleMediaButtonIntent(mediaButtonEvent)
                         Log.d(mediaButtonLogTag, "sessionCallback onMediaButtonEvent handled=$handled")
@@ -116,7 +117,8 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                     .setActions(
                         PlaybackStateCompat.ACTION_PLAY or
                             PlaybackStateCompat.ACTION_PAUSE or
-                            PlaybackStateCompat.ACTION_PLAY_PAUSE,
+                            PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                            PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS,
                     )
                     .setState(PlaybackStateCompat.STATE_PAUSED, 0L, 1f)
                     .build(),
@@ -246,7 +248,8 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
                 .setActions(
                     PlaybackStateCompat.ACTION_PLAY or
                         PlaybackStateCompat.ACTION_PAUSE or
-                        PlaybackStateCompat.ACTION_PLAY_PAUSE,
+                        PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                        PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS,
                 )
                 .setActiveQueueItemId(next.itemId?.toLong() ?: -1L)
                 .setState(state, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1f)
@@ -479,6 +482,7 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
             MediaButtonDispatchAction.Play -> dispatchPlay()
             MediaButtonDispatchAction.Pause -> dispatchPause()
             MediaButtonDispatchAction.Toggle -> dispatchToggle()
+            MediaButtonDispatchAction.Previous -> dispatchPrevious()
             MediaButtonDispatchAction.None -> return false
         }
         Log.d(mediaButtonLogTag, "handleMediaButtonIntent dispatched")
@@ -489,6 +493,12 @@ class PlaybackService : Service(), AudioManager.OnAudioFocusChangeListener {
     private fun refreshSnapshotForMediaButtonDispatch() {
         val fresh = PlaybackServiceBridge.snapshotProvider?.invoke() ?: return
         updateSnapshot(reconcileMediaButtonSnapshotRefresh(snapshot, fresh))
+    }
+
+    private fun dispatchPrevious() {
+        Log.d(mediaButtonLogTag, "dispatchPrevious")
+        PlaybackServiceBridge.onPrevious?.invoke()
+        emitAudit("dispatchPrevious")
     }
 
     private fun emitAudit(event: String) {

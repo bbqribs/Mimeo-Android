@@ -110,6 +110,7 @@ internal enum class MediaButtonDispatchAction {
     Play,
     Pause,
     Toggle,
+    Previous,
     None,
 }
 
@@ -164,6 +165,7 @@ internal fun optimisticSnapshotAfterDispatch(
         MediaButtonDispatchAction.Play -> snapshot.copy(isPlaying = true)
         MediaButtonDispatchAction.Pause -> snapshot.copy(isPlaying = false)
         MediaButtonDispatchAction.Toggle -> snapshot.copy(isPlaying = !snapshot.isPlaying)
+        MediaButtonDispatchAction.Previous -> snapshot
         MediaButtonDispatchAction.None -> snapshot
     }
 }
@@ -194,6 +196,7 @@ internal fun resolveMediaButtonDispatchAction(
         android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
         android.view.KeyEvent.KEYCODE_HEADSETHOOK,
         -> MediaButtonDispatchAction.Toggle
+        android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS -> MediaButtonDispatchAction.Previous
         else -> MediaButtonDispatchAction.None
     }
 }
