@@ -153,6 +153,20 @@ internal fun <T> computeNowPlayingSessionSections(
     )
 }
 
+/**
+ * History is process-local, so a server acknowledgement of the exact active/upcoming
+ * projection must not erase it. A different projection is a replacement and must start
+ * without the prior session's transient History.
+ */
+internal fun shouldRetainTransientHistoryAfterAuthoritativeApply(
+    localItemIds: List<Int>,
+    localCurrentItemId: Int?,
+    authoritativeItemIds: List<Int>,
+    authoritativeCurrentItemId: Int?,
+): Boolean =
+    localItemIds == authoritativeItemIds &&
+        localCurrentItemId == authoritativeCurrentItemId
+
 internal data class SessionIndexMovePlan(
     val itemIds: List<Int>,
     val currentIndex: Int,

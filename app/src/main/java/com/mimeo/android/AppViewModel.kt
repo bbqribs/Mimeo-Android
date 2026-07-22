@@ -180,6 +180,7 @@ import com.mimeo.android.repository.ItemTextResult
 import com.mimeo.android.repository.ItemTextPrefetchAttempt
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.NowPlayingSessionItem
+import com.mimeo.android.repository.shouldRetainTransientHistoryAfterAuthoritativeApply
 import com.mimeo.android.repository.OfflineReadyCandidate
 import com.mimeo.android.repository.PlaylistMembershipToggleResult
 import com.mimeo.android.repository.PlaybackRepository
@@ -708,14 +709,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private data class UpNextSeedMetadata(val kind: String, val label: String)
 
-    init {
-        bindPlaybackService()
-        viewModelScope.launch {
-            _inboxSort.value = loadPersistedLibrarySort("inbox")
-            _favoritesSort.value = loadPersistedLibrarySort("favorites")
-            _archiveSort.value = loadPersistedLibrarySort("archive")
-            _binSort.value = loadPersistedLibrarySort("bin")
-        }
+    private fun registerPlaybackServiceBridgeCallbacks() {
         PlaybackServiceBridge.onPlay = {
             playbackPlay()
         }
@@ -736,6 +730,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         PlaybackServiceBridge.snapshotProvider = {
             buildPlaybackServiceSnapshot()
         }
+    }
+
+    init {
+        bindPlaybackService()
+        viewModelScope.launch {
+            _inboxSort.value = loadPersistedLibrarySort("inbox")
+            _favoritesSort.value = loadPersistedLibrarySort("favorites")
+            _archiveSort.value = loadPersistedLibrarySort("archive")
+            _binSort.value = loadPersistedLibrarySort("bin")
+        }
+        registerPlaybackServiceBridgeCallbacks()
         viewModelScope.launch {
             playbackEngineState.collect {
                 updateActivePlaybackClock(it)
@@ -798,6 +803,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 if (previous.apiToken.isBlank() && next.apiToken.isNotBlank()) {
                     authFailureHandledThisSession = false
                     pendingInitialPostSignInHydration = true
+                    // Account reset clears this process-local bridge. Re-register it before
+                    // restoring the session so media controls, including Previous, target the
+                    // newly signed-in ViewModel rather than becoming no-ops.
+                    registerPlaybackServiceBridgeCallbacks()
                     loadQueue()
                     scheduleUpNextSynchronization()
                     blueskyCoordinator.refreshBlueskyStatus()
@@ -7011,6 +7020,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         requestContext: AccountScopedRequestContext,
         serverIdentity: String,
     ) {
+        val localSessionBeforeApply = _nowPlayingSession.value
         val priorPlaybackItemId = playbackEngineState.value.currentItemId.takeIf { it > 0 }
         val applied = repository.applyAuthoritativeUpNextSession(
             session = session,
@@ -7027,15 +7037,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _playbackPositionByItem.value = emptyMap()
             _sessionIssueMessage.value = null
         } else {
-            clearTransientSessionHistory()
-            applyAuthoritativeSessionSnapshot(applied)
+            val retainTransientHistory = shouldRetainTransientHistoryAfterAuthoritativeApply(
+                localItemIds = localSessionBeforeApply?.items?.map { it.itemId }.orEmpty(),
+                localCurrentItemId = localSessionBeforeApply?.currentItem?.itemId,
+                authoritativeItemIds = applied.items.map { it.itemId },
+                authoritativeCurrentItemId = applied.currentItem?.itemId,
+            )
+            if (!retainTransientHistory) {
+                clearTransientSessionHistory()
+            }
+            applyAuthoritativeSessionSnapshot(applied, retainTransientHistory)
         }
     }
 
-    private fun applyAuthoritativeSessionSnapshot(session: NowPlayingSession) {
-        val withoutHistory = session.copy(historyItems = emptyList())
-        _nowPlayingSession.value = withoutHistory
-        _playbackPositionByItem.value = withoutHistory.items.associate { item ->
+    private fun applyAuthoritativeSessionSnapshot(
+        session: NowPlayingSession,
+        retainTransientHistory: Boolean = false,
+    ) {
+        val projectedSession = if (retainTransientHistory) {
+            withTransientHistory(session)
+        } else {
+            session.copy(historyItems = emptyList())
+        }
+        _nowPlayingSession.value = projectedSession
+        _playbackPositionByItem.value = (projectedSession.items + projectedSession.historyItems).associate { item ->
             item.itemId to PlaybackPosition(
                 chunkIndex = item.chunkIndex.coerceAtLeast(0),
                 offsetInChunkChars = item.offsetInChunkChars.coerceAtLeast(0),

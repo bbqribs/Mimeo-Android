@@ -7,6 +7,32 @@ import org.junit.Test
 class StoredNowPlayingItemMappingTest {
 
     @Test
+    fun authoritativeAcknowledgementRetainsProcessLocalHistoryForSameProjection() {
+        assertEquals(
+            true,
+            shouldRetainTransientHistoryAfterAuthoritativeApply(
+                localItemIds = listOf(20, 30, 40),
+                localCurrentItemId = 30,
+                authoritativeItemIds = listOf(20, 30, 40),
+                authoritativeCurrentItemId = 30,
+            ),
+        )
+    }
+
+    @Test
+    fun authoritativeReplacementDropsProcessLocalHistory() {
+        assertEquals(
+            false,
+            shouldRetainTransientHistoryAfterAuthoritativeApply(
+                localItemIds = listOf(20, 30, 40),
+                localCurrentItemId = 30,
+                authoritativeItemIds = listOf(20, 40, 50),
+                authoritativeCurrentItemId = 40,
+            ),
+        )
+    }
+
+    @Test
     fun restoreHistoryItemToSessionMappingPreservesLastReadPercent() {
         val item = queueItem(itemId = 42, lastReadPercent = 37)
 
