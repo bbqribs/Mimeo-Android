@@ -1,6 +1,6 @@
 # T-AND-PENDING-SAVE-SURFACING-1 — Surface parked saves, bounded retry, snapshot expiry
 
-Base SHA: `8788ed9` (main). Branch: `claude/t-and-pending-save-surfacing-1`.
+Base SHA: `cc6ba2b` (main). Branch: `claude/t-and-pending-save-surfacing-1`.
 Evidence: `docs/investigations/ANDROID_SAVE_DISAPPEARANCE_INVESTIGATION_2026_07.md`
 (§1 Mechanism B, §4 latent defect, §9 regression requirements, §12 follow-up note).
 Android-only. Draft PR to `main`; do not merge.
@@ -87,7 +87,7 @@ park ⇒ job scheduled with network constraint; constraint met ⇒ retry execute
 
 ## Delivery
 
-- Branch `claude/t-and-pending-save-surfacing-1` from `8788ed9` (rebase base to current
+- Branch `claude/t-and-pending-save-surfacing-1` from `cc6ba2b` (rebase base to current
   `main` tip at start if it has advanced; additive commits only).
 - Draft PR to `main` with: what changed, tests run (`.\gradlew.bat :app:testDebugUnitTest`,
   `:app:assembleDebug`), manual steps above. Do not merge; operator merges.
