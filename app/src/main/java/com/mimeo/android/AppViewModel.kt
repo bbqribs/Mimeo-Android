@@ -202,8 +202,13 @@ import com.mimeo.android.bluesky.BlueskyServiceCoordinator
 import com.mimeo.android.share.ShareRefreshEvent
 import com.mimeo.android.share.ShareSaveRefreshBus
 import com.mimeo.android.share.ShareSaveResult
+import com.mimeo.android.share.PendingRetryOutcome
+import com.mimeo.android.share.PendingSaveRetryGate
+import com.mimeo.android.share.SAVED_ITEM_NOT_YET_VISIBLE_MESSAGE
+import com.mimeo.android.share.classifyPendingRetryOutcome
 import com.mimeo.android.share.isAutoRetryEligiblePendingSaveResult
 import com.mimeo.android.share.isRetryablePendingSaveResult
+import com.mimeo.android.share.pendingRetryFailureMessage
 import com.mimeo.android.repository.ProgressPostResult
 import com.mimeo.android.ui.components.StatusBanner
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
@@ -413,7 +418,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val pendingManualSaves: StateFlow<List<PendingManualSaveItem>> = _pendingManualSaves.asStateFlow()
     private val _pendingItemActions = MutableStateFlow<List<PendingItemAction>>(emptyList())
     val pendingItemActions: StateFlow<List<PendingItemAction>> = _pendingItemActions.asStateFlow()
-    private val pendingManualRetryMutex = Mutex()
+    // Shared process-wide gate so the app-open flush and the background PendingSaveRetryWorker
+    // never retry the same parked save concurrently.
+    private val pendingManualRetryMutex = PendingSaveRetryGate.mutex
     private val pendingItemActionFlushMutex = Mutex()
     private val _pendingManualRetryInProgress = MutableStateFlow(false)
     val pendingManualRetryInProgress: StateFlow<Boolean> = _pendingManualRetryInProgress.asStateFlow()
@@ -1862,24 +1869,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         try {
         val item = _pendingManualSaves.value.firstOrNull { it.id == itemId } ?: return null
         val result = retryPendingManualSaveItem(item)
-        if (result is ShareSaveResult.Saved && result.itemId != null) {
-            settingsStore.markPendingManualSaveResolved(
-                itemId = itemId,
-                resolvedItemId = result.itemId,
-                statusMessage = "Processing...",
-            )
-        } else if (!isRetryablePendingSaveResult(result)) {
-            settingsStore.removePendingManualSave(itemId)
-        } else {
-            settingsStore.markPendingManualSaveRetryFailure(
-                itemId = itemId,
-                failureMessage = resolvePendingRetryFailureMessage(
-                    existingMessage = item.lastFailureMessage,
-                    result = result,
-                ),
-                autoRetryEligible = shouldAutoRetryManualSave(result),
-            )
-        }
+        applyPendingRetryOutcome(item, result)
         return result
         } finally {
             _pendingManualRetryInProgress.value = false
@@ -1897,27 +1887,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         retryIds.forEach { itemId ->
             val item = _pendingManualSaves.value.firstOrNull { it.id == itemId } ?: return@forEach
             val result = retryPendingManualSaveItem(item)
+            applyPendingRetryOutcome(item, result)
             if (result is ShareSaveResult.Saved && result.itemId != null) {
-                settingsStore.markPendingManualSaveResolved(
-                    itemId = itemId,
-                    resolvedItemId = result.itemId,
-                    statusMessage = "Processing...",
-                )
-            } else if (!isRetryablePendingSaveResult(result)) {
-                settingsStore.removePendingManualSave(itemId)
-            } else {
-                settingsStore.markPendingManualSaveRetryFailure(
-                    itemId = itemId,
-                    failureMessage = resolvePendingRetryFailureMessage(
-                        existingMessage = item.lastFailureMessage,
-                        result = result,
-                    ),
-                    autoRetryEligible = shouldAutoRetryManualSave(result),
-                )
-            }
-            if (result is ShareSaveResult.Saved) {
                 successCount += 1
-            } else if (firstFailureResult == null) {
+            } else if (result !is ShareSaveResult.Saved && firstFailureResult == null) {
+                // A Saved(itemId = null) is neither a counted success nor a surfaced failure — the
+                // row is retained with its own "not yet visible" message rather than snackbarred.
                 firstFailureResult = result
             }
         }
@@ -2529,6 +2504,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 successCount += 1
             }
         }
+        // If the app-open flush drained every auto-retryable row, the scheduled background retry is
+        // now obsolete — cancel it so WorkManager does no redundant work.
+        if (_pendingManualSaves.value.none { it.autoRetryEligible }) {
+            WorkScheduler.cancelPendingSaveRetry(getApplication<Application>().applicationContext)
+        }
         return successCount
     }
 
@@ -3093,13 +3073,43 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return System.currentTimeMillis() - lastPendingAutoRetryAtMs >= 3_000L
     }
 
-    private fun resolvePendingRetryFailureMessage(
-        existingMessage: String?,
-        result: ShareSaveResult,
-    ): String {
-        return when (result) {
-            ShareSaveResult.SaveFailed -> existingMessage ?: ShareSaveResult.NetworkError.notificationText
-            else -> result.notificationText
+    /**
+     * Applies a completed retry [result] to a parked [item], sharing the exact outcome semantics used
+     * by the background worker (including the null-item-id preservation fix) and reconciling the
+     * parked-save notification. Called under [pendingManualRetryMutex].
+     */
+    private suspend fun applyPendingRetryOutcome(item: PendingManualSaveItem, result: ShareSaveResult) {
+        val notifications = ShareResultNotifications(getApplication<Application>().applicationContext)
+        when (val outcome = classifyPendingRetryOutcome(result)) {
+            is PendingRetryOutcome.Resolved -> {
+                settingsStore.markPendingManualSaveResolved(
+                    itemId = item.id,
+                    resolvedItemId = outcome.itemId,
+                    statusMessage = "Processing...",
+                )
+                // Row resolved via app-open flush; drop the parked heads-up without stacking a
+                // duplicate success notification (the in-app UI already reflects the save).
+                notifications.cancelPendingSave(item.id)
+            }
+            PendingRetryOutcome.PreserveUnresolved -> {
+                settingsStore.updatePendingManualSaveStatus(
+                    itemId = item.id,
+                    statusMessage = SAVED_ITEM_NOT_YET_VISIBLE_MESSAGE,
+                    autoRetryEligible = false,
+                )
+                notifications.cancelPendingSave(item.id)
+            }
+            PendingRetryOutcome.RetryFailed -> {
+                settingsStore.markPendingManualSaveRetryFailure(
+                    itemId = item.id,
+                    failureMessage = pendingRetryFailureMessage(item.lastFailureMessage, result),
+                    autoRetryEligible = shouldAutoRetryManualSave(result),
+                )
+            }
+            PendingRetryOutcome.Remove -> {
+                settingsStore.removePendingManualSave(item.id)
+                notifications.cancelPendingSave(item.id)
+            }
         }
     }
 
