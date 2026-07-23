@@ -757,9 +757,13 @@ class SettingsStore(private val context: Context) {
         }
     }
 
-    suspend fun saveQueueSnapshot(selectedPlaylistId: Int?, queue: PlaybackQueueResponse) {
+    suspend fun saveQueueSnapshot(
+        selectedPlaylistId: Int?,
+        queue: PlaybackQueueResponse,
+        savedAtMs: Long = System.currentTimeMillis(),
+    ) {
         val key = queueSnapshotKey(selectedPlaylistId)
-        val savedAt = System.currentTimeMillis()
+        val savedAt = savedAtMs
         context.dataStore.edit { prefs ->
             val existing = decodeQueueSnapshots(prefs[queueSnapshotsJsonKey])
             val updated = listOf(
@@ -778,11 +782,17 @@ class SettingsStore(private val context: Context) {
         }
     }
 
-    suspend fun loadQueueSnapshot(selectedPlaylistId: Int?): PlaybackQueueResponse? {
+    suspend fun loadQueueSnapshot(
+        selectedPlaylistId: Int?,
+        nowMs: Long = System.currentTimeMillis(),
+    ): PlaybackQueueResponse? {
         val key = queueSnapshotKey(selectedPlaylistId)
         val prefs = context.dataStore.data.first()
         val stored = decodeQueueSnapshots(prefs[queueSnapshotsJsonKey])
         val record = stored.records.firstOrNull { it.key == key } ?: return null
+        // A stale snapshot may reference items that were trashed/deleted server-side after it was
+        // captured. Rather than render them as live, skip it so the surface falls back to empty/offline.
+        if (isQueueSnapshotStale(savedAtMs = record.savedAt, nowMs = nowMs)) return null
         return PlaybackQueueResponse(
             count = maxOf(record.count, record.items.size),
             items = record.items,
@@ -795,6 +805,7 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    /** Enqueues (or updates a matching) pending save and returns the id of the affected row. */
     suspend fun enqueuePendingManualSave(
         source: PendingSaveSource,
         type: PendingManualSaveType,
@@ -805,7 +816,8 @@ class SettingsStore(private val context: Context) {
         lastFailureMessage: String,
         autoRetryEligible: Boolean,
         incrementRetryCount: Boolean = true,
-    ) {
+    ): Long {
+        var affectedId = -1L
         context.dataStore.edit { prefs ->
             val existing = decodePendingManualSaves(prefs[pendingManualSavesJsonKey])
             val duplicateIndex = existing.indexOfFirst { pending ->
@@ -817,6 +829,7 @@ class SettingsStore(private val context: Context) {
                     pending.destinationPlaylistId == destinationPlaylistId
             }
             val updated = if (duplicateIndex >= 0) {
+                affectedId = existing[duplicateIndex].id
                 existing.mapIndexed { index, item ->
                     if (index == duplicateIndex) {
                         item.copy(
@@ -830,6 +843,7 @@ class SettingsStore(private val context: Context) {
                 }
             } else {
                 val nextId = (existing.maxOfOrNull { it.id } ?: 0L) + 1L
+                affectedId = nextId
                 listOf(
                     PendingManualSaveItem(
                         id = nextId,
@@ -846,6 +860,7 @@ class SettingsStore(private val context: Context) {
             }
             prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(updated)
         }
+        return affectedId
     }
 
     suspend fun markPendingManualSaveResolved(
@@ -1244,6 +1259,27 @@ class SettingsStore(private val context: Context) {
         private const val MAX_QUEUE_SNAPSHOT_RECORDS = 16
         private const val MAX_PLAYBACK_SEGMENT_INDEX_RECORDS = 256
         private const val MAX_READER_SCROLL_OFFSET_RECORDS = 256
+
+        /** Persisted queue snapshots older than this are treated as stale and not rendered as live. */
+        const val QUEUE_SNAPSHOT_MAX_AGE_MS = 24L * 60L * 60L * 1000L
+
+        /**
+         * Debug/test override for [QUEUE_SNAPSHOT_MAX_AGE_MS]. When non-null it replaces the 24 h
+         * default, letting instrumentation lower the staleness threshold without waiting a real day.
+         * Never set in release flows.
+         */
+        @Volatile
+        internal var queueSnapshotMaxAgeMsOverride: Long? = null
+
+        internal fun resolveQueueSnapshotMaxAgeMs(): Long =
+            queueSnapshotMaxAgeMsOverride ?: QUEUE_SNAPSHOT_MAX_AGE_MS
+
+        /** Pure staleness check: a snapshot saved at [savedAtMs] is stale once older than [maxAgeMs]. */
+        fun isQueueSnapshotStale(
+            savedAtMs: Long,
+            nowMs: Long = System.currentTimeMillis(),
+            maxAgeMs: Long = resolveQueueSnapshotMaxAgeMs(),
+        ): Boolean = savedAtMs <= 0L || nowMs - savedAtMs >= maxAgeMs
     }
 
     internal suspend fun clearAllSettingsForTesting() {

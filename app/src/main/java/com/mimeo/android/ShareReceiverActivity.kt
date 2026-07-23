@@ -30,9 +30,13 @@ import com.mimeo.android.share.extractPlainTextShareBody
 import com.mimeo.android.share.isAutoRetryEligiblePendingSaveResult
 import com.mimeo.android.share.isRetryablePendingSaveResult
 import com.mimeo.android.share.hasTrailingBrowserSelectionFragment
+import com.mimeo.android.share.PARKED_SAVE_NOTIFICATION_TEXT
+import com.mimeo.android.share.SAVED_ITEM_NOT_YET_VISIBLE_MESSAGE
 import com.mimeo.android.share.normalizeSharedSubjectTitle
 import com.mimeo.android.share.removeTrailingSourceUrlFromText
+import com.mimeo.android.share.shouldSurfaceParkedSaveRetry
 import com.mimeo.android.share.shouldTreatShareAsUrlCapture
+import com.mimeo.android.work.WorkScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -122,8 +126,9 @@ class ShareReceiverActivity : ComponentActivity() {
             } else {
                 null
             }
+            var pendingRowId = -1L
             if (useUrlCapture && normalizedUrl != null) {
-                settingsStore.enqueuePendingManualSave(
+                pendingRowId = settingsStore.enqueuePendingManualSave(
                     source = PendingSaveSource.SHARE,
                     type = PendingManualSaveType.URL,
                     urlInput = normalizedUrl,
@@ -135,7 +140,7 @@ class ShareReceiverActivity : ComponentActivity() {
                     incrementRetryCount = false,
                 )
             } else if (plainTextBody != null && plainTextUrlInput != null) {
-                settingsStore.enqueuePendingManualSave(
+                pendingRowId = settingsStore.enqueuePendingManualSave(
                     source = PendingSaveSource.SHARE,
                     type = PendingManualSaveType.TEXT,
                     urlInput = plainTextUrlInput,
@@ -183,6 +188,16 @@ class ShareReceiverActivity : ComponentActivity() {
                     resolvedItemId = result.itemId,
                     statusMessage = "Processing...",
                 )
+            } else if (result is ShareSaveResult.Saved && result.itemId == null && pendingRowId > 0L) {
+                // Duplicate resolution reported success but exposed no item id (e.g. the existing
+                // item is not in the ready-only queue). Never treat as complete: retain the row as
+                // an unresolved failure so later reconciliation/retry can resolve it.
+                settingsStore.updatePendingManualSaveStatus(
+                    itemId = pendingRowId,
+                    statusMessage = SAVED_ITEM_NOT_YET_VISIBLE_MESSAGE,
+                    autoRetryEligible = false,
+                )
+                surfacedResult = null
             }
             if (isRetryablePendingSaveResult(result)) {
                 if (useUrlCapture && normalizedUrl != null) {
@@ -212,6 +227,15 @@ class ShareReceiverActivity : ComponentActivity() {
                     )
                     surfacedResult = null
                 }
+                // Surface a parked-save heads-up and schedule bounded background retry for transient
+                // failures so the save no longer depends on the user reopening the app.
+                if (shouldSurfaceParkedSaveRetry(result) && pendingRowId > 0L) {
+                    notifications.postParkedPendingSave(pendingRowId)
+                    WorkScheduler.enqueuePendingSaveRetry(
+                        context = applicationContext,
+                        parkedBaseUrl = settings.baseUrl,
+                    )
+                }
             }
             if (surfacedResult != null) {
                 notifications.post(surfacedResult, notificationId)
@@ -236,6 +260,7 @@ class ShareReceiverActivity : ComponentActivity() {
 
     companion object {
         const val ACTION_OPEN_SETTINGS = "com.mimeo.android.action.OPEN_SETTINGS"
+        const val ACTION_OPEN_PENDING_SAVES = "com.mimeo.android.action.OPEN_PENDING_SAVES"
 
         private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
@@ -300,6 +325,73 @@ internal class ShareResultNotifications(
         postNotificationIfAllowed(notificationId ?: nextNotificationId(), builder.build())
     }
 
+    /**
+     * Posts the "save pending, will retry automatically" heads-up for a parked share. Keyed by the
+     * pending row id so repeated parks of the same row replace rather than stack, and so a later
+     * success or cancel can target the same notification. Contains no URL/token/body text.
+     */
+    suspend fun postParkedPendingSave(pendingRowId: Long) {
+        if (!canPostNotifications()) return
+        ensureChannel()
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.msr_view_list_24)
+            .setLargeIcon(buildBrandLargeIcon())
+            .setContentTitle("Mimeo")
+            .setContentText(PARKED_SAVE_NOTIFICATION_TEXT)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(PARKED_SAVE_NOTIFICATION_TEXT))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setAutoCancel(true)
+            .setContentIntent(pendingSavesContentIntent(pendingRowId))
+        postNotificationIfAllowed(pendingSaveNotificationId(pendingRowId), builder.build())
+    }
+
+    /**
+     * Replaces the parked notification for [pendingRowId] with a success heads-up once the save
+     * resolves. Only the destination name is shown — never the source URL.
+     */
+    suspend fun postPendingSaveResolved(pendingRowId: Long, destinationName: String) {
+        if (!canPostNotifications()) return
+        val settings = SettingsStore(context.applicationContext).settingsFlow.first()
+        ensureChannel()
+        val text = "Saved to $destinationName ✅"
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.msr_view_list_24)
+            .setLargeIcon(buildBrandLargeIcon())
+            .setContentTitle("Mimeo")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setAutoCancel(true)
+        if (!settings.keepShareResultNotifications) {
+            builder.setTimeoutAfter(4_000L)
+        }
+        postNotificationIfAllowed(pendingSaveNotificationId(pendingRowId), builder.build())
+    }
+
+    /** Cancels the parked notification for [pendingRowId] (e.g. resolved via app-open flush). */
+    fun cancelPendingSave(pendingRowId: Long) {
+        runCatching {
+            NotificationManagerCompat.from(context).cancel(pendingSaveNotificationId(pendingRowId))
+        }
+    }
+
+    private fun pendingSavesContentIntent(pendingRowId: Long): PendingIntent {
+        return PendingIntent.getActivity(
+            context,
+            pendingSaveNotificationId(pendingRowId),
+            Intent(context, MainActivity::class.java).apply {
+                action = ShareReceiverActivity.ACTION_OPEN_PENDING_SAVES
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or pendingIntentMutableFlag(),
+        )
+    }
+
+    private fun pendingSaveNotificationId(pendingRowId: Long): Int =
+        PENDING_SAVE_NOTIFICATION_ID_BASE + (pendingRowId.mod(1000L)).toInt()
+
     private fun ensureChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -350,7 +442,9 @@ internal class ShareResultNotifications(
     private fun nextNotificationId(): Int = notificationIds.incrementAndGet()
 
     private fun buildBrandLargeIcon(): Bitmap? {
-        val drawable = ContextCompat.getDrawable(context, R.drawable.msr_view_list_24) ?: return null
+        val drawable = runCatching {
+            ContextCompat.getDrawable(context, R.drawable.msr_view_list_24)
+        }.getOrNull() ?: return null
         val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 72
         val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 72
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -363,6 +457,9 @@ internal class ShareResultNotifications(
     companion object {
         private const val CHANNEL_ID = "share_saving_heads_up"
         private val notificationIds = AtomicInteger(2400)
+        // Distinct, stable id range for per-row parked-save notifications (2400-series is the
+        // incrementing ad-hoc share result range; keep parked ids clear of it).
+        private const val PENDING_SAVE_NOTIFICATION_ID_BASE = 2800
     }
 }
 

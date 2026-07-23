@@ -567,9 +567,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun consumeLaunchIntent(incomingIntent: Intent?) {
-        if (incomingIntent?.action != ShareReceiverActivity.ACTION_OPEN_SETTINGS) return
-        vm.requestNavigation(ROUTE_SETTINGS)
-        setIntent(Intent(incomingIntent).apply { action = null })
+        when (incomingIntent?.action) {
+            ShareReceiverActivity.ACTION_OPEN_SETTINGS -> {
+                vm.requestNavigation(ROUTE_SETTINGS)
+                setIntent(Intent(incomingIntent).apply { action = null })
+            }
+            ShareReceiverActivity.ACTION_OPEN_PENDING_SAVES -> {
+                // Pending Saves are surfaced on the Up Next queue screen.
+                vm.requestNavigation(ROUTE_UP_NEXT)
+                setIntent(Intent(incomingIntent).apply { action = null })
+            }
+        }
     }
 
     private fun requestNotificationPermissionIfNeeded() {
