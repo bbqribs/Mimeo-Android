@@ -259,7 +259,34 @@ Mimeo (read-only): `backend/app/api/items.py`, `playback.py`, `inbox.py`, `audit
 `core/audit.py`, `scripts/dedup-cleanup.ps1`, `scripts/android_acceptance_harness.py`,
 `docs/REMOTE_RUNTIME_VERIFICATION_PROTOCOL.md`.
 
-## 12. Runtime access statement
+## 12. Follow-up note — 2026-07-23 (bounded re-check)
+
+After this investigation completed, reopening the Android app displayed the swept
+articles in the app again without any explicit restore. A bounded read-only re-check
+found:
+
+- The original 16 server rows (2584–2595, 2607, 2611, 2613, 2614) **remain trashed**
+  (`/items/{id}` 404, all present in `/items?view=trash`); no replacement rows exist for
+  the swept URLs, and the item sequence is continuous through id 2623 — i.e. no database
+  restoration or rollback occurred.
+- The reappearance was client-side: Android persists offline queue snapshots in
+  DataStore (`SettingsStore.saveQueueSnapshot`/`loadQueueSnapshot`), and a pre-sweep
+  snapshot is rendered on reopen until a successful network refresh replaces it. The
+  five articles created by the 2026-07-23T11:01Z pending-save flush appearing alongside
+  it likely amplified the impression of a restore.
+- The pending-save path cannot untrash a row (the backend URL upsert excludes trashed
+  rows), and no resubmission rows were created.
+
+Consequence for the Android follow-up ticket (`T-AND-PENDING-SAVE-SURFACING-1`): also
+age-stamp/expire persisted queue snapshots, or drop cached rows confirmed absent or
+trashed during refresh, so a stale pre-deletion snapshot cannot present binned items as
+live.
+
+The findings in §1–§2 stand unchanged, including the distinction that the batch trash
+operations themselves are confirmed while their attribution to agent tooling remains
+unproven pending access-log evidence.
+
+## 13. Runtime access statement
 
 All runtime interaction was read-only `GET` requests authorized per
 `REMOTE_RUNTIME_VERIFICATION_PROTOCOL.md`. No writes, no deploys, no restarts, no test
