@@ -80,6 +80,7 @@ import com.mimeo.android.ui.playlists.SmartPlaylistFormState
 import com.mimeo.android.ui.queue.JumpToNowPlayingPill
 import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.authenticatedIdentityPresentation
+import com.mimeo.android.ui.common.syncIndicatorLabel
 import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.ui.queue.SmartQueueScreen
 import com.mimeo.android.ui.bluesky.BlueskyBrowseScreen
@@ -163,6 +164,13 @@ internal fun MainActivityShell(
     val binSearchQuery by vm.binSearchQuery.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
     val pendingManualSaves by vm.pendingManualSaves.collectAsState()
+    val lastSuccessfulSyncAtMs by vm.lastSuccessfulSyncAtMs.collectAsState(initial = null)
+    // Re-stamped whenever the drawer opens rather than ticking on a timer: the relative age only
+    // needs to be correct at the moment the user actually looks at it.
+    var drawerNowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(drawerState.isOpen) {
+        if (drawerState.isOpen) drawerNowMs = System.currentTimeMillis()
+    }
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val statusMessage by vm.statusMessage.collectAsState()
     var showNewPlaylistDialog by remember { mutableStateOf(false) }
@@ -347,6 +355,11 @@ internal fun MainActivityShell(
                             nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true }
                             coroutineScope.launch { drawerState.close() }
                         },
+                        syncIndicatorLabel = syncIndicatorLabel(
+                            lastSyncAtMs = lastSuccessfulSyncAtMs,
+                            nowMs = drawerNowMs,
+                        ),
+                        syncIndicatorOffline = queueOffline,
                     )
                 }
             },

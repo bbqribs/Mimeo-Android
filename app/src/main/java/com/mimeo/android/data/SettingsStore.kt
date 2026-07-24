@@ -153,6 +153,10 @@ class SettingsStore(private val context: Context) {
         stringPreferencesKey("startup_destination")
     private val queueSnapshotsJsonKey: Preferences.Key<String> =
         stringPreferencesKey("queue_snapshots_json")
+    private val libraryViewSnapshotsJsonKey: Preferences.Key<String> =
+        stringPreferencesKey("library_view_snapshots_json")
+    private val lastSuccessfulSyncAtMsKey: Preferences.Key<Long> =
+        androidx.datastore.preferences.core.longPreferencesKey("last_successful_sync_at_ms")
     private val pendingManualSavesJsonKey: Preferences.Key<String> =
         stringPreferencesKey("pending_manual_saves_json")
     private val pendingItemActionsJsonKey: Preferences.Key<String> =
@@ -695,6 +699,8 @@ class SettingsStore(private val context: Context) {
     suspend fun clearAccountScopedDataStoreState(clearOwner: Boolean = false) {
         context.dataStore.edit { prefs ->
             prefs[queueSnapshotsJsonKey] = json.encodeToString(QueueSnapshotState())
+            prefs[libraryViewSnapshotsJsonKey] = json.encodeToString(LibraryViewSnapshotState())
+            prefs.remove(lastSuccessfulSyncAtMsKey)
             prefs[pendingManualSavesJsonKey] = encodePendingManualSaves(emptyList())
             prefs[pendingItemActionsJsonKey] = encodePendingItemActions(emptyList())
             prefs[playbackSegmentIndexByItemJsonKey] = encodePlaybackSegmentIndexRecords(emptyList())
@@ -790,9 +796,10 @@ class SettingsStore(private val context: Context) {
         val prefs = context.dataStore.data.first()
         val stored = decodeQueueSnapshots(prefs[queueSnapshotsJsonKey])
         val record = stored.records.firstOrNull { it.key == key } ?: return null
-        // A stale snapshot may reference items that were trashed/deleted server-side after it was
-        // captured. Rather than render them as live, skip it so the surface falls back to empty/offline.
-        if (isQueueSnapshotStale(savedAtMs = record.savedAt, nowMs = nowMs)) return null
+        // Offline display intentionally shows the saved copy regardless of age: the drawer's
+        // offline / last-sync indicator tells the user it is cached, and any successful refresh
+        // replaces this snapshot wholesale (dropping trashed/removed rows). [nowMs] is retained for
+        // callers/tests that still want to reason about snapshot age via [isQueueSnapshotStale].
         return PlaybackQueueResponse(
             count = maxOf(record.count, record.items.size),
             items = record.items,
@@ -803,6 +810,41 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { prefs ->
             prefs[queueSnapshotsJsonKey] = json.encodeToString(QueueSnapshotState())
         }
+    }
+
+    /** Persists the last successful listing for a library view (Inbox/Favorites/Archived) for offline display. */
+    suspend fun saveLibraryViewSnapshot(
+        viewKey: String,
+        items: List<PlaybackQueueItem>,
+        savedAtMs: Long = System.currentTimeMillis(),
+    ) {
+        context.dataStore.edit { prefs ->
+            val existing = decodeLibraryViewSnapshots(prefs[libraryViewSnapshotsJsonKey])
+            val updated = listOf(
+                LibraryViewSnapshotRecord(viewKey = viewKey, items = items, savedAt = savedAtMs),
+            ) + existing.records.filterNot { it.viewKey == viewKey }
+            prefs[libraryViewSnapshotsJsonKey] = json.encodeToString(
+                LibraryViewSnapshotState(records = updated.take(MAX_LIBRARY_VIEW_SNAPSHOT_RECORDS)),
+            )
+        }
+    }
+
+    /** Loads the saved offline listing for a library view, or null if none was ever stored. */
+    suspend fun loadLibraryViewSnapshot(viewKey: String): LibraryViewSnapshot? {
+        val prefs = context.dataStore.data.first()
+        val record = decodeLibraryViewSnapshots(prefs[libraryViewSnapshotsJsonKey])
+            .records.firstOrNull { it.viewKey == viewKey } ?: return null
+        return LibraryViewSnapshot(items = record.items, savedAtMs = record.savedAt)
+    }
+
+    /** Records the wall-clock time of the most recent successful account-scoped sync. */
+    suspend fun saveLastSuccessfulSyncAt(atMs: Long = System.currentTimeMillis()) {
+        context.dataStore.edit { prefs -> prefs[lastSuccessfulSyncAtMsKey] = atMs }
+    }
+
+    /** Last successful sync time (epoch millis), or null if never synced on this account. */
+    val lastSuccessfulSyncAtMsFlow: Flow<Long?> = context.dataStore.data.map { prefs ->
+        prefs[lastSuccessfulSyncAtMsKey]?.takeIf { it > 0L }
     }
 
     /** Enqueues (or updates a matching) pending save and returns the id of the affected row. */
@@ -1114,6 +1156,13 @@ class SettingsStore(private val context: Context) {
         }.getOrDefault(QueueSnapshotState())
     }
 
+    private fun decodeLibraryViewSnapshots(raw: String?): LibraryViewSnapshotState {
+        if (raw.isNullOrBlank()) return LibraryViewSnapshotState()
+        return runCatching {
+            json.decodeFromString<LibraryViewSnapshotState>(raw)
+        }.getOrDefault(LibraryViewSnapshotState())
+    }
+
     private fun encodePendingManualSaves(items: List<PendingManualSaveItem>): String {
         return json.encodeToString(PendingManualSaveState(records = items))
     }
@@ -1257,6 +1306,7 @@ class SettingsStore(private val context: Context) {
 
     companion object {
         private const val MAX_QUEUE_SNAPSHOT_RECORDS = 16
+        private const val MAX_LIBRARY_VIEW_SNAPSHOT_RECORDS = 4
         private const val MAX_PLAYBACK_SEGMENT_INDEX_RECORDS = 256
         private const val MAX_READER_SCROLL_OFFSET_RECORDS = 256
 
@@ -1298,6 +1348,24 @@ class SettingsStore(private val context: Context) {
 @Serializable
 private data class QueueSnapshotState(
     val records: List<QueueSnapshotRecord> = emptyList(),
+)
+
+/** Decoded offline listing for a library view plus the wall-clock time it was captured. */
+data class LibraryViewSnapshot(
+    val items: List<PlaybackQueueItem>,
+    val savedAtMs: Long,
+)
+
+@Serializable
+private data class LibraryViewSnapshotState(
+    val records: List<LibraryViewSnapshotRecord> = emptyList(),
+)
+
+@Serializable
+private data class LibraryViewSnapshotRecord(
+    val viewKey: String,
+    val items: List<PlaybackQueueItem>,
+    val savedAt: Long,
 )
 
 @Serializable

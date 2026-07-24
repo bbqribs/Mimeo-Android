@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -18,6 +19,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -53,6 +56,7 @@ import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.ui.common.AuthenticatedIdentityPresentation
 import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
+import com.mimeo.android.ui.common.syncIndicatorStateDescription
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
 import com.mimeo.android.ui.theme.LocalMimeoTypographyTokens
@@ -72,6 +76,10 @@ internal fun MimeoDrawerContent(
     onNewPlaylistClick: () -> Unit,
     onNewSmartPlaylistClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    // Discreet always-present sync indicator shown beneath the account block: the icon carries
+    // connected/offline state, the label carries freshness.
+    syncIndicatorLabel: String? = null,
+    syncIndicatorOffline: Boolean = false,
 ) {
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
@@ -146,6 +154,20 @@ internal fun MimeoDrawerContent(
                         color = if (isV1) mColors.fg else Color.Unspecified,
                     )
                     DrawerAccountIdentityBlock(identity = identity, isV1 = isV1)
+                    syncIndicatorLabel?.let { label ->
+                        DrawerSyncIndicator(
+                            label = label,
+                            isOffline = syncIndicatorOffline,
+                            // Offline is nudged to the stronger foreground so the two states are
+                            // distinguishable at a glance; both stay muted — this is status, not alarm.
+                            tint = if (syncIndicatorOffline) {
+                                if (isV1) mColors.fg2 else MaterialTheme.colorScheme.onSurface
+                            } else {
+                                if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            textStyle = if (isV1) mTypography.meta else MaterialTheme.typography.labelSmall,
+                        )
+                    }
                     primaryDrawerItems.forEach { destination ->
                         DrawerDestinationItem(
                             destination = destination,
@@ -372,6 +394,43 @@ internal fun MimeoDrawerContent(
                 )
             }
         }
+    }
+}
+
+/**
+ * One muted line beneath the account block, e.g. "Last sync: 3h ago".
+ *
+ * Always present: the icon (cloud-done / cloud-off) carries connectivity and the label carries
+ * freshness, so going offline changes a familiar element rather than introducing a new one.
+ * Deliberately minimal — no card, no colour alarm, no action. It exists so cached content is never
+ * mistaken for live data; it is not a warning.
+ */
+@Composable
+private fun DrawerSyncIndicator(
+    label: String,
+    isOffline: Boolean,
+    tint: Color,
+    textStyle: TextStyle,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = if (isOffline) Icons.Default.CloudOff else Icons.Default.CloudDone,
+            // The icon is the only visual carrier of state, so it must be announced.
+            contentDescription = syncIndicatorStateDescription(isOffline),
+            tint = tint,
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = label,
+            style = textStyle,
+            color = tint,
+        )
     }
 }
 
