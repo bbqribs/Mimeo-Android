@@ -35,6 +35,8 @@ class SettingsStoreQueueSnapshotExpiryTest {
         SettingsStore.queueSnapshotMaxAgeMsOverride = null
     }
 
+    private fun days(n: Long): Long = n * 24L * 60L * 60L * 1000L
+
     private fun queue(vararg itemIds: Int): PlaybackQueueResponse = PlaybackQueueResponse(
         count = itemIds.size,
         items = itemIds.map { id ->
@@ -52,25 +54,32 @@ class SettingsStoreQueueSnapshotExpiryTest {
     }
 
     @Test
-    fun snapshotOlderThanThreshold_isNotRenderedAsLive() = runBlocking {
+    fun oldSnapshotIsStillShownOffline() = runBlocking {
+        // T-AND-OFFLINE-LIBRARY-CACHE-1 replaced #471's hard 24 h hide-cliff: offline browsing keeps
+        // working indefinitely, and the drawer's offline / last-sync indicator marks it as a saved
+        // copy. Trashed rows still drop out on the next successful refresh (wholesale replace).
         val savedAt = 10_000_000L
         store.saveQueueSnapshot(selectedPlaylistId = null, queue = queue(1, 2, 3), savedAtMs = savedAt)
-        // 25 h later — beyond the 24 h staleness threshold.
         val loaded = store.loadQueueSnapshot(
             selectedPlaylistId = null,
-            nowMs = savedAt + SettingsStore.QUEUE_SNAPSHOT_MAX_AGE_MS + 60_000L,
+            nowMs = savedAt + SettingsStore.QUEUE_SNAPSHOT_MAX_AGE_MS + days(7),
         )
-        assertNull("Stale snapshots must not present potentially-trashed rows as live", loaded)
+        assertNotNull("Offline content must survive beyond the old 24 h cutoff", loaded)
+        assertEquals(listOf(1, 2, 3), loaded!!.items.map { it.itemId })
     }
 
     @Test
-    fun loweredDebugThreshold_marksRecentSnapshotStale() = runBlocking {
-        // Mirrors the physical-acceptance debug-threshold mechanism.
-        SettingsStore.queueSnapshotMaxAgeMsOverride = 1_000L
-        val savedAt = 10_000_000L
-        store.saveQueueSnapshot(selectedPlaylistId = null, queue = queue(9), savedAtMs = savedAt)
-        assertNull(store.loadQueueSnapshot(selectedPlaylistId = null, nowMs = savedAt + 5_000L))
-        assertNotNull(store.loadQueueSnapshot(selectedPlaylistId = null, nowMs = savedAt + 500L))
+    fun successfulRefreshReplacesSnapshotWholesale() = runBlocking {
+        store.saveQueueSnapshot(selectedPlaylistId = null, queue = queue(1, 2, 3), savedAtMs = 1_000L)
+        // A later refresh no longer returns item 2 (e.g. trashed server-side).
+        store.saveQueueSnapshot(selectedPlaylistId = null, queue = queue(1, 3), savedAtMs = 2_000L)
+
+        val loaded = store.loadQueueSnapshot(selectedPlaylistId = null, nowMs = 3_000L)
+        assertEquals(
+            "removed rows must not resurrect from the snapshot",
+            listOf(1, 3),
+            loaded!!.items.map { it.itemId },
+        )
     }
 
     @Test

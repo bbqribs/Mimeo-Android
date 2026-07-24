@@ -463,6 +463,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _queueOffline = MutableStateFlow(false)
     val queueOffline: StateFlow<Boolean> = _queueOffline.asStateFlow()
+    /** Wall-clock time of the last successful account-scoped sync, for the offline indicator. */
+    val lastSuccessfulSyncAtMs: Flow<Long?> = settingsStore.lastSuccessfulSyncAtMsFlow
 
     private val _pendingProgressCount = MutableStateFlow(0)
     val pendingProgressCount: StateFlow<Int> = _pendingProgressCount.asStateFlow()
@@ -2181,6 +2183,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 token = current.apiToken,
             )
             _queueOffline.value = false
+            settingsStore.saveLastSuccessfulSyncAt()
             _statusMessage.value = "Queue loaded (${queue.count})"
             flushPendingProgress()
             val shouldAttemptPendingAutoRetry = autoRetryPendingSaves && shouldAttemptPendingAutoRetryOnQueueLoad(
@@ -5071,6 +5074,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ) {
                 return Result.success(Unit)
             }
+            settingsStore.saveLibraryViewSnapshot(ApiClient.ItemsView.ARCHIVED.name, projected)
+            settingsStore.saveLastSuccessfulSyncAt()
             val combined = (_queueItems.value + _archivedItems.value).distinctBy { item -> item.itemId }
             val offlineReadyIds = resolveOfflineReadyIds(combined)
             _cachedItemIds.update { previous -> previous + offlineReadyIds }
@@ -5097,6 +5102,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (isNetworkError(error)) {
                 _queueOffline.value = true
                 _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+                val cached = runCatching {
+                    settingsStore.loadLibraryViewSnapshot(ApiClient.ItemsView.ARCHIVED.name)
+                }.getOrNull()
+                if (cached != null &&
+                    accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())
+                ) {
+                    _archivedItems.value = cached.items
+                }
             }
             Result.failure(error)
         }
@@ -5138,6 +5151,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ) {
                 return Result.success(Unit)
             }
+            // Persist the listing so this view still renders after a cold launch while offline.
+            // Trash is intentionally not cached (a stale trash view could confuse restores).
+            if (view != ApiClient.ItemsView.TRASH) {
+                settingsStore.saveLibraryViewSnapshot(view.name, projected)
+                settingsStore.saveLastSuccessfulSyncAt()
+            }
             _queueOffline.value = false
             if (flushedPendingActions > 0) {
                 _statusMessage.value = "Synced offline actions"
@@ -5156,6 +5175,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (isNetworkError(error)) {
                 _queueOffline.value = true
                 _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
+                // Fall back to the saved copy so offline browsing keeps working.
+                if (view != ApiClient.ItemsView.TRASH) {
+                    val cached = runCatching { settingsStore.loadLibraryViewSnapshot(view.name) }.getOrNull()
+                    if (cached != null &&
+                        accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())
+                    ) {
+                        onLoaded(cached.items)
+                    }
+                }
             }
             Result.failure(error)
         }

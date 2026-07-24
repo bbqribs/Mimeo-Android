@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -72,6 +74,8 @@ internal fun MimeoDrawerContent(
     onNewPlaylistClick: () -> Unit,
     onNewSmartPlaylistClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    // Discreet offline/last-sync line for the footer. Null when online (drawer stays clean).
+    offlineIndicatorLabel: String? = null,
 ) {
     val isV1 = LocalMimeoV1Active.current
     val mColors = LocalMimeoColorTokens.current
@@ -370,8 +374,48 @@ internal fun MimeoDrawerContent(
                     legacyColors = drawerSelectedColorsLegacy,
                     selectedRailColor = settingsAccent,
                 )
+                offlineIndicatorLabel?.let { label ->
+                    DrawerOfflineIndicator(
+                        label = label,
+                        tint = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        textStyle = if (isV1) mTypography.meta else MaterialTheme.typography.labelSmall,
+                    )
+                }
             }
         }
+    }
+}
+
+/**
+ * One muted line at the very bottom of the drawer, e.g. "Offline · Last sync: 3h ago".
+ *
+ * Deliberately minimal — no card, no colour alarm, no action. It exists so cached content is never
+ * mistaken for live data; it is not a warning.
+ */
+@Composable
+private fun DrawerOfflineIndicator(
+    label: String,
+    tint: Color,
+    textStyle: TextStyle,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Default.CloudOff,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = label,
+            style = textStyle,
+            color = tint,
+        )
     }
 }
 
