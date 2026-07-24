@@ -87,6 +87,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.mimeo.android.model.PendingManualSaveItem
+import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.ui.common.DefaultListSurfaceMessage
@@ -185,6 +187,12 @@ fun LibraryItemsScreen(
     clientSideSearch: Boolean = false,
     isInbox: Boolean = false,
     isBin: Boolean = false,
+    // Client-side saves that never reached the server. Inbox only; rendered in the
+    // Pending section above the server-side pending rows. These have no item ID, so
+    // they never enter readyItems / playback snapshots / selection.
+    parkedSaves: List<PendingManualSaveItem> = emptyList(),
+    onRetryParkedSave: ((PendingManualSaveItem) -> Unit)? = null,
+    onDismissParkedSave: ((PendingManualSaveItem) -> Unit)? = null,
     showSourceListRule: Boolean = false,
     showDragReorderHandle: Boolean = false,
     dragReorderEnabled: Boolean = false,
@@ -237,7 +245,6 @@ fun LibraryItemsScreen(
             )
         }
     }
-    var pendingExpanded by rememberSaveable { mutableStateOf(false) }
     val actionScope = rememberCoroutineScope()
     var refreshActionState by remember { mutableStateOf(RefreshActionVisualState.Idle) }
     var pendingPlayAllSnapshot by remember { mutableStateOf<List<PlaybackQueueItem>?>(null) }
@@ -359,6 +366,23 @@ fun LibraryItemsScreen(
 
     val pendingItems = remember(sortedItems, isInbox) {
         if (isInbox) sortedItems.filter { it.status in PENDING_STATUSES } else emptyList()
+    }
+    // Deduped against the full server response (not just the pending slice): once the
+    // real item exists in either section, the parked row must disappear.
+    val parkedRows = remember(parkedSaves, items, isInbox) {
+        if (isInbox) projectParkedSavesForInbox(parkedSaves, items) else emptyList()
+    }
+    // Declared here (not with the other section state above) because the initial value
+    // depends on parkedRows: an offline share must be visible the moment the Inbox opens.
+    var pendingExpanded by rememberSaveable { mutableStateOf(parkedRows.isNotEmpty()) }
+    val hasParkedRows = parkedRows.isNotEmpty()
+    // Keyed on the boolean, so this only fires on the empty -> non-empty edge. A user
+    // who collapsed the section stays collapsed until a genuinely new parked save
+    // arrives, and nothing here ever auto-collapses.
+    LaunchedEffect(hasParkedRows) {
+        if (hasParkedRows) {
+            pendingExpanded = shouldAutoExpandPending(parkedRows.size, pendingExpanded)
+        }
     }
     val baseReadyItems = remember(sortedItems, isInbox) {
         if (isInbox) sortedItems.filter { it.status !in PENDING_STATUSES } else sortedItems
@@ -760,15 +784,25 @@ fun LibraryItemsScreen(
                 contentPadding = PaddingValues(bottom = jumpPillBottomClearance),
             ) {
                 // Pending section (inbox only)
-                if (pendingItems.isNotEmpty()) {
+                if (pendingItems.isNotEmpty() || parkedRows.isNotEmpty()) {
                     stickyHeader(key = "pending_header") {
                         PendingSectionHeader(
-                            count = pendingItems.size,
+                            count = parkedRows.size + pendingItems.size,
                             expanded = pendingExpanded,
                             onToggle = { pendingExpanded = !pendingExpanded },
                         )
                     }
                     if (pendingExpanded) {
+                        // Parked (not-yet-uploaded) saves first — newest action first.
+                        // Long keys, disjoint from the "p_<itemId>" server keys below.
+                        items(items = parkedRows, key = { "parked_${it.id}" }) { parked ->
+                            ParkedSaveRow(
+                                item = parked,
+                                onRetry = onRetryParkedSave?.let { cb -> { cb(parked) } },
+                                onDismiss = onDismissParkedSave?.let { cb -> { cb(parked) } },
+                            )
+                            RowDivider()
+                        }
                         items(items = pendingItems, key = { "p_${it.itemId}" }) { item ->
                             LibraryQueueItemRow(
                                 item = item,
@@ -1118,6 +1152,54 @@ private fun PendingSectionHeader(
 @Composable
 private fun DateSectionHeader(label: String) {
     SectionLabelHeader(label = label)
+}
+
+/**
+ * A save that is still only on this device. Deliberately not [LibraryQueueItemRow],
+ * which is keyed on a server item ID this row does not have — no selection, no
+ * playback, no favorite/archive/bin, no drag handle. Retry and Dismiss only.
+ */
+@Composable
+private fun ParkedSaveRow(
+    item: PendingManualSaveItem,
+    onRetry: (() -> Unit)?,
+    onDismiss: (() -> Unit)?,
+) {
+    val isV1 = LocalMimeoV1Active.current
+    val mColors = LocalMimeoColorTokens.current
+    val title = parkedSaveTitleLine(item)
+    val metadata = parkedSaveMetadataLine(item)
+    ItemRow(
+        title = title,
+        metadata = metadata,
+        // Server status pills describe server-side processing; this row has never
+        // reached the server, so the state lives in the metadata line instead.
+        status = null,
+        titleColor = if (isV1) mColors.fg3 else MaterialTheme.colorScheme.onSurfaceVariant,
+        onOpen = onRetry ?: {},
+        menuEntries = listOfNotNull(
+            onRetry?.let { ItemActionMenuEntry.Action(label = "Retry", onClick = it) },
+            onDismiss?.let { ItemActionMenuEntry.Action(label = "Dismiss", onClick = it) },
+        ),
+    )
+}
+
+/** Same precedence as the Up Next pending-saves hub, so one save reads identically in both. */
+private fun parkedSaveTitleLine(item: PendingManualSaveItem): String = when {
+    !item.titleInput.isNullOrBlank() -> item.titleInput
+    item.urlInput.isNotBlank() -> item.urlInput
+    item.type == PendingManualSaveType.TEXT -> "Pasted text"
+    else -> "(no title)"
+}
+
+private fun parkedSaveMetadataLine(item: PendingManualSaveItem): String {
+    val state = if (item.autoRetryEligible) {
+        "Not uploaded yet — will retry"
+    } else {
+        "Not uploaded — tap to retry"
+    }
+    val reason = item.lastFailureMessage.trim().takeIf { it.isNotEmpty() } ?: return state
+    return "$state · $reason"
 }
 
 @Composable

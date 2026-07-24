@@ -16,6 +16,19 @@ fun extractFirstHttpUrl(sharedText: String?): String? {
     return trimmed.takeIf { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
 }
 
+/**
+ * Loose URL key used to match a client-side pending save against a server item when
+ * the pending row has no resolved item ID. Shared by the Up Next pending projection
+ * and the Inbox parked-save projection so the two dedupe paths cannot drift.
+ *
+ * Returns null when no http(s) URL can be extracted — a null key never matches
+ * anything, so text-only pending saves are never deduped against URL-less items.
+ */
+fun normalizePendingComparisonUrlKey(raw: String?): String? {
+    val extracted = extractFirstHttpUrl(raw)?.trim()?.lowercase(Locale.US) ?: return null
+    return extracted.removeSuffix("/").takeIf { it.isNotEmpty() }
+}
+
 fun extractHttpUrls(sharedText: String?): List<String> {
     if (sharedText.isNullOrBlank()) return emptyList()
     return HTTP_URL_REGEX.findAll(sharedText)
