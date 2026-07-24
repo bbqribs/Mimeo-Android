@@ -758,16 +758,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         viewModelScope.launch {
-            // One emission per "the engine began playing item X" transition. Position, speed
-            // and pause updates leave the key unchanged, so the session is never re-pointed
-            // by anything other than an actual playback start.
+            // One emission per "the engine committed to playing item X" transition. Position,
+            // speed and pause updates leave the key unchanged, so the session is never
+            // re-pointed by anything other than a commitment to play something new.
             playbackEngineState
-                .map { state -> state.currentItemId to state.hasStartedPlaybackForCurrentItem }
+                .map { state ->
+                    state.currentItemId to engineCommittedToPlayback(
+                        autoPlayAfterLoad = state.autoPlayAfterLoad,
+                        isSpeaking = state.isSpeaking,
+                        isAutoPlaying = state.isAutoPlaying,
+                        hasStartedPlaybackForCurrentItem = state.hasStartedPlaybackForCurrentItem,
+                    )
+                }
                 .distinctUntilChanged()
-                .collect { (engineItemId, hasStartedPlayback) ->
+                .collect { (engineItemId, committedToPlayback) ->
                     reconcileSessionPointerToLivePlayback(
                         engineItemId = engineItemId,
-                        hasStartedPlayback = hasStartedPlayback,
+                        committedToPlayback = committedToPlayback,
                     )
                 }
         }
@@ -6700,12 +6707,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     private suspend fun reconcileSessionPointerToLivePlayback(
         engineItemId: Int,
-        hasStartedPlayback: Boolean,
+        committedToPlayback: Boolean,
     ) {
         val session = nowPlayingSession.value ?: return
         val sync = classifyLivePlaybackSessionSync(
             engineItemId = engineItemId,
-            hasStartedPlayback = hasStartedPlayback,
+            committedToPlayback = committedToPlayback,
             sessionCurrentItemId = session.currentItem?.itemId,
             inSessionItems = session.items.any { it.itemId == engineItemId },
             inHistory = session.historyItems.any { it.itemId == engineItemId },

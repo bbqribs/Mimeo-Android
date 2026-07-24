@@ -1,6 +1,8 @@
 package com.mimeo.android
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LivePlaybackSessionSyncTest {
@@ -13,7 +15,7 @@ class LivePlaybackSessionSyncTest {
         // it skipped to.
         val sync = classifyLivePlaybackSessionSync(
             engineItemId = 41,
-            hasStartedPlayback = true,
+            committedToPlayback = true,
             sessionCurrentItemId = 44,
             inSessionItems = true,
             inHistory = false,
@@ -26,7 +28,7 @@ class LivePlaybackSessionSyncTest {
     fun startingAHistoryItemRestoresItFromHistory() {
         val sync = classifyLivePlaybackSessionSync(
             engineItemId = 42,
-            hasStartedPlayback = true,
+            committedToPlayback = true,
             sessionCurrentItemId = 44,
             inSessionItems = false,
             inHistory = true,
@@ -36,12 +38,12 @@ class LivePlaybackSessionSyncTest {
     }
 
     @Test
-    fun loadedButNotYetPlayingItemLeavesTheSessionAlone() {
+    fun loadedButUncommittedItemLeavesTheSessionAlone() {
         // Preview and plain-open both land here. Reclassifying the session on load is the
-        // behaviour that had to be removed; only an actual playback start may re-point it.
+        // behaviour that had to be removed; only a commitment to play may re-point it.
         val sync = classifyLivePlaybackSessionSync(
             engineItemId = 41,
-            hasStartedPlayback = false,
+            committedToPlayback = false,
             sessionCurrentItemId = 44,
             inSessionItems = true,
             inHistory = false,
@@ -51,10 +53,63 @@ class LivePlaybackSessionSyncTest {
     }
 
     @Test
+    fun openWithPlayIntentCommitsBeforeAnySoundIsProduced() {
+        // The pointer must move at openItem(autoPlay = true), not when speech begins.
+        // Waiting until hasStartedPlaybackForCurrentItem flips re-points the session
+        // mid-handoff, after autoPlayAfterLoad is consumed, which re-keys the Reader's load
+        // effect outside its preserve-content window: blank + spinner, playback stopped.
+        assertTrue(
+            engineCommittedToPlayback(
+                autoPlayAfterLoad = true,
+                isSpeaking = false,
+                isAutoPlaying = false,
+                hasStartedPlaybackForCurrentItem = false,
+            ),
+        )
+    }
+
+    @Test
+    fun commitmentHasNoGapAcrossTheLoadToPlayHandoff() {
+        // maybeAutoPlayAfterLoad clears autoPlayAfterLoad immediately before speaking, so
+        // the predicate must stay true on the isSpeaking/isAutoPlaying side of that switch —
+        // otherwise the key flickers and the pointer moves twice.
+        assertTrue(
+            engineCommittedToPlayback(
+                autoPlayAfterLoad = false,
+                isSpeaking = true,
+                isAutoPlaying = true,
+                hasStartedPlaybackForCurrentItem = false,
+            ),
+        )
+        // Paused after playing stays committed: the engine still owns this item.
+        assertTrue(
+            engineCommittedToPlayback(
+                autoPlayAfterLoad = false,
+                isSpeaking = false,
+                isAutoPlaying = false,
+                hasStartedPlaybackForCurrentItem = true,
+            ),
+        )
+    }
+
+    @Test
+    fun plainOpenIsNotACommitment() {
+        // Opening an item to read it (autoPlayAfterLoad = false) must leave Up Next alone.
+        assertFalse(
+            engineCommittedToPlayback(
+                autoPlayAfterLoad = false,
+                isSpeaking = false,
+                isAutoPlaying = false,
+                hasStartedPlaybackForCurrentItem = false,
+            ),
+        )
+    }
+
+    @Test
     fun playingTheAlreadyCurrentItemIsANoOp() {
         val sync = classifyLivePlaybackSessionSync(
             engineItemId = 44,
-            hasStartedPlayback = true,
+            committedToPlayback = true,
             sessionCurrentItemId = 44,
             inSessionItems = true,
             inHistory = false,
@@ -69,7 +124,7 @@ class LivePlaybackSessionSyncTest {
         // into Up Next; that stays an explicit user action (Play now / Reader promote).
         val sync = classifyLivePlaybackSessionSync(
             engineItemId = 99,
-            hasStartedPlayback = true,
+            committedToPlayback = true,
             sessionCurrentItemId = 44,
             inSessionItems = false,
             inHistory = false,
@@ -82,7 +137,7 @@ class LivePlaybackSessionSyncTest {
     fun sessionMembershipTakesPrecedenceOverHistory() {
         val sync = classifyLivePlaybackSessionSync(
             engineItemId = 7,
-            hasStartedPlayback = true,
+            committedToPlayback = true,
             sessionCurrentItemId = 44,
             inSessionItems = true,
             inHistory = true,
@@ -99,7 +154,7 @@ class LivePlaybackSessionSyncTest {
             LivePlaybackSessionSync.None,
             classifyLivePlaybackSessionSync(
                 engineItemId = 0,
-                hasStartedPlayback = true,
+                committedToPlayback = true,
                 sessionCurrentItemId = 44,
                 inSessionItems = true,
                 inHistory = false,
@@ -109,7 +164,7 @@ class LivePlaybackSessionSyncTest {
             LivePlaybackSessionSync.None,
             classifyLivePlaybackSessionSync(
                 engineItemId = -3,
-                hasStartedPlayback = true,
+                committedToPlayback = true,
                 sessionCurrentItemId = null,
                 inSessionItems = false,
                 inHistory = false,
@@ -123,7 +178,7 @@ class LivePlaybackSessionSyncTest {
         // playback start should install the pointer rather than leave it unset.
         val sync = classifyLivePlaybackSessionSync(
             engineItemId = 41,
-            hasStartedPlayback = true,
+            committedToPlayback = true,
             sessionCurrentItemId = null,
             inSessionItems = true,
             inHistory = false,

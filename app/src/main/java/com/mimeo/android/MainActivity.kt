@@ -211,6 +211,15 @@ internal const val ROUTE_ARCHIVE = "archive"
 internal const val ROUTE_BIN = "bin"
 internal const val ROUTE_SMART_QUEUE = "smartQueue"
 internal const val ROUTE_UP_NEXT = "upNext"
+
+/**
+ * The route Up Next is actually *registered* under. `navigate(ROUTE_UP_NEXT)` matches this
+ * via the optional argument, but `popUpTo` resolves destinations by exact route, so passing
+ * the bare [ROUTE_UP_NEXT] there silently finds nothing and the pop is skipped — every
+ * chevron/drawer hop to Up Next then stacks another copy instead of returning to the
+ * existing one.
+ */
+internal const val ROUTE_UP_NEXT_PATTERN = "$ROUTE_UP_NEXT?focusItemId={focusItemId}"
 internal const val ROUTE_SIGN_IN = "signIn"
 internal const val ROUTE_LOCUS = "locus"
 internal const val ROUTE_LOCUS_ITEM = "locus/{itemId}"
@@ -364,8 +373,31 @@ internal fun classifyReaderPromoteRoute(
 }
 
 /**
+ * Whether the playback engine has *committed* to playing its current item: it either
+ * already produced sound, or it was opened with the explicit intent to play as soon as the
+ * text lands.
+ *
+ * This is the same predicate the Reader uses to decide that the engine — rather than the
+ * session — owns the current item (`engineOwnsLivePlayback` / `hasLockedPlaybackOwner` in
+ * PlayerScreen), plus `autoPlayAfterLoad`. Sharing it matters: the session pointer and the
+ * Reader's `currentItemId` then flip on the *same* signal at the *same* moment, so they
+ * cannot disagree.
+ *
+ * Including `autoPlayAfterLoad` is what keeps the commit continuous. `openItem(autoPlay =
+ * true)` sets it synchronously and `maybeAutoPlayAfterLoad` clears it just before starting
+ * to speak, so this predicate stays true across the whole load→play handoff with no gap —
+ * and the pointer moves once, at the open, instead of mid-handoff after the text arrives.
+ */
+internal fun engineCommittedToPlayback(
+    autoPlayAfterLoad: Boolean,
+    isSpeaking: Boolean,
+    isAutoPlaying: Boolean,
+    hasStartedPlaybackForCurrentItem: Boolean,
+): Boolean = autoPlayAfterLoad || isSpeaking || isAutoPlaying || hasStartedPlaybackForCurrentItem
+
+/**
  * How the Now Playing session pointer must move to catch up with the item the playback
- * engine has actually started speaking.
+ * engine has committed to playing.
  *
  * Playback can begin without any session mutation. Opening an item from "Earlier in queue"
  * while playback is paused loads that item into the engine buffer but resets
@@ -377,8 +409,12 @@ internal fun classifyReaderPromoteRoute(
  * Next ordering all keep describing the wrong article, and the next Up Next sync sees an
  * authoritative active id that disagrees with the engine (which clears playback outright).
  *
- * Gating on playback *start* rather than item *load* is deliberate: previewing an item
- * never starts its playback, so previews still must not reclassify the session.
+ * Gating on playback *commitment* rather than item *load* is deliberate: previewing or
+ * plain-opening an item never commits it, so neither may reclassify the session. Gating on
+ * commitment rather than on sound actually starting matters just as much — re-pointing
+ * mid-handoff moves the Reader's `currentItemId` after `autoPlayAfterLoad` has already been
+ * consumed, which re-keys its load effect outside the preserve-content window and blanks
+ * the Reader (and stops playback) instead of handing over cleanly.
  *
  * Items in neither the session nor its history return [LivePlaybackSessionSync.None].
  * Adopting an arbitrary played item into Up Next is an explicit user action (Play now,
@@ -392,13 +428,13 @@ internal enum class LivePlaybackSessionSync {
 
 internal fun classifyLivePlaybackSessionSync(
     engineItemId: Int,
-    hasStartedPlayback: Boolean,
+    committedToPlayback: Boolean,
     sessionCurrentItemId: Int?,
     inSessionItems: Boolean,
     inHistory: Boolean,
 ): LivePlaybackSessionSync {
     if (engineItemId <= 0) return LivePlaybackSessionSync.None
-    if (!hasStartedPlayback) return LivePlaybackSessionSync.None
+    if (!committedToPlayback) return LivePlaybackSessionSync.None
     if (engineItemId == sessionCurrentItemId) return LivePlaybackSessionSync.None
     return when {
         inSessionItems -> LivePlaybackSessionSync.MoveToSessionItem

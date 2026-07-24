@@ -136,6 +136,59 @@ the session*, matching the stated expected behaviour.
   move this repro needs (current index 3 → target 0), with and without the displaced
   active item going to History.
 
+## Follow-up round (operator, 2026-07-24, on the first build of this branch)
+
+### A. The reconciler fired too late (regression from the first commit)
+
+With an article playing, opening another from Up Next and long-pressing Play produced:
+the "Playing item shown in Locus" snackbar, then a dark reader with a spinner, playback
+stopped outright, and Now Playing still showing the previous article.
+
+The first cut keyed the reconciler on `hasStartedPlaybackForCurrentItem` — the moment sound
+actually begins. In the preview→play path that is *mid-handoff*:
+
+1. `playLocusItem` calls `playbackOpenItem(B, autoPlayAfterLoad = true)` and drops preview
+   mode. The session is still A, and the engine has not started, so `engineOwnsLivePlayback`
+   is false and the Reader's `currentItemId` still resolves to **A**.
+2. `maybeAutoPlayAfterLoad` clears `autoPlayAfterLoad` *and then* starts speaking.
+3. Only now did the old key `(B, hasStarted = true)` fire and move the session to B — which
+   flips `currentItemId` A→B and re-keys the loadItem effect
+   (`PlayerScreen.kt:1407`, keyed on `currentItemId`) at the one moment
+   `autoPlayAfterLoad` is already false. `preservingVisibleContent` is then false, so the
+   effect takes `textPayload = null; chunks = emptyList(); isLoading = true` — blank +
+   spinner — and `shouldPreserveActivePlaybackDuringLoad` can miss, calling `stopSpeaking`.
+
+Fix: trigger on **commitment to play** rather than on sound starting, via a shared
+`engineCommittedToPlayback(autoPlayAfterLoad, isSpeaking, isAutoPlaying, hasStarted)`.
+`openItem(autoPlay = true)` sets `autoPlayAfterLoad` synchronously and
+`maybeAutoPlayAfterLoad` clears it immediately before speaking, so the predicate is
+continuous across the whole load→play handoff — the pointer now moves once, at the open,
+exactly where `promoteReaderItemToNowPlaying` used to move it.
+
+This is deliberately the same predicate PlayerScreen already uses for
+`engineOwnsLivePlayback` / `hasLockedPlaybackOwner`. The session pointer and the Reader's
+`currentItemId` now flip on the same signal at the same instant, so they cannot disagree.
+The original paused repro still works: a plain open is `autoPlayAfterLoad = false` (no
+move), and `playbackPlay()` sets `isSpeaking`/`isAutoPlaying` (move) — at which point
+`shouldSkipSurfaceHandoffReload` short-circuits the load effect cleanly.
+
+### B. Chevron does not reliably go to Up Next
+
+Two independent defects, both in scope here since the chevron sits in the same control bar:
+
+1. **Tap loses to the drag detector.** `PlayerChromeChevron` stacks `pointerInput {
+   detectHorizontalDragGestures }` and `pointerInput { detectTapGestures }` on one box. Once
+   a gesture crosses touch slop the drag detector consumes moves, cancelling the tap
+   detector — but `handleChevronSnap` ignores anything under 32px. So a tap that drifts a
+   few pixels (routine for a thumb on a small chip at the screen edge) fired *nothing*.
+   That is the reported intermittency. `onDragEnd` now replays sub-threshold drags as taps;
+   `chevronDragEndIsTap` / `chevronDragIsSnap` partition the range so exactly one fires.
+2. **`popUpTo` never matched.** Up Next is registered as `upNext?focusItemId={focusItemId}`
+   but both `popUpTo(ROUTE_UP_NEXT)` call sites passed the bare `upNext`. `navigate` matches
+   that via the optional argument; `popUpTo` resolves by exact route and silently found
+   nothing, so every chevron/drawer hop stacked another Up Next entry instead of returning
+   to the existing one. Both sites now use a new `ROUTE_UP_NEXT_PATTERN`.
+
 ## Manual verification
 
 See the PR description.
