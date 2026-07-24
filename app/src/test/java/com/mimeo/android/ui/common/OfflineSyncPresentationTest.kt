@@ -35,21 +35,27 @@ class OfflineSyncPresentationTest {
     }
 
     @Test
-    fun `indicator is hidden entirely while online`() {
-        assertNull(offlineIndicatorLabel(isOffline = false, lastSyncAtMs = now - hours(3), nowMs = now))
-        assertNull(offlineIndicatorLabel(isOffline = false, lastSyncAtMs = null, nowMs = now))
+    fun `label is identical online and offline so only the icon changes state`() {
+        // The indicator is always present; connectivity is carried by the icon, not the text.
+        val expected = "Last sync: 3h ago"
+        assertEquals(expected, syncIndicatorLabel(lastSyncAtMs = now - hours(3), nowMs = now))
     }
 
     @Test
-    fun `offline indicator reports the last sync age`() {
-        assertEquals(
-            "Offline · Last sync: 3h ago",
-            offlineIndicatorLabel(isOffline = true, lastSyncAtMs = now - hours(3), nowMs = now),
-        )
+    fun `label keeps a prefix rather than a bare age`() {
+        assertEquals("Last sync: just now", syncIndicatorLabel(lastSyncAtMs = now - 10_000L, nowMs = now))
+        assertEquals("Last sync: 2d ago", syncIndicatorLabel(lastSyncAtMs = now - days(2), nowMs = now))
     }
 
     @Test
-    fun `offline with no prior sync degrades to a bare label`() {
-        assertEquals("Offline", offlineIndicatorLabel(isOffline = true, lastSyncAtMs = null, nowMs = now))
+    fun `never-synced account reports so instead of an empty age`() {
+        assertEquals("Never synced", syncIndicatorLabel(lastSyncAtMs = null, nowMs = now))
+        assertEquals("Never synced", syncIndicatorLabel(lastSyncAtMs = 0L, nowMs = now))
+    }
+
+    @Test
+    fun `icon state is announced for screen readers`() {
+        assertEquals("Offline", syncIndicatorStateDescription(isOffline = true))
+        assertEquals("Connected", syncIndicatorStateDescription(isOffline = false))
     }
 }

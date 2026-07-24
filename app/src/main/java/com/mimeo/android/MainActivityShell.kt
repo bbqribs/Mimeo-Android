@@ -80,7 +80,7 @@ import com.mimeo.android.ui.playlists.SmartPlaylistFormState
 import com.mimeo.android.ui.queue.JumpToNowPlayingPill
 import com.mimeo.android.ui.common.jumpPillBottomPadding
 import com.mimeo.android.ui.common.authenticatedIdentityPresentation
-import com.mimeo.android.ui.common.offlineIndicatorLabel
+import com.mimeo.android.ui.common.syncIndicatorLabel
 import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.ui.queue.SmartQueueScreen
 import com.mimeo.android.ui.bluesky.BlueskyBrowseScreen
@@ -354,11 +354,11 @@ internal fun MainActivityShell(
                             nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true }
                             coroutineScope.launch { drawerState.close() }
                         },
-                        offlineIndicatorLabel = offlineIndicatorLabel(
-                            isOffline = queueOffline,
+                        syncIndicatorLabel = syncIndicatorLabel(
                             lastSyncAtMs = lastSuccessfulSyncAtMs,
                             nowMs = drawerNowMs,
                         ),
+                        syncIndicatorOffline = queueOffline,
                     )
                 }
             },

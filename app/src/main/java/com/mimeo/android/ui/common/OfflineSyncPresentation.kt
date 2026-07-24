@@ -1,11 +1,13 @@
 package com.mimeo.android.ui.common
 
 /**
- * Presentation helpers for the discreet offline / last-sync indicator.
+ * Presentation helpers for the discreet sync indicator beneath the drawer's account block.
  *
- * Deliberately terse: the indicator is a single muted line in the drawer footer, shown only while
- * offline, so the user can tell at a glance that what they are looking at is a saved copy rather
- * than live data. Contains no titles, URLs or tokens — a relative time only.
+ * The indicator is always present; the *icon* carries connected/offline state and the *text*
+ * carries freshness. Keeping it visible in both states means going offline reads as a change in
+ * something familiar rather than a new element appearing, and the sync age stays useful online.
+ *
+ * Contains no titles, URLs or tokens — a relative time only.
  */
 
 /** Formats a relative age like "just now", "3m ago", "5h ago", "2d ago". */
@@ -24,17 +26,21 @@ internal fun formatLastSyncAge(lastSyncAtMs: Long?, nowMs: Long): String? {
 }
 
 /**
- * Full indicator line, or null when nothing should be shown.
+ * The indicator's text, shown identically whether online or offline.
  *
- * Only rendered while [isOffline]; when online the drawer stays clean. If the account has never
- * synced there is no age to report, so the line degrades to a bare "Offline".
+ * Keeps the "Last sync:" prefix rather than a bare age — a naked "3h ago" invites "3h ago *what*?".
+ * An account that has never completed a sync has no age to report and says so instead.
  */
-internal fun offlineIndicatorLabel(
-    isOffline: Boolean,
-    lastSyncAtMs: Long?,
-    nowMs: Long,
-): String? {
-    if (!isOffline) return null
-    val age = formatLastSyncAge(lastSyncAtMs, nowMs) ?: return "Offline"
-    return "Offline · Last sync: $age"
+internal fun syncIndicatorLabel(lastSyncAtMs: Long?, nowMs: Long): String {
+    val age = formatLastSyncAge(lastSyncAtMs, nowMs) ?: return "Never synced"
+    return "Last sync: $age"
 }
+
+/**
+ * Screen-reader description for the indicator icon.
+ *
+ * The icon is the only visual carrier of connected/offline state, so it must be announced —
+ * otherwise a TalkBack user hears the age with no indication of connectivity at all.
+ */
+internal fun syncIndicatorStateDescription(isOffline: Boolean): String =
+    if (isOffline) "Offline" else "Connected"
