@@ -736,6 +736,27 @@ internal fun shouldSkipSurfaceHandoffReload(
     return autoPlayAfterLoad || isSpeaking || isAutoPlaying
 }
 
+/**
+ * Minimum horizontal travel that turns a chevron gesture into an edge snap. Anything
+ * shorter is a tap the drag detector happened to intercept.
+ */
+internal const val CHEVRON_SNAP_MIN_DRAG_PX = 32f
+
+internal fun chevronDragIsSnap(dragTotalPx: Float): Boolean =
+    abs(dragTotalPx) >= CHEVRON_SNAP_MIN_DRAG_PX
+
+/**
+ * Whether a completed chevron drag should be treated as a tap.
+ *
+ * The chevron stacks a horizontal-drag detector and a tap detector on the same box. Once a
+ * gesture crosses touch slop the drag detector starts consuming moves, which cancels the
+ * tap detector — so a tap that drifts a few pixels (routine for a thumb on a small chip at
+ * the screen edge) fired neither handler: not a tap, and too short to snap. That is the
+ * "chevron sometimes doesn't go to Up Next" report. A drag that ends below the snap
+ * threshold is the user tapping, so replay it as one.
+ */
+internal fun chevronDragEndIsTap(dragTotalPx: Float): Boolean = !chevronDragIsSnap(dragTotalPx)
+
 internal fun shouldApplyVoiceSettings(
     lastAppliedVoiceName: String,
     requestedVoiceName: String,
@@ -1847,7 +1868,7 @@ fun PlayerScreen(
         onControlsModeChange(nextMode, nextLastNonNub)
     }
     val handleChevronSnap: (Float) -> Unit = { delta ->
-        if (abs(delta) >= 32f) {
+        if (chevronDragIsSnap(delta)) {
             val nextEdge = if (delta < 0f) {
                 PlayerChevronSnapEdge.LEFT
             } else {
@@ -4164,8 +4185,11 @@ private fun PlayerChromeChevron(
                         dragAccumulation += dragAmount
                     },
                     onDragEnd = {
-                        onSnap(dragAccumulation)
+                        val dragTotal = dragAccumulation
                         dragAccumulation = 0f
+                        // Only reached once the gesture crossed touch slop, which already
+                        // cancelled the tap detector below. Short drags are taps.
+                        if (chevronDragEndIsTap(dragTotal)) onTap() else onSnap(dragTotal)
                     },
                     onDragCancel = {
                         dragAccumulation = 0f

@@ -280,7 +280,7 @@ internal fun MainActivityShell(
                 return@buildPlayerRouteHandlers
             }
             nav.navigate(ROUTE_UP_NEXT) {
-                popUpTo(ROUTE_UP_NEXT) { inclusive = false }
+                popUpTo(ROUTE_UP_NEXT_PATTERN) { inclusive = false }
                 launchSingleTop = true
                 restoreState = true
             }
@@ -785,7 +785,7 @@ internal fun MainActivityShell(
                                     onOpenPlayer = shellState.openItemInLocus,
                                     onNavigateAfterDelete = {
                                         nav.navigate(ROUTE_UP_NEXT) {
-                                            popUpTo(ROUTE_UP_NEXT) { inclusive = false }
+                                            popUpTo(ROUTE_UP_NEXT_PATTERN) { inclusive = false }
                                             launchSingleTop = true
                                         }
                                     },
@@ -857,7 +857,7 @@ internal fun MainActivityShell(
                                 )
                             }
                             composable(
-                                route = "$ROUTE_UP_NEXT?focusItemId={focusItemId}",
+                                route = ROUTE_UP_NEXT_PATTERN,
                                 arguments = listOf(
                                     navArgument("focusItemId") {
                                         type = NavType.IntType
