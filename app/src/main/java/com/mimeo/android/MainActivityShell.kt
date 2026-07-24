@@ -163,6 +163,7 @@ internal fun MainActivityShell(
     val archiveSearchQuery by vm.archiveSearchQuery.collectAsState()
     val binSearchQuery by vm.binSearchQuery.collectAsState()
     val queueOffline by vm.queueOffline.collectAsState()
+    val pendingManualSaves by vm.pendingManualSaves.collectAsState()
     val lastSuccessfulSyncAtMs by vm.lastSuccessfulSyncAtMs.collectAsState(initial = null)
     // Re-stamped whenever the drawer opens rather than ticking on a timer: the relative age only
     // needs to be correct at the moment the user actually looks at it.
@@ -525,6 +526,11 @@ internal fun MainActivityShell(
                                     availableSorts = LibrarySortOption.INBOX_SORTS,
                                     searchQuery = inboxSearchQuery,
                                     isInbox = true,
+                                    parkedSaves = pendingManualSaves,
+                                    onRetryParkedSave = { parked ->
+                                        coroutineScope.launch { vm.retryPendingManualSave(parked.id) }
+                                    },
+                                    onDismissParkedSave = { parked -> vm.removePendingManualSave(parked.id) },
                                     batchActions = listOf(
                                         LibraryBatchAction("Archive", Icons.Default.Archive, "archive"),
                                         LibraryBatchAction("Move to Bin", Icons.Default.Delete, "bin"),
