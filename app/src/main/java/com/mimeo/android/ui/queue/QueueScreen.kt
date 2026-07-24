@@ -108,6 +108,7 @@ import com.mimeo.android.repository.NowPlayingSessionItem
 import com.mimeo.android.share.ShareSaveResult
 import com.mimeo.android.share.extractFirstHttpUrl
 import com.mimeo.android.share.isRetryablePendingSaveResult
+import com.mimeo.android.share.normalizePendingComparisonUrlKey
 import com.mimeo.android.ui.components.RefreshActionButton
 import com.mimeo.android.ui.components.RefreshActionVisualState
 import com.mimeo.android.ui.common.ItemActionMenuEntry
@@ -1348,10 +1349,8 @@ internal fun projectPendingItemsForDestination(
     }
 }
 
-private fun normalizePendingComparisonUrl(raw: String?): String? {
-    val extracted = extractFirstHttpUrl(raw)?.trim()?.lowercase() ?: return null
-    return extracted.removeSuffix("/")
-}
+private fun normalizePendingComparisonUrl(raw: String?): String? =
+    normalizePendingComparisonUrlKey(raw)
 
 private fun hasFailedPendingProjectionStatus(queueItem: PlaybackQueueItem): Boolean {
     return isTerminalPendingProcessingStatus(queueItem.status)
