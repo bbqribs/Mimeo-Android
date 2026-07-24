@@ -255,6 +255,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
@@ -755,6 +756,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 updateActivePlaybackClock(it)
                 pushPlaybackServiceSnapshot()
             }
+        }
+        viewModelScope.launch {
+            // One emission per "the engine began playing item X" transition. Position, speed
+            // and pause updates leave the key unchanged, so the session is never re-pointed
+            // by anything other than an actual playback start.
+            playbackEngineState
+                .map { state -> state.currentItemId to state.hasStartedPlaybackForCurrentItem }
+                .distinctUntilChanged()
+                .collect { (engineItemId, hasStartedPlayback) ->
+                    reconcileSessionPointerToLivePlayback(
+                        engineItemId = engineItemId,
+                        hasStartedPlayback = hasStartedPlayback,
+                    )
+                }
         }
         viewModelScope.launch {
             playbackEngineState.collect { state ->
@@ -6634,30 +6649,71 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             inHistory = session.historyItems.any { it.itemId == itemId },
         )
         when (route) {
-            ReaderPromoteRoute.SessionItem -> {
-                val targetIndex = session.items.indexOfFirst { it.itemId == itemId }
-                val current = session.currentItem ?: return
-                if (targetIndex == session.currentIndex) return
-                val priorActiveGoesToHistory = shouldPlacePriorActiveInHistory(current.itemId)
-                val updated = repository.moveCurrentIndex(
-                    targetIndex = targetIndex,
-                    priorActiveToHistory = priorActiveGoesToHistory,
-                ) ?: return
-                if (priorActiveGoesToHistory) recordTransientHistoryItem(current)
-                applySessionSnapshot(updated, preserveExistingPositions = true)
-            }
-            ReaderPromoteRoute.HistoryItem -> {
-                val item = session.historyItems.firstOrNull { it.itemId == itemId } ?: return
-                val updated = repository.insertTransientHistoryItemAsCurrent(item) ?: return
-                transientHistoryItems.removeAll { it.itemId == itemId }
-                applySessionSnapshot(updated, preserveExistingPositions = true)
-            }
+            ReaderPromoteRoute.SessionItem -> movePointerToSessionItem(session, itemId)
+            ReaderPromoteRoute.HistoryItem -> movePointerToHistoryItem(session, itemId)
             ReaderPromoteRoute.ExternalItem -> {
                 val item = allQueueActionItems().firstOrNull { it.itemId == itemId } ?: return
                 val updated = repository.playNowInSession(item)
                 applySessionSnapshot(updated, preserveExistingPositions = true)
             }
             ReaderPromoteRoute.None -> return
+        }
+    }
+
+    /** Re-points the session at a member of `session.items`, displacing the prior active item. */
+    private suspend fun movePointerToSessionItem(session: NowPlayingSession, itemId: Int) {
+        val targetIndex = session.items.indexOfFirst { it.itemId == itemId }
+        if (targetIndex < 0) return
+        if (targetIndex == session.currentIndex) return
+        // A session whose pointer never resolved (currentIndex out of range) has no active
+        // item to displace; computeSessionIndexMovePlan installs the target directly.
+        val priorActiveForHistory = session.currentItem
+            ?.takeIf { shouldPlacePriorActiveInHistory(it.itemId) }
+        val updated = repository.moveCurrentIndex(
+            targetIndex = targetIndex,
+            priorActiveToHistory = priorActiveForHistory != null,
+        ) ?: return
+        priorActiveForHistory?.let(::recordTransientHistoryItem)
+        applySessionSnapshot(updated, preserveExistingPositions = true)
+    }
+
+    /** Re-points the session at a transient-History item, pulling it back into the queue. */
+    private suspend fun movePointerToHistoryItem(session: NowPlayingSession, itemId: Int) {
+        val item = session.historyItems.firstOrNull { it.itemId == itemId } ?: return
+        val updated = repository.insertTransientHistoryItemAsCurrent(item) ?: return
+        transientHistoryItems.removeAll { it.itemId == itemId }
+        applySessionSnapshot(updated, preserveExistingPositions = true)
+    }
+
+    /**
+     * Keeps the Now Playing pointer honest about what is audible.
+     *
+     * Several playback entry points start the engine without mutating the session: the
+     * Reader's play control when the engine buffer holds an opened-but-not-yet-current item
+     * (see [classifyLivePlaybackSessionSync]), and media-notification / headset starts. Left
+     * alone, the session keeps projecting the previously active item as Now Playing while a
+     * different article plays.
+     *
+     * Driven off engine-state transitions only, so a session mutation that legitimately runs
+     * *ahead* of the engine — the auto-continue handoff moves the pointer first, then opens
+     * the next item — cannot be dragged backwards by this.
+     */
+    private suspend fun reconcileSessionPointerToLivePlayback(
+        engineItemId: Int,
+        hasStartedPlayback: Boolean,
+    ) {
+        val session = nowPlayingSession.value ?: return
+        val sync = classifyLivePlaybackSessionSync(
+            engineItemId = engineItemId,
+            hasStartedPlayback = hasStartedPlayback,
+            sessionCurrentItemId = session.currentItem?.itemId,
+            inSessionItems = session.items.any { it.itemId == engineItemId },
+            inHistory = session.historyItems.any { it.itemId == engineItemId },
+        )
+        when (sync) {
+            LivePlaybackSessionSync.MoveToSessionItem -> movePointerToSessionItem(session, engineItemId)
+            LivePlaybackSessionSync.RestoreFromHistory -> movePointerToHistoryItem(session, engineItemId)
+            LivePlaybackSessionSync.None -> Unit
         }
     }
 

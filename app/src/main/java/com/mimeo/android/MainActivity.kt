@@ -363,6 +363,50 @@ internal fun classifyReaderPromoteRoute(
     }
 }
 
+/**
+ * How the Now Playing session pointer must move to catch up with the item the playback
+ * engine has actually started speaking.
+ *
+ * Playback can begin without any session mutation. Opening an item from "Earlier in queue"
+ * while playback is paused loads that item into the engine buffer but resets
+ * `hasStartedPlaybackForCurrentItem`, so the Reader resolves its current item from the
+ * *session* anchor instead of the engine. The play control then targets the session's item
+ * id, takes the "already current" branch of `playLocusItem`, and calls `playbackPlay()` —
+ * which speaks the loaded buffer (the opened item) while the session pointer still
+ * references the previously active one. Now Playing, the earlier/upcoming split and the Up
+ * Next ordering all keep describing the wrong article, and the next Up Next sync sees an
+ * authoritative active id that disagrees with the engine (which clears playback outright).
+ *
+ * Gating on playback *start* rather than item *load* is deliberate: previewing an item
+ * never starts its playback, so previews still must not reclassify the session.
+ *
+ * Items in neither the session nor its history return [LivePlaybackSessionSync.None].
+ * Adopting an arbitrary played item into Up Next is an explicit user action (Play now,
+ * Reader promote), not something an engine start should do on the user's behalf.
+ */
+internal enum class LivePlaybackSessionSync {
+    None,
+    MoveToSessionItem,
+    RestoreFromHistory,
+}
+
+internal fun classifyLivePlaybackSessionSync(
+    engineItemId: Int,
+    hasStartedPlayback: Boolean,
+    sessionCurrentItemId: Int?,
+    inSessionItems: Boolean,
+    inHistory: Boolean,
+): LivePlaybackSessionSync {
+    if (engineItemId <= 0) return LivePlaybackSessionSync.None
+    if (!hasStartedPlayback) return LivePlaybackSessionSync.None
+    if (engineItemId == sessionCurrentItemId) return LivePlaybackSessionSync.None
+    return when {
+        inSessionItems -> LivePlaybackSessionSync.MoveToSessionItem
+        inHistory -> LivePlaybackSessionSync.RestoreFromHistory
+        else -> LivePlaybackSessionSync.None
+    }
+}
+
 internal fun resolveNextPlaylistScopedSessionIndex(
     session: NowPlayingSession,
     currentId: Int,
