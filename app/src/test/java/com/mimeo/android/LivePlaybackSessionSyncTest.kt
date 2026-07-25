@@ -1,5 +1,13 @@
 package com.mimeo.android
 
+import com.mimeo.android.model.PlaybackPosition
+import com.mimeo.android.ui.player.PlaybackEngineState
+import com.mimeo.android.ui.player.PlaybackOpenIntent
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -173,6 +181,71 @@ class LivePlaybackSessionSyncTest {
     }
 
     @Test
+    fun ordinaryEngineChatterProducesNoReconcileWork() {
+        // Position, chunk range and speed updates all emit new engine states. None of them
+        // may re-run a pointer move — a repeated RestoreFromHistory would re-insert the same
+        // item, and repeated moves would churn the Up Next projection.
+        val keys = reconcileKeys(
+            engineState(itemId = 41, isSpeaking = true, hasStarted = true),
+            engineState(itemId = 41, isSpeaking = true, hasStarted = true, chunkIndex = 3),
+            engineState(itemId = 41, isSpeaking = true, hasStarted = true, chunkIndex = 9),
+            engineState(itemId = 41, isSpeaking = true, hasStarted = true, activeRange = 2..4),
+        )
+
+        assertEquals(listOf(41 to true), keys)
+    }
+
+    @Test
+    fun pausingAndResumingDoesNotRepeatTheRestore() {
+        // hasStartedPlaybackForCurrentItem keeps the item committed across a pause, so the
+        // restore that ran when playback began is not repeated when the user hits play again.
+        val keys = reconcileKeys(
+            engineState(itemId = 42, autoPlay = true),
+            engineState(itemId = 42, isSpeaking = true, hasStarted = true),
+            engineState(itemId = 42, hasStarted = true),
+            engineState(itemId = 42, isSpeaking = true, hasStarted = true),
+        )
+
+        assertEquals(listOf(42 to true), keys)
+    }
+
+    @Test
+    fun theLoadToPlayHandoffIsOneCommitmentNotTwo() {
+        // openItem(autoPlay = true) -> text lands -> maybeAutoPlayAfterLoad clears
+        // autoPlayAfterLoad as speech starts. The key must not flicker across that switch.
+        val keys = reconcileKeys(
+            engineState(itemId = 41),
+            engineState(itemId = 41, autoPlay = true),
+            engineState(itemId = 41, autoPlay = true, chunkIndex = 0),
+            engineState(itemId = 41, isSpeaking = true, hasStarted = true),
+        )
+
+        assertEquals(listOf(41 to false, 41 to true), keys)
+    }
+
+    @Test
+    fun openingTheNextItemIsANewCommitment() {
+        val keys = reconcileKeys(
+            engineState(itemId = 41, isSpeaking = true, hasStarted = true),
+            engineState(itemId = 44, autoPlay = true),
+            engineState(itemId = 44, isSpeaking = true, hasStarted = true),
+        )
+
+        assertEquals(listOf(41 to true, 44 to true), keys)
+    }
+
+    @Test
+    fun previewOnlyLoadsNeverBecomeCommitments() {
+        val keys = reconcileKeys(
+            engineState(itemId = 41, isSpeaking = true, hasStarted = true),
+            engineState(itemId = 77),
+            engineState(itemId = 77, chunkIndex = 4),
+        )
+
+        assertEquals(listOf(41 to true, 77 to false), keys)
+    }
+
+    @Test
     fun noSessionCurrentStillAdoptsASessionMember() {
         // A session whose currentIndex never resolved (-1) still projects Up Next; a
         // playback start should install the pointer rather than leave it unset.
@@ -186,4 +259,32 @@ class LivePlaybackSessionSyncTest {
 
         assertEquals(LivePlaybackSessionSync.MoveToSessionItem, sync)
     }
+
+    /** Mirrors the ViewModel's reconciler pipeline: one entry per commitment transition. */
+    private fun reconcileKeys(vararg states: PlaybackEngineState): List<Pair<Int, Boolean>> =
+        runBlocking {
+            states.asSequence().asFlow()
+                .map(::livePlaybackReconcileKey)
+                .distinctUntilChanged()
+                .toList()
+        }
+
+    private fun engineState(
+        itemId: Int,
+        autoPlay: Boolean = false,
+        isSpeaking: Boolean = false,
+        isAutoPlaying: Boolean = false,
+        hasStarted: Boolean = false,
+        chunkIndex: Int = 0,
+        activeRange: IntRange? = null,
+    ) = PlaybackEngineState(
+        currentItemId = itemId,
+        openIntent = PlaybackOpenIntent.ManualOpen,
+        currentPosition = PlaybackPosition(chunkIndex = chunkIndex, offsetInChunkChars = 0),
+        isSpeaking = isSpeaking,
+        isAutoPlaying = isAutoPlaying,
+        activeChunkRange = activeRange,
+        autoPlayAfterLoad = autoPlay,
+        hasStartedPlaybackForCurrentItem = hasStarted,
+    )
 }

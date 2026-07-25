@@ -126,7 +126,7 @@ the session*, matching the stated expected behaviour.
   `currentItemId` converges on its own (the engine wins as soon as playback starts, and
   the session now agrees).
 - `setNowPlayingCurrentItem` is left in place (dead but harmless); removing it is a
-  separate cleanup.
+  separate cleanup. *(Done in `T-AND-PLAYBACK-PROMOTION-CLEANUP-1`, below.)*
 
 ## Tests
 
@@ -192,3 +192,37 @@ Two independent defects, both in scope here since the chevron sits in the same c
 ## Manual verification
 
 See the PR description.
+
+## Cleanup round (`T-AND-PLAYBACK-PROMOTION-CLEANUP-1`)
+
+The two items this ticket deliberately left out of scope, resolved.
+
+### Dead pointer mutation removed
+
+`AppViewModel.setNowPlayingCurrentItem` is gone. It had no live caller since `5dc4f81`, and
+the invariant above means nothing may re-point the session on item *load* again. The
+`shouldMutateUpNextActiveItem` predicate it used stays in `UpNextSynchronization.kt` as
+repository-layer sync policy (with its own test); it is no longer referenced from the
+ViewModel.
+
+### One owner per route
+
+`playLocusItem` no longer launches a promotion from `rememberCoroutineScope`. It calls
+`AppViewModel.playReaderItem(itemId)`, which is the single decision point:
+
+| Where the item is | Who moves the pointer |
+| --- | --- |
+| `session.items` or `session.historyItems` | the engine-commit reconciler, off `playbackEngineState` |
+| neither, session exists | explicit Play Now adoption (`repository.playNowInSession`) on `viewModelScope`, before the engine is committed |
+| no session at all | nobody — playback only, session seeding stays where it was |
+| plain open / preview | nobody — the session is not touched |
+
+`resolveReaderPlaySessionOwner` (next to `classifyReaderPromoteRoute`) states the rule; the
+reconciler's dedupe key is `livePlaybackReconcileKey`. Adoption runs on the ViewModel's
+scope, so navigating away or collapsing the player mid-action cannot cancel it, and a
+failed adoption reports itself (`readerExternalAdoptionMessage`) instead of leaving the UI
+implying the item joined Up Next.
+
+`promoteReaderItemToNowPlaying` was removed with its last caller; its two session mutations
+(`movePointerToSessionItem`, `movePointerToHistoryItem`) are unchanged and now serve the
+reconciler alone.

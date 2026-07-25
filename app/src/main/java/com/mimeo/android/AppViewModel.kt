@@ -188,7 +188,6 @@ import com.mimeo.android.repository.UpNextCapability
 import com.mimeo.android.repository.UpNextSyncPlan
 import com.mimeo.android.repository.planFirstUpNextAdoption
 import com.mimeo.android.repository.planUpNextReconnect
-import com.mimeo.android.repository.shouldMutateUpNextActiveItem
 import com.mimeo.android.repository.resolveOfflineReadyItemIds
 import com.mimeo.android.player.PlaybackService
 import com.mimeo.android.player.PlaybackServiceBridge
@@ -762,14 +761,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // speed and pause updates leave the key unchanged, so the session is never
             // re-pointed by anything other than a commitment to play something new.
             playbackEngineState
-                .map { state ->
-                    state.currentItemId to engineCommittedToPlayback(
-                        autoPlayAfterLoad = state.autoPlayAfterLoad,
-                        isSpeaking = state.isSpeaking,
-                        isAutoPlaying = state.isAutoPlaying,
-                        hasStartedPlaybackForCurrentItem = state.hasStartedPlaybackForCurrentItem,
-                    )
-                }
+                .map(::livePlaybackReconcileKey)
                 .distinctUntilChanged()
                 .collect { (engineItemId, committedToPlayback) ->
                     reconcileSessionPointerToLivePlayback(
@@ -6626,45 +6618,63 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    suspend fun setNowPlayingCurrentItem(itemId: Int) {
-        val session = nowPlayingSession.value ?: return
-        if (!shouldMutateUpNextActiveItem(session.currentItem?.itemId, itemId)) return
-        val idx = session.items.indexOfFirst { it.itemId == itemId }
-        if (idx < 0) return
-        _nowPlayingSession.value = withTransientHistory(
-            repository.setCurrentIndex(idx) ?: session.copy(currentIndex = idx),
+    /**
+     * Play the item the Reader is displaying. Single owner of playback-to-session promotion
+     * for that action; see [ReaderPlaySessionOwner] for the rule:
+     *
+     *  - already in `session.items` / `session.historyItems`: opening with
+     *    `autoPlayAfterLoad = true` *is* the commitment, and
+     *    [reconcileSessionPointerToLivePlayback] moves the pointer off the resulting engine
+     *    transition. No session write happens here.
+     *  - outside both, with a session to adopt into: adopted explicitly via
+     *    [repository.playNowInSession] on [viewModelScope], before the engine is committed,
+     *    so no composition lifetime can cancel the adoption or reorder it after playback
+     *    starts.
+     *  - no session at all: playback only, exactly as before.
+     *
+     * Plain opens and previews never call this and never mutate the session.
+     */
+    fun playReaderItem(itemId: Int) {
+        if (itemId <= 0) return
+        val session = nowPlayingSession.value
+        val owner = resolveReaderPlaySessionOwner(
+            route = classifyReaderPromoteRoute(
+                itemId = itemId,
+                inSessionItems = session?.items?.any { it.itemId == itemId } == true,
+                inHistory = session?.historyItems?.any { it.itemId == itemId } == true,
+            ),
+            hasSession = session != null,
         )
-        markAndScheduleUpNextMutation()
+        when (owner) {
+            ReaderPlaySessionOwner.EngineCommitReconciler,
+            ReaderPlaySessionOwner.NoSessionMutation,
+            -> commitReaderItemToPlayback(itemId)
+            ReaderPlaySessionOwner.ExplicitAdoption -> viewModelScope.launch {
+                val adopted = adoptExternalItemAsSessionCurrent(itemId)
+                commitReaderItemToPlayback(itemId)
+                readerExternalAdoptionMessage(adopted)?.let(::showSnackbar)
+            }
+        }
+    }
+
+    private fun commitReaderItemToPlayback(itemId: Int) {
+        playbackOpenItem(
+            itemId = itemId,
+            intent = PlaybackOpenIntent.ManualOpen,
+            autoPlayAfterLoad = true,
+        )
     }
 
     /**
-     * Make any Reader-displayed item the Now Playing current item, regardless of
-     * where it lives in the session. [setNowPlayingCurrentItem] only relocates
-     * items already in `session.items`; a history item (in `historyItems`) or an
-     * item not in the session at all would silently no-op, leaving the engine
-     * playing the promoted item while the session pointer still referenced the
-     * prior active item. That divergence reverted Now Playing and blanked the
-     * Reader once playback later paused. This routes the session mutation by the
-     * item's actual location. It does not start playback — callers open and
-     * auto-play the item via the engine.
+     * Explicit Play Now adoption for an item in neither the session nor its History. Reuses
+     * the repository's Play Now ordering rather than adding a second queue-adoption
+     * algorithm. Returns whether the session actually adopted the item.
      */
-    suspend fun promoteReaderItemToNowPlaying(itemId: Int) {
-        val session = nowPlayingSession.value ?: return
-        val route = classifyReaderPromoteRoute(
-            itemId = itemId,
-            inSessionItems = session.items.any { it.itemId == itemId },
-            inHistory = session.historyItems.any { it.itemId == itemId },
-        )
-        when (route) {
-            ReaderPromoteRoute.SessionItem -> movePointerToSessionItem(session, itemId)
-            ReaderPromoteRoute.HistoryItem -> movePointerToHistoryItem(session, itemId)
-            ReaderPromoteRoute.ExternalItem -> {
-                val item = allQueueActionItems().firstOrNull { it.itemId == itemId } ?: return
-                val updated = repository.playNowInSession(item)
-                applySessionSnapshot(updated, preserveExistingPositions = true)
-            }
-            ReaderPromoteRoute.None -> return
-        }
+    private suspend fun adoptExternalItemAsSessionCurrent(itemId: Int): Boolean {
+        val item = allQueueActionItems().firstOrNull { it.itemId == itemId } ?: return false
+        val updated = runCatching { repository.playNowInSession(item) }.getOrNull() ?: return false
+        applySessionSnapshot(updated, preserveExistingPositions = true)
+        return true
     }
 
     /** Re-points the session at a member of `session.items`, displacing the prior active item. */
@@ -6693,13 +6703,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Keeps the Now Playing pointer honest about what is audible.
+     * Authoritative owner of the Now Playing pointer for an item already in the session or
+     * its History: whatever the engine commits to playing becomes current, once, per commit.
      *
      * Several playback entry points start the engine without mutating the session: the
      * Reader's play control when the engine buffer holds an opened-but-not-yet-current item
      * (see [classifyLivePlaybackSessionSync]), and media-notification / headset starts. Left
      * alone, the session keeps projecting the previously active item as Now Playing while a
      * different article plays.
+     *
+     * An item outside the session and its History is deliberately *not* adopted here; that
+     * is an explicit user action ([playReaderItem], [playNow]). A plain open or preview never
+     * commits, so it never reaches a mutation at all.
      *
      * Driven off engine-state transitions only, so a session mutation that legitimately runs
      * *ahead* of the engine — the auto-continue handoff moves the pointer first, then opens
