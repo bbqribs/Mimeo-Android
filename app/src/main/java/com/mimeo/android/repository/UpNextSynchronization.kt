@@ -27,10 +27,6 @@ internal sealed interface UpNextSyncPlan {
     data class Clear(val expectedVersion: Long) : UpNextSyncPlan
 }
 
-/** Reasserting the authoritative active item is presentation work, not a queue mutation. */
-internal fun shouldMutateUpNextActiveItem(currentItemId: Int?, requestedItemId: Int): Boolean =
-    currentItemId != requestedItemId
-
 /** Ratified first-adoption rule: an existing server projection always wins. */
 internal fun planFirstUpNextAdoption(
     serverSession: UpNextSession?,

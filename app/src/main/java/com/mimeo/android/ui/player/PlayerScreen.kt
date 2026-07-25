@@ -517,11 +517,12 @@ internal fun shouldPreservePlaybackOwnerForPreviewOpen(
     @Suppress("UNUSED_PARAMETER") playbackActive: Boolean,
 ): Boolean {
     // Tapping any item while a different session current exists should preview it
-    // in the Reader without rebasing the session's current pointer. Promotion to
-    // Now Playing is reserved for explicit Play/Jump actions (jumpToUpcomingSessionItem,
-    // setNowPlayingCurrentItem, startNowPlayingSession). The previous behavior
-    // gated on `playbackActive`, which incorrectly reclassified the session
-    // whenever TTS was paused and the user tapped a row to read it.
+    // in the Reader without rebasing the session's current pointer. Moving the pointer
+    // belongs to playback commitment (the engine-commit reconciler) and to explicit
+    // Play/Jump actions (playReaderItem, jumpToUpcomingSessionItem,
+    // startNowPlayingSession). The previous behavior gated on `playbackActive`, which
+    // incorrectly reclassified the session whenever TTS was paused and the user tapped a
+    // row to read it.
     if (targetItemId <= 0 || currentItemId <= 0) return false
     if (targetItemId == currentItemId) return false
     return true
@@ -1216,9 +1217,8 @@ fun PlayerScreen(
         //  - a session anchor that the engine has not caught up with: the engine
         //    is either empty or holds a stale id from a previous open that was
         //    never played, and the session has since been re-seeded.
-        // Without this skip, the engine would adopt the tapped item and the
-        // loadItem effect's setNowPlayingCurrentItem would reclassify the
-        // session — exactly what tapping-to-preview must not do.
+        // Without this skip, the engine would adopt the tapped item as its current
+        // one — and a tap-to-preview must never become the session's current item.
         val sessionAnchorDiffersFromEngine =
             sessionCurrentItemId != null && sessionCurrentItemId > 0 &&
                 !engineOwnsLivePlayback
@@ -1905,19 +1905,10 @@ fun PlayerScreen(
             viewerPayload = null
             viewerPayloadItemId = -1
             viewerChunks = emptyList()
-            vm.playbackOpenItem(
-                itemId = locusItemId,
-                intent = PlaybackOpenIntent.ManualOpen,
-                autoPlayAfterLoad = true,
-            )
-            actionScope.launch {
-                // Route the session pointer by the item's actual location
-                // (queue/upcoming, history, or external). setNowPlayingCurrentItem
-                // alone only handles queue items and would no-op for a history
-                // item, leaving the engine and session pointing at different
-                // items.
-                vm.promoteReaderItemToNowPlaying(locusItemId)
-            }
+            // The ViewModel owns both the engine commitment and any session mutation this
+            // implies (AppViewModel.playReaderItem). Nothing about the pointer may depend on
+            // this composition surviving the navigation that follows.
+            vm.playReaderItem(locusItemId)
             onOpenItem(locusItemId)
             onShowSnackbar("Playing item shown in Locus", null, null)
             return

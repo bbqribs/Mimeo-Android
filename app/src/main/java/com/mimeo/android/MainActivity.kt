@@ -344,13 +344,9 @@ internal fun shouldReplayCompletedItem(furthestPercent: Int): Boolean {
 }
 
 /**
- * Where a Reader-promoted item currently lives in the Now Playing session. The
- * session mutation needed to make it the current item differs by location:
- * items already in the queue use the current-index move; history items must be
- * pulled out of history; anything else has to be inserted. Picking the wrong
- * one (e.g. treating a history item as a queue item) silently no-ops and leaves
- * the engine playing the promoted item while the session pointer still points at
- * the prior active item.
+ * Where an item the Reader is asked to play currently lives relative to the Now Playing
+ * session. Location alone decides who owns the session mutation
+ * (see [resolveReaderPlaySessionOwner]).
  */
 internal enum class ReaderPromoteRoute {
     SessionItem,
@@ -371,6 +367,61 @@ internal fun classifyReaderPromoteRoute(
         else -> ReaderPromoteRoute.ExternalItem
     }
 }
+
+/**
+ * Who is allowed to move the Now Playing pointer when the Reader plays the item it is
+ * displaying. Exactly one owner per route — overlapping claims are what let the engine,
+ * the Reader and the Up Next projection describe different items.
+ */
+internal enum class ReaderPlaySessionOwner {
+    /**
+     * The item is already in `session.items` or `session.historyItems`. Committing the
+     * engine to it is the whole operation; `reconcileSessionPointerToLivePlayback` moves
+     * the pointer off the resulting engine-state transition. Nothing else may mutate the
+     * session — a second mutation racing the commit is the desync this replaced.
+     */
+    EngineCommitReconciler,
+
+    /**
+     * The item is in neither the session nor its History. The reconciler deliberately
+     * leaves such items alone (an engine start must not inject arbitrary items into Up
+     * Next), so adoption is an explicit Play Now, run on the ViewModel's scope before the
+     * engine is committed.
+     */
+    ExplicitAdoption,
+
+    /**
+     * Playback is committed and the session is left exactly as it was. Covers the
+     * no-session case: playing an article before any Up Next session exists must not
+     * conjure a one-item session out of it — seeding stays with the existing entry points,
+     * as it was before promotion moved into the ViewModel.
+     */
+    NoSessionMutation,
+}
+
+internal fun resolveReaderPlaySessionOwner(
+    route: ReaderPromoteRoute,
+    hasSession: Boolean,
+): ReaderPlaySessionOwner =
+    when (route) {
+        ReaderPromoteRoute.SessionItem,
+        ReaderPromoteRoute.HistoryItem,
+        -> ReaderPlaySessionOwner.EngineCommitReconciler
+        ReaderPromoteRoute.ExternalItem ->
+            if (hasSession) ReaderPlaySessionOwner.ExplicitAdoption else ReaderPlaySessionOwner.NoSessionMutation
+        ReaderPromoteRoute.None -> ReaderPlaySessionOwner.NoSessionMutation
+    }
+
+/**
+ * What the user is told after an explicit Play Now for an item outside the session.
+ *
+ * Adoption can fail — the item may not be resolvable from any loaded list, or the session
+ * write may not land. Playback still starts (the engine owns an item the session does not
+ * describe, which is the tolerated [LivePlaybackSessionSync.None] state), so the failure
+ * must be surfaced rather than left implying the item joined Up Next.
+ */
+internal fun readerExternalAdoptionMessage(adopted: Boolean): String? =
+    if (adopted) null else "Playing outside Up Next"
 
 /**
  * Whether the playback engine has *committed* to playing its current item: it either
@@ -394,6 +445,20 @@ internal fun engineCommittedToPlayback(
     isAutoPlaying: Boolean,
     hasStartedPlaybackForCurrentItem: Boolean,
 ): Boolean = autoPlayAfterLoad || isSpeaking || isAutoPlaying || hasStartedPlaybackForCurrentItem
+
+/**
+ * The reconciler's dedupe key: one distinct value per "the engine committed to playing item
+ * X" transition. Position, speed, pause and chunk-range updates leave it unchanged, so the
+ * session is never re-pointed — and a History restore never repeated — by ordinary engine
+ * chatter.
+ */
+internal fun livePlaybackReconcileKey(state: PlaybackEngineState): Pair<Int, Boolean> =
+    state.currentItemId to engineCommittedToPlayback(
+        autoPlayAfterLoad = state.autoPlayAfterLoad,
+        isSpeaking = state.isSpeaking,
+        isAutoPlaying = state.isAutoPlaying,
+        hasStartedPlaybackForCurrentItem = state.hasStartedPlaybackForCurrentItem,
+    )
 
 /**
  * How the Now Playing session pointer must move to catch up with the item the playback

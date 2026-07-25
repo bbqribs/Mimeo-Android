@@ -70,12 +70,6 @@ class UpNextSynchronizationTest {
     }
 
     @Test
-    fun reassertingAuthoritativeActiveItemDoesNotCreateAnEchoMutation() {
-        assertEquals(false, shouldMutateUpNextActiveItem(currentItemId = 41, requestedItemId = 41))
-        assertTrue(shouldMutateUpNextActiveItem(currentItemId = 41, requestedItemId = 42))
-    }
-
-    @Test
     fun serverProjectionWithoutActiveItemKeepsAllMembershipUpcoming() {
         val sections = computeNowPlayingSessionSections(
             items = listOf(3, 1, 2),
