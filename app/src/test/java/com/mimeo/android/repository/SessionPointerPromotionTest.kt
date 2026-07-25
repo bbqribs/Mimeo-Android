@@ -115,6 +115,10 @@ class SessionPointerPromotionTest {
 
     @Test
     fun explicitPlayNowStartsASessionWhenThereIsNone() = runBlocking {
+        // The repository primitive seeds, for callers that own seeding (AppViewModel.playNow
+        // from the library). It is not what the Reader does with no session: playReaderItem
+        // resolves to NoSessionMutation there and only commits playback — see
+        // ReaderPlaySessionOwnerTest.playingWithNoSessionSeedsNothing.
         val adopted = repository.playNowInSession(queueItem(99))
 
         assertEquals(99, adopted.currentItem?.itemId)

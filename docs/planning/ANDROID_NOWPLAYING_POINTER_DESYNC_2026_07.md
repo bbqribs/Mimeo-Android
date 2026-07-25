@@ -200,10 +200,12 @@ The two items this ticket deliberately left out of scope, resolved.
 ### Dead pointer mutation removed
 
 `AppViewModel.setNowPlayingCurrentItem` is gone. It had no live caller since `5dc4f81`, and
-the invariant above means nothing may re-point the session on item *load* again. The
-`shouldMutateUpNextActiveItem` predicate it used stays in `UpNextSynchronization.kt` as
-repository-layer sync policy (with its own test); it is no longer referenced from the
-ViewModel.
+the invariant above means nothing may re-point the session on item *load* again. Its only
+remaining dependency, `shouldMutateUpNextActiveItem` in `UpNextSynchronization.kt`, went
+with it — the same no-echo rule is enforced by `classifyLivePlaybackSessionSync` (which
+returns `None` when the engine item is already the session current) and by
+`movePointerToSessionItem`. The Up Next adoption and reconnect policies alongside it
+(`planFirstUpNextAdoption`, `planUpNextReconnect`) are untouched.
 
 ### One owner per route
 
