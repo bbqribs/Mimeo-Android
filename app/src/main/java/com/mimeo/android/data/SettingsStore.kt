@@ -1,13 +1,15 @@
 ﻿package com.mimeo.android.data
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import androidx.datastore.preferences.preferencesDataStoreFile
 import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.AppSettings
 import com.mimeo.android.model.ConnectionMode
@@ -45,7 +47,10 @@ import com.mimeo.android.model.VisualThemePreference
 import com.mimeo.android.model.decodeSelectedPlaylistId
 import com.mimeo.android.model.encodeSelectedPlaylistId
 import com.mimeo.android.model.inferConnectionModeForHost
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -57,7 +62,42 @@ import kotlinx.serialization.json.Json
 import java.security.MessageDigest
 import java.util.Locale
 
-private val Context.dataStore by preferencesDataStore(name = "mimeo_settings")
+private const val SETTINGS_DATASTORE_NAME = "mimeo_settings"
+
+/**
+ * Holds the process-wide settings DataStore, keyed on the resolved file path rather than on the
+ * declaring delegate.
+ *
+ * Production resolves the same path for the life of the process, so this behaves exactly like the
+ * `preferencesDataStore` singleton delegate it replaces. Under Robolectric, every test method gets
+ * its own temp `dataDir`; the delegate would stay bound to whichever path it first resolved and
+ * later writes would target a torn-down temp directory (surfacing on Windows as
+ * `AccessDeniedException` when DataStore atomically moves its `.tmp` file into place). Keying on
+ * the path rebinds instead.
+ */
+private object SettingsDataStoreProvider {
+    private var boundPath: String? = null
+    private var boundScope: CoroutineScope? = null
+    private var boundStore: DataStore<Preferences>? = null
+
+    @Synchronized
+    fun get(context: Context): DataStore<Preferences> {
+        val file = context.applicationContext.preferencesDataStoreFile(SETTINGS_DATASTORE_NAME)
+        val path = file.absolutePath
+        boundStore?.let { existing -> if (boundPath == path) return existing }
+        // Releases the previous path from DataStore's active-file registry before rebinding.
+        boundScope?.cancel()
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { file }
+        boundPath = path
+        boundScope = scope
+        boundStore = store
+        return store
+    }
+}
+
+private val Context.dataStore: DataStore<Preferences>
+    get() = SettingsDataStoreProvider.get(this)
 
 class SettingsStore(private val context: Context) {
     private val baseUrlKey: Preferences.Key<String> = stringPreferencesKey("base_url")
