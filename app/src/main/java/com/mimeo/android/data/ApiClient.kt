@@ -289,20 +289,14 @@ class ApiClient(
     }
 
     suspend fun getDebugVersion(baseUrl: String, token: String): DebugVersionResponse = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/debug/version", token)
-            .get()
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<DebugVersionResponse>(payload) }
+        executeAuthorizedJson(baseUrl, "/debug/version", token) { get() }
     }
 
     suspend fun getBlueskyAccountConnection(
         baseUrl: String,
         token: String,
     ): BlueskyAccountConnectionResponse = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/bluesky/account/connection", token)
-            .get()
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<BlueskyAccountConnectionResponse>(payload) }
+        executeAuthorizedJson(baseUrl, "/bluesky/account/connection", token) { get() }
     }
 
     suspend fun postBlueskyConnect(
@@ -311,13 +305,8 @@ class ApiClient(
         handle: String,
         appPassword: String,
     ): BlueskyAccountConnectionResponse = withContext(Dispatchers.IO) {
-        val body = json.encodeToString(
-            BlueskyConnectRequest(handle = handle, appPassword = appPassword)
-        ).toRequestBody("application/json".toMediaType())
-        val request = authorizedRequest(baseUrl, "/bluesky/account/connection/connect", token)
-            .post(body)
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<BlueskyAccountConnectionResponse>(payload) }
+        val body = jsonBody(BlueskyConnectRequest(handle = handle, appPassword = appPassword))
+        executeAuthorizedJson(baseUrl, "/bluesky/account/connection/connect", token) { post(body) }
     }
 
     suspend fun postBlueskyDisconnect(
@@ -325,35 +314,33 @@ class ApiClient(
         token: String,
     ): BlueskyAccountConnectionResponse = withContext(Dispatchers.IO) {
         val body = jsonBody("{}")
-        val request = authorizedRequest(baseUrl, "/bluesky/account/connection/disconnect", token)
-            .post(body)
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<BlueskyAccountConnectionResponse>(payload) }
+        executeAuthorizedJson(baseUrl, "/bluesky/account/connection/disconnect", token) { post(body) }
     }
 
     suspend fun getBlueskyOperatorStatus(
         baseUrl: String,
         token: String,
     ): BlueskyOperatorStatusResponse = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/bluesky/operator/status", token)
-            .get()
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<BlueskyOperatorStatusResponse>(payload) }
+        executeAuthorizedJson(baseUrl, "/bluesky/operator/status", token) { get() }
     }
 
+    /**
+     * Deliberately unauthenticated: this is the call that mints the bearer token,
+     * so it is built explicitly rather than through [authorizedRequest].
+     */
     suspend fun postAuthToken(
         baseUrl: String,
         username: String,
         password: String,
         deviceName: String,
     ): AuthTokenResponse = withContext(Dispatchers.IO) {
-        val body = json.encodeToString(
+        val body = jsonBody(
             AuthTokenPayload(
                 username = username,
                 password = password,
                 deviceName = deviceName,
             )
-        ).toRequestBody("application/json".toMediaType())
+        )
         val request = Request.Builder()
             .url(resolveUrl(baseUrl, "/auth/token"))
             .post(body)
@@ -367,12 +354,12 @@ class ApiClient(
         oldPassword: String,
         newPassword: String,
     ) = withContext(Dispatchers.IO) {
-        val jsonBody = json.encodeToString(
+        val jsonRequestBody = jsonBody(
             ChangePasswordPayload(
                 oldPassword = oldPassword,
                 newPassword = newPassword,
             ),
-        ).toRequestBody("application/json".toMediaType())
+        )
         val jsonEndpoints = listOf(
             "/auth/change-password",
             "/auth/change-password/",
@@ -385,11 +372,8 @@ class ApiClient(
         )
         var lastError: ApiException? = null
         for (endpoint in jsonEndpoints) {
-            val request = authorizedRequest(baseUrl, endpoint, token)
-                .post(jsonBody)
-                .build()
             try {
-                executeNoBody(request)
+                executeAuthorizedNoBody(baseUrl, endpoint, token) { post(jsonRequestBody) }
                 return@withContext
             } catch (error: ApiException) {
                 lastError = error
@@ -408,11 +392,8 @@ class ApiClient(
                 .add("new_password", newPassword)
                 .add("confirm_new_password", newPassword)
                 .build()
-            val request = authorizedRequest(baseUrl, endpoint, token)
-                .post(formBody)
-                .build()
             try {
-                executeNoBody(request)
+                executeAuthorizedNoBody(baseUrl, endpoint, token) { post(formBody) }
                 return@withContext
             } catch (error: ApiException) {
                 lastError = error
@@ -423,30 +404,24 @@ class ApiClient(
     }
 
     suspend fun getAccountDevices(baseUrl: String, token: String): List<DeviceSession> = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/account/devices", token)
-            .get()
-            .build()
-        executeJson(request) { payload ->
-            json.decodeFromString(ListSerializer(DeviceSession.serializer()), payload)
-        }
+        executeAuthorizedJson(baseUrl, "/account/devices", token) { get() }
     }
 
     suspend fun postRevokeDevice(baseUrl: String, token: String, deviceId: Int): RevokeDeviceResponse = withContext(Dispatchers.IO) {
         val body = jsonBody("{}")
-        val request = authorizedRequest(baseUrl, "/account/devices/$deviceId/revoke", token)
-            .post(body)
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<RevokeDeviceResponse>(payload) }
+        executeAuthorizedJson(baseUrl, "/account/devices/$deviceId/revoke", token) { post(body) }
     }
 
     suspend fun postRevokeOtherDevices(baseUrl: String, token: String): RevokeOtherDevicesResponse = withContext(Dispatchers.IO) {
         val body = jsonBody("{}")
-        val request = authorizedRequest(baseUrl, "/account/devices/revoke-others", token)
-            .post(body)
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<RevokeOtherDevicesResponse>(payload) }
+        executeAuthorizedJson(baseUrl, "/account/devices/revoke-others", token) { post(body) }
     }
 
+    /**
+     * Built and executed explicitly: the response is inspected for the debug
+     * snapshot (status, byte count, hash) before parsing, which the shared
+     * execute helpers deliberately do not expose.
+     */
     suspend fun getQueue(
         baseUrl: String,
         token: String,
@@ -499,20 +474,14 @@ class ApiClient(
     }
 
     suspend fun getItemSummary(baseUrl: String, token: String, itemId: Int): ArticleSummary = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/items/$itemId", token)
-            .get()
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<ArticleSummary>(payload) }
+        executeAuthorizedJson(baseUrl, "/items/$itemId", token) { get() }
     }
 
     suspend fun getSummaryCapabilities(
         baseUrl: String,
         token: String,
     ): SummaryCapabilitiesOut = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/summary/capabilities", token)
-            .get()
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<SummaryCapabilitiesOut>(payload) }
+        executeAuthorizedJson(baseUrl, "/summary/capabilities", token) { get() }
     }
 
     /**
@@ -525,10 +494,7 @@ class ApiClient(
         baseUrl: String,
         token: String,
     ): AiProviderConfigStatusOut = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/config/ai-provider", token)
-            .get()
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<AiProviderConfigStatusOut>(payload) }
+        executeAuthorizedJson(baseUrl, "/config/ai-provider", token) { get() }
     }
 
     /**
@@ -541,6 +507,9 @@ class ApiClient(
      * [AiProviderConfigException] code and the raw body is discarded — it is never
      * logged or surfaced. Android never calls an LLM provider directly; this only
      * talks to the Mimeo backend.
+     *
+     * Built explicitly rather than through [executeAuthorizedJson] so the no-leak
+     * error mapping ([executeProviderActionJson]) stays visible at this call site.
      */
     suspend fun saveAiProviderConfig(
         baseUrl: String,
@@ -567,7 +536,7 @@ class ApiClient(
         token: String,
     ): AiProviderConfigStatusOut = withContext(Dispatchers.IO) {
         val request = authorizedRequest(baseUrl, "/config/ai-provider/test", token)
-            .post(ByteArray(0).toRequestBody(null, 0, 0))
+            .post(emptyBody())
             .build()
         executeProviderActionJson(request) { payload ->
             json.decodeFromString<AiProviderConfigStatusOut>(payload)
@@ -594,10 +563,7 @@ class ApiClient(
         itemId: Int,
         kind: String? = null,
     ): ContentSummaryOut = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/items/$itemId/summary${summaryKindQuery(kind)}", token)
-            .get()
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<ContentSummaryOut>(payload) }
+        executeAuthorizedJson(baseUrl, "/items/$itemId/summary${summaryKindQuery(kind)}", token) { get() }
     }
 
     suspend fun requestContentSummary(
@@ -609,56 +575,28 @@ class ApiClient(
     ): ContentSummaryOut = withContext(Dispatchers.IO) {
         // Kind is sent as a query param (backend accepts it on the POST); the body
         // keeps its existing shape so the no-kind path stays byte-for-byte compatible.
-        val body = json.encodeToString(ContentSummaryRequest(force = force))
-            .toRequestBody("application/json".toMediaType())
-        val request = authorizedRequest(baseUrl, "/items/$itemId/summary${summaryKindQuery(kind)}", token)
-            .post(body)
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<ContentSummaryOut>(payload) }
+        val body = jsonBody(ContentSummaryRequest(force = force))
+        executeAuthorizedJson(baseUrl, "/items/$itemId/summary${summaryKindQuery(kind)}", token) { post(body) }
     }
 
     suspend fun getQueueExplain(baseUrl: String, token: String, itemId: Int): QueueExplainResponse = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/playback/queue/explain?item_id=$itemId", token)
-            .get()
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<QueueExplainResponse>(payload) }
+        executeAuthorizedJson(baseUrl, "/playback/queue/explain?item_id=$itemId", token) { get() }
     }
 
     suspend fun getPlaylists(baseUrl: String, token: String): List<PlaylistSummary> = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/playlists", token)
-            .get()
-            .build()
-        executeJson(request) { payload ->
-            json.decodeFromString(ListSerializer(PlaylistSummary.serializer()), payload)
-        }
+        executeAuthorizedJson(baseUrl, "/playlists", token) { get() }
     }
 
     suspend fun getSmartPlaylists(baseUrl: String, token: String): List<SmartPlaylistSummary> = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/smart-playlists", token)
-            .acceptJson()
-            .get()
-            .build()
-        executeJson(request) { payload ->
-            json.decodeFromString(ListSerializer(SmartPlaylistSummary.serializer()), payload)
-        }
+        executeAuthorizedJson(baseUrl, "/smart-playlists", token, acceptJson = true) { get() }
     }
 
     suspend fun getSmartPlaylist(baseUrl: String, token: String, playlistId: Int): SmartPlaylistDetail = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/smart-playlists/$playlistId", token)
-            .acceptJson()
-            .get()
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<SmartPlaylistDetail>(payload) }
+        executeAuthorizedJson(baseUrl, "/smart-playlists/$playlistId", token, acceptJson = true) { get() }
     }
 
     suspend fun getSmartPlaylistItems(baseUrl: String, token: String, playlistId: Int): List<PlaybackQueueItem> = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/smart-playlists/$playlistId/items", token)
-            .acceptJson()
-            .get()
-            .build()
-        executeJson(request) { payload ->
-            json.decodeFromString(ListSerializer(PlaybackQueueItem.serializer()), payload)
-        }
+        executeAuthorizedJson(baseUrl, "/smart-playlists/$playlistId/items", token, acceptJson = true) { get() }
     }
 
     suspend fun createSmartPlaylist(
@@ -667,11 +605,7 @@ class ApiClient(
         payload: SmartPlaylistWriteRequest,
     ): SmartPlaylistSummary = withContext(Dispatchers.IO) {
         val body = jsonBody(payload)
-        val request = authorizedRequest(baseUrl, "/smart-playlists", token)
-            .acceptJson()
-            .post(body)
-            .build()
-        executeJson(request) { responsePayload -> json.decodeFromString<SmartPlaylistSummary>(responsePayload) }
+        executeAuthorizedJson(baseUrl, "/smart-playlists", token, acceptJson = true) { post(body) }
     }
 
     suspend fun updateSmartPlaylist(
@@ -681,11 +615,7 @@ class ApiClient(
         payload: SmartPlaylistWriteRequest,
     ): SmartPlaylistSummary = withContext(Dispatchers.IO) {
         val body = jsonBody(payload)
-        val request = authorizedRequest(baseUrl, "/smart-playlists/$playlistId", token)
-            .acceptJson()
-            .patch(body)
-            .build()
-        executeJson(request) { responsePayload -> json.decodeFromString<SmartPlaylistSummary>(responsePayload) }
+        executeAuthorizedJson(baseUrl, "/smart-playlists/$playlistId", token, acceptJson = true) { patch(body) }
     }
 
     suspend fun deleteSmartPlaylist(
@@ -693,11 +623,7 @@ class ApiClient(
         token: String,
         playlistId: Int,
     ) = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/smart-playlists/$playlistId", token)
-            .acceptJson()
-            .delete()
-            .build()
-        executeNoBody(request)
+        executeAuthorizedNoBody(baseUrl, "/smart-playlists/$playlistId", token, acceptJson = true) { delete() }
     }
 
     suspend fun pinSmartPlaylistItem(
@@ -707,14 +633,8 @@ class ApiClient(
         itemId: Int,
         position: Int? = null,
     ) = withContext(Dispatchers.IO) {
-        val body = json.encodeToString(
-            SmartPlaylistPinRequest(articleId = itemId, position = position),
-        ).toRequestBody("application/json".toMediaType())
-        val request = authorizedRequest(baseUrl, "/smart-playlists/$playlistId/pins", token)
-            .acceptJson()
-            .post(body)
-            .build()
-        executeNoBody(request)
+        val body = jsonBody(SmartPlaylistPinRequest(articleId = itemId, position = position))
+        executeAuthorizedNoBody(baseUrl, "/smart-playlists/$playlistId/pins", token, acceptJson = true) { post(body) }
     }
 
     suspend fun unpinSmartPlaylistItem(
@@ -723,11 +643,7 @@ class ApiClient(
         playlistId: Int,
         itemId: Int,
     ) = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/smart-playlists/$playlistId/pins/$itemId", token)
-            .acceptJson()
-            .delete()
-            .build()
-        executeNoBody(request)
+        executeAuthorizedNoBody(baseUrl, "/smart-playlists/$playlistId/pins/$itemId", token, acceptJson = true) { delete() }
     }
 
     suspend fun reorderSmartPlaylistPins(
@@ -739,13 +655,8 @@ class ApiClient(
         val payload = itemIds.mapIndexed { idx, itemId ->
             SmartPlaylistPinReorderItem(articleId = itemId, position = idx + 1)
         }
-        val body = json.encodeToString(ListSerializer(SmartPlaylistPinReorderItem.serializer()), payload)
-            .toRequestBody("application/json".toMediaType())
-        val request = authorizedRequest(baseUrl, "/smart-playlists/$playlistId/pins/reorder", token)
-            .acceptJson()
-            .put(body)
-            .build()
-        executeNoBody(request)
+        val body = jsonBody(payload)
+        executeAuthorizedNoBody(baseUrl, "/smart-playlists/$playlistId/pins/reorder", token, acceptJson = true) { put(body) }
     }
 
     suspend fun freezeSmartPlaylist(
@@ -759,19 +670,12 @@ class ApiClient(
             ?.let { json.encodeToString(SmartPlaylistFreezePayload(it)) }
             ?: "{}"
         val body = jsonBody(payload)
-        val request = authorizedRequest(baseUrl, "/smart-playlists/$playlistId/freeze", token)
-            .acceptJson()
-            .post(body)
-            .build()
-        executeJson(request) { responsePayload -> json.decodeFromString<PlaylistSummary>(responsePayload) }
+        executeAuthorizedJson(baseUrl, "/smart-playlists/$playlistId/freeze", token, acceptJson = true) { post(body) }
     }
 
     suspend fun createPlaylist(baseUrl: String, token: String, name: String): PlaylistSummary = withContext(Dispatchers.IO) {
         val body = jsonBody(PlaylistNamePayload(name))
-        val request = authorizedRequest(baseUrl, "/playlists", token)
-            .post(body)
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<PlaylistSummary>(payload) }
+        executeAuthorizedJson(baseUrl, "/playlists", token) { post(body) }
     }
 
     suspend fun createItem(
@@ -784,18 +688,14 @@ class ApiClient(
         siteName: String? = null,
         timeoutMs: Long? = null,
     ): ArticleSummary = withContext(Dispatchers.IO) {
-        val body = json.encodeToString(
+        val body = jsonBody(
             CreateItemPayload(
                 url = url,
                 title = title,
                 canonicalUrl = canonicalUrl,
                 siteName = siteName,
             )
-        ).toRequestBody("application/json".toMediaType())
-        val request = authorizedRequest(baseUrl, "/items", token)
-            .header("Idempotency-Key", idempotencyKey)
-            .post(body)
-            .build()
+        )
         val client = if (timeoutMs != null) {
             okHttpClient.newBuilder()
                 .callTimeout(timeoutMs, TimeUnit.MILLISECONDS)
@@ -806,7 +706,9 @@ class ApiClient(
         } else {
             okHttpClient
         }
-        executeJson(request, client = client) { payload -> json.decodeFromString<ArticleSummary>(payload) }
+        executeAuthorizedJson(baseUrl, "/items", token, client = client) {
+            header("Idempotency-Key", idempotencyKey).post(body)
+        }
     }
 
     suspend fun createManualTextItem(
@@ -818,23 +720,21 @@ class ApiClient(
         siteName: String? = null,
         source: ManualTextSourcePayload? = null,
     ): ArticleSummary = withContext(Dispatchers.IO) {
-        val payload = ManualTextPayload(
-            url = url,
-            text = text,
-            title = title,
-            siteName = siteName,
-            source = source,
+        val body = jsonBody(
+            ManualTextPayload(
+                url = url,
+                text = text,
+                title = title,
+                siteName = siteName,
+                source = source,
+            )
         )
-        val body = jsonBody(payload)
-        val request = authorizedRequest(baseUrl, "/items/manual-text", token)
-            .post(body)
-            .build()
         try {
-            executeJson(request) { responsePayload -> json.decodeFromString<ArticleSummary>(responsePayload) }
+            executeAuthorizedJson(baseUrl, "/items/manual-text", token) { post(body) }
         } catch (error: ApiException) {
             val shouldFallbackWithoutSource = source != null && (error.statusCode == 400 || error.statusCode == 422)
             if (!shouldFallbackWithoutSource) throw error
-            val fallbackBody = json.encodeToString(
+            val fallbackBody = jsonBody(
                 ManualTextPayload(
                     url = url,
                     text = text,
@@ -842,42 +742,27 @@ class ApiClient(
                     siteName = siteName,
                     source = null,
                 ),
-            ).toRequestBody("application/json".toMediaType())
-            val fallbackRequest = authorizedRequest(baseUrl, "/items/manual-text", token)
-                .post(fallbackBody)
-                .build()
-            executeJson(fallbackRequest) { responsePayload -> json.decodeFromString<ArticleSummary>(responsePayload) }
+            )
+            executeAuthorizedJson(baseUrl, "/items/manual-text", token) { post(fallbackBody) }
         }
     }
 
     suspend fun renamePlaylist(baseUrl: String, token: String, playlistId: Int, name: String): PlaylistSummary = withContext(Dispatchers.IO) {
         val body = jsonBody(PlaylistNamePayload(name))
-        val request = authorizedRequest(baseUrl, "/playlists/$playlistId", token)
-            .patch(body)
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<PlaylistSummary>(payload) }
+        executeAuthorizedJson(baseUrl, "/playlists/$playlistId", token) { patch(body) }
     }
 
     suspend fun deletePlaylist(baseUrl: String, token: String, playlistId: Int) = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/playlists/$playlistId", token)
-            .delete()
-            .build()
-        executeNoBody(request)
+        executeAuthorizedNoBody(baseUrl, "/playlists/$playlistId", token) { delete() }
     }
 
     suspend fun addItemToPlaylist(baseUrl: String, token: String, playlistId: Int, itemId: Int) = withContext(Dispatchers.IO) {
         val body = jsonBody(PlaylistItemPayload(itemId))
-        val request = authorizedRequest(baseUrl, "/playlists/$playlistId/items", token)
-            .post(body)
-            .build()
-        executeNoBody(request)
+        executeAuthorizedNoBody(baseUrl, "/playlists/$playlistId/items", token) { post(body) }
     }
 
     suspend fun removeItemFromPlaylist(baseUrl: String, token: String, playlistId: Int, itemId: Int) = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/playlists/$playlistId/items/$itemId", token)
-            .delete()
-            .build()
-        executeNoBody(request)
+        executeAuthorizedNoBody(baseUrl, "/playlists/$playlistId/items/$itemId", token) { delete() }
     }
 
     suspend fun batchAddItemsToPlaylist(
@@ -886,12 +771,8 @@ class ApiClient(
         playlistId: Int,
         itemIds: List<Int>,
     ): PlaylistBatchAddResponse = withContext(Dispatchers.IO) {
-        val body = json.encodeToString(PlaylistBatchAddRequest(itemIds = itemIds))
-            .toRequestBody("application/json".toMediaType())
-        val request = authorizedRequest(baseUrl, "/playlists/$playlistId/items/batch", token)
-            .post(body)
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<PlaylistBatchAddResponse>(payload) }
+        val body = jsonBody(PlaylistBatchAddRequest(itemIds = itemIds))
+        executeAuthorizedJson(baseUrl, "/playlists/$playlistId/items/batch", token) { post(body) }
     }
 
     suspend fun reorderPlaylistEntries(
@@ -903,14 +784,14 @@ class ApiClient(
         val payload = entryIds.mapIndexed { idx, entryId ->
             PlaylistReorderItem(entryId = entryId, position = idx.toFloat())
         }
-        val body = json.encodeToString(ListSerializer(PlaylistReorderItem.serializer()), payload)
-            .toRequestBody("application/json".toMediaType())
-        val request = authorizedRequest(baseUrl, "/playlists/$playlistId/entries/reorder", token)
-            .put(body)
-            .build()
-        executeNoBody(request)
+        val body = jsonBody(payload)
+        executeAuthorizedNoBody(baseUrl, "/playlists/$playlistId/entries/reorder", token) { put(body) }
     }
 
+    /**
+     * Built explicitly so the 409 revision-conflict mapping
+     * ([executeSmartQueueReorderJson]) stays visible at this call site.
+     */
     suspend fun reorderSmartQueue(
         baseUrl: String,
         token: String,
@@ -933,12 +814,13 @@ class ApiClient(
     }
 
     suspend fun getDebugPython(baseUrl: String, token: String): DebugPythonResponse = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/debug/python", token)
-            .get()
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<DebugPythonResponse>(payload) }
+        executeAuthorizedJson(baseUrl, "/debug/python", token) { get() }
     }
 
+    /**
+     * Diagnostics probe: returns the raw status and body for an arbitrary path,
+     * so it deliberately bypasses the parsing/throwing execute helpers.
+     */
     suspend fun getRawEndpoint(baseUrl: String, token: String, path: String, timeoutMs: Long = 4000): RawHttpResponse =
         withContext(Dispatchers.IO) {
             val request = authorizedRequest(baseUrl, path, token)
@@ -955,10 +837,7 @@ class ApiClient(
         }
 
     suspend fun getItemText(baseUrl: String, token: String, itemId: Int): ItemTextResponse = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/items/$itemId/text", token)
-            .get()
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<ItemTextResponse>(payload) }
+        executeAuthorizedJson(baseUrl, "/items/$itemId/text", token) { get() }
     }
 
     suspend fun getItemContentBlocks(baseUrl: String, token: String, itemId: Int): List<ItemTextContentBlock>? =
@@ -1024,10 +903,9 @@ class ApiClient(
         autoArchive: Boolean = false,
     ) = withContext(Dispatchers.IO) {
         val autoArchiveFlag = if (autoArchive) 1 else 0
-        val request = authorizedRequest(baseUrl, "/items/$itemId/done?auto_archive=$autoArchiveFlag", token)
-            .post(ByteArray(0).toRequestBody())
-            .build()
-        executeNoBody(request)
+        executeAuthorizedNoBody(baseUrl, "/items/$itemId/done?auto_archive=$autoArchiveFlag", token) {
+            post(emptyBody())
+        }
     }
 
     suspend fun resetItemDone(
@@ -1035,10 +913,7 @@ class ApiClient(
         token: String,
         itemId: Int,
     ) = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/items/$itemId/reset", token)
-            .post(ByteArray(0).toRequestBody())
-            .build()
-        executeNoBody(request)
+        executeAuthorizedNoBody(baseUrl, "/items/$itemId/reset", token) { post(emptyBody()) }
     }
 
     suspend fun unarchiveItem(
@@ -1046,28 +921,15 @@ class ApiClient(
         token: String,
         itemId: Int,
     ) = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/items/$itemId/unarchive", token)
-            .post(ByteArray(0).toRequestBody(null, 0, 0))
-            .build()
-        executeNoBody(request)
+        executeAuthorizedNoBody(baseUrl, "/items/$itemId/unarchive", token) { post(emptyBody()) }
     }
 
     suspend fun getTrashedItems(baseUrl: String, token: String, limit: Int = 100): List<ArticleSummary> = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/items?trashed=true&limit=$limit", token)
-            .get()
-            .build()
-        executeJson(request) { payload ->
-            json.decodeFromString(ListSerializer(ArticleSummary.serializer()), payload)
-        }
+        executeAuthorizedJson(baseUrl, "/items?trashed=true&limit=$limit", token) { get() }
     }
 
     suspend fun getArchivedItems(baseUrl: String, token: String, limit: Int = 100): List<ArticleSummary> = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/items?archived=true&limit=$limit", token)
-            .get()
-            .build()
-        executeJson(request) { payload ->
-            json.decodeFromString(ListSerializer(ArticleSummary.serializer()), payload)
-        }
+        executeAuthorizedJson(baseUrl, "/items?archived=true&limit=$limit", token) { get() }
     }
 
     suspend fun getItemsByView(
@@ -1102,10 +964,7 @@ class ApiClient(
         token: String,
         itemId: Int,
     ) = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/items/$itemId", token)
-            .delete()
-            .build()
-        executeNoBody(request)
+        executeAuthorizedNoBody(baseUrl, "/items/$itemId", token) { delete() }
     }
 
     suspend fun restoreItemFromBin(
@@ -1113,10 +972,7 @@ class ApiClient(
         token: String,
         itemId: Int,
     ) = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/items/$itemId/restore", token)
-            .post(ByteArray(0).toRequestBody(null, 0, 0))
-            .build()
-        executeNoBody(request)
+        executeAuthorizedNoBody(baseUrl, "/items/$itemId/restore", token) { post(emptyBody()) }
     }
 
     suspend fun purgeItemFromBin(
@@ -1124,10 +980,7 @@ class ApiClient(
         token: String,
         itemId: Int,
     ) = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/items/$itemId/purge", token)
-            .post(ByteArray(0).toRequestBody(null, 0, 0))
-            .build()
-        executeNoBody(request)
+        executeAuthorizedNoBody(baseUrl, "/items/$itemId/purge", token) { post(emptyBody()) }
     }
 
     suspend fun setFavoriteState(
@@ -1136,15 +989,8 @@ class ApiClient(
         itemId: Int,
         favorited: Boolean,
     ) = withContext(Dispatchers.IO) {
-        val body = json.encodeToString(
-            FavoriteUpdatePayload(
-                favorited = favorited,
-            ),
-        ).toRequestBody("application/json".toMediaType())
-        val request = authorizedRequest(baseUrl, "/items/$itemId/favorite", token)
-            .put(body)
-            .build()
-        executeNoBody(request)
+        val body = jsonBody(FavoriteUpdatePayload(favorited = favorited))
+        executeAuthorizedNoBody(baseUrl, "/items/$itemId/favorite", token) { put(body) }
     }
 
     suspend fun batchItemAction(
@@ -1153,12 +999,8 @@ class ApiClient(
         action: String,
         itemIds: List<Int>,
     ): ItemBatchResponse = withContext(Dispatchers.IO) {
-        val body = json.encodeToString(ItemBatchRequest(action = action, itemIds = itemIds))
-            .toRequestBody("application/json".toMediaType())
-        val request = authorizedRequest(baseUrl, "/items/batch", token)
-            .post(body)
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<ItemBatchResponse>(payload) }
+        val body = jsonBody(ItemBatchRequest(action = action, itemIds = itemIds))
+        executeAuthorizedJson(baseUrl, "/items/batch", token) { post(body) }
     }
 
     suspend fun getBlueskyBrowse(
@@ -1185,15 +1027,11 @@ class ApiClient(
     }
 
     suspend fun getBlueskyPicker(baseUrl: String, token: String): BlueskyPickerResponse = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/bluesky/picker", token)
-            .acceptJson()
-            .get()
-            .build()
         val client = okHttpClient.newBuilder()
             .readTimeout(30, TimeUnit.SECONDS)
             .callTimeout(30, TimeUnit.SECONDS)
             .build()
-        executeJson(request, client) { payload -> json.decodeFromString<BlueskyPickerResponse>(payload) }
+        executeAuthorizedJson(baseUrl, "/bluesky/picker", token, acceptJson = true, client = client) { get() }
     }
 
     suspend fun getBlueskyCandidates(
@@ -1231,11 +1069,7 @@ class ApiClient(
         payload: BlueskyCandidateSaveRequest,
     ): ArticleSummary = withContext(Dispatchers.IO) {
         val body = jsonBody(payload)
-        val request = authorizedRequest(baseUrl, "/bluesky/candidates/save", token)
-            .acceptJson()
-            .post(body)
-            .build()
-        executeJson(request) { responsePayload -> json.decodeFromString<ArticleSummary>(responsePayload) }
+        executeAuthorizedJson(baseUrl, "/bluesky/candidates/save", token, acceptJson = true) { post(body) }
     }
 
     suspend fun pinBlueskyCandidateSource(
@@ -1244,33 +1078,16 @@ class ApiClient(
         actor: String? = null,
         uri: String? = null,
     ): BlueskyCandidatePinResponse = withContext(Dispatchers.IO) {
-        val body = json.encodeToString(BlueskyCandidatePinRequest(actor = actor, uri = uri))
-            .toRequestBody("application/json".toMediaType())
-        val request = authorizedRequest(baseUrl, "/bluesky/candidates/pin", token)
-            .acceptJson()
-            .post(body)
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<BlueskyCandidatePinResponse>(payload) }
+        val body = jsonBody(BlueskyCandidatePinRequest(actor = actor, uri = uri))
+        executeAuthorizedJson(baseUrl, "/bluesky/candidates/pin", token, acceptJson = true) { post(body) }
     }
 
     suspend fun getBlueskySources(baseUrl: String, token: String): List<BlueskySourceInfo> = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/bluesky/sources", token)
-            .acceptJson()
-            .get()
-            .build()
-        executeJson(request) { payload ->
-            json.decodeFromString(ListSerializer(BlueskySourceInfo.serializer()), payload)
-        }
+        executeAuthorizedJson(baseUrl, "/bluesky/sources", token, acceptJson = true) { get() }
     }
 
     suspend fun getBlueskyBrowsePins(baseUrl: String, token: String): List<BlueskyBrowsePinResponse> = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/bluesky/browse/pins", token)
-            .acceptJson()
-            .get()
-            .build()
-        executeJson(request) { payload ->
-            json.decodeFromString(ListSerializer(BlueskyBrowsePinResponse.serializer()), payload)
-        }
+        executeAuthorizedJson(baseUrl, "/bluesky/browse/pins", token, acceptJson = true) { get() }
     }
 
     suspend fun addBlueskyBrowsePin(
@@ -1278,13 +1095,8 @@ class ApiClient(
         token: String,
         sourceId: Int,
     ): BlueskyBrowsePinResponse = withContext(Dispatchers.IO) {
-        val body = json.encodeToString(BlueskyBrowsePinCreateRequest(sourceId = sourceId))
-            .toRequestBody("application/json".toMediaType())
-        val request = authorizedRequest(baseUrl, "/bluesky/browse/pins", token)
-            .acceptJson()
-            .post(body)
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<BlueskyBrowsePinResponse>(payload) }
+        val body = jsonBody(BlueskyBrowsePinCreateRequest(sourceId = sourceId))
+        executeAuthorizedJson(baseUrl, "/bluesky/browse/pins", token, acceptJson = true) { post(body) }
     }
 
     suspend fun removeBlueskyBrowsePinBySource(
@@ -1292,18 +1104,11 @@ class ApiClient(
         token: String,
         sourceId: Int,
     ) = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/bluesky/browse/pins/by-source/$sourceId", token)
-            .delete()
-            .build()
-        executeNoBody(request)
+        executeAuthorizedNoBody(baseUrl, "/bluesky/browse/pins/by-source/$sourceId", token) { delete() }
     }
 
     suspend fun getBlueskyPreferences(baseUrl: String, token: String): BlueskyScannerPreferences = withContext(Dispatchers.IO) {
-        val request = authorizedRequest(baseUrl, "/bluesky/preferences", token)
-            .acceptJson()
-            .get()
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<BlueskyScannerPreferences>(payload) }
+        executeAuthorizedJson(baseUrl, "/bluesky/preferences", token, acceptJson = true) { get() }
     }
 
     suspend fun patchBlueskyPreferences(
@@ -1312,11 +1117,8 @@ class ApiClient(
         patch: BlueskyScannerPreferencesPatch,
     ): BlueskyScannerPreferences = withContext(Dispatchers.IO) {
         val body = jsonBody(patch)
-        val request = authorizedRequest(baseUrl, "/bluesky/preferences", token)
-            .acceptJson()
-            .patch(body)
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<BlueskyScannerPreferences>(payload) }
+        // `this.` disambiguates the HTTP verb from the `patch` payload parameter.
+        executeAuthorizedJson(baseUrl, "/bluesky/preferences", token, acceptJson = true) { this.patch(body) }
     }
 
     suspend fun postProblemReport(
@@ -1325,11 +1127,7 @@ class ApiClient(
         requestPayload: ProblemReportRequest,
     ): ProblemReportResponse = withContext(Dispatchers.IO) {
         val body = jsonBody(requestPayload)
-        val request = authorizedRequest(baseUrl, "/feedback/problem-report", token)
-            .acceptJson()
-            .post(body)
-            .build()
-        executeJson(request) { payload -> json.decodeFromString<ProblemReportResponse>(payload) }
+        executeAuthorizedJson(baseUrl, "/feedback/problem-report", token, acceptJson = true) { post(body) }
     }
 
     private fun resolveUrl(baseUrl: String, path: String): String {
@@ -1361,6 +1159,13 @@ class ApiClient(
         json.encodeToString(payload).toRequestBody("application/json".toMediaType())
 
     /**
+     * The zero-length body used by the "action" POSTs that carry no payload
+     * (done/reset/unarchive/restore/purge, provider test). Sends `Content-Length: 0`
+     * and no `Content-Type`, matching what those endpoints have always sent.
+     */
+    private fun emptyBody() = ByteArray(0).toRequestBody(null, 0, 0)
+
+    /**
      * Build the optional `?kind=` query for summary requests. Blank/null kinds
      * yield an empty string so the URL is identical to the legacy no-kind path.
      */
@@ -1369,6 +1174,51 @@ class ApiClient(
         if (trimmed.isEmpty()) return ""
         val encoded = java.net.URLEncoder.encode(trimmed, "UTF-8")
         return "?kind=$encoded"
+    }
+
+    /**
+     * The bearer-authenticated builder shared by the common endpoint families:
+     * `Authorization` first, then an optional `Accept: application/json`, then
+     * whatever [configure] adds. [acceptJson] is opt-in rather than defaulted on,
+     * because endpoints differ today in whether they send `Accept` and this
+     * consolidation must not change any endpoint's request bytes.
+     */
+    private fun authorizedBuilder(
+        baseUrl: String,
+        path: String,
+        token: String,
+        acceptJson: Boolean,
+    ): Request.Builder {
+        val builder = authorizedRequest(baseUrl, path, token)
+        return if (acceptJson) builder.acceptJson() else builder
+    }
+
+    /**
+     * Authenticated request whose successful response body is decoded as [T].
+     * Error, status-code and 401 semantics are unchanged: this delegates to
+     * [executeJson], so callers still own retry/re-auth handling.
+     */
+    private inline fun <reified T> executeAuthorizedJson(
+        baseUrl: String,
+        path: String,
+        token: String,
+        acceptJson: Boolean = false,
+        client: OkHttpClient = okHttpClient,
+        configure: Request.Builder.() -> Request.Builder,
+    ): T {
+        val request = configure(authorizedBuilder(baseUrl, path, token, acceptJson)).build()
+        return executeJson(request, client) { payload -> json.decodeFromString<T>(payload) }
+    }
+
+    /** [executeAuthorizedJson] for endpoints whose response body is ignored. */
+    private fun executeAuthorizedNoBody(
+        baseUrl: String,
+        path: String,
+        token: String,
+        acceptJson: Boolean = false,
+        configure: Request.Builder.() -> Request.Builder,
+    ) {
+        executeNoBody(configure(authorizedBuilder(baseUrl, path, token, acceptJson)).build())
     }
 
     private inline fun <T> executeJson(
