@@ -1,5 +1,6 @@
 package com.mimeo.android.startup
 
+import android.Manifest
 import android.content.Context
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.mimeo.android.MainActivity
 import com.mimeo.android.StartupLoadingScreen
 import com.mimeo.android.data.SettingsStore
@@ -86,8 +88,14 @@ class StartupActivitySmokeTest {
     private val context: Context get() = ApplicationProvider.getApplicationContext()
 
     @Before
-    fun resetSettingsBeforeTest() = runBlocking {
-        SettingsStore(context).clearAllSettingsForTesting()
+    fun resetSettingsBeforeTest() {
+        InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(
+            context.packageName,
+            Manifest.permission.POST_NOTIFICATIONS,
+        )
+        runBlocking {
+            SettingsStore(context).clearAllSettingsForTesting()
+        }
     }
 
     @After
