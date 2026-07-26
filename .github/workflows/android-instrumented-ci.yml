@@ -1,0 +1,86 @@
+name: Android Instrumented CI
+
+# Small, deterministic emulator gate for locally owned startup and Up Next UI behavior.
+# API 35 matches compileSdk/targetSdk. The AOSP x86_64 image avoids Google-service
+# dependencies while retaining hardware acceleration on GitHub's Ubuntu runner.
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: android-instrumented-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  instrumented-assurance:
+    name: Instrumented assurance (API 35)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          add-job-summary: always
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Build debug app APK
+        run: ./gradlew :app:assembleDebug --no-daemon --build-cache
+
+      - name: Build debug test APK
+        run: ./gradlew :app:assembleDebugAndroidTest --no-daemon --build-cache
+
+      - name: Run selected instrumented tests
+        uses: ReactiveCircus/android-emulator-runner@v2
+        env:
+          INSTRUMENTED_TEST_CLASSES: com.mimeo.android.startup.StartupLoadingScreenTest,com.mimeo.android.startup.NavigationDrawerStateTest,com.mimeo.android.startup.StartupActivitySmokeTest,com.mimeo.android.ui.queue.UpNextRenderSmokeTest
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          force-avd-creation: true
+          disable-animations: true
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -no-snapshot -noaudio
+            -no-boot-anim -camera-back none
+          script: |
+            adb wait-for-device
+            adb devices | awk '$2 == "device" && $1 ~ /^emulator-/ { found=1 } END { exit(found ? 0 : 1) }'
+            mkdir -p app/build/reports/androidTests/connected
+            ./gradlew :app:connectedDebugAndroidTest "-Pandroid.testInstrumentationRunnerArguments.class=$INSTRUMENTED_TEST_CLASSES" --no-daemon --build-cache --stacktrace; test_status=$?; mkdir -p app/build/reports/androidTests/connected; adb logcat -d > app/build/reports/androidTests/connected/device-logcat.txt; exit "$test_status"
+
+      - name: Upload instrumented-test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: instrumented-assurance-api-35
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            app/build/reports/androidTests/connected/
+            app/build/outputs/androidTest-results/connected/
