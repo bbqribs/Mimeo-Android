@@ -56,6 +56,8 @@ jobs:
 
       - name: Run selected instrumented tests
         uses: ReactiveCircus/android-emulator-runner@v2
+        env:
+          INSTRUMENTED_TEST_CLASSES: com.mimeo.android.startup.StartupLoadingScreenTest,com.mimeo.android.startup.NavigationDrawerStateTest,com.mimeo.android.startup.StartupActivitySmokeTest,com.mimeo.android.ui.queue.UpNextRenderSmokeTest
         with:
           api-level: 35
           target: default
@@ -68,22 +70,9 @@ jobs:
             -no-boot-anim -camera-back none
           script: |
             adb wait-for-device
-            emulator_serial="$(adb devices | awk '$2 == "device" && $1 ~ /^emulator-/ { print $1; exit }')"
-            if [ -z "$emulator_serial" ]; then
-              echo "No ready emulator was found; refusing to skip instrumented tests."
-              adb devices -l
-              exit 1
-            fi
-
+            adb devices | awk '$2 == "device" && $1 ~ /^emulator-/ { found=1 } END { exit(found ? 0 : 1) }'
             mkdir -p app/build/reports/androidTests/connected
-            set +e
-            ./gradlew :app:connectedDebugAndroidTest \
-              "-Pandroid.testInstrumentationRunnerArguments.class=com.mimeo.android.startup.StartupLoadingScreenTest,com.mimeo.android.startup.NavigationDrawerStateTest,com.mimeo.android.startup.StartupActivitySmokeTest,com.mimeo.android.ui.queue.UpNextRenderSmokeTest" \
-              --no-daemon --build-cache --stacktrace
-            test_status=$?
-            mkdir -p app/build/reports/androidTests/connected
-            adb logcat -d > app/build/reports/androidTests/connected/device-logcat.txt
-            exit "$test_status"
+            ./gradlew :app:connectedDebugAndroidTest "-Pandroid.testInstrumentationRunnerArguments.class=$INSTRUMENTED_TEST_CLASSES" --no-daemon --build-cache --stacktrace; test_status=$?; mkdir -p app/build/reports/androidTests/connected; adb logcat -d > app/build/reports/androidTests/connected/device-logcat.txt; exit "$test_status"
 
       - name: Upload instrumented-test diagnostics
         if: always()
