@@ -96,6 +96,14 @@ gated on the final QA matrix in
    and Up Next History / Earlier in queue implementation. History is bounded
    session-local state; default Save queue-as-playlist remains Active + Up Next
    only.
+   **Partly shipped (2026-07-26):** Up Next History / Earlier in queue is
+   implemented (T-AND-UPNEXT-HISTORY-1, PR #468), and its pointer semantics were
+   then corrected and cleaned up by PRs #475/#476 — the session pointer now
+   follows the engine's commitment to play, with one owner per route. Android
+   History remains **bounded session-local state**; cross-device History depends
+   on the backend projection `T-UPNEXT-HISTORY-CONTRACT-1` in the Mimeo repo and
+   must not be assumed before it merges. Smart Queue-as-playlist-source is the
+   part of this cluster still open.
    Smart Queue reorder decision: Smart Queue should become a persisted,
    reorderable inbox view, distinct from chronological Inbox and local Up
    Next. New items default to the top; user-adjusted relative order persists
@@ -118,6 +126,12 @@ gated on the final QA matrix in
    listening-time estimates at 1.0x and current-speed-adjusted playback.
 9. [ ] **Android maintenance cluster.** Compose BOM/deprecation audit,
    scrollbar coverage where appropriate, and limited refactor survey.
+   **The refactor-survey half is done:** `docs/planning/ANDROID_ARCH_PERF_PLAN_2026_07.md`
+   is complete — all five tickets T-A…T-E shipped (PRs #445–#448, #477). That plan
+   should no longer generate tickets. Its explicitly deferred items (May survey R2
+   `LibraryStateHolder`, R12 `QueueLoadCoordinator`, R10 `AppRoute` sealed routes,
+   F7 unmeasured hotspots, F8 grab-bag splits) remain valid backlog. Compose BOM
+   migration (item 19) and scrollbars (item 18) are still open.
 
 ### P1 — follow-ups implied by shipped state
 
@@ -130,9 +144,10 @@ gated on the final QA matrix in
    checkboxes + privacy hint + bounded payload). Remaining work is backend
    persistence/export per `docs/PROBLEM_REPORT_ATTACHMENT_V2_CONTRACT_SPEC.md`.
    Tracked in the Mimeo (backend) repo; this line is a pointer only.
-12. [ ] **Roadmap hygiene pass** — identify duplicate/stale shipped entries;
+12. [x] **Roadmap hygiene pass** — identify duplicate/stale shipped entries;
    correct cross-repo shipping-state discrepancies. Coordinated with Mimeo
-   repo.
+   repo. Done 2026-07-26 (T-ROADMAP-RECONCILIATION-2026-07), paired with the
+   equivalent pass in the Mimeo repo.
 13. [ ] **Reader context menu expansion.** Four additions to the floating
    selection toolbar and link long-press sheet:
    - Share selected text (plain-text share of highlighted passage, no
@@ -184,7 +199,16 @@ gated on the final QA matrix in
     increased vertical padding, a subtle divider or surface elevation
     change, or a shadow. Evaluate in Locus at typical font sizes before
     deciding on approach; defer to a focused visual pass session.
-22. [ ] **Article summaries entry point (backend dependency).** Android
+22. [ ] **`Accept: application/json` consistency in `ApiClient` (low priority,
+    no known symptom).** Endpoints differ in whether they send an `Accept`
+    header. `T-AND-APICLIENT-REQUEST-BUILDER-1` deliberately made `acceptJson()`
+    opt-in rather than defaulted, so the consolidation could not change any
+    endpoint's request bytes; the current inconsistency is therefore frozen
+    intentionally, not accidental. **No evidence it causes any problem** — the
+    backend has not been observed to vary behaviour on it. Do not promote this
+    without such evidence. If ever normalised, do it as one deliberate pass with
+    `ApiClientRequestBuilderTest.kt` updated in the same change.
+23. [ ] **Article summaries entry point (backend dependency).** Android
     reader needs an entry point for per-article AI summaries once the
     backend summary substrate and API design are settled. No Android work
     until the Mimeo backend summary contract is defined and merged
@@ -226,6 +250,8 @@ Non-goals still in force:
 History of shipped work, kept for reference. Newest at the top of each
 block. Not a forward-looking list.
 
+- [x] **Playback pointer correctness + architecture/perf queue completion** (2026-07-24 → 2026-07-26): **T-AND-NOWPLAYING-POINTER-DESYNC-1** (PR #475) re-points the Now Playing session to whatever actually starts playing — the pointer now follows the engine's commitment to play rather than item load — and **T-AND-PLAYBACK-PROMOTION-CLEANUP-1** (PR #476) finished the job: `setNowPlayingCurrentItem`, `promoteReaderItemToNowPlaying` and `shouldMutateUpNextActiveItem` are gone, and `playLocusItem` routes through the single decision point `playReaderItem` so there is exactly one pointer owner per route. Implementation and automated gates are complete; optional S24 re-acceptance is not a blocker. **T-AND-APICLIENT-REQUEST-BUILDER-1** (PR #477) consolidated authenticated request construction in `ApiClient` (`authorizedRequest`, `authorizedBuilder`, `executeAuthorizedJson`, `executeAuthorizedNoBody`) with no change to any endpoint's request bytes, locked by `ApiClientRequestBuilderTest.kt` — this was **T-E**, completing the whole `ANDROID_ARCH_PERF_PLAN_2026_07.md` queue (T-D #445, T-B #446, T-A #447, T-C #448, T-E #477). **SettingsStore DataStore binding fix** (PR #478) resolved a genuine full-suite isolation failure by keying the settings DataStore on its file path rather than the property delegate; verified with 4 consecutive `--rerun-tasks` runs at 1145 tests / 0 failures. Nothing is quarantined or excluded from the suite. Details in `TESTING.md`.
+- [x] **Save-reliability and offline series shipped** (2026-07-23 → 2026-07-24): pending-save surfacing (T-AND-PENDING-SAVE-SURFACING-1, PR #471, following the save-disappearance investigation PR #469), distinct debug-variant icon (PR #472), inbox parked-save rows (T-AND-INBOX-PARKED-SAVE-ROWS-1, PR #473), and the offline library cache (T-AND-OFFLINE-LIBRARY-CACHE-1, PR #474).
 - [x] **Household distribution + launch-support series shipped** (2026-07-08 → 2026-07-15): signed household release line (T-AND-DIST-MIN-1, PR #451: dedicated release key, versionCode discipline, versioned artifacts, `RELEASE_NOTES.md`, sideload runbook, Settings version display); Android problem-report submission fix (PR #452); reader viewport resume + signed 0.4.2/vc8 (PRs #453–#454); account-scoped local-state ownership so persisted state never crosses account/server boundaries (T-AND-STATE-OWNER-LAND-1, PR #455) with crash-safe sign-out; stale-library response guards (PR #456); signed `0.4.3` / versionCode 9 release provenance (PR #457); isolated debug package identity — distinct debug application ID, debug version suffix, "Mimeo Debug" label (PR #458). Distribution to members now also flows through the Mimeo repo's authenticated Account → Android app download and guarded installer (Mimeo PRs #759–#760). Household GO recorded 2026-07-11; first trusted member onboarded (Mimeo repo).
 - [x] **Devices & sessions Android UI shipped** (T-AND-DEVICES-1, 2026-07-05): Settings → Account & Connection gains a "Devices & sessions" screen backed by the existing backend `GET/POST /account/devices*` surface (T-HH-DEVICES-1, no backend/API changes). Lists the signed-in user's active sessions with name, signed-in/last-used/expiry times, and a "Current device" marker; never displays token values. Supports revoking a non-current session and "Sign out everywhere else" (current session always preserved), with plain-language confirmation dialogs and stable loading/empty/error states. Reuses the existing authenticated API client and T-AND-AUTH-EXPIRY-1 stale-token re-auth routing on 401. Verified end-to-end on a physical device against the remote runtime. Unit tests, `assembleDebug`, and `assembleRelease` all passed.
 - [x] **Android visual v1 surface streamlining shipped** (2026-05-14): Smart Queue search already uses compact row treatment via `LibraryItemsScreen`. Up Next session panel header simplified to seed-source label only (redundant Re-seed button removed; remains in overflow menu). Bluesky candidate cards redesigned: title clickable→article, post area clickable→post, `SaveActionChip` (FilterChip) replaces saved-state text and bottom-row duplicate buttons. Smart Playlist detail header gains Play All IconButton (replaces "Use as Up Next") and collapsible metadata panel with FlowRow filter chips (collapse/expand arrow with rotation animation). Settings screen: connection help collapsed behind info toggle, Bluesky verbose explanations trimmed, scheduler/source diagnostics collapsed behind show/hide toggle, scanner defaults collapsed by default, "Open candidate browser" and "Open Bluesky smart playlist" navigation buttons removed. `SettingsScreen` signature cleaned of now-dead `onOpenBlueskyBrowse`/`onOpenSmartPlaylist` params. Unit tests and assembleDebug both passed. Follow-ups (not in this ticket): filter chip editing/remove/add in smart playlist header, Bluesky candidate browser accessible from other entry points.

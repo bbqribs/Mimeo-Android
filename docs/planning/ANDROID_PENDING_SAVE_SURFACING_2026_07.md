@@ -5,6 +5,11 @@ Evidence: `docs/investigations/ANDROID_SAVE_DISAPPEARANCE_INVESTIGATION_2026_07.
 (§1 Mechanism B, §4 latent defect, §9 regression requirements, §12 follow-up note).
 Android-only. Draft PR to `main`; do not merge.
 
+> **Status: shipped as PR #471** (noted 2026-07-26,
+> T-ROADMAP-RECONCILIATION-2026-07). The "do not merge" line above is the
+> original pre-execution instruction and no longer applies. Implementation
+> record; generates no further tickets.
+
 ## Problem (from confirmed findings)
 
 1. Retryable share-sheet failures are parked in Pending Saves with the failure

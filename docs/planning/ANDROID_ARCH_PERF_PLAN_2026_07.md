@@ -4,7 +4,23 @@
 **Date:** 2026-07-05
 **Repo:** Mimeo-Android
 **Base SHA:** `b1df6c1` (main, clean tree)
-**Status:** Docs-only planning. No source changes in this ticket.
+**Status:** **Complete — all five tickets shipped** (updated 2026-07-26,
+T-ROADMAP-RECONCILIATION-2026-07). Original status, preserved: *Docs-only
+planning. No source changes in this ticket.*
+
+> **Completion record (2026-07-26).** The whole T-A…T-E queue has landed. This
+> plan is now an implementation record and **should no longer generate tickets**;
+> the sequencing advice in "What first, what deferred" is spent. The deferred
+> items listed there (R2, R12, R10, F7, F8, shared MockWebServer utility) were
+> never in scope and remain valid backlog.
+>
+> | Ticket | Delivered | PR |
+> | --- | --- | --- |
+> | **T-D** — Gradle configuration cache + parallel builds | `gradle.properties` sets `org.gradle.configuration-cache`, `org.gradle.parallel`, `org.gradle.caching` | #445 |
+> | **T-B** — Extract `AccountSecurityCoordinator` | `state/AccountSecurityCoordinator.kt`, `state/AccountSecurityStateHolder.kt` | #446 |
+> | **T-A** — Split `SettingsScreen` spoke sections | `ui/settings/sections/` (Account, Bluesky, Playback) | #447 |
+> | **T-C** — Shared load-state component + error copy | `ui/common/LoadStatePane.kt` | #448 |
+> | **T-E** — Collapse `ApiClient` request boilerplate | `authorizedRequest`/`authorizedBuilder`/`executeAuthorizedJson`/`executeAuthorizedNoBody`, delivered as `T-AND-APICLIENT-REQUEST-BUILDER-1`; contract locked by `ApiClientRequestBuilderTest.kt` | #477 |
 
 ## Context and method
 
@@ -45,6 +61,10 @@ extractions work, but new feature state defaults into the god object.
   offenders found. Both recent tickets are covered (`StaleTokenAuthFailureTest.kt`,
   `DevicesApiTest.kt` 188 lines, `DevicesSupportTest.kt`). The 5 Robolectric tests
   are all justified (DataStore/Context). **No test-speed cleanup ticket is warranted.**
+  *(Correction, 2026-07-26: the Robolectric tests remain justified, but "in good
+  shape" overstated it — a real full-suite isolation defect surfaced later in
+  `SettingsStore` and was fixed in PR #478. See `TESTING.md`. Still no test-speed
+  cleanup ticket.)*
 - **A repository layer exists and is used** (`repository/PlaybackRepository.kt` with
   stale-cache fallback on 5xx/IOException). ViewModel→ApiClient direct calls exist
   but are the established pattern, not a regression.

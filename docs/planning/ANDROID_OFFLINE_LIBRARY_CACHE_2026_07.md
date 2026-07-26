@@ -3,6 +3,10 @@
 Base SHA: `632f4b6` (main). Branch: `claude/t-and-offline-library-cache-1`.
 Android-only. Draft PR to `main`; operator merges.
 
+> **Status: shipped as PR #474** (noted 2026-07-26,
+> T-ROADMAP-RECONCILIATION-2026-07). Implementation record; generates no
+> further tickets.
+
 ## Problem (verified 2026-07-24 on main @ `632f4b6`)
 
 1. **Inbox has no offline cache.** `AppViewModel.loadInboxItems()` →
