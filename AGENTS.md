@@ -39,6 +39,12 @@ Mimeo Android is the mobile client for the Mimeo "read later" system.
 .\gradlew.bat :app:testDebugUnitTest
 ```
 
+## Avoid redundant validation
+- Do not rerun a build, test, lint, smoke, or deployment check when a trustworthy passing result already covers the same relevant source tree and configuration. Reuse and report that result instead.
+- A merge commit does not by itself require rerunning checks when it introduces no content changes relative to the already-tested PR head. Prefer the completed PR checks and any automatic post-merge CI runs.
+- Rerun validation only when the relevant inputs changed, a required result is missing, failed, cancelled, stale, or otherwise unreliable, the merge introduced conflict-resolution changes, or the ticket/operator explicitly requires a fresh run.
+- Distinguish validation executed in the current closeout from earlier or CI validation being reused; report the source commit or workflow run when useful.
+
 ## Context hygiene
 - Treat one ticket as one working session.
 - Start a fresh session when switching tickets.
@@ -99,6 +105,6 @@ Canonical branch: `main`.
 
 1. Sync `main`.
 2. Confirm: final SHA, `git status -sb`, PR merge state via `gh pr view <PR>`, tracked tree clean, untracked files summarized.
-3. For Android-only PRs: include Gradle gate summary. Run remote backend checks only if the PR touched backend contracts or runtime.
+3. For Android-only PRs: include the existing Gradle gate summary without rerunning passing gates unless the redundant-validation rules require it. Run remote backend checks only if the PR touched backend contracts or runtime.
 4. If runtime deploy/sync was in scope: runtime sync result, smoke result, remote git checkout state if relevant.
 5. Never say "merged" unless `gh pr view` confirms state is `MERGED`.
