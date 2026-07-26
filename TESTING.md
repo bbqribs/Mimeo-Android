@@ -90,6 +90,29 @@ Local verification stays broader than the PR gate — run the full
 `.\gradlew.bat :app:testDebugUnitTest` and any ticket-specific suites (e.g. the
 Playback Scroll Guard suite below) before pushing.
 
+### Robolectric / DataStore full-suite isolation (fixed, PR #478)
+
+Nothing in this repo is quarantined or excluded from the unit-test suite, and
+`app/build.gradle.kts` has no test `exclude`/`filter`. If you are looking for a
+known flake, there isn't one.
+
+There *was* a real full-suite failure worth knowing about, because the failure
+mode is easy to reintroduce. `preferencesDataStore` installs a process-wide
+singleton keyed on the property delegate rather than on the `Context`, so the
+first path it resolves is the path it keeps. All Robolectric classes share one
+JVM fork while Robolectric gives each test method its own temp `dataDir`, so the
+singleton stayed bound to whichever class ran first; once that class's temp dir
+was torn down, a later class's atomic move of `mimeo_settings.preferences_pb.tmp`
+failed with `AccessDeniedException` on Windows. Every affected test passed in
+isolation and only failed in the full suite.
+
+The fix binds the settings DataStore to its file path instead of the delegate
+(`data/SettingsStore.kt`). Verified with 4 consecutive
+`:app:testDebugUnitTest --rerun-tasks` runs: 1145 tests, 0 failures.
+
+**Rule:** when adding a DataStore, key it on a resolved file path, not on a
+delegate, or the same cross-class leak returns.
+
 ## Physical-device verification helper
 
 Use `scripts/android-device-verify.ps1` instead of ad hoc coordinates for

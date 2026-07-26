@@ -5,6 +5,10 @@ Follow-up to `T-AND-PENDING-SAVE-SURFACING-1` (merged as PR #471), which explici
 scoped out "no redesign of Pending Saves UI".
 Android-only. Draft PR to `main`; operator merges.
 
+> **Status: shipped as PR #473** (noted 2026-07-26,
+> T-ROADMAP-RECONCILIATION-2026-07). Implementation record; generates no
+> further tickets.
+
 ## Problem (verified 2026-07-24 on main @ `a1bbbf6`)
 
 1. `LibraryItemsScreen.kt:360` computes

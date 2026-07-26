@@ -1,8 +1,19 @@
 # T-AND-NOWPLAYING-POINTER-DESYNC-1 — Re-point the Now Playing session to whatever actually starts playing
 
-Base SHA: `9cbbdf3` (main, = merge of #474; operator reported against a build of #473 + #474
-on top of `632f4b6`). Branch: `claude/t-nowplaying-pointer-desync-1`.
-Android-only. Draft PR to `main`; operator merges.
+**Status: shipped and closed** (updated 2026-07-26, T-ROADMAP-RECONCILIATION-2026-07).
+The fix merged as PR #475 and the cleanup round as `T-AND-PLAYBACK-PROMOTION-CLEANUP-1`
+(PR #476). The implementation and its automated gates are complete: `AppViewModel`
+no longer contains `setNowPlayingCurrentItem`, `promoteReaderItemToNowPlaying`, or
+`shouldMutateUpNextActiveItem`. This doc is now an implementation record and should
+no longer generate tickets; the pointer-ownership table under "Cleanup round" is the
+current rule.
+
+Optional physical-device (SM-S926B / Galaxy S24+) re-acceptance is a nice-to-have
+confirmation, **not an open implementation blocker**.
+
+Original pre-execution header, preserved: Base SHA `9cbbdf3` (main, = merge of #474;
+operator reported against a build of #473 + #474 on top of `632f4b6`). Branch:
+`claude/t-nowplaying-pointer-desync-1`. Android-only. Draft PR to `main`; operator merges.
 
 ## Report (operator, 2026-07-24, physical device SM-S926B)
 
@@ -191,7 +202,8 @@ Two independent defects, both in scope here since the chevron sits in the same c
 
 ## Manual verification
 
-See the PR description.
+See the PR descriptions for #475 and #476. Automated coverage carries the invariant;
+further physical-device acceptance is optional and blocks nothing.
 
 ## Cleanup round (`T-AND-PLAYBACK-PROMOTION-CLEANUP-1`)
 
