@@ -1,5 +1,11 @@
 # Roadmap (Android)
 
+Cross-repository authority for remaining project work:
+[`PROJECT_COMPLETION_AND_GAPS_PLAN_2026_07.md`](https://github.com/bbqribs/Mimeo/blob/56fbc9bc391bd55ee5290abc92c367859a3eb075/docs/planning/PROJECT_COMPLETION_AND_GAPS_PLAN_2026_07.md),
+approved in Mimeo PR #822. Its five lanes, entry gates, dependencies, and
+exclusions govern when an older Android planning document differs. This
+roadmap mirrors only the Android participation and does not duplicate the plan.
+
 Source of truth for redesign scope: `docs/REDESIGN_V2_PLAN.md`.
 Drift guard: `docs/REDESIGN_V2_DECISION_SNAPSHOT.md`.
 Most recent audit: `docs/REDESIGN_V2_AUDIT_2026-04-21.md`.
@@ -14,7 +20,10 @@ Post-redesign product model planning (canonical in Mimeo): `C:\Users\brend\Docum
 Workflow + transition guidance: `docs/planning/AGENT_WORKFLOW.md` and `docs/planning/PROJECT_HANDOFF.md`.
 Planning-doc ownership decision: `docs/planning/DOCS_OWNERSHIP_DECISION.md`.
 
-## Productization state memo
+## Historical productization state memo
+
+This memo records the household-launch boundary at the time it was written. It
+is not the current execution queue; the five-lane programme below is.
 
 - [x] **Authenticated account and endpoint identity surfaced**
   (T-AND-ACCOUNT-IDENTITY-VISIBILITY-1; pending ticket closeout): Drawer and
@@ -65,7 +74,104 @@ Planning-doc ownership decision: `docs/planning/DOCS_OWNERSHIP_DECISION.md`.
     polish beyond the crowned username/onboarding UX polish item) stays in
     force.
 
-## Open — priority order
+## Active project-completion programme
+
+The supported posture remains private-household distribution against the
+Tailscale-only Mimeo service. Store/public-service work is not implied.
+
+### Shipped boundary
+
+- Startup polish is shipped: restored sessions do not flash sign-in, startup
+  has a neutral loading state, and the drawer opens closed.
+- Smart Queue source actions, Play All/Play from Here, persisted reorder,
+  revision preconditions, and conflict refresh are shipped.
+- Compose migration foundations, including Compose BOM `2026.03.00`, built-in
+  Kotlin, and resolver work, are shipped. They are not an open numbered ticket.
+- SettingsStore/Robolectric isolation is fixed and the full JVM suite is not
+  quarantined.
+- Playback-promotion cleanup is complete; playback commitment has one pointer
+  owner per route.
+- The `ApiClient` request-builder cleanup is complete. Any future `Accept`
+  normalization is evidence-triggered maintenance, not unfinished cleanup.
+- The backend summary contract and Android summary entry point are already
+  shipped. Household AI summaries remain disabled under the approved privacy
+  stance; there is no missing-contract implementation ticket.
+
+### Lane 1 — Audit
+
+**Owner:** Mimeo. Android has no implementation ticket in this lane. It may
+provide read-only client-impact input where a converted event family crosses a
+mobile contract. Entry and internal prerequisites remain governed by `AUD1`
+and `AUD2` in the cross-repo authority.
+
+### Lane 2 — Queue and parity
+
+**Owners:** Mimeo for policy/backend/web; Mimeo-Android for dependent client
+adoption and assurance. **Entry gate for server parity:** operator decision
+`B1` plus ratified Now Playing/Earlier move rules.
+
+Preserve this order: crowned state/conflict policy → backend pointer/History →
+backend semantic reorder → web parity → Android server parity → cross-device
+assurance. Android can execute the local/CI slice of
+`T-AND-INSTRUMENTED-ASSURANCE-2` now: add a required emulator lane and narrow
+local Up Next/History UI coverage while keeping real-headset checks manual. The
+archive/History semantics audit is also independently executable if it does not
+invent server truth. Cross-device History, reorder, offline-conflict, and
+two-device scenarios remain blocked on merged backend contracts and Android
+server-parity adoption.
+
+### Lane 3 — Migration
+
+**Owner:** Mimeo/operator infrastructure. Android participates only after a
+genuine Linux-target rehearsal passes, in each of the two production-class
+dress rehearsals, by temporarily retargeting a client over tailnet HTTPS and
+proving rollback. Android work does not make the service migration-ready.
+Readiness remains unclaimed until the separate-target Linux rehearsal, both
+dress rehearsals, and current G1–G9 evidence exist; real migration has a
+separate operator go/no-go.
+
+### Lane 4 — Maintenance
+
+**Owners:** each repository for its surface, with one Android companion record.
+**Entry gate:** operator decision `C1`. After approval, batch evidence-backed
+reviews quarterly; only backup freshness and consolidated security-advisory
+review are monthly across the programme. Review sooner only for a support
+deadline, breakage, or relevant advisory.
+
+Current Android watch areas are Media3 migration, replacement of
+`security-crypto`, SDK 36, and older AndroidX dependencies. A watch item is not
+an automatically scheduled major upgrade: each review must record support and
+security evidence, compatibility risk, deferral, and rollback before opening a
+bounded ticket. Completed Compose and architecture/refactor foundations stay
+closed.
+
+### Lane 5 — Triggered (dormant)
+
+Android participates only after the named cross-repo trigger and operator
+decision. Store distribution, public ingress consequences, OAuth/OIDC/MFA,
+real-user deletion/export UX, per-user AI/BYOAI, key re-encryption support, and
+mobile operator elevation are dormant. The signed household sideload/download
+path remains the supported distribution route.
+
+### Parallelism and gates
+
+- Android local emulator-CI/Up Next assurance and the local archive/History
+  audit may run in parallel with Mimeo audit conversion, queue-policy work,
+  migration target/tooling work, and the maintenance baseline.
+- Android server History/reorder/conflict adoption cannot start against an
+  unmerged backend contract. Cross-device assurance follows that adoption.
+- Android's migration check follows Linux rehearsal evidence and is serialized
+  inside each dress rehearsal; it is not a substitute for either rehearsal.
+- Lane decisions remain with the operator: `B1`/movement rules for queue work,
+  `DEC-A1`–`DEC-A4` for migration, `C1` for maintenance, and each dormant
+  capability's explicit trigger. Android must not install a new policy choice.
+
+## Superseded priority snapshot (historical; not an active queue)
+
+The former numbered “Open — priority order” list below is retained as a dated
+record. Unchecked boxes are not executable tickets or an unconditional next
+queue; re-entry must come through the applicable lane and gate above. Shipped
+items stay closed even where this snapshot once described them as open.
 
 ### P0 — redesign closeout (shipped)
 
@@ -92,7 +198,7 @@ and cleared app data while stored user opt-outs remain honored; merge is
 gated on the final QA matrix in
 `docs/ANDROID_VISUAL_V1_FINAL_QA_2026_05.md`.
 
-4. [ ] **Playback / queue UX cluster.** Smart Queue as playlist-like source
+4. [x] **Playback / queue UX cluster.** Smart Queue as playlist-like source
    and Up Next History / Earlier in queue implementation. History is bounded
    session-local state; default Save queue-as-playlist remains Active + Up Next
    only.
@@ -113,25 +219,28 @@ gated on the final QA matrix in
    conflict recovery for persisted Smart Queue order; V1 search remains
    supported, but every reorder path is disabled while search/filter is active.
    Smart Queue source idiom (accent left rule on header, reorder status,
-   per-row source-list rule) shipped in M-V2-03; drag reorder preserved.
-5. [ ] **Startup polish cluster.** No sign-in flash for restored sessions,
-   neutral loading/splash state, and drawer closed on launch.
-6. [ ] **Instrumented tests cluster.** Startup/auth restoration coverage,
-   playback/media-session/headset controls, and Up Next section behavior.
+   per-row source-list rule) shipped in M-V2-03; drag reorder preserved. The
+   remaining cross-device slice is represented only in Lane 2 above.
+5. [x] **Startup polish cluster.** No sign-in flash for restored sessions,
+   neutral loading/splash state, and drawer closed on launch are shipped.
+6. [ ] **Instrumented assurance split.** The local/emulator-CI slice is
+   independently executable through Lane 2; cross-device History/reorder
+   coverage waits on merged backend contracts and Android parity adoption.
 7. [ ] **Privacy-first telemetry cluster.** Default telemetry stays
    anonymised/aggregate-only with no titles, URLs, article text, domains,
    playlist contents, or reading-choice payloads; problem reports remain
    explicit opt-in exception.
 8. [ ] **Progress / playback duration model.** Pointer/progress audit plus
    listening-time estimates at 1.0x and current-speed-adjusted playback.
-9. [ ] **Android maintenance cluster.** Compose BOM/deprecation audit,
+9. [x] **Android maintenance foundations.** Compose BOM/deprecation audit,
    scrollbar coverage where appropriate, and limited refactor survey.
    **The refactor-survey half is done:** `docs/planning/ANDROID_ARCH_PERF_PLAN_2026_07.md`
    is complete — all five tickets T-A…T-E shipped (PRs #445–#448, #477). That plan
    should no longer generate tickets. Its explicitly deferred items (May survey R2
    `LibraryStateHolder`, R12 `QueueLoadCoordinator`, R10 `AppRoute` sealed routes,
    F7 unmeasured hotspots, F8 grab-bag splits) remain valid backlog. Compose BOM
-   migration (item 19) and scrollbars (item 18) are still open.
+   foundations are shipped; future dependency work follows Lane 4 rather than
+   this numbered snapshot.
 
 ### P1 — follow-ups implied by shipped state
 
@@ -157,8 +266,8 @@ gated on the final QA matrix in
    - Long-press a link → share the link address (URL only, not article
      share flow).
    - Long-press a link → copy the link address to clipboard.
-   Depends on Compose BOM migration (item 21) to unlock
-   `onSelectAllRequested` on the selection toolbar API.
+   The old numbered Compose BOM dependency was stale; the shipped BOM foundation
+   already exposes the required selection-toolbar API.
 14. [ ] **Playback / archive semantics audit.** Verify and correct two
    routing cases that are currently unspecified or likely wrong:
    - An archived item that reaches TTS completion should appear in History
@@ -184,9 +293,9 @@ gated on the final QA matrix in
 17. [x] **Cleartext → HTTPS-friendly transport** for hosted/mobile use.
 18. [ ] **Scrollbars** for Up Next (draggable, long-queue ergonomics) and
     Settings (non-draggable `drawWithContent` indicator).
-19. [ ] **Compose BOM migration to 1.10.x.** Bump from `2024.06.00`, fix
-    any Material3/API deprecations. Standalone session. Unblocks
-    `onSelectAllRequested` in the reader selection toolbar.
+19. [x] **Compose BOM foundation.** Shipped as BOM `2026.03.00`; future
+    Compose/Material changes are evidence-backed Lane 4 maintenance, not an
+    unconditional standalone migration or blocker for reader work.
 20. [ ] **Up Next / Now Playing visual hierarchy — now-playing accent.**
     The active now-playing item title in Up Next should be rendered at a
     slightly larger size and/or in an accented color to immediately
@@ -208,12 +317,10 @@ gated on the final QA matrix in
     backend has not been observed to vary behaviour on it. Do not promote this
     without such evidence. If ever normalised, do it as one deliberate pass with
     `ApiClientRequestBuilderTest.kt` updated in the same change.
-23. [ ] **Article summaries entry point (backend dependency).** Android
-    reader needs an entry point for per-article AI summaries once the
-    backend summary substrate and API design are settled. No Android work
-    until the Mimeo backend summary contract is defined and merged
-    (CONTRACT CHANGE). Track backend readiness in the Mimeo repo; this
-    line is a pointer only.
+23. [x] **Article summaries entry point and backend contract.** Both are
+    shipped. Summary UI/settings consume the backend contract; household
+    generation remains disabled under the approved privacy decision until its
+    separate per-user trigger and policy gate are satisfied.
 
 ### Testing debt
 
@@ -241,7 +348,9 @@ pointers:
 Non-goals still in force:
 - No playlist folders (cut in v0.2 of the plan).
 - No auto re-seed on pull-to-refresh (plan §3.2, Risk 10).
-- No cross-device Up Next sync in v1 (snapshot rule 14).
+- Cross-device Up Next sync was outside redesign v1, but server-authoritative
+  continuity has since shipped; only the Lane 2 History/reorder parity slices
+  remain open behind their current backend gates.
 
 ---
 
