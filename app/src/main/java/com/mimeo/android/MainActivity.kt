@@ -48,6 +48,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -757,7 +758,7 @@ private fun MimeoApp(vm: AppViewModel) {
     val nav = rememberNavController()
     val navBackStack by nav.currentBackStackEntryAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val drawerState = rememberMimeoDrawerState()
     // Resolve playlist / smart-playlist detail routes to their concrete id
     // (e.g. "playlist/5") rather than the registered pattern
     // ("playlist/{playlistId}"), so route-equality checks — the drawer active
@@ -919,6 +920,10 @@ private fun MimeoApp(vm: AppViewModel) {
         shellState = shellState,
     )
 }
+
+@Composable
+internal fun rememberMimeoDrawerState(): DrawerState =
+    rememberDrawerState(initialValue = DrawerValue.Closed)
 
 @Composable
 internal fun StartupLoadingScreen() {

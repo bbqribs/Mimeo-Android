@@ -1,6 +1,8 @@
 package com.mimeo.android.startup
 
 import android.content.Context
+import androidx.compose.material3.DrawerState
+import androidx.compose.material3.DrawerValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -12,9 +14,12 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.mimeo.android.MainActivity
 import com.mimeo.android.StartupLoadingScreen
 import com.mimeo.android.data.SettingsStore
-import com.mimeo.android.model.ConnectionMode
+import com.mimeo.android.rememberMimeoDrawerState
 import com.mimeo.android.ui.theme.MimeoTheme
 import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,6 +46,28 @@ class StartupLoadingScreenTest {
     }
 }
 
+/** Verifies the app-owned drawer state factory used by [MainActivity]. */
+@RunWith(AndroidJUnit4::class)
+class NavigationDrawerStateTest {
+
+    @get:Rule
+    val composeTestRule = createComposeRule()
+
+    @Test
+    fun navigationDrawerBeginsClosed() {
+        lateinit var drawerState: DrawerState
+
+        composeTestRule.setContent {
+            drawerState = rememberMimeoDrawerState()
+        }
+
+        composeTestRule.runOnIdle {
+            assertEquals(DrawerValue.Closed, drawerState.currentValue)
+            assertEquals(DrawerValue.Closed, drawerState.targetValue)
+        }
+    }
+}
+
 /**
  * Activity-level startup smoke tests.
  *
@@ -58,17 +85,18 @@ class StartupActivitySmokeTest {
 
     private val context: Context get() = ApplicationProvider.getApplicationContext()
 
-    private fun clearCredentials() = runBlocking {
-        SettingsStore(context).saveSignedInSession(
-            baseUrl = "",
-            connectionMode = ConnectionMode.LOCAL,
-            apiToken = "",
-        )
+    @Before
+    fun resetSettingsBeforeTest() = runBlocking {
+        SettingsStore(context).clearAllSettingsForTesting()
+    }
+
+    @After
+    fun resetSettingsAfterTest() = runBlocking {
+        SettingsStore(context).clearAllSettingsForTesting()
     }
 
     @Test
     fun noCredentials_signInScreenAppearsAfterStartupRestore() {
-        clearCredentials()
         ActivityScenario.launch(MainActivity::class.java).use { _ ->
             composeTestRule.waitUntil(timeoutMillis = 6_000) {
                 composeTestRule
@@ -84,7 +112,6 @@ class StartupActivitySmokeTest {
     fun noCredentials_drawerMenuButtonNotVisible() {
         // When signed out, libraryShellVisible=false so the hamburger (☰) is never rendered.
         // This proves the drawer cannot be accidentally opened before authentication.
-        clearCredentials()
         ActivityScenario.launch(MainActivity::class.java).use { _ ->
             composeTestRule.waitUntil(timeoutMillis = 6_000) {
                 composeTestRule
