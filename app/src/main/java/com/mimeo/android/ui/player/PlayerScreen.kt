@@ -2409,11 +2409,8 @@ fun PlayerScreen(
                                                 )
                                                     .onSuccess {
                                                         onShowSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
-                                                        val archivedActivePlaybackItem =
-                                                            locusActionItemId == currentItemId &&
-                                                                (isSpeaking || isAutoPlaying || autoPlayAfterLoad)
-                                                        if (archivedActivePlaybackItem) {
-                                                            // Keep playback continuity for the currently playing item.
+                                                        if (locusActionItemId == currentItemId && currentItemId > 0) {
+                                                            // Archive never displaces the current owner, including while paused.
                                                             Unit
                                                         } else if (locusActionItemId != currentItemId && currentItemId > 0) {
                                                             onOpenItem(currentItemId)

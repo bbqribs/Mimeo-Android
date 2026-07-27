@@ -916,6 +916,14 @@ class ApiClient(
         executeAuthorizedNoBody(baseUrl, "/items/$itemId/reset", token) { post(emptyBody()) }
     }
 
+    suspend fun archiveItem(
+        baseUrl: String,
+        token: String,
+        itemId: Int,
+    ) = withContext(Dispatchers.IO) {
+        executeAuthorizedNoBody(baseUrl, "/items/$itemId/archive", token) { post(emptyBody()) }
+    }
+
     suspend fun unarchiveItem(
         baseUrl: String,
         token: String,

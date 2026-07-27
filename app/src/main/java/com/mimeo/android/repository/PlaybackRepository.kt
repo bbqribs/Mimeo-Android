@@ -75,6 +75,7 @@ data class NowPlayingSessionItem(
     val chunkIndex: Int,
     val offsetInChunkChars: Int,
     val readerScrollOffset: Int,
+    val isArchived: Boolean = false,
 )
 
 data class NowPlayingSession(
@@ -342,6 +343,7 @@ internal data class StoredNowPlayingItem(
     val chunkIndex: Int = 0,
     val offsetInChunkChars: Int = 0,
     val readerScrollOffset: Int = 0,
+    val isArchived: Boolean = false,
 )
 
 @Serializable
@@ -748,7 +750,7 @@ class PlaybackRepository(
     }
 
     suspend fun archiveItem(baseUrl: String, token: String, itemId: Int): ProgressPostResult {
-        apiClient.markItemDone(baseUrl, token, itemId, autoArchive = true)
+        apiClient.archiveItem(baseUrl, token, itemId)
         // Cache hygiene: an archived item leaves active rotation, so drop its cached
         // text. Evicted only AFTER the server confirms the archive so an offline
         // action keeps its blob until the queued action drains — that lets an
@@ -1143,7 +1145,7 @@ class PlaybackRepository(
             dao.clear()
             return null
         }
-        val normalized = currentIndex.coerceIn(0, stored.lastIndex)
+        val normalized = if (currentIndex < 0) -1 else currentIndex.coerceIn(0, stored.lastIndex)
         val updatedAt = System.currentTimeMillis()
         val updatedRow = row.copy(
             queueJson = encodeStoredNowPlaying(stored),
@@ -1381,6 +1383,28 @@ class PlaybackRepository(
         val updatedRow = row.copy(
             queueJson = encodeStoredNowPlaying(stored, parseStoredNowPlayingHistory(row.queueJson)),
             updatedAt = updatedAt,
+        )
+        dao.upsert(updatedRow)
+        return updatedRow.toSession(stored)
+    }
+
+    suspend fun setNowPlayingItemArchived(itemId: Int, archived: Boolean): NowPlayingSession? {
+        val dao = database.nowPlayingDao()
+        val row = dao.getSession() ?: return null
+        val stored = parseStoredNowPlaying(row.queueJson).toMutableList()
+        if (stored.isEmpty()) {
+            dao.clear()
+            return null
+        }
+        val idx = stored.indexOfFirst { it.itemId == itemId }
+        if (idx < 0 || stored[idx].isArchived == archived) {
+            return row.toSession(stored)
+        }
+
+        stored[idx] = stored[idx].copy(isArchived = archived)
+        val updatedRow = row.copy(
+            queueJson = encodeStoredNowPlaying(stored, parseStoredNowPlayingHistory(row.queueJson)),
+            updatedAt = System.currentTimeMillis(),
         )
         dao.upsert(updatedRow)
         return updatedRow.toSession(stored)
@@ -1897,6 +1921,7 @@ class PlaybackRepository(
                     chunkIndex = item.chunkIndex,
                     offsetInChunkChars = item.offsetInChunkChars,
                     readerScrollOffset = item.readerScrollOffset,
+                    isArchived = item.isArchived,
                 )
             },
             currentIndex = safeIndex,
@@ -1934,6 +1959,7 @@ class PlaybackRepository(
         status = item.status,
         activeContentVersionId = item.activeContentVersionId,
         lastReadPercent = item.furthestPercent ?: item.lastReadPercent ?: lastReadPercent,
+        isArchived = item.isArchived,
     )
 
     private fun UpNextSessionItem.toStoredNowPlayingItem(): StoredNowPlayingItem = StoredNowPlayingItem(
@@ -1944,6 +1970,7 @@ class PlaybackRepository(
         status = status,
         activeContentVersionId = activeContentVersionId,
         lastReadPercent = furthestPercent ?: lastReadPercent,
+        isArchived = isArchived,
     )
 
 }

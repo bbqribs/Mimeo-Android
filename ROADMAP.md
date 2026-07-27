@@ -268,16 +268,12 @@ gated on the final QA matrix in
    - Long-press a link → copy the link address to clipboard.
    The old numbered Compose BOM dependency was stale; the shipped BOM foundation
    already exposes the required selection-toolbar API.
-14. [ ] **Playback / archive semantics audit.** Verify and correct two
-   routing cases that are currently unspecified or likely wrong:
-   - An archived item that reaches TTS completion should appear in History
-     (same as an unarchived completed item); confirm the archive flag does
-     not suppress the history entry.
-   - An archived-but-not-completed item should remain reachable in Earlier
-     in Queue or equivalent expected playback history — archiving must not
-     silently drop it from the queue history view. Audit `UpNextViewModel`
-     and playback-completion callbacks; no behavior change without a
-     confirming spec note.
+14. [x] **Playback / archive semantics aligned**
+   (`T-AND-PLAYBACK-ARCHIVE-SEMANTICS-1`, 2026-07-27). Archive is now an
+   organizational flag: it preserves the current playback owner, progress,
+   completion and bounded process-local History. Archived session members are
+   skipped by future continuation, completion records exactly one History row,
+   and unarchive neither resets progress/completion nor starts playback.
 
 ### P2 — exploratory / deferred
 

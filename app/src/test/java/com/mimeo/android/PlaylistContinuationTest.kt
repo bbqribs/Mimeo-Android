@@ -15,6 +15,41 @@ class PlaylistContinuationTest {
     }
 
     @Test
+    fun skipsArchivedItemsForPlaylistContinuation() {
+        val session = session(
+            sourcePlaylistId = 42,
+            currentIndex = 0,
+            itemIds = listOf(10, 20, 30),
+            archivedIds = setOf(20),
+        )
+        assertEquals(2, resolveNextPlaylistScopedSessionIndex(session, currentId = 10))
+    }
+
+    @Test
+    fun skipsLocallyArchivedItemsBeforeAuthoritativeRefresh() {
+        val session = session(sourcePlaylistId = 42, currentIndex = 0, itemIds = listOf(10, 20, 30))
+        assertEquals(
+            2,
+            resolveNextEligibleSessionIndex(
+                session = session,
+                currentId = 10,
+                additionalArchivedItemIds = setOf(20),
+            ),
+        )
+    }
+
+    @Test
+    fun returnsNoContinuationWhenOnlyArchivedItemsRemain() {
+        val session = session(
+            sourcePlaylistId = 42,
+            currentIndex = 0,
+            itemIds = listOf(10, 20, 30),
+            archivedIds = setOf(20, 30),
+        )
+        assertNull(resolveNextEligibleSessionIndex(session, currentId = 10))
+    }
+
+    @Test
     fun stopsAtEndOfPlaylistScopedSession() {
         val session = session(sourcePlaylistId = 42, currentIndex = 2, itemIds = listOf(10, 20, 30))
         assertNull(resolveNextPlaylistScopedSessionIndex(session, currentId = 30))
@@ -40,6 +75,7 @@ class PlaylistContinuationTest {
         sourcePlaylistId: Int?,
         currentIndex: Int,
         itemIds: List<Int>,
+        archivedIds: Set<Int> = emptySet(),
     ): NowPlayingSession {
         return NowPlayingSession(
             items = itemIds.map { itemId ->
@@ -59,6 +95,7 @@ class PlaylistContinuationTest {
                     chunkIndex = 0,
                     offsetInChunkChars = 0,
                     readerScrollOffset = 0,
+                    isArchived = itemId in archivedIds,
                 )
             },
             currentIndex = currentIndex,
