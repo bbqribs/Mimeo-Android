@@ -34,38 +34,43 @@ fun openItemInBrowser(context: Context, url: String) {
 }
 
 fun shareSelectedText(context: Context, text: String) {
-    val send = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, text)
-    }
+    val send = selectedTextShareIntent(text)
     val chooser = Intent.createChooser(send, "Share").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     ContextCompat.startActivity(context, chooser, null)
 }
 
+/** The unadorned text payload used by Reader selection and link-address sharing. */
+internal fun selectedTextShareIntent(text: String): Intent =
+    Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+
 /**
  * Run a web search for [query] using the standard implicit web-search intent.
- * Falls back to opening a browser search URL when no activity handles
- * [Intent.ACTION_WEB_SEARCH]. A blank query is a no-op.
+ * A blank query is a no-op. If no capable activity exists, leave the user in
+ * the reader rather than changing to a different browser-based flow.
  */
 fun webSearchText(context: Context, query: String) {
-    val trimmed = query.trim()
-    if (trimmed.isEmpty()) return
-    val searchIntent = Intent(Intent.ACTION_WEB_SEARCH).apply {
-        putExtra(SearchManager.QUERY, trimmed)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
+    val searchIntent = selectedTextWebSearchIntent(query) ?: return
     try {
         ContextCompat.startActivity(context, searchIntent, null)
     } catch (_: ActivityNotFoundException) {
-        val fallback = Intent(
-            Intent.ACTION_VIEW,
-            Uri.parse("https://www.google.com/search?q=" + Uri.encode(trimmed)),
-        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
-            ContextCompat.startActivity(context, fallback, null)
-        } catch (_: ActivityNotFoundException) {
-            // No browser available; nothing further to do.
-        }
+        // No capable search activity; nothing further to do.
+    } catch (_: SecurityException) {
+        // A device policy may prevent resolving the implicit search intent.
+    }
+}
+
+/**
+ * Builds the platform web-search intent while preserving the exact selection.
+ * Whitespace-only text is deliberately rejected before any activity launch.
+ */
+internal fun selectedTextWebSearchIntent(query: String): Intent? {
+    if (query.isBlank()) return null
+    return Intent(Intent.ACTION_WEB_SEARCH).apply {
+        putExtra(SearchManager.QUERY, query)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 }
 

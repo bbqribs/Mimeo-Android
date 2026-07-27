@@ -30,7 +30,7 @@ internal fun resolveSelectionLinkUrl(
     val hits = links.filter { link ->
         link.start < selectionEndExclusive && link.endExclusive > selectionStart
     }
-    return hits.singleOrNull()?.url
+    return hits.singleOrNull()?.url?.let(::normalizeReaderHttpUrl)
 }
 
 internal fun extractReaderHttpLinks(text: String): List<ReaderLinkRange> {
@@ -41,10 +41,11 @@ internal fun extractReaderHttpLinks(text: String): List<ReaderLinkRange> {
         if (trimmed.isBlank()) return@mapNotNull null
         val endExclusive = match.range.first + trimmed.length
         if (endExclusive <= match.range.first) return@mapNotNull null
+        val url = normalizeReaderHttpUrl(trimmed) ?: return@mapNotNull null
         ReaderLinkRange(
             start = match.range.first,
             endExclusive = endExclusive,
-            url = trimmed,
+            url = url,
         )
     }.toList()
 }
@@ -98,7 +99,7 @@ private fun buildPreservedLinkSpecs(contentBlocks: List<ItemTextContentBlock>): 
             .forEach { block ->
                 val paragraphText = block.text.orEmpty()
                 block.links.orEmpty().forEach { link ->
-                    val url = normalizeHttpUrl(link.href ?: return@forEach) ?: return@forEach
+                    val url = normalizeReaderHttpUrl(link.href ?: return@forEach) ?: return@forEach
                     val preferredFromOffsets = normalizedTextFromOffsets(
                         paragraphText = paragraphText,
                         start = link.start,
@@ -190,7 +191,7 @@ private fun buildHrefHostPathHints(url: String): List<String> {
     return hints.reversed()
 }
 
-private fun normalizeHttpUrl(raw: String): String? {
+internal fun normalizeReaderHttpUrl(raw: String): String? {
     val trimmed = raw.trim()
     if (trimmed.isBlank()) return null
     val parsed = runCatching { URI(trimmed) }.getOrNull() ?: return null

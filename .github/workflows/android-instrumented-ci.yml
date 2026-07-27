@@ -57,7 +57,7 @@ jobs:
       - name: Run selected instrumented tests
         uses: ReactiveCircus/android-emulator-runner@v2
         env:
-          INSTRUMENTED_TEST_CLASSES: com.mimeo.android.startup.StartupLoadingScreenTest,com.mimeo.android.startup.NavigationDrawerStateTest,com.mimeo.android.startup.StartupActivitySmokeTest,com.mimeo.android.ui.queue.UpNextRenderSmokeTest
+          INSTRUMENTED_TEST_CLASSES: com.mimeo.android.startup.StartupLoadingScreenTest,com.mimeo.android.startup.NavigationDrawerStateTest,com.mimeo.android.startup.StartupActivitySmokeTest,com.mimeo.android.ui.queue.UpNextRenderSmokeTest,com.mimeo.android.ui.reader.ReaderContextActionsInstrumentedTest
         with:
           api-level: 35
           target: default
