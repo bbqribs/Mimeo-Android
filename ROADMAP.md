@@ -273,7 +273,9 @@ gated on the final QA matrix in
    organizational flag: it preserves the current playback owner, progress,
    completion and bounded process-local History. Archived session members are
    skipped by future continuation, completion records exactly one History row,
-   and unarchive neither resets progress/completion nor starts playback.
+   and unarchive neither resets progress/completion nor starts playback. History
+   and Earlier in queue display entries chronologically, with the oldest at the
+   top and newest at the bottom, without changing Previous traversal order.
 
 ### P2 — exploratory / deferred
 

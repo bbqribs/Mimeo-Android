@@ -108,6 +108,9 @@ internal fun <T> sessionPanelEarlierItems(
     currentIndex: Int,
 ): List<T> = if (currentIndex >= 0) localItems.take(currentIndex) else emptyList()
 
+internal fun <T> sessionPanelHistoryItems(historyItems: List<T>): List<T> =
+    historyItems.asReversed()
+
 internal data class SessionStickyHeaderBounds(
     val title: String,
     val count: Int,
@@ -359,7 +362,9 @@ internal fun NowPlayingSessionPanel(
         localItemIds = localItems.map { it.itemId },
     )
     val activeItem = localItems.getOrNull(currentIndex)
-    val historyItems = session.historyItems
+    // History is stored most-recent-first so Previous can restore the latest item first,
+    // but the section is chronological: oldest entry at the top, newest at the bottom.
+    val historyItems = sessionPanelHistoryItems(session.historyItems)
     var historyExpanded by rememberSaveable { mutableStateOf(false) }
     // Earlier-in-queue items already sit in play order (oldest at the top,
     // most recently passed nearest Now Playing), so they need no reordering.

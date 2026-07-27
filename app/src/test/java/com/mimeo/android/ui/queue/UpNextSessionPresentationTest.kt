@@ -34,8 +34,16 @@ class UpNextSessionPresentationTest {
     @Test
     fun presentActiveItemKeepsOnlyPrecedingRowsEarlier() {
         assertEquals(
-            listOf(7),
-            sessionPanelEarlierItems(localItems = listOf(7, 8, 9), currentIndex = 1),
+            listOf(7, 8),
+            sessionPanelEarlierItems(localItems = listOf(7, 8, 9), currentIndex = 2),
+        )
+    }
+
+    @Test
+    fun historyDisplaysOldestAtTopAndNewestAtBottom() {
+        assertEquals(
+            listOf(7, 8, 9),
+            sessionPanelHistoryItems(historyItems = listOf(9, 8, 7)),
         )
     }
 
