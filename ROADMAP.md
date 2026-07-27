@@ -276,6 +276,8 @@ gated on the final QA matrix in
    and unarchive neither resets progress/completion nor starts playback. History
    and Earlier in queue display entries chronologically, with the oldest at the
    top and newest at the bottom, without changing Previous traversal order.
+   Archived non-current rows are absent from the future Up Next presentation even
+   while continuity data retains them, so the visible list matches autoplay eligibility.
 
 ### P2 — exploratory / deferred
 

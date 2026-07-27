@@ -48,6 +48,29 @@ class UpNextSessionPresentationTest {
     }
 
     @Test
+    fun archivedFutureItemsAreExcludedFromUpNextPresentation() {
+        assertEquals(
+            listOf(30),
+            sessionPanelUpcomingItems(
+                localItems = listOf(10, 20, 30),
+                currentIndex = 0,
+                isArchived = { it == 20 },
+            ),
+        )
+    }
+
+    @Test
+    fun authoritativeArchiveRefreshPreservesOptimisticLocalOrder() {
+        val presented = sessionPanelPresentationItems(
+            localItems = listOf(20 to false, 10 to false),
+            authoritativeItems = listOf(10 to false, 20 to true),
+            itemKey = { it.first },
+        )
+
+        assertEquals(listOf(20 to true, 10 to false), presented)
+    }
+
+    @Test
     fun initialScrollTargetUsesMeasuredNowPlayingTop() {
         assertEquals(480, nowPlayingScrollTargetPx(480.8f))
     }

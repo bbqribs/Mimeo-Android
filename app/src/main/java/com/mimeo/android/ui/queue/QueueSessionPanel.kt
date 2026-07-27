@@ -111,6 +111,26 @@ internal fun <T> sessionPanelEarlierItems(
 internal fun <T> sessionPanelHistoryItems(historyItems: List<T>): List<T> =
     historyItems.asReversed()
 
+internal fun <T, K> sessionPanelPresentationItems(
+    localItems: List<T>,
+    authoritativeItems: List<T>,
+    itemKey: (T) -> K,
+): List<T> {
+    val authoritativeByKey = authoritativeItems.associateBy(itemKey)
+    return localItems.map { localItem ->
+        authoritativeByKey[itemKey(localItem)] ?: localItem
+    }
+}
+
+internal fun <T> sessionPanelUpcomingItems(
+    localItems: List<T>,
+    currentIndex: Int,
+    isArchived: (T) -> Boolean,
+): List<T> {
+    val startIndex = (currentIndex + 1).coerceIn(0, localItems.size)
+    return localItems.drop(startIndex).filterNot(isArchived)
+}
+
 internal data class SessionStickyHeaderBounds(
     val title: String,
     val count: Int,
@@ -255,11 +275,22 @@ internal fun NowPlayingSessionPanel(
         localItemIds = localItems.map { it.itemId },
     )
 
-    fun upcomingStartIndex(): Int = (activeIndex() + 1).coerceIn(0, localItems.size)
+    fun presentationItems(): List<NowPlayingSessionItem> = sessionPanelPresentationItems(
+        localItems = localItems,
+        authoritativeItems = session.items,
+        itemKey = { it.itemId },
+    )
 
-    fun upcomingItems(): List<NowPlayingSessionItem> = localItems.drop(upcomingStartIndex())
+    fun upcomingItems(): List<NowPlayingSessionItem> = sessionPanelUpcomingItems(
+        localItems = presentationItems(),
+        currentIndex = activeIndex(),
+        isArchived = { it.isArchived },
+    )
 
-    fun absoluteIndexForUpcoming(upcomingIndex: Int): Int = upcomingStartIndex() + upcomingIndex
+    fun absoluteIndexForUpcoming(upcomingIndex: Int): Int {
+        val itemId = upcomingItems().getOrNull(upcomingIndex)?.itemId ?: return -1
+        return localItems.indexOfFirst { it.itemId == itemId }
+    }
 
     fun scrollDraggedItemNearEdge(from: Int) {
         val upcoming = upcomingItems()
@@ -361,7 +392,12 @@ internal fun NowPlayingSessionPanel(
         currentItemId = currentItemId,
         localItemIds = localItems.map { it.itemId },
     )
-    val activeItem = localItems.getOrNull(currentIndex)
+    val presentationItems = sessionPanelPresentationItems(
+        localItems = localItems,
+        authoritativeItems = session.items,
+        itemKey = { it.itemId },
+    )
+    val activeItem = presentationItems.getOrNull(currentIndex)
     // History is stored most-recent-first so Previous can restore the latest item first,
     // but the section is chronological: oldest entry at the top, newest at the bottom.
     val historyItems = sessionPanelHistoryItems(session.historyItems)
@@ -371,10 +407,13 @@ internal fun NowPlayingSessionPanel(
     // Authoritative lifecycle reconciliation can remove the active item while the
     // remembered presentation list is catching up. Treat that transient state as
     // no active item: nothing is earlier and every surviving row remains upcoming.
-    val earlierItems = sessionPanelEarlierItems(localItems, currentIndex)
+    val earlierItems = sessionPanelEarlierItems(presentationItems, currentIndex)
     val hasRowsBeforeActive = historyItems.isNotEmpty() || earlierItems.isNotEmpty()
-    val upcomingStartIndex = (currentIndex + 1).coerceIn(0, localItems.size)
-    val upcomingItems = localItems.drop(upcomingStartIndex)
+    val upcomingItems = sessionPanelUpcomingItems(
+        localItems = presentationItems,
+        currentIndex = currentIndex,
+        isArchived = { it.isArchived },
+    )
     val upcomingItemIds = remember(upcomingItems) { upcomingItems.map { it.itemId } }
     val density = LocalDensity.current
     val minVisibleActiveHeightPx = with(density) { 24.dp.toPx() }
@@ -688,7 +727,7 @@ internal fun NowPlayingSessionPanel(
                 }
                 upcomingItems.forEachIndexed { index, item ->
                     key(item.itemId) {
-                        val absoluteIndex = upcomingStartIndex + index
+                        val absoluteIndex = absoluteIndexForUpcoming(index)
                         val isDragging = draggingIndex == index
                         val itemVisualOffsetY = when {
                             isDragging -> dragOffsetY
@@ -721,10 +760,10 @@ internal fun NowPlayingSessionPanel(
                                 modifier = Modifier.semantics {
                                     customActions = buildList {
                                         if (index > 0) add(CustomAccessibilityAction("Move up") {
-                                            onReorderItem(absoluteIndex, absoluteIndex - 1); true
+                                            onReorderItem(absoluteIndex, absoluteIndexForUpcoming(index - 1)); true
                                         })
                                         if (index < upcomingItems.lastIndex) add(CustomAccessibilityAction("Move down") {
-                                            onReorderItem(absoluteIndex, absoluteIndex + 1); true
+                                            onReorderItem(absoluteIndex, absoluteIndexForUpcoming(index + 1)); true
                                         })
                                     }
                                 },
