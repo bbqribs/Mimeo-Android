@@ -1,7 +1,9 @@
 # Mimeo Android - Shared Agent Rules
 
 ## Multi-agent workflow (Codex + Claude + humans)
-- **Model routing**: Use Mimeo's canonical [AI model routing policy](https://github.com/bbqribs/Mimeo/blob/master/docs/AI_MODEL_ROUTING_POLICY.md). Select by capability fit, harness fit, expected token efficiency, and live subscription headroom; repository ownership and agent familiarity are secondary tie-breakers only.
+- **Model routing**: Use Mimeo's canonical documents — the [routing policy](https://github.com/bbqribs/Mimeo/blob/master/docs/AI_MODEL_ROUTING_POLICY.md) for durable principles, the [model inventory](https://github.com/bbqribs/Mimeo/blob/master/docs/AI_MODEL_INVENTORY.md) for current dated model/plan/effort facts, and the [performance ledger](https://github.com/bbqribs/Mimeo/blob/master/docs/AI_MODEL_PERFORMANCE_LEDGER.md) for evidenced outcomes — plus the live model picker and usage/headroom information. This repository deliberately keeps no model inventory of its own; do not add one here.
+  - **Do not assign models primarily by repository.** Choose the model and harness that best fit the task's capability, risk, tool-access, and execution requirements. Treat repository familiarity and historical ownership as secondary considerations, not capability substitutes.
+  - **If the sibling Mimeo checkout is unavailable**, use the operator's explicit assignment and the live model picker. Do not infer the current model choice from old ticket text, prose in this repo, or a dated worked example.
 - **Single-writer per PR/branch**: Exactly one agent may push commits to a given PR branch. No tag-team pushing.
 - **Merge authority**: The agent owning the ticket/branch may merge its PR.
 - **Serialized merges**: Only one merge operation may happen at a time across BOTH repos (Mimeo + Mimeo-Android).
@@ -44,6 +46,34 @@ Mimeo Android is the mobile client for the Mimeo "read later" system.
 - A merge commit does not by itself require rerunning checks when it introduces no content changes relative to the already-tested PR head. Prefer the completed PR checks and any automatic post-merge CI runs.
 - Rerun validation only when the relevant inputs changed, a required result is missing, failed, cancelled, stale, or otherwise unreliable, the merge introduced conflict-resolution changes, or the ticket/operator explicitly requires a fresh run.
 - Distinguish validation executed in the current closeout from earlier or CI validation being reused; report the source commit or workflow run when useful.
+- This permits reuse; it never weakens a stricter requirement stated by a ticket or by repository policy.
+
+Closeout reports must distinguish three failure kinds rather than collapsing them into "tests failed":
+
+- **code or test failure** — the change is wrong;
+- **environment-caused test failure** — the change is fine, the local environment is not (name the artifact or condition);
+- **CI infrastructure unavailability** — including jobs that never started because of billing, spending limits, or a platform fault. A job that never ran is not a passing job and is not a failing test.
+
+## Source precedence
+
+Before proposing or starting the next ticket, inspect this repository's current `ROADMAP.md` and its recent merged work. Then resolve conflicts in this order:
+
+- `ROADMAP.md` owns current sequencing and priority.
+- Accepted contracts and decision documents own settled behaviour. Backend/API contracts are owned by the Mimeo repository; do not assume an unmerged contract.
+- Current code and tests own shipped implementation reality.
+- Older conversations, summaries, and external stable-reference files supply context but do not override fresher repository evidence.
+
+State explicitly which of these a claim rests on when they disagree, and distinguish among shipped, active, planned, newly proposed, and trigger-gated work.
+
+## Ticket construction
+
+**Tickets must be decision-complete, not implementation-complete.**
+
+A ticket should state the intended outcome; settled product, security, or architectural decisions; dangerous shortcuts and prohibited approaches; hard scope boundaries; load-bearing invariants; required evidence and gates; meaningful stop conditions; and the minimum closeout report.
+
+A ticket should normally delegate call-site and dependency discovery, exact file selection, internal implementation design, routine refactoring choices, expanded test-matrix construction, and identification of incidental documentation changes. Prescribe implementation detail only when it captures a decision or hazard the agent cannot safely infer — for this repository, that includes the known-fragile areas (Smart Queue drag/reorder geometry, `pointerInput` consolidation, cold-launch behaviour).
+
+Token efficiency is **total completion cost** — exploration, tool use, rework, verification, and review — not prompt length. There is no word limit: a ticket should be no longer than necessary to preserve decisions and prevent predictable mistakes.
 
 ## Context hygiene
 - Treat one ticket as one working session.
