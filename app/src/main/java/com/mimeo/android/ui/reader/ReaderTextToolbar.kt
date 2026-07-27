@@ -128,22 +128,19 @@ internal class ReaderTextToolbar(
                         }
                         ITEM_SHARE -> {
                             this@ReaderTextToolbar.onCopyRequested?.invoke()
-                            val text = sanitizeReaderClipboard()
-                            if (!text.isNullOrBlank()) onShare(text)
+                            dispatchReaderSelectedTextAction(sanitizeReaderClipboard(), onShare)
                             mode.finish()
                             true
                         }
                         ITEM_WEB_SEARCH -> {
                             this@ReaderTextToolbar.onCopyRequested?.invoke()
-                            val text = sanitizeReaderClipboard()
-                            if (!text.isNullOrBlank()) onWebSearch(text)
+                            dispatchReaderSelectedTextAction(sanitizeReaderClipboard(), onWebSearch)
                             mode.finish()
                             true
                         }
                         ITEM_TRANSLATE -> {
                             this@ReaderTextToolbar.onCopyRequested?.invoke()
-                            val text = sanitizeReaderClipboard()
-                            if (!text.isNullOrBlank()) onTranslate(text)
+                            dispatchReaderSelectedTextAction(sanitizeReaderClipboard(), onTranslate)
                             mode.finish()
                             true
                         }
@@ -154,14 +151,12 @@ internal class ReaderTextToolbar(
                             true
                         }
                         ITEM_SHARE_LINK -> {
-                            val url = currentLinkUrl
-                            if (!url.isNullOrBlank()) onShare(url)
+                            dispatchReaderLinkAddress(currentLinkUrl, onShare)
                             mode.finish()
                             true
                         }
                         ITEM_COPY_LINK -> {
-                            val url = currentLinkUrl
-                            if (!url.isNullOrBlank()) copyLinkAddress(url)
+                            currentLinkUrl?.let { copyReaderLinkAddress(context, it) }
                             mode.finish()
                             true
                         }
@@ -199,11 +194,6 @@ internal class ReaderTextToolbar(
     fun dispose() {
         scope.cancel(null)
         edgeScrollSpeed = 0f
-    }
-
-    private fun copyLinkAddress(url: String) {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("link address", url))
     }
 
     /**
@@ -251,4 +241,20 @@ internal class ReaderTextToolbar(
         private const val ITEM_SELECT_ALL = 6
         private const val ITEM_TRANSLATE = 7
     }
+}
+
+/** Calls [action] only when the selected text contains a non-whitespace character. */
+internal fun dispatchReaderSelectedTextAction(selectedText: String?, action: (String) -> Unit) {
+    if (!selectedText.isNullOrBlank()) action(selectedText)
+}
+
+/** Shares the exact, already safety-validated reader link address. */
+internal fun dispatchReaderLinkAddress(url: String?, onShare: (String) -> Unit) {
+    if (!url.isNullOrBlank()) onShare(url)
+}
+
+/** Uses the same system clipboard feedback convention as existing copy actions. */
+internal fun copyReaderLinkAddress(context: Context, url: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText("link address", url))
 }

@@ -70,6 +70,21 @@ class ReaderLinkSupportTest {
     }
 
     @Test
+    fun resolveSelectionLinkUrl_rejectsUnsafeLinkAddress() {
+        val unsafe = listOf(
+            ReaderLinkRange(start = 10, endExclusive = 20, url = "javascript:alert(1)"),
+        )
+
+        val url = resolveSelectionLinkUrl(
+            selectionStart = 12,
+            selectionEndExclusive = 18,
+            links = unsafe,
+        )
+
+        assertNull(url)
+    }
+
+    @Test
     fun resolveSelectionLinkUrl_ignoresAdjacentNonOverlappingLink() {
         // Selection ends exactly where the link starts: half-open ranges do not
         // overlap, so no link address is offered.

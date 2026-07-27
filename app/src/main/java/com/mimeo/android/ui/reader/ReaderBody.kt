@@ -432,18 +432,7 @@ fun ReaderBody(
                                 end = offset,
                             ).firstOrNull()?.item
                             if (!url.isNullOrBlank()) {
-                                val opened = try {
-                                    val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    context.startActivity(viewIntent)
-                                    true
-                                } catch (_: ActivityNotFoundException) {
-                                    false
-                                } catch (_: SecurityException) {
-                                    false
-                                } catch (_: IllegalArgumentException) {
-                                    false
-                                }
+                                val opened = openReaderLink(context, url)
                                 if (!opened) {
                                     latestOnNonLinkTap?.invoke()
                                 }
@@ -751,6 +740,21 @@ fun ReaderBody(
         lastAnchorWasFullyVisible = true
     }
 }
+
+/** Opens an already safety-validated reader link through the existing implicit path. */
+internal fun openReaderLink(context: android.content.Context, url: String): Boolean =
+    try {
+        val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(viewIntent)
+        true
+    } catch (_: ActivityNotFoundException) {
+        false
+    } catch (_: SecurityException) {
+        false
+    } catch (_: IllegalArgumentException) {
+        false
+    }
 
 internal fun mapChunkRangeToFullText(
     chunkIndex: Int,
