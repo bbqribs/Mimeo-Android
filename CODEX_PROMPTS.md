@@ -1,7 +1,7 @@
 # Mimeo Android - Codex Instructions
 
 ## Multi-agent workflow (Codex + Claude + humans)
-- **Model routing**: Use Mimeo's canonical [AI model routing policy](https://github.com/bbqribs/Mimeo/blob/master/docs/AI_MODEL_ROUTING_POLICY.md). Select by capability fit, harness fit, expected token efficiency, and live subscription headroom; repository ownership and agent familiarity are secondary tie-breakers only.
+- **Model routing**: Use Mimeo's canonical [routing policy](https://github.com/bbqribs/Mimeo/blob/master/docs/AI_MODEL_ROUTING_POLICY.md), [model inventory](https://github.com/bbqribs/Mimeo/blob/master/docs/AI_MODEL_INVENTORY.md), and [performance ledger](https://github.com/bbqribs/Mimeo/blob/master/docs/AI_MODEL_PERFORMANCE_LEDGER.md), plus the live model picker and usage/headroom information. Do not assign models primarily by repository; repository familiarity and historical ownership are secondary considerations, not capability substitutes. If the sibling Mimeo checkout is unavailable, use the operator's explicit assignment and the live picker — do not infer the current model choice from old ticket text. See `AGENTS.md` for the full rule; this repository keeps no model inventory of its own.
 - **Single-writer per PR/branch**: Exactly one agent may push commits to a given PR branch. No tag-team pushing.
 - **Merge authority**: The agent owning the ticket/branch may merge its PR.
 - **Serialized merges**: Only one merge operation may happen at a time across BOTH repos (Mimeo + Mimeo-Android).
