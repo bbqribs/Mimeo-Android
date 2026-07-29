@@ -160,9 +160,7 @@ For v1, these are two simple settings. The seed source does not need to be confi
 
 **User playlists:** Archiving an item removes it from all user playlists (deferred v2: per-playlist "include archived" option would override this).
 
-**Up Next:** Archiving an item marks it archived but does not remove it from Up Next until the current playback session ends or the user refreshes/re-seeds. This preserves the "archive as I listen" pattern without disrupting the queue.
-
-The existing deferred-cleanup logic for archive-while-playing already handles this for the currently-playing item. Non-playing archived items in Up Next are harder to justify — they are visible but not re-addable to a user playlist. Tentative v1 behavior: non-playing archived items in Up Next are shown with a muted/archived indicator and can be manually removed by the user but are not auto-removed.
+**Up Next:** Archiving the currently playing item preserves playback and its session context. Archiving an item while it is Upcoming removes that session membership. An item that is already archived when the user explicitly adds it to Up Next remains visible and is eligible for autoplay; that membership records explicit playback intent. Unarchiving does not restore a membership removed by an earlier archive action.
 
 ### 3.7 Library-first but Locus is the crown jewel
 

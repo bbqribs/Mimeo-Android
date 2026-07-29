@@ -48,13 +48,12 @@ class UpNextSessionPresentationTest {
     }
 
     @Test
-    fun archivedFutureItemsAreExcludedFromUpNextPresentation() {
+    fun explicitlyQueuedArchivedItemRemainsInUpNextPresentation() {
         assertEquals(
-            listOf(30),
+            listOf(20, 30),
             sessionPanelUpcomingItems(
                 localItems = listOf(10, 20, 30),
                 currentIndex = 0,
-                isArchived = { it == 20 },
             ),
         )
     }

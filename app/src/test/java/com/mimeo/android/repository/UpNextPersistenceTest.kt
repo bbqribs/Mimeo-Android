@@ -191,6 +191,23 @@ class UpNextPersistenceTest {
     }
 
     @Test
+    fun removingArchivedUpcomingMembershipPreservesCurrentProgressAndNextEligibleOrder() = runBlocking {
+        repository.startSession(
+            listOf(queueItem(7), queueItem(8), queueItem(9)),
+            startItemId = 7,
+            sourcePlaylistId = null,
+        )
+        repository.setNowPlayingItemProgress(itemId = 7, percent = 64)
+        repository.setNowPlayingItemArchived(itemId = 8, archived = true)
+
+        val remaining = repository.removeItemFromSession(itemId = 8)!!
+
+        assertEquals(listOf(7, 9), remaining.items.map { it.itemId })
+        assertEquals(7, remaining.currentItem?.itemId)
+        assertEquals(64, remaining.currentItem?.lastReadPercent)
+    }
+
+    @Test
     fun sessionCanEndWithNoActiveItemWithoutDiscardingRemainingMembership() = runBlocking {
         repository.startSession(listOf(queueItem(7), queueItem(8)), startItemId = 7, sourcePlaylistId = null)
 

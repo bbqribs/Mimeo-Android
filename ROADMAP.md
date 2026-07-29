@@ -271,13 +271,14 @@ gated on the final QA matrix in
 14. [x] **Playback / archive semantics aligned**
    (`T-AND-PLAYBACK-ARCHIVE-SEMANTICS-1`, 2026-07-27). Archive is now an
    organizational flag: it preserves the current playback owner, progress,
-   completion and bounded process-local History. Archived session members are
-   skipped by future continuation, completion records exactly one History row,
-   and unarchive neither resets progress/completion nor starts playback. History
-   and Earlier in queue display entries chronologically, with the oldest at the
-   top and newest at the bottom, without changing Previous traversal order.
-   Archived non-current rows are absent from the future Up Next presentation even
-   while continuity data retains them, so the visible list matches autoplay eligibility.
+   completion and bounded process-local History. Archiving an Upcoming member
+   removes it from that session, while an already archived item explicitly added
+   to Up Next remains visible and eligible for continuation. Completion records
+   exactly one History row, and unarchive neither resets progress/completion nor
+   starts playback. History and Earlier in queue display entries chronologically,
+   with the oldest at the top and newest at the bottom, without changing Previous
+   traversal order. Current, Earlier and History membership remains stable across
+   archive changes.
 
 ### P2 — exploratory / deferred
 

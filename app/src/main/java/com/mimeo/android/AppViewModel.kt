@@ -4766,6 +4766,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val inboxItemSnapshot = _inboxItems.value.firstOrNull { it.itemId == itemId }
         val archivedItemSnapshot = _archivedItems.value.firstOrNull { it.itemId == itemId }
         val previousSessionArchiveState = sessionArchiveState(itemId)
+        val sessionBeforeArchive = _nowPlayingSession.value
+        val removeUpcomingSessionMembership = shouldRemoveArchivedUpcomingSessionItem(
+            session = sessionBeforeArchive,
+            itemId = itemId,
+            engineCurrentItemId = playbackEngineState.value.currentItemId.takeIf { it > 0 },
+        )
         val wasCached = _cachedItemIds.value.contains(itemId)
         val wasNoActiveContent = _noActiveContentItemIds.value.contains(itemId)
         val undoSnapshot = queueArchiveUndoSnapshot(
@@ -4787,7 +4793,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 itemId = itemId,
             )
             val deferPlaybackCleanup = archiveCleanup.deferCleanup
-            applyLocalSessionArchiveState(itemId, archived = true)
+            if (!removeUpcomingSessionMembership) {
+                applyLocalSessionArchiveState(itemId, archived = true)
+            }
             if (archiveCleanup.clearSessionNow) {
                 playbackPause(forceSync = true)
                 clearNowPlayingSessionNow()
@@ -4808,6 +4816,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 knownNoActiveIds = _noActiveContentItemIds.value,
             )
             repository.archiveItem(current.baseUrl, current.apiToken, itemId)
+            if (removeUpcomingSessionMembership) {
+                if (removeUpcomingSessionMemberForArchive(itemId)) {
+                    markAndScheduleUpNextMutation()
+                }
+            }
             if (refreshQueue) {
                 val refreshResult = loadQueueOnce(autoRetryPendingSaves = false)
                 if (refreshResult.isFailure) {
@@ -4835,9 +4848,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _queueOffline.value = true
                 _progressSyncBadgeState.value = ProgressSyncBadgeState.OFFLINE
                 _statusMessage.value = "Archived offline; will sync"
+                if (removeUpcomingSessionMembership) {
+                    if (removeUpcomingSessionMemberForArchive(itemId)) {
+                        markAndScheduleUpNextMutation()
+                    }
+                }
                 return Result.success(undoSnapshot)
             }
-            applyLocalSessionArchiveState(itemId, archived = previousSessionArchiveState)
+            if (!removeUpcomingSessionMembership) {
+                applyLocalSessionArchiveState(itemId, archived = previousSessionArchiveState)
+            }
             runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
             runCatching { loadArchivedItems() }
             Result.failure(error)
@@ -5471,7 +5491,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val affectedIds = lastBatchItemIds.toSet()
                 when (action) {
                     "archive" -> {
-                        val sessionSnapshot = _nowPlayingSession.value
+                        var removedUpcomingMembership = false
                         affectedIds.forEach { id ->
                             val seed = _queueItems.value.firstOrNull { it.itemId == id }
                                 ?: _inboxItems.value.firstOrNull { it.itemId == id }
@@ -5483,14 +5503,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             }
                             _queueItems.update { previous -> previous.filterNot { it.itemId == id } }
                             _inboxItems.update { previous -> previous.filterNot { it.itemId == id } }
-                            if (sessionSnapshot != null) {
-                                val inSession = sessionSnapshot.items.any { it.itemId == id } ||
-                                    sessionSnapshot.historyItems.any { it.itemId == id }
+                            val session = _nowPlayingSession.value
+                            if (session != null) {
+                                val inSession = session.items.any { it.itemId == id } ||
+                                    session.historyItems.any { it.itemId == id }
                                 if (inSession) {
-                                    applyLocalSessionArchiveState(id, archived = true)
+                                    if (shouldRemoveArchivedUpcomingSessionItem(
+                                            session = session,
+                                            itemId = id,
+                                            engineCurrentItemId = playbackEngineState.value.currentItemId.takeIf { it > 0 },
+                                        )) {
+                                        removedUpcomingMembership =
+                                            removeUpcomingSessionMemberForArchive(id) || removedUpcomingMembership
+                                    } else {
+                                        applyLocalSessionArchiveState(id, archived = true)
+                                    }
                                 }
                             }
                         }
+                        if (removedUpcomingMembership) markAndScheduleUpNextMutation()
                     }
                     "unarchive" -> {
                         affectedIds.forEach { id ->
@@ -5905,6 +5936,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 },
             ),
         )
+    }
+
+    private suspend fun removeUpcomingSessionMemberForArchive(
+        itemId: Int,
+    ): Boolean {
+        val sessionBeforeRemoval = _nowPlayingSession.value ?: return false
+        val shouldRemove = shouldRemoveArchivedUpcomingSessionItem(
+            session = sessionBeforeRemoval,
+            itemId = itemId,
+            engineCurrentItemId = playbackEngineState.value.currentItemId.takeIf { it > 0 },
+        )
+        if (!shouldRemove) {
+            applyLocalSessionArchiveState(itemId, archived = true)
+            return false
+        }
+        val remaining = repository.removeItemFromSession(itemId)
+        val projected = remaining ?: run {
+            val retainedItems = sessionBeforeRemoval.items.filterNot { it.itemId == itemId }
+            val retainedCurrentId = sessionBeforeRemoval.currentItem?.itemId
+            sessionBeforeRemoval.copy(
+                items = retainedItems,
+                currentIndex = retainedItems.indexOfFirst { it.itemId == retainedCurrentId },
+                updatedAt = System.currentTimeMillis(),
+                historyItems = emptyList(),
+            )
+        }
+        _archivedSessionHistoryIds.update { it - itemId }
+        _nowPlayingSession.value = withTransientHistory(projected)
+        return true
     }
 
     private fun applyLocalFavoriteState(itemId: Int, favorited: Boolean) {
@@ -6778,7 +6838,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val nextIndex = resolveNextEligibleSessionIndex(
             session = session,
             currentId = currentId,
-            additionalArchivedItemIds = _archivedSessionHistoryIds.value,
         ) ?: return null
         val priorActiveGoesToHistory = shouldPlacePriorActiveInHistory(currentId)
         val updated = repository.moveCurrentIndex(
@@ -6806,7 +6865,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val nextIndex = resolveNextPlaylistScopedSessionIndex(
             session = session,
             currentId = currentId,
-            additionalArchivedItemIds = _archivedSessionHistoryIds.value,
         ) ?: run {
             Log.d(
                 LOCUS_CONTINUATION_DEBUG_TAG,

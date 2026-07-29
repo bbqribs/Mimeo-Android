@@ -125,10 +125,9 @@ internal fun <T, K> sessionPanelPresentationItems(
 internal fun <T> sessionPanelUpcomingItems(
     localItems: List<T>,
     currentIndex: Int,
-    isArchived: (T) -> Boolean,
 ): List<T> {
     val startIndex = (currentIndex + 1).coerceIn(0, localItems.size)
-    return localItems.drop(startIndex).filterNot(isArchived)
+    return localItems.drop(startIndex)
 }
 
 internal data class SessionStickyHeaderBounds(
@@ -284,7 +283,6 @@ internal fun NowPlayingSessionPanel(
     fun upcomingItems(): List<NowPlayingSessionItem> = sessionPanelUpcomingItems(
         localItems = presentationItems(),
         currentIndex = activeIndex(),
-        isArchived = { it.isArchived },
     )
 
     fun absoluteIndexForUpcoming(upcomingIndex: Int): Int {
@@ -412,7 +410,6 @@ internal fun NowPlayingSessionPanel(
     val upcomingItems = sessionPanelUpcomingItems(
         localItems = presentationItems,
         currentIndex = currentIndex,
-        isArchived = { it.isArchived },
     )
     val upcomingItemIds = remember(upcomingItems) { upcomingItems.map { it.itemId } }
     val density = LocalDensity.current

@@ -3,7 +3,9 @@ package com.mimeo.android
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.NowPlayingSessionItem
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlaylistContinuationTest {
@@ -15,37 +17,80 @@ class PlaylistContinuationTest {
     }
 
     @Test
-    fun skipsArchivedItemsForPlaylistContinuation() {
+    fun explicitlyQueuedArchivedItemRemainsEligibleForPlaylistContinuation() {
         val session = session(
             sourcePlaylistId = 42,
             currentIndex = 0,
             itemIds = listOf(10, 20, 30),
             archivedIds = setOf(20),
         )
-        assertEquals(2, resolveNextPlaylistScopedSessionIndex(session, currentId = 10))
+        assertEquals(1, resolveNextPlaylistScopedSessionIndex(session, currentId = 10))
     }
 
     @Test
-    fun skipsLocallyArchivedItemsBeforeAuthoritativeRefresh() {
+    fun archiveTransitionRemovesUpcomingMemberButPreservesCurrent() {
         val session = session(sourcePlaylistId = 42, currentIndex = 0, itemIds = listOf(10, 20, 30))
-        assertEquals(
-            2,
-            resolveNextEligibleSessionIndex(
+
+        assertTrue(
+            shouldRemoveArchivedUpcomingSessionItem(
                 session = session,
-                currentId = 10,
-                additionalArchivedItemIds = setOf(20),
+                itemId = 20,
+                engineCurrentItemId = 10,
+            ),
+        )
+        assertFalse(
+            shouldRemoveArchivedUpcomingSessionItem(
+                session = session,
+                itemId = 10,
+                engineCurrentItemId = 10,
             ),
         )
     }
 
     @Test
-    fun returnsNoContinuationWhenOnlyArchivedItemsRemain() {
-        val session = session(
-            sourcePlaylistId = 42,
-            currentIndex = 0,
-            itemIds = listOf(10, 20, 30),
-            archivedIds = setOf(20, 30),
+    fun archiveTransitionPreservesEarlierAndLiveEngineItems() {
+        val session = session(sourcePlaylistId = 42, currentIndex = 1, itemIds = listOf(10, 20, 30))
+
+        assertFalse(
+            shouldRemoveArchivedUpcomingSessionItem(
+                session = session,
+                itemId = 10,
+                engineCurrentItemId = 20,
+            ),
         )
+        assertFalse(
+            shouldRemoveArchivedUpcomingSessionItem(
+                session = session,
+                itemId = 30,
+                engineCurrentItemId = 30,
+            ),
+        )
+    }
+
+    @Test
+    fun everyMemberIsUpcomingWhenSessionHasNoActivePointer() {
+        val session = session(sourcePlaylistId = 42, currentIndex = -1, itemIds = listOf(10, 20))
+
+        assertTrue(
+            shouldRemoveArchivedUpcomingSessionItem(
+                session = session,
+                itemId = 10,
+                engineCurrentItemId = null,
+            ),
+        )
+    }
+
+    @Test
+    fun continuationUsesNextRemainingMemberAfterArchivedUpcomingRemoval() {
+        val session = session(sourcePlaylistId = 42, currentIndex = 0, itemIds = listOf(10, 30))
+
+        assertEquals(1, resolveNextEligibleSessionIndex(session, currentId = 10))
+    }
+
+    @Test
+    fun returnsNoContinuationWhenNoUpcomingMembershipRemains() {
+        val session = session(sourcePlaylistId = 42, currentIndex = 0, itemIds = listOf(10))
+
         assertNull(resolveNextEligibleSessionIndex(session, currentId = 10))
     }
 
