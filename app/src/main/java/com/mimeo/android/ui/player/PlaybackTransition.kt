@@ -26,6 +26,16 @@ fun shouldForceNearEndCommit(
     return previousPercent < thresholdPercent
 }
 
+fun isTerminalPlaybackPosition(
+    position: PlaybackPosition,
+    chunkCount: Int,
+    finalChunkLength: Int,
+): Boolean {
+    if (chunkCount <= 0) return false
+    return position.chunkIndex == chunkCount - 1 &&
+        position.offsetInChunkChars >= finalChunkLength.coerceAtLeast(0)
+}
+
 fun applyDoneTransition(
     event: PlaybackDoneEvent?,
     currentItemId: Int,

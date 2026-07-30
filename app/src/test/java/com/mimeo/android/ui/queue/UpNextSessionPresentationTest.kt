@@ -7,14 +7,24 @@ import org.junit.Test
 
 class UpNextSessionPresentationTest {
     @Test
-    fun collapsedHistoryAnnouncesItsCountStateAndPreviousTraversal() {
+    fun staticRowLifecycleActionsOfferArchiveOrUnarchiveAndBin() {
         assertEquals(
-            "History, 3 items, collapsed; reachable through Previous",
-            historyToggleContentDescription(count = 3, expanded = false),
+            listOf(SessionLifecycleAction.Archive, SessionLifecycleAction.MoveToBin),
+            sessionLifecycleActionOrder(
+                isArchived = false,
+                canArchive = true,
+                canUnarchive = true,
+                canMoveToBin = true,
+            ),
         )
         assertEquals(
-            "History, 3 items, expanded",
-            historyToggleContentDescription(count = 3, expanded = true),
+            listOf(SessionLifecycleAction.Unarchive, SessionLifecycleAction.MoveToBin),
+            sessionLifecycleActionOrder(
+                isArchived = true,
+                canArchive = true,
+                canUnarchive = true,
+                canMoveToBin = true,
+            ),
         )
     }
 
@@ -34,9 +44,39 @@ class UpNextSessionPresentationTest {
     @Test
     fun presentActiveItemKeepsOnlyPrecedingRowsEarlier() {
         assertEquals(
-            listOf(7),
-            sessionPanelEarlierItems(localItems = listOf(7, 8, 9), currentIndex = 1),
+            listOf(7, 8),
+            sessionPanelEarlierItems(localItems = listOf(7, 8, 9), currentIndex = 2),
         )
+    }
+
+    @Test
+    fun historyDisplaysOldestAtTopAndNewestAtBottom() {
+        assertEquals(
+            listOf(7, 8, 9),
+            sessionPanelHistoryItems(historyItems = listOf(9, 8, 7)),
+        )
+    }
+
+    @Test
+    fun explicitlyQueuedArchivedItemRemainsInUpNextPresentation() {
+        assertEquals(
+            listOf(20, 30),
+            sessionPanelUpcomingItems(
+                localItems = listOf(10, 20, 30),
+                currentIndex = 0,
+            ),
+        )
+    }
+
+    @Test
+    fun authoritativeArchiveRefreshPreservesOptimisticLocalOrder() {
+        val presented = sessionPanelPresentationItems(
+            localItems = listOf(20 to false, 10 to false),
+            authoritativeItems = listOf(10 to false, 20 to true),
+            itemKey = { it.first },
+        )
+
+        assertEquals(listOf(20 to true, 10 to false), presented)
     }
 
     @Test

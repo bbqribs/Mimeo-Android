@@ -281,6 +281,7 @@ fun QueueScreen(
     val pendingManualSaves by vm.pendingManualSaves.collectAsState()
     val pendingManualRetryInProgress by vm.pendingManualRetryInProgress.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
+    val archivedSessionHistoryIds by vm.archivedSessionHistoryIds.collectAsState()
     val actionScope = rememberCoroutineScope()
 
     var topActionsMenuExpanded by remember { mutableStateOf(false) }
@@ -706,11 +707,17 @@ fun QueueScreen(
                 seededFromLabel = sessionSeedPresentation?.seededFromLabel ?: selectedPlaylistName,
                 onOpenItem = { itemId -> onOpenPlayer(itemId) },
                 onJumpToQueueItem = { itemId -> vm.jumpToUpcomingSessionItem(itemId) },
+                onJumpToHistoryItem = { itemId -> vm.jumpToHistorySessionItem(itemId) },
                 onReorderItem = { from, to ->
                     vm.reorderNowPlayingSessionItem(fromIndex = from, toIndex = to)
                 },
                 onRemoveItem = { itemId -> vm.removeItemFromSession(itemId) },
                 onClearUpcoming = { showClearUpcomingConfirmation = true },
+                onArchiveSessionItem = { itemId -> vm.archiveSessionItem(itemId) },
+                onUnarchiveSessionHistoryItem = { itemId -> vm.unarchiveSessionHistoryItem(itemId) },
+                onBinSessionHistoryItem = { itemId -> vm.binSessionHistoryItem(itemId) },
+                onBinSessionEarlierItem = { itemId -> vm.binSessionEarlierItem(itemId) },
+                archivedHistoryItemIds = archivedSessionHistoryIds,
                 snapBottomClearance = snapBottomClearance,
                 snapToActiveSignal = snapToActiveSignal,
                 renderSnapPillLocally = renderSnapPillLocally,

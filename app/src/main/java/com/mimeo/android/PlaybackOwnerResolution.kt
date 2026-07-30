@@ -19,8 +19,8 @@ internal fun resolvePlaybackOwnerItemId(
  *
  * [affectsCurrentOwner] is true when the item being archived/binned is the current
  * playback owner (per [resolvePlaybackOwnerItemId]). [deferCleanup] is true when the
- * owner is still actively playing and session teardown must be postponed so playback can
- * finish. [clearSessionNow] is the immediate pause + clear signal.
+ * lifecycle action must preserve that owner. [clearSessionNow] is the immediate pause +
+ * clear signal.
  */
 internal data class PlaybackCleanupDecision(
     val affectsCurrentOwner: Boolean,
@@ -31,19 +31,18 @@ internal data class PlaybackCleanupDecision(
 }
 
 /**
- * Cleanup decision for archiving [itemId]. Archiving the actively-playing owner defers
- * cleanup so playback continues; otherwise the session is cleared immediately.
+ * Cleanup decision for archiving [itemId]. Archive is organizational state: the current
+ * owner remains available whether it is speaking, paused, seeking, or waiting to load.
  */
 internal fun archivePlaybackCleanupDecision(
     engineCurrentItemId: Int,
     sessionCurrentItemId: Int?,
     itemId: Int,
-    isItemActivelyPlaying: Boolean,
 ): PlaybackCleanupDecision {
     val affects = resolvePlaybackOwnerItemId(engineCurrentItemId, sessionCurrentItemId) == itemId
     return PlaybackCleanupDecision(
         affectsCurrentOwner = affects,
-        deferCleanup = affects && isItemActivelyPlaying,
+        deferCleanup = affects,
     )
 }
 

@@ -44,6 +44,23 @@ class ApiClientCompletionSemanticsTest {
     }
 
     @Test
+    fun archiveUsesOrganizationalArchiveRoute() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(200))
+        server.start()
+        try {
+            val client = ApiClient(okHttpClient = OkHttpClient.Builder().followRedirects(false).build())
+            client.archiveItem(server.url("/").toString(), "token", 42)
+
+            val request = server.takeRequest()
+            assertEquals("POST", request.method)
+            assertEquals("/items/42/archive", request.path)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun moveToBinUsesDeleteItemRoute() = runBlocking {
         val server = MockWebServer()
         server.enqueue(MockResponse().setResponseCode(204))

@@ -22,6 +22,49 @@ class PlaybackTransitionTest {
     }
 
     @Test
+    fun exactEndOfFinalChunkIsTerminal() {
+        assertTrue(
+            isTerminalPlaybackPosition(
+                position = PlaybackPosition(chunkIndex = 2, offsetInChunkChars = 120),
+                chunkCount = 3,
+                finalChunkLength = 120,
+            ),
+        )
+        assertTrue(
+            isTerminalPlaybackPosition(
+                position = PlaybackPosition(chunkIndex = 2, offsetInChunkChars = 121),
+                chunkCount = 3,
+                finalChunkLength = 120,
+            ),
+        )
+    }
+
+    @Test
+    fun positionsBeforeFinalChunkEndAreNotTerminal() {
+        assertFalse(
+            isTerminalPlaybackPosition(
+                position = PlaybackPosition(chunkIndex = 1, offsetInChunkChars = 120),
+                chunkCount = 3,
+                finalChunkLength = 120,
+            ),
+        )
+        assertFalse(
+            isTerminalPlaybackPosition(
+                position = PlaybackPosition(chunkIndex = 2, offsetInChunkChars = 119),
+                chunkCount = 3,
+                finalChunkLength = 120,
+            ),
+        )
+        assertFalse(
+            isTerminalPlaybackPosition(
+                position = PlaybackPosition(),
+                chunkCount = 0,
+                finalChunkLength = 0,
+            ),
+        )
+    }
+
+    @Test
     fun doneAdvancesChunkAndResetsOffset() {
         val result = applyDoneTransition(
             event = PlaybackDoneEvent(

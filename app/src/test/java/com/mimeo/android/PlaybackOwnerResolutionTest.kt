@@ -61,16 +61,15 @@ class PlaybackOwnerResolutionTest {
     // --- archive cleanup ---
 
     @Test
-    fun archiveOfEngineOwnedCurrentItemClearsSessionWhenIdle() {
+    fun archiveOfEngineOwnedCurrentItemPreservesSessionWhenPaused() {
         val decision = archivePlaybackCleanupDecision(
             engineCurrentItemId = 42,
             sessionCurrentItemId = 7,
             itemId = 42,
-            isItemActivelyPlaying = false,
         )
         assertTrue(decision.affectsCurrentOwner)
-        assertFalse(decision.deferCleanup)
-        assertTrue(decision.clearSessionNow)
+        assertTrue(decision.deferCleanup)
+        assertFalse(decision.clearSessionNow)
     }
 
     @Test
@@ -79,7 +78,6 @@ class PlaybackOwnerResolutionTest {
             engineCurrentItemId = 42,
             sessionCurrentItemId = 7,
             itemId = 42,
-            isItemActivelyPlaying = true,
         )
         assertTrue(decision.affectsCurrentOwner)
         assertTrue(decision.deferCleanup)
@@ -88,16 +86,15 @@ class PlaybackOwnerResolutionTest {
     }
 
     @Test
-    fun archiveOfSessionCurrentItemWhenEngineAbsentClearsSession() {
+    fun archiveOfSessionCurrentItemWhenEngineAbsentPreservesSession() {
         val decision = archivePlaybackCleanupDecision(
             engineCurrentItemId = 0,
             sessionCurrentItemId = 7,
             itemId = 7,
-            isItemActivelyPlaying = false,
         )
         assertTrue(decision.affectsCurrentOwner)
-        assertFalse(decision.deferCleanup)
-        assertTrue(decision.clearSessionNow)
+        assertTrue(decision.deferCleanup)
+        assertFalse(decision.clearSessionNow)
     }
 
     @Test
@@ -108,7 +105,6 @@ class PlaybackOwnerResolutionTest {
             engineCurrentItemId = 42,
             sessionCurrentItemId = 7,
             itemId = 7,
-            isItemActivelyPlaying = false,
         )
         assertFalse(decision.affectsCurrentOwner)
         assertFalse(decision.deferCleanup)
@@ -116,13 +112,11 @@ class PlaybackOwnerResolutionTest {
     }
 
     @Test
-    fun archiveActivePlayingIsIgnoredForNonOwner() {
-        // isItemActivelyPlaying only defers when the item is actually the owner.
+    fun archivePreservationIsIgnoredForNonOwner() {
         val decision = archivePlaybackCleanupDecision(
             engineCurrentItemId = 42,
             sessionCurrentItemId = 7,
             itemId = 7,
-            isItemActivelyPlaying = true,
         )
         assertFalse(decision.affectsCurrentOwner)
         assertFalse(decision.deferCleanup)

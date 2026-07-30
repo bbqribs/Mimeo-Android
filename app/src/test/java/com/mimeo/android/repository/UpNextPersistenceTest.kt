@@ -102,6 +102,7 @@ class UpNextPersistenceTest {
         )!!
         assertEquals(listOf(3, 1, 2), adopted.items.map { it.itemId })
         assertEquals(1, adopted.currentItem?.itemId)
+        assertTrue(adopted.items.first { it.itemId == 3 }.isArchived)
         assertEquals("Reading list", adopted.seedSourceLabel)
 
         val activeRemoved = server(
@@ -160,6 +161,77 @@ class UpNextPersistenceTest {
         )!!
         assertEquals(listOf(8), projectedAfterPurge.items.map { it.itemId })
         assertNull(projectedAfterPurge.currentItem)
+    }
+
+    @Test
+    fun archivedCurrentRetainsProgressAndOwnerAcrossArchiveRefreshAndUnarchive() = runBlocking {
+        repository.startSession(listOf(queueItem(7), queueItem(8)), startItemId = 7, sourcePlaylistId = null)
+
+        val archived = repository.setNowPlayingItemArchived(itemId = 7, archived = true)!!
+        assertEquals(7, archived.currentItem?.itemId)
+        assertTrue(archived.currentItem!!.isArchived)
+
+        val progressed = repository.setNowPlayingItemProgress(itemId = 7, percent = 64)!!
+        assertEquals(64, progressed.currentItem?.lastReadPercent)
+        assertTrue(progressed.currentItem!!.isArchived)
+
+        val refreshed = repository.applyAuthoritativeUpNextSession(
+            server(version = 10, itemIds = listOf(7, 8), currentItemId = 7, archivedIds = setOf(7)),
+            "owner-a",
+            "https://reader.example.com",
+        )!!
+        assertEquals(7, refreshed.currentItem?.itemId)
+        assertTrue(refreshed.currentItem!!.isArchived)
+        assertEquals(64, refreshed.currentItem?.lastReadPercent)
+
+        val unarchived = repository.setNowPlayingItemArchived(itemId = 7, archived = false)!!
+        assertEquals(7, unarchived.currentItem?.itemId)
+        assertFalse(unarchived.currentItem!!.isArchived)
+        assertEquals(64, unarchived.currentItem?.lastReadPercent)
+    }
+
+    @Test
+    fun archiveRefreshForOffSessionItemCannotReplaceSessionMembership() = runBlocking {
+        repository.startSession(
+            listOf(queueItem(7), queueItem(8), queueItem(9)),
+            startItemId = 7,
+            sourcePlaylistId = null,
+        )
+        repository.setNowPlayingItemProgress(itemId = 7, percent = 64)
+
+        val unchanged = repository.setNowPlayingItemArchived(itemId = 99, archived = false)!!
+
+        assertEquals(listOf(7, 8, 9), unchanged.items.map { it.itemId })
+        assertEquals(7, unchanged.currentItem?.itemId)
+        assertEquals(64, unchanged.currentItem?.lastReadPercent)
+    }
+
+    @Test
+    fun removingArchivedUpcomingMembershipPreservesCurrentProgressAndNextEligibleOrder() = runBlocking {
+        repository.startSession(
+            listOf(queueItem(7), queueItem(8), queueItem(9)),
+            startItemId = 7,
+            sourcePlaylistId = null,
+        )
+        repository.setNowPlayingItemProgress(itemId = 7, percent = 64)
+        repository.setNowPlayingItemArchived(itemId = 8, archived = true)
+
+        val remaining = repository.removeItemFromSession(itemId = 8)!!
+
+        assertEquals(listOf(7, 9), remaining.items.map { it.itemId })
+        assertEquals(7, remaining.currentItem?.itemId)
+        assertEquals(64, remaining.currentItem?.lastReadPercent)
+    }
+
+    @Test
+    fun sessionCanEndWithNoActiveItemWithoutDiscardingRemainingMembership() = runBlocking {
+        repository.startSession(listOf(queueItem(7), queueItem(8)), startItemId = 7, sourcePlaylistId = null)
+
+        val noActive = repository.setCurrentIndex(-1)!!
+
+        assertNull(noActive.currentItem)
+        assertEquals(-1, noActive.currentIndex)
+        assertEquals(listOf(7, 8), noActive.items.map { it.itemId })
     }
 
     private fun queueItem(id: Int) = PlaybackQueueItem(

@@ -2,9 +2,22 @@ package com.mimeo.android.repository
 
 import com.mimeo.android.model.PlaybackQueueItem
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StoredNowPlayingItemMappingTest {
+
+    @Test
+    fun emptyProjectionAcknowledgementCanRetainProcessLocalHistory() {
+        assertTrue(
+            shouldRetainTransientHistoryAfterAuthoritativeApply(
+                localItemIds = emptyList(),
+                localCurrentItemId = null,
+                authoritativeItemIds = emptyList(),
+                authoritativeCurrentItemId = null,
+            ),
+        )
+    }
 
     @Test
     fun authoritativeAcknowledgementRetainsProcessLocalHistoryForSameProjection() {

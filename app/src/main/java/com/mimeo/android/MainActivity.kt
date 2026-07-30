@@ -514,9 +514,28 @@ internal fun resolveNextPlaylistScopedSessionIndex(
     currentId: Int,
 ): Int? {
     if (session.sourcePlaylistId == null || session.sourcePlaylistId == SMART_QUEUE_SESSION_CONTEXT_ID) return null
+    return resolveNextEligibleSessionIndex(session, currentId)
+}
+
+internal fun resolveNextEligibleSessionIndex(
+    session: NowPlayingSession,
+    currentId: Int,
+): Int? {
     val idx = session.items.indexOfFirst { it.itemId == currentId }.let { if (it >= 0) it else session.currentIndex }
     if (idx >= session.items.lastIndex) return null
     return idx + 1
+}
+
+internal fun shouldRemoveArchivedUpcomingSessionItem(
+    session: NowPlayingSession?,
+    itemId: Int,
+    engineCurrentItemId: Int?,
+): Boolean {
+    val activeSession = session ?: return false
+    val itemIndex = activeSession.items.indexOfFirst { it.itemId == itemId }
+    if (itemIndex < 0) return false
+    if (itemId == engineCurrentItemId || itemId == activeSession.currentItem?.itemId) return false
+    return activeSession.currentIndex < 0 || itemIndex > activeSession.currentIndex
 }
 
 internal fun resolveSessionSourcePlaylistId(selectedPlaylistId: Int?): Int {
