@@ -22,17 +22,28 @@ ones run elsewhere:
 - **Unsigned release / full verification** — `.github/workflows/android-release-check.yml`
   - Triggers: every PR to `main`, `main` pushes, a weekly schedule (Mondays
     07:00 UTC), and manual `workflow_dispatch`.
-  - Runs: `:app:verifyUnsignedRelease` with no signing secrets. The task runs
-    the complete debug unit-test suite, production `lintRelease`, release-like
-    compilation and manifest/resource processing, and packages the isolated
-    `unsignedRelease` variant. It also proves the variant has no signing config,
-    is not debuggable, and preserves the production shrinker setting.
+  - Every run uses one two-worker Gradle process for
+    `:app:verifyUnsignedReleaseConfiguration`, `:app:lintRelease`, and
+    `:app:assembleUnsignedRelease`, followed by an unsigned-APK signature check.
+    Debug unit tests stay in the required fast PR gate and are not repeated here.
+    The local `:app:verifyUnsignedRelease` aggregate remains broader and still
+    includes `:app:testDebugUnitTest` for operator use.
+  - Ordinary application/documentation-only PRs stop after those release and
+    artifact checks. A fail-safe changed-path classifier adds the complete
+    signing-failure fixture matrix for Gradle/release configuration, signing or
+    release scripts, this workflow, signing fixtures/trust metadata, and the
+    classifier/tests themselves. Missing, empty, malformed, or unavailable
+    change metadata selects the full matrix.
+  - Pushes to `main`, schedules, and manual dispatches always run the full
+    matrix. Superseded PR runs remain cancellation-enabled.
   - Output: package `com.mimeo.android.unsigned`, version suffix `-unsigned`.
     It is build-failure evidence only: non-production, non-publishable, and not
     a household distribution artifact. CI success never authorizes publication.
-  - The focused signing-lane script then proves signed-production tasks still
+  - The full signing-lane mode proves signed-production tasks still
     fail closed for absent, malformed, missing-keystore, invalid-credential,
     invalid-alias, and wrong-certificate fixtures without logging fixture values.
+    The workflow job summary records total/phase timings, lane reason, the
+    two-worker cap, safe cache-policy context, and artifact-verification result.
 
 - **Signed production release** — operator machine only
   - Requires the untracked root `keystore.properties` and the operator-held
@@ -49,8 +60,9 @@ Local command handoff:
 
 ```powershell
 # No secrets; CI-equivalent and explicitly non-publishable.
-.\gradlew.bat :app:verifyUnsignedRelease --no-daemon
-.\scripts\test-release-signing-lanes.ps1
+.\gradlew.bat :app:verifyUnsignedRelease --no-daemon --max-workers=2
+.\scripts\test-release-signing-lanes.ps1 -MaxWorkers 2
+.\scripts\test-unsigned-release-path-classifier.ps1
 
 # Operator-held inputs required; does not publish or install.
 .\gradlew.bat :app:assembleSignedProductionRelease --no-daemon
