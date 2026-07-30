@@ -5,7 +5,7 @@
   - **Do not assign models primarily by repository.** Choose the model and harness that best fit the task's capability, risk, tool-access, and execution requirements. Treat repository familiarity and historical ownership as secondary considerations, not capability substitutes.
   - **If the sibling Mimeo checkout is unavailable**, use the operator's explicit assignment and the live model picker. Do not infer the current model choice from old ticket text, prose in this repo, or a dated worked example.
 - **Single-writer per PR/branch**: Exactly one agent may push commits to a given PR branch. No tag-team pushing.
-- **Merge authority**: The agent owning the ticket/branch may merge its PR.
+- **Merge authority**: Claude and Codex may merge pull requests only when explicitly instructed by the operator. Without explicit merge instruction, stop after opening or updating the PR and report `not merged; awaiting operator approval`. Owning the ticket or branch is not a merge entitlement. See `§Merge authority (canonical)` below.
 - **Serialized merges**: Only one merge operation may happen at a time across BOTH repos (Mimeo + Mimeo-Android).
 - **No history rewrites**: No rebases or force-pushes by agents. Additive commits only.
 - **Contract-change flag**: Any PR changing backend/API semantics must be labeled "CONTRACT CHANGE"; dependent Android work must not assume the change until merged.
@@ -124,6 +124,18 @@ Before awaiting merge approval, report:
 - tests skipped and reason
 - manual verification steps
 - explicit statement: `not merged; awaiting operator approval`
+
+### Merge authority (canonical)
+
+Claude and Codex may merge pull requests **only when explicitly instructed by the operator**. Without an explicit merge instruction, the agent must stop after opening or updating the PR and report `not merged; awaiting operator approval`.
+
+This is the single authoritative merge rule for all agents in this repository. It replaces the earlier rule that let the agent owning the ticket or branch merge its own PR. Owning a ticket or branch confers no merge entitlement, and no ticket template or workflow shortcut confers one — an instruction to open a PR is not an instruction to merge it.
+
+The **one-merge-at-a-time-per-repository** rule is preserved and unchanged: only one merge operation may happen at a time across both Mimeo and Mimeo-Android.
+
+Merging when explicitly instructed remains ordinary work, not an escalation. The rule constrains the default, not the operator.
+
+This matches `AGENTS.md §Merge authority (canonical)` in the Mimeo repository, so both repositories hold the same merge rule.
 
 ### Merge trigger
 
