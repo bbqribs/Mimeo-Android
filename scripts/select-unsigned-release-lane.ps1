@@ -163,3 +163,4 @@ New-Classification `
     -FullMatrix $false `
     -Reason "ordinary application/documentation paths only; reduced PR lane selected" `
     -ChangedPathCount $resolvedChangedPaths.Count
+exit 0

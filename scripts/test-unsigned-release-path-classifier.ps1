@@ -39,7 +39,7 @@ function Get-Classification {
     }
 
     $json = & $selectorPath @arguments
-    if ($LASTEXITCODE -ne 0) {
+    if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
         throw "Classifier exited with code $LASTEXITCODE."
     }
     return ($json | ConvertFrom-Json)
