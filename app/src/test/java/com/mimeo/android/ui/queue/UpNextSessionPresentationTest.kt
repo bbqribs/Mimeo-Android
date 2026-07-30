@@ -7,14 +7,24 @@ import org.junit.Test
 
 class UpNextSessionPresentationTest {
     @Test
-    fun collapsedHistoryAnnouncesItsCountStateAndPreviousTraversal() {
+    fun staticRowLifecycleActionsOfferArchiveOrUnarchiveAndBin() {
         assertEquals(
-            "History, 3 items, collapsed; reachable through Previous",
-            historyToggleContentDescription(count = 3, expanded = false),
+            listOf(SessionLifecycleAction.Archive, SessionLifecycleAction.MoveToBin),
+            sessionLifecycleActionOrder(
+                isArchived = false,
+                canArchive = true,
+                canUnarchive = true,
+                canMoveToBin = true,
+            ),
         )
         assertEquals(
-            "History, 3 items, expanded",
-            historyToggleContentDescription(count = 3, expanded = true),
+            listOf(SessionLifecycleAction.Unarchive, SessionLifecycleAction.MoveToBin),
+            sessionLifecycleActionOrder(
+                isArchived = true,
+                canArchive = true,
+                canUnarchive = true,
+                canMoveToBin = true,
+            ),
         )
     }
 

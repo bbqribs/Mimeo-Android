@@ -28,6 +28,9 @@ class UpNextRenderSmokeTest {
                 sessionItem(itemId = 1, title = "Current assurance article"),
                 sessionItem(itemId = 2, title = "Upcoming assurance article"),
             ),
+            historyItems = listOf(
+                sessionItem(itemId = 3, title = "Visible history assurance article"),
+            ),
             currentIndex = 0,
             updatedAt = 1L,
             sourcePlaylistId = null,
@@ -41,6 +44,7 @@ class UpNextRenderSmokeTest {
                         seededFromLabel = "CI assurance fixture",
                         onOpenItem = {},
                         onJumpToQueueItem = {},
+                        onJumpToHistoryItem = {},
                         onReorderItem = { _, _ -> },
                         onRemoveItem = {},
                         onClearUpcoming = {},
@@ -50,6 +54,7 @@ class UpNextRenderSmokeTest {
         }
 
         composeTestRule.onNodeWithText("Current assurance article").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Visible history assurance article").assertExists()
         composeTestRule.onNodeWithText("Up Next · 1").assertIsDisplayed()
         composeTestRule.onNodeWithText("Upcoming assurance article").assertIsDisplayed()
     }

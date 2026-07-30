@@ -278,7 +278,10 @@ gated on the final QA matrix in
    starts playback. History and Earlier in queue display entries chronologically,
    with the oldest at the top and newest at the bottom, without changing Previous
    traversal order. Current, Earlier and History membership remains stable across
-   archive changes.
+   archive changes. Follow-up acceptance fixes keep History permanently visible,
+   restore History/Earlier row overflow actions, preserve Up Next when unrelated
+   archived items are restored, and treat an active seek to the exact article end
+   as normal completion instead of replaying the final text chunk.
 
 ### P2 — exploratory / deferred
 

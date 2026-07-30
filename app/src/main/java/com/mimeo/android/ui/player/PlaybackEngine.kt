@@ -242,7 +242,16 @@ class PlaybackEngine(
         val safe = normalizedPosition(PlaybackPosition(chunkIndex = chunkIndex, offsetInChunkChars = offsetInChunkChars))
         setPlaybackPosition(safe.chunkIndex, safe.offsetInChunkChars)
         val current = _state.value
-        if (keepPlaying && (current.isSpeaking || current.isAutoPlaying)) {
+        val continuePlaying = keepPlaying && (current.isSpeaking || current.isAutoPlaying)
+        if (continuePlaying && chunks.isNotEmpty() && isTerminalPlaybackPosition(
+                position = safe,
+                chunkCount = chunks.size,
+                finalChunkLength = playableChunkLength(chunks.last()),
+            )
+        ) {
+            stopInternal(forceSync = false)
+            scope.launch { finishCurrentArticle(current.currentItemId) }
+        } else if (continuePlaying) {
             _state.value = current.copy(isAutoPlaying = true)
             playChunk(safe.chunkIndex, safe.offsetInChunkChars)
         }
@@ -332,71 +341,76 @@ class PlaybackEngine(
                 setPlaybackPosition(next, 0)
                 playChunk(next, 0)
             } else if (transition.reachedEnd) {
-                val completedItemId = current.currentItemId
-                val settings = host.currentPlaybackSettings()
-                val playlistScoped = host.isCurrentSessionPlaylistScoped()
-                val shouldAutoAdvance = settings.autoAdvanceOnCompletion
+                finishCurrentArticle(current.currentItemId)
+            }
+        }
+    }
+
+    private suspend fun finishCurrentArticle(completedItemId: Int) {
+        val current = _state.value
+        if (current.currentItemId != completedItemId) return
+        val settings = host.currentPlaybackSettings()
+        val playlistScoped = host.isCurrentSessionPlaylistScoped()
+        val shouldAutoAdvance = settings.autoAdvanceOnCompletion
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                LOCUS_CONTINUATION_DEBUG_TAG,
+                "continueTrigger item=$completedItemId playlistScoped=$playlistScoped autoAdvance=$shouldAutoAdvance",
+            )
+        }
+        if (settings.playCompletionCueAtArticleEnd) {
+            ttsController.playCompletionCue()
+        }
+        _state.value = current.copy(
+            isSpeaking = false,
+            isAutoPlaying = false,
+        )
+        scope.launch {
+            syncProgress(force = true)
+        }
+        if (playlistScoped || shouldAutoAdvance) {
+            val nextId = if (playlistScoped) {
+                val scopedNextId = host.nextPlaylistScopedSessionItemId(completedItemId)
+                if (scopedNextId == null && shouldAutoAdvance) {
+                    host.nextSessionItemId(completedItemId)
+                } else {
+                    scopedNextId
+                }
+            } else {
+                host.nextSessionItemId(completedItemId)
+            }
+            if (nextId == null) {
                 if (BuildConfig.DEBUG) {
                     Log.d(
                         LOCUS_CONTINUATION_DEBUG_TAG,
-                        "continueTrigger item=${current.currentItemId} playlistScoped=$playlistScoped autoAdvance=$shouldAutoAdvance",
+                        "continueNoNext item=$completedItemId playlistScoped=$playlistScoped autoAdvance=$shouldAutoAdvance",
                     )
                 }
-                if (settings.playCompletionCueAtArticleEnd) {
-                    ttsController.playCompletionCue()
+                _events.tryEmit(PlaybackEngineEvent.UiMessage("Completed"))
+            } else {
+                host.setPlaybackPosition(nextId, 0, 0)
+                if (BuildConfig.DEBUG) {
+                    Log.d(
+                        LOCUS_CONTINUATION_DEBUG_TAG,
+                        "continueOpenNext from=$completedItemId to=$nextId",
+                    )
                 }
-                _state.value = _state.value.copy(
-                    isSpeaking = false,
-                    isAutoPlaying = false,
-                )
-                scope.launch {
-                    syncProgress(force = true)
-                }
-                if (playlistScoped || shouldAutoAdvance) {
-                    val nextId = if (playlistScoped) {
-                        val scopedNextId = host.nextPlaylistScopedSessionItemId(current.currentItemId)
-                        if (scopedNextId == null && shouldAutoAdvance) {
-                            host.nextSessionItemId(current.currentItemId)
-                        } else {
-                            scopedNextId
-                        }
-                    } else {
-                        host.nextSessionItemId(current.currentItemId)
-                    }
-                    if (nextId == null) {
-                        if (BuildConfig.DEBUG) {
-                            Log.d(
-                                LOCUS_CONTINUATION_DEBUG_TAG,
-                                "continueNoNext item=${current.currentItemId} playlistScoped=$playlistScoped autoAdvance=$shouldAutoAdvance",
-                            )
-                        }
-                        _events.tryEmit(PlaybackEngineEvent.UiMessage("Completed"))
-                    } else {
-                        host.setPlaybackPosition(nextId, 0, 0)
-                        if (BuildConfig.DEBUG) {
-                            Log.d(
-                                LOCUS_CONTINUATION_DEBUG_TAG,
-                                "continueOpenNext from=${current.currentItemId} to=$nextId",
-                            )
-                        }
-                        openItem(nextId, PlaybackOpenIntent.AutoContinue, autoPlayAfterLoad = true)
-                        _events.tryEmit(PlaybackEngineEvent.NavigateToItem(nextId))
-                    }
-                } else {
-                    if (BuildConfig.DEBUG) {
-                        Log.d(
-                            LOCUS_CONTINUATION_DEBUG_TAG,
-                            "continueDisabled item=${current.currentItemId} playlistScoped=$playlistScoped autoAdvance=$shouldAutoAdvance",
-                        )
-                    }
-                    _events.tryEmit(PlaybackEngineEvent.UiMessage("Completed"))
-                }
-                host.onPlaybackArticleEnded(
-                    itemId = completedItemId,
-                    autoArchiveAtArticleEnd = settings.autoArchiveAtArticleEnd,
+                openItem(nextId, PlaybackOpenIntent.AutoContinue, autoPlayAfterLoad = true)
+                _events.tryEmit(PlaybackEngineEvent.NavigateToItem(nextId))
+            }
+        } else {
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    LOCUS_CONTINUATION_DEBUG_TAG,
+                    "continueDisabled item=$completedItemId playlistScoped=$playlistScoped autoAdvance=$shouldAutoAdvance",
                 )
             }
+            _events.tryEmit(PlaybackEngineEvent.UiMessage("Completed"))
         }
+        host.onPlaybackArticleEnded(
+            itemId = completedItemId,
+            autoArchiveAtArticleEnd = settings.autoArchiveAtArticleEnd,
+        )
     }
 
     private fun startPlaybackAtPosition(

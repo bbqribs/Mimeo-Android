@@ -191,6 +191,22 @@ class UpNextPersistenceTest {
     }
 
     @Test
+    fun archiveRefreshForOffSessionItemCannotReplaceSessionMembership() = runBlocking {
+        repository.startSession(
+            listOf(queueItem(7), queueItem(8), queueItem(9)),
+            startItemId = 7,
+            sourcePlaylistId = null,
+        )
+        repository.setNowPlayingItemProgress(itemId = 7, percent = 64)
+
+        val unchanged = repository.setNowPlayingItemArchived(itemId = 99, archived = false)!!
+
+        assertEquals(listOf(7, 8, 9), unchanged.items.map { it.itemId })
+        assertEquals(7, unchanged.currentItem?.itemId)
+        assertEquals(64, unchanged.currentItem?.lastReadPercent)
+    }
+
+    @Test
     fun removingArchivedUpcomingMembershipPreservesCurrentProgressAndNextEligibleOrder() = runBlocking {
         repository.startSession(
             listOf(queueItem(7), queueItem(8), queueItem(9)),

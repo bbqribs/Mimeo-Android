@@ -34,7 +34,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -51,7 +50,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -60,6 +58,7 @@ import androidx.compose.ui.zIndex
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.NowPlayingSessionItem
 import com.mimeo.android.ui.common.DragHandleIcon
+import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
 import com.mimeo.android.ui.common.ItemRowPlayRemoveActions
 import com.mimeo.android.ui.common.JumpPill
@@ -83,6 +82,12 @@ internal const val NOW_PLAYING_SECTION_TITLE = "Now Playing"
 internal enum class SessionRowAction {
     JumpPlay,
     Remove,
+}
+
+internal enum class SessionLifecycleAction {
+    Archive,
+    Unarchive,
+    MoveToBin,
 }
 
 internal fun shouldShowJumpToNowPlayingPill(
@@ -180,6 +185,19 @@ internal fun sessionRowTrailingActionOrder(
     }
 }
 
+internal fun sessionLifecycleActionOrder(
+    isArchived: Boolean,
+    canArchive: Boolean,
+    canUnarchive: Boolean,
+    canMoveToBin: Boolean,
+): List<SessionLifecycleAction> = buildList {
+    if (isArchived && canUnarchive) {
+        add(SessionLifecycleAction.Unarchive)
+    } else if (!isArchived && canArchive) {
+        add(SessionLifecycleAction.Archive)
+    }
+    if (canMoveToBin) add(SessionLifecycleAction.MoveToBin)
+}
 
 @Composable
 private fun SessionSectionHeader(
@@ -193,27 +211,45 @@ private fun SessionSectionHeader(
     )
 }
 
-internal fun historyToggleContentDescription(count: Int, expanded: Boolean): String =
-    "History, $count items, " +
-        (if (expanded) "expanded" else "collapsed; reachable through Previous")
-
 @Composable
 private fun SessionStaticItemRow(
     item: NowPlayingSessionItem,
     onOpenItem: (Int) -> Unit,
+    onJumpToItem: (Int) -> Unit,
+    onArchiveItem: ((Int) -> Unit)? = null,
+    onUnarchiveItem: ((Int) -> Unit)? = null,
+    onBinItem: ((Int) -> Unit)? = null,
+    showArchivedIndicator: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val title = item.title?.ifBlank { null } ?: item.url
     val source = item.host
         ?: item.sourceLabel?.takeIf { it.isNotBlank() }
         ?: item.sourceType?.takeIf { it.isNotBlank() }
-    val metadata = buildItemMetadata(source)
+    val metadata = buildItemMetadata(source, showArchived = showArchivedIndicator)
+    val menuEntries = sessionLifecycleActionOrder(
+        isArchived = showArchivedIndicator,
+        canArchive = onArchiveItem != null,
+        canUnarchive = onUnarchiveItem != null,
+        canMoveToBin = onBinItem != null,
+    ).map { action ->
+        when (action) {
+            SessionLifecycleAction.Archive ->
+                ItemActionMenuEntry.Action("Archive") { onArchiveItem?.invoke(item.itemId) }
+            SessionLifecycleAction.Unarchive ->
+                ItemActionMenuEntry.Action("Unarchive") { onUnarchiveItem?.invoke(item.itemId) }
+            SessionLifecycleAction.MoveToBin ->
+                ItemActionMenuEntry.Action("Move to Bin") { onBinItem?.invoke(item.itemId) }
+        }
+    }
     ItemRow(
         title = title,
         metadata = metadata,
         status = null,
         modifier = modifier,
         onOpen = { onOpenItem(item.itemId) },
+        onPlayNow = { onJumpToItem(item.itemId) },
+        menuEntries = menuEntries,
     )
 }
 
@@ -223,6 +259,7 @@ internal fun NowPlayingSessionPanel(
     seededFromLabel: String,
     onOpenItem: (Int) -> Unit,
     onJumpToQueueItem: (Int) -> Unit,
+    onJumpToHistoryItem: (Int) -> Unit,
     onReorderItem: (fromIndex: Int, toIndex: Int) -> Unit,
     onRemoveItem: (Int) -> Unit,
     onClearUpcoming: () -> Unit,
@@ -232,6 +269,11 @@ internal fun NowPlayingSessionPanel(
     renderSnapPillLocally: Boolean = true,
     onSnapPillVisibilityChange: (Boolean) -> Unit = {},
     trailingActions: (@Composable RowScope.() -> Unit)? = null,
+    onArchiveSessionItem: (Int) -> Unit = {},
+    onUnarchiveSessionHistoryItem: (Int) -> Unit = {},
+    onBinSessionHistoryItem: (Int) -> Unit = {},
+    onBinSessionEarlierItem: (Int) -> Unit = {},
+    archivedHistoryItemIds: Set<Int> = emptySet(),
 ) {
     val densityTokens = LocalMimeoDensityTokens.current
     val isV1 = LocalMimeoV1Active.current
@@ -399,7 +441,6 @@ internal fun NowPlayingSessionPanel(
     // History is stored most-recent-first so Previous can restore the latest item first,
     // but the section is chronological: oldest entry at the top, newest at the bottom.
     val historyItems = sessionPanelHistoryItems(session.historyItems)
-    var historyExpanded by rememberSaveable { mutableStateOf(false) }
     // Earlier-in-queue items already sit in play order (oldest at the top,
     // most recently passed nearest Now Playing), so they need no reordering.
     // Authoritative lifecycle reconciliation can remove the active item while the
@@ -552,32 +593,25 @@ internal fun NowPlayingSessionPanel(
                                 )
                             },
                     ) {
-                        TextButton(
-                            onClick = { historyExpanded = !historyExpanded },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .onSizeChanged { size ->
-                                    historyHeaderHeightPx = size.height.toFloat()
-                                }
-                                .semantics {
-                                    contentDescription = historyToggleContentDescription(
-                                        count = historyItems.size,
-                                        expanded = historyExpanded,
-                                    )
-                                    stateDescription = if (historyExpanded) "Expanded" else "Collapsed"
-                                },
-                        ) {
-                            Text("History · ${historyItems.size} · ${if (historyExpanded) "Hide" else "Show"}")
-                        }
-                        if (historyExpanded) {
-                            historyItems.forEachIndexed { index, item ->
-                                SessionStaticItemRow(
-                                    item = item,
-                                    onOpenItem = onOpenItem,
-                                )
-                                if (index < historyItems.lastIndex) {
-                                    RowDivider()
-                                }
+                        SessionSectionHeader(
+                            title = "History",
+                            count = historyItems.size,
+                            modifier = Modifier.onSizeChanged { size ->
+                                historyHeaderHeightPx = size.height.toFloat()
+                            },
+                        )
+                        historyItems.forEachIndexed { index, item ->
+                            SessionStaticItemRow(
+                                item = item,
+                                onOpenItem = onOpenItem,
+                                onJumpToItem = onJumpToHistoryItem,
+                                onArchiveItem = onArchiveSessionItem,
+                                onUnarchiveItem = onUnarchiveSessionHistoryItem,
+                                onBinItem = onBinSessionHistoryItem,
+                                showArchivedIndicator = item.itemId in archivedHistoryItemIds,
+                            )
+                            if (index < historyItems.lastIndex) {
+                                RowDivider()
                             }
                         }
                     }
@@ -608,6 +642,11 @@ internal fun NowPlayingSessionPanel(
                             SessionStaticItemRow(
                                 item = item,
                                 onOpenItem = onOpenItem,
+                                onJumpToItem = onJumpToQueueItem,
+                                onArchiveItem = onArchiveSessionItem,
+                                onUnarchiveItem = onUnarchiveSessionHistoryItem,
+                                onBinItem = onBinSessionEarlierItem,
+                                showArchivedIndicator = item.itemId in archivedHistoryItemIds,
                                 modifier = Modifier.onSizeChanged { size ->
                                     earlierItemHeights[item.itemId] = size.height.toFloat()
                                 },
