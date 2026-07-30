@@ -1,8 +1,9 @@
 name: Android Release Check
 
-# No-secrets release verification lane. It compiles, lints, tests, and packages
-# an explicitly unsigned/non-publishable release-check APK. Production signing
-# remains an operator-only local action and no signing inputs enter GitHub.
+# No-secrets release verification lane. Every run compiles, lints, packages,
+# and verifies an explicitly unsigned/non-publishable release-check APK.
+# Signing-sensitive PRs and trusted non-PR events also run the full fail-closed
+# signing-fixture matrix. Production signing remains operator-only.
 
 on:
   pull_request:
@@ -25,8 +26,19 @@ jobs:
     name: Verify unsigned release
     runs-on: windows-latest
     steps:
+      - name: Initialize timing
+        id: timing
+        shell: powershell
+        run: |
+          $startedMilliseconds = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+          "started_ms=$startedMilliseconds" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Complete history makes base-to-head classification deterministic.
+          # Any unavailable/uncertain metadata still fails closed in the script.
+          fetch-depth: 0
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -35,13 +47,142 @@ jobs:
           java-version: "17"
 
       - name: Set up Gradle
+        id: gradle-setup
         uses: gradle/actions/setup-gradle@v4
         with:
           add-job-summary: always
 
-      - name: Verify unsigned non-publishable release
-        run: .\gradlew.bat :app:verifyUnsignedRelease --no-daemon --build-cache
-
-      - name: Test release signing lane boundaries
+      - name: Classify release assurance lane
+        id: classify
         shell: powershell
-        run: powershell -ExecutionPolicy Bypass -File .\scripts\test-release-signing-lanes.ps1
+        run: |
+          $started = Get-Date
+          try {
+              $rawResult = & .\scripts\select-unsigned-release-lane.ps1 `
+                  -EventName '${{ github.event_name }}' `
+                  -Ref '${{ github.ref }}' `
+                  -BaseSha '${{ github.event.pull_request.base.sha }}' `
+                  -HeadSha '${{ github.event.pull_request.head.sha }}' 2>&1
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Classifier exited with code $LASTEXITCODE."
+              }
+              $classification = ($rawResult -join "`n") | ConvertFrom-Json
+              if ($null -eq $classification.fullMatrix -or [string]::IsNullOrWhiteSpace($classification.reason)) {
+                  throw "Classifier returned incomplete output."
+              }
+          } catch {
+              Write-Warning "Release classifier failed closed: $($_.Exception.Message)"
+              $classification = [pscustomobject]@{
+                  fullMatrix = $true
+                  reason = "classifier execution or metadata failed closed"
+                  changedPathCount = 0
+              }
+          }
+
+          $durationSeconds = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
+          $fullMatrix = $classification.fullMatrix.ToString().ToLowerInvariant()
+          "full_matrix=$fullMatrix" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "reason=$($classification.reason)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "changed_path_count=$($classification.changedPathCount)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "duration_seconds=$durationSeconds" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Full signing-failure matrix: $fullMatrix ($($classification.reason))"
+
+      - name: Test release path classifier
+        id: classifier-tests
+        shell: powershell
+        run: |
+          $started = Get-Date
+          & powershell -ExecutionPolicy Bypass -File .\scripts\test-unsigned-release-path-classifier.ps1
+          $exitCode = $LASTEXITCODE
+          $durationSeconds = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
+          "duration_seconds=$durationSeconds" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          exit $exitCode
+
+      - name: Build, lint, and assemble unsigned release
+        id: release
+        shell: powershell
+        run: |
+          $started = Get-Date
+          & .\gradlew.bat `
+              :app:verifyUnsignedReleaseConfiguration `
+              :app:lintRelease `
+              :app:assembleUnsignedRelease `
+              --no-daemon `
+              --build-cache `
+              --max-workers=2
+          $exitCode = $LASTEXITCODE
+          $durationSeconds = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
+          "duration_seconds=$durationSeconds" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          exit $exitCode
+
+      - name: Verify unsigned artifact
+        id: artifact
+        shell: powershell
+        run: |
+          $started = Get-Date
+          & powershell -ExecutionPolicy Bypass -File .\scripts\test-release-signing-lanes.ps1 -Mode Artifact -MaxWorkers 2
+          $exitCode = $LASTEXITCODE
+          $durationSeconds = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
+          "duration_seconds=$durationSeconds" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          exit $exitCode
+
+      - name: Test full release signing-failure matrix
+        id: signing-matrix
+        if: steps.classify.outputs.full_matrix == 'true'
+        shell: powershell
+        run: |
+          $started = Get-Date
+          & powershell -ExecutionPolicy Bypass -File .\scripts\test-release-signing-lanes.ps1 -Mode SigningMatrix -MaxWorkers 2
+          $exitCode = $LASTEXITCODE
+          $durationSeconds = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
+          "duration_seconds=$durationSeconds" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          exit $exitCode
+
+      - name: Write unsigned-release timing summary
+        if: always()
+        shell: powershell
+        env:
+          DEFAULT_BRANCH_RUN: ${{ github.ref_name == github.event.repository.default_branch }}
+        run: |
+          function Format-Duration([string]$Seconds) {
+              if ([string]::IsNullOrWhiteSpace($Seconds)) {
+                  return "not run"
+              }
+              return "$Seconds s"
+          }
+
+          $startedMilliseconds = 0L
+          $null = [long]::TryParse('${{ steps.timing.outputs.started_ms }}', [ref]$startedMilliseconds)
+          $totalSeconds = if ($startedMilliseconds -gt 0) {
+              [math]::Round(([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() - $startedMilliseconds) / 1000, 1)
+          } else {
+              "unavailable"
+          }
+          $cacheMode = if ('${{ github.event_name }}' -eq 'pull_request') {
+              "enabled; read-only Gradle User Home cache on PRs"
+          } elseif ($env:DEFAULT_BRANCH_RUN -eq 'true') {
+              "enabled; default-branch Gradle User Home cache can read/write"
+          } else {
+              "enabled; setup-gradle default policy applies"
+          }
+          $matrixSelection = if ('${{ steps.classify.outputs.full_matrix }}' -eq 'true') { "full" } else { "reduced" }
+
+          @"
+          ## Unsigned-release assurance timing
+
+          - Total measured duration: $totalSeconds s
+          - Lane selected: $matrixSelection
+          - Full-matrix reason: ${{ steps.classify.outputs.reason }}
+          - Full-matrix execution result: ${{ steps.signing-matrix.outcome }}
+          - Gradle worker setting: --max-workers=2
+          - Cache: $cacheMode; --build-cache requested for release work; setup result ${{ steps.gradle-setup.outcome }}
+          - Final unsigned-artifact verification result: ${{ steps.artifact.outcome }}
+
+          | Major phase | Duration | Result |
+          | --- | ---: | --- |
+          | Changed-path classification | $(Format-Duration '${{ steps.classify.outputs.duration_seconds }}') | ${{ steps.classify.outcome }} |
+          | Classifier tests | $(Format-Duration '${{ steps.classifier-tests.outputs.duration_seconds }}') | ${{ steps.classifier-tests.outcome }} |
+          | Release configuration + lint + unsigned assembly | $(Format-Duration '${{ steps.release.outputs.duration_seconds }}') | ${{ steps.release.outcome }} |
+          | Unsigned-artifact verification | $(Format-Duration '${{ steps.artifact.outputs.duration_seconds }}') | ${{ steps.artifact.outcome }} |
+          | Signing-failure matrix | $(Format-Duration '${{ steps.signing-matrix.outputs.duration_seconds }}') | ${{ steps.signing-matrix.outcome }} |
+          "@ | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8

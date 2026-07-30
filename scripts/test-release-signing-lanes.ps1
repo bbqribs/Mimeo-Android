@@ -1,9 +1,16 @@
 [CmdletBinding()]
-param()
+param(
+    [ValidateSet("Full", "Artifact", "SigningMatrix")]
+    [string]$Mode = "Full",
+
+    [ValidateRange(1, 64)]
+    [int]$MaxWorkers = 2
+)
 
 $ErrorActionPreference = "Stop"
 $script:RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $script:SigningPropertiesName = "keystore.properties"
+$script:GradleMaxWorkers = $MaxWorkers
 
 function Assert-Condition {
     param(
@@ -53,7 +60,7 @@ function Invoke-GradleCapture {
     $previousErrorActionPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = "Continue"
-        $output = & (Join-Path $ProjectRoot "gradlew.bat") @Tasks --no-daemon --console=plain 2>&1
+        $output = & (Join-Path $ProjectRoot "gradlew.bat") @Tasks --no-daemon --console=plain "--max-workers=$($script:GradleMaxWorkers)" 2>&1
         $exitCode = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $previousErrorActionPreference
@@ -145,28 +152,42 @@ $workflowPath = Join-Path $script:RepoRoot ".github\workflows\android-release-ch
 $workflow = Get-Content -Raw -LiteralPath $workflowPath
 Assert-Condition ($workflow -match '(?m)^\s*pull_request:') "Android Release Check must run on pull requests."
 Assert-Condition ($workflow -match '(?m)^\s*push:') "Android Release Check must run on merged-main pushes."
-Assert-Condition ($workflow.Contains(":app:verifyUnsignedRelease")) "Android Release Check must call the explicit unsigned Gradle lane."
+Assert-Condition ($workflow -match '(?m)^\s*schedule:') "Android Release Check must run on a schedule."
+Assert-Condition ($workflow -match '(?m)^\s*workflow_dispatch:') "Android Release Check must support manual dispatch."
+Assert-Condition ($workflow.Contains(":app:verifyUnsignedReleaseConfiguration")) "Android Release Check must validate unsigned configuration."
+Assert-Condition ($workflow.Contains(":app:lintRelease")) "Android Release Check must run release lint."
+Assert-Condition ($workflow.Contains(":app:assembleUnsignedRelease")) "Android Release Check must assemble the isolated unsigned variant."
+Assert-Condition (-not $workflow.Contains(":app:testDebugUnitTest")) "Android Release Check must not duplicate required main-CI debug unit tests."
 Assert-Condition (-not $workflow.Contains(":app:assembleRelease")) "Android Release Check must not call the signed production assemble task."
-Write-Host "PASS: pull-request and merged-main release checks select the explicit no-secrets lane."
-
-$unsignedOutputDirectory = Join-Path $script:RepoRoot "app\build\outputs\apk\unsignedRelease"
-$unsignedApks = @(Get-ChildItem -LiteralPath $unsignedOutputDirectory -Filter "*.apk" -File -ErrorAction SilentlyContinue)
-Assert-Condition ($unsignedApks.Count -eq 1) "Run :app:verifyUnsignedRelease before this script; exactly one unsignedRelease APK is required."
-Assert-Condition ($unsignedApks[0].Name -match 'unsigned') "Unsigned lane output filename must be visibly identified as unsigned."
+Assert-Condition ($workflow.Contains("--max-workers=2")) "Android Release Check must cap workflow-specific Gradle workers at two."
+Assert-Condition ($workflow.Contains("steps.classify.outputs.full_matrix == 'true'")) "Android Release Check must condition the signing-failure matrix on the fail-safe classifier."
+Write-Host "PASS: release CI preserves event coverage, explicit no-secrets tasks, worker cap, and conditional full assurance."
 
 $sdkRoot = Get-AndroidSdkRoot
-$apksigner = Get-ChildItem -LiteralPath (Join-Path $sdkRoot "build-tools") -Filter "apksigner.bat" -File -Recurse |
-    Sort-Object FullName -Descending |
-    Select-Object -First 1
-Assert-Condition ($null -ne $apksigner) "Android apksigner was not found under the configured SDK."
-$apksignerPath = $apksigner.FullName
-$previousErrorActionPreference = $ErrorActionPreference
-$ErrorActionPreference = "Continue"
-$null = & $apksignerPath verify $unsignedApks[0].FullName 2>&1
-$apksignerExitCode = $LASTEXITCODE
-$ErrorActionPreference = $previousErrorActionPreference
-Assert-Condition ($apksignerExitCode -ne 0) "Unsigned release verification output is signed; CI must never create a signed artifact."
-Write-Host "PASS: unsignedRelease output is visibly named, has no APK signature, and is non-publishable."
+if ($Mode -in @("Full", "Artifact")) {
+    $unsignedOutputDirectory = Join-Path $script:RepoRoot "app\build\outputs\apk\unsignedRelease"
+    $unsignedApks = @(Get-ChildItem -LiteralPath $unsignedOutputDirectory -Filter "*.apk" -File -ErrorAction SilentlyContinue)
+    Assert-Condition ($unsignedApks.Count -eq 1) "Run :app:assembleUnsignedRelease or :app:verifyUnsignedRelease before this script; exactly one unsignedRelease APK is required."
+    Assert-Condition ($unsignedApks[0].Name -match 'unsigned') "Unsigned lane output filename must be visibly identified as unsigned."
+
+    $apksigner = Get-ChildItem -LiteralPath (Join-Path $sdkRoot "build-tools") -Filter "apksigner.bat" -File -Recurse |
+        Sort-Object FullName -Descending |
+        Select-Object -First 1
+    Assert-Condition ($null -ne $apksigner) "Android apksigner was not found under the configured SDK."
+    $apksignerPath = $apksigner.FullName
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $null = & $apksignerPath verify $unsignedApks[0].FullName 2>&1
+    $apksignerExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $previousErrorActionPreference
+    Assert-Condition ($apksignerExitCode -ne 0) "Unsigned release verification output is signed; CI must never create a signed artifact."
+    Write-Host "PASS: unsignedRelease output is visibly named, has no APK signature, and is non-publishable."
+}
+
+if ($Mode -eq "Artifact") {
+    Write-Host "Unsigned release artifact verification passed; signing-failure fixtures were not requested."
+    exit 0
+}
 
 $tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $fixtureRoot = [IO.Path]::GetFullPath([IO.Path]::Combine($tempBase, "mimeo-signing-lanes-" + [guid]::NewGuid().ToString("N")))
