@@ -369,8 +369,13 @@ Four sections, in this order:
 - `pointer/engine`: `agree` / `differ` / `no engine item`
 - Engine commitment flags (4 booleans)
 - Engine item's membership relative to the session: `in session` / `in history` /
-  `outside session` (from `classifyReaderPromoteRoute`)
-- Session pointer position: `n of m`
+  `outside session` (from `classifyReaderPromoteRoute`). **`in history` is
+  process-local**: `parseStoredNowPlayingHistory` returns `emptyList()`
+  unconditionally (S3), so after a process restart a genuine history item
+  classifies as `outside session`. The field must carry that caveat.
+- Session pointer position: `n of m`, or `unavailable` when `currentIndex` is
+  out of range — it is legitimately `-1` on several repository paths
+  (`PlaybackRepository.kt:138,185`), where `currentItem` is null
 - `resolveReaderPlaySessionOwner` verdict
 - `classifyLivePlaybackSessionSync` verdict
 
@@ -432,7 +437,9 @@ exactly what the diagnostic is about. Role labels carry strictly more meaning
 than `A`/`B` and cannot drift into a pseudo-identifier. If a future change ever
 needs a third slot, an alias must be assigned **by render-time position only** —
 never derived from an id by hash, truncation, modulo or any stable mapping, and
-never persisted or reused across recompositions (§7.2 exclusion table).
+never persisted or reused across recompositions (§7.2 exclusion table) — **and
+only via a §12 amendment.** This paragraph constrains a future change; it does
+not pre-authorize one.
 
 **Positions are not identities.** `n of m` describes where the pointer sits in
 the current session. It is view-local, changes with any reorder, and reveals
@@ -486,8 +493,10 @@ buries the one detector that matters. So:
 `pointer-vs-engine` is the one that reproduces the PR #475 symptom class. Note
 it is a **legitimate transient** during a load→play handoff and a **tolerated
 steady state** for an item outside the session (`LivePlaybackSessionSync.None`);
-the surface labels it — including which of those two cases the classifier says
-it is — and does not alarm on it.
+the surface labels which of the two it is and does not alarm on it. Note the
+label cannot come from `classifyLivePlaybackSessionSync` alone — that returns
+`None` for *both* cases (`MainActivity.kt:502-508`). It is derived from the
+commitment flags together with the membership classification.
 
 ### 6.5 Staleness rules (mandatory, all representations)
 
@@ -534,7 +543,8 @@ not an upload. Accordingly:
 
 ### 7.2 Field exclusions (mandatory)
 
-The surface renders **numbers, ids, enum names and booleans only**. The
+The surface renders **numbers, enum names and booleans only — never an
+identifier of any kind** (§7.2.1). The
 following are excluded outright:
 
 | Excluded | Why |
@@ -546,7 +556,7 @@ following are excluded outright:
 | `sourceLabel`, `sourceType`, `captureKind`, `sourceAppPackage` | Source identity |
 | Playlist name or Smart Queue seed label | Reading-choice payload |
 | `voiceId`, TTS voice name | Not progress state |
-| Any **list** of items, or session/History membership beyond the single active item | A list of what the user has been reading is a reading log |
+| Any **list** of items, or membership information beyond the at most two items in §6.1 scope | A list of what the user has been reading is a reading log. The engine item's three-valued membership classification (`in session` / `in history` / `outside session`) required by §6.3 A is a single enum about one item, not a list, and is permitted. |
 | **Active-playback elapsed ms** (R12) | §8 |
 | `PendingProgressEntity.lastError` | Free text truncated from `Throwable.message` (`PlaybackRepository.kt:1867-1871`); telemetry plan §4.4 — may carry URL or response text. Attempt **count** is permitted; the error string is not. |
 
@@ -579,9 +589,10 @@ is a behaviour change outside this scope. It is recorded as observation O1
 ### 7.2.2 One residual, accepted exposure
 
 Rendering canonical percent alongside chunk index and character offset lets a
-viewer derive an approximate article **character length**. That is a weak
-length fingerprint, not content, and it resolves to no identity. It is inherent
-to any surface that answers Q1, and it is accepted.
+viewer derive an approximate article **character length** — for each rendered
+column, so twice in the `differ` case. That is a weak length fingerprint, not
+content, and it resolves to no identity. It is inherent to any surface that
+answers Q1, and it is accepted.
 
 With ids excluded, a **screenshot** of this surface contains no durable
 identifier and nothing that resolves to a specific article.
@@ -594,7 +605,7 @@ identifier and nothing that resolves to a specific article.
 | **Logging** | No `Log.*` call may take any value rendered by this surface. |
 | **Transmission** | No network call. No share/export/copy action — deliberately unlike `ConnectivityDiagnosticsExport`. A copyable payload is a step toward problem-report attachment, and copy is also the path by which an internal id most easily escapes into a display or clipboard string. |
 | **Retention** | Zero. State is derived on recomposition from live flows and dies with the composition. Sign-out and account/owner change already clear the underlying stores; the surface inherits that with no additional work. |
-| **Screenshots** | Out of scope to prevent, and no longer a concern. With item ids excluded (§7.2.1), a screenshot carries no durable identifier and nothing that resolves to a specific article — only relational labels, percentages, cursor offsets and enum names. |
+| **Screenshots** | Out of scope to prevent. With item ids excluded (§7.2.1), a screenshot carries **no durable identifier** — only relational labels, percentages, cursor offsets and enum names. The §7.2.2 length-fingerprint residual still applies, and applies to each column independently in the `differ` case. |
 
 ---
 
@@ -815,12 +826,20 @@ if (BuildConfig.DEBUG && settings.showProgressPointerDiagnostics) { ... }
 4. New pure, testable functions in a new file (no new module, no new
    dependency):
    - a snapshot builder mapping existing flows → a
-     `ProgressPointerDiagnosticsUiState` data class;
+     `ProgressPointerDiagnosticsUiState` data class. It takes an **injected
+     time source** (defaulting to the real clock) so the §11.4(6) invariance
+     assertion is satisfiable — without it, the mandatory `snapshot HH:MM:SS`
+     and "seconds since" fields make two renders differ regardless of ids, and
+     the privacy lock would get weakened to a substring check.
+     **`ProgressPointerDiagnosticsUiState` must not declare any item-id
+     field.** Ids are resolved and compared inside the builder and discarded
+     before the state type is constructed, so the renderer is structurally
+     incapable of emitting one — including into a content description. This is
+     the primary enforcement of §7.2.1; the tests are the backstop;
    - a renderer producing labelled display rows. It may mirror the *shape* of
      `playbackObservabilityLines` but **not its first line**: no item id may
-     enter a display string (§6.3.1, §7.2.1). The cleanest enforcement is for
-     the renderer to take a state type that carries no id field at all, so an
-     id cannot be rendered even by mistake;
+     enter a display string (§6.3.1, §7.2.1). The id-free state type above is
+     what makes that structural rather than a matter of care;
    - the three divergence detectors and two lag detectors from §6.4.
 5. Three **read-only** accessors, each additive and each with no caller other
    than the new screen:
@@ -902,20 +921,32 @@ proceeding.
    title, URL, host, source label, source app package and article text — and
    whose pending row carries a `lastError` string — assert the rendered row
    list contains none of those strings. This is the privacy regression lock.
-6. **No-identifier test (mandatory, §7.2.1).** Build a fixture whose session
-   pointer and engine items use deliberately distinctive ids that cannot occur
-   as a percent, chunk index, offset, position or attempt count — e.g.
-   `907_211` and `907_212` — with `pointer/engine: differ`. Assert that **no
-   rendered row contains either id in any form**: as a decimal substring, and
-   also not as any derived alias (assert the render is byte-identical when the
-   fixture is rebuilt with a different pair of distinctive ids and all other
-   inputs held constant). That second assertion is what catches a hash- or
-   modulo-derived pseudo-identifier, which a plain substring check would miss.
+6. **No-identifier test (mandatory, §7.2.1).** Two assertions, run over **both**
+   an `agree` and a `differ` fixture:
+   - *Substring.* Give the pointer item, the engine item and the
+     pending-progress row three distinct, deliberately distinctive ids that
+     cannot occur as a percent, chunk index, offset, position or attempt count.
+     Assert no rendered row, `contentDescription`, `semantics` property or
+     `testTag` contains any of them as a decimal substring. (Row text alone is
+     insufficient — an id in a content description is read aloud by TalkBack
+     and lands in the accessibility tree.)
+   - *Invariance.* Assert the render is **byte-identical** across at least
+     **three** rebuilds that vary only the ids, with the injected time source
+     (§11.1) and every non-id input held constant. The id sets must differ in
+     **every decimal digit and by at least two orders of magnitude** — e.g.
+     `907_211 / 907_212 / 907_213`, then `41_308 / 588_697 / 12_044`, then
+     `3_112_004 / 9_870_555 / 6_009_318`. Adjacent same-magnitude ids leave
+     coarse bucketing aliases (`id / 1000`, `id.toString().take(3)`)
+     invariant, so a near pair would pass with a live pseudo-identifier.
+   Invariance is what catches a hash- or modulo-derived alias that a substring
+   check cannot see. It structurally cannot catch a render-time-position alias
+   — which §6.3.1 permits, so that is not a gap.
 7. **Relational-label test.** With `pointer/engine: differ`, assert section A
    renders the relational result, the engine item's session membership, and the
    pointer's `n of m` position; and that sections B–D carry `pointer item` /
    `engine item` role labels. With `agree`, assert a single `active item`
-   column.
+   column. Assert `n of m` renders `unavailable` when `currentIndex` is out of
+   range.
 8. **No-logging assertion:** a source-level test (or lint rule) asserting the
    new file contains no `Log.`, `println`, `debugLog` or `continuationLog`
    token.
@@ -956,7 +987,7 @@ behaviour.
 
 | Attribute | Value |
 |---|---|
-| **Size** | Small–Medium. One new screen, one new settings boolean, two additive read-only accessors, ~11 files (2 of them tests), no new dependency, no behaviour change. |
+| **Size** | Small–Medium. One new screen, one new settings boolean, three additive read-only accessors (§11.1 item 5), ~11 files (2 of them tests), no new dependency, no behaviour change. |
 | **Risk** | Low. Additive, debug-gated, read-only. The cross-cutting edits are the settings-plumbing call sites (mechanical, already covered by existing `SettingsStore` tests) and the triple build guard in §9, which is the one place a mistake would be user-visible in release — hence the explicit route-absence check in §11.4. |
 | **Model / effort** | Per `AGENTS.md`, model selection follows Mimeo's canonical routing policy, model inventory and the live picker at execution time — **not** this document. This contract records only that the work is a bounded, mechanical, single-surface Android UI ticket with no architectural decisions left open, which is the input that routing needs. |
 | **Dependencies** | None. No backend, no unmerged contract, no other Android ticket. Executable immediately after this contract merges. |
@@ -972,8 +1003,10 @@ with the same fresh-context privacy review:
 - the §3 matrix (adding, removing or re-classifying a representation);
 - the §6.3 field set, the §6.3.1 no-identity rule, the §6.4 detector lists
   (either band), or the §6.5 staleness rules;
-- the §7.2 exclusion list — **especially** §7.2.1. Any proposal to render an
-  item id, or any value derived from one, reopens the content-identification
+- the §7.2 exclusion list — **especially** §7.2.1, and the id-free
+  `ProgressPointerDiagnosticsUiState` requirement in §11.1 that enforces it.
+  Any proposal to render an item id, to add an id field to the state type, or
+  to introduce an alias slot under §6.3.1, reopens the content-identification
   question and must be argued from scratch, not carried in as a field addition;
 - the §8 listening-duration exclusion;
 - the §9 gating (in particular, any proposal to make the surface non-debug, or
