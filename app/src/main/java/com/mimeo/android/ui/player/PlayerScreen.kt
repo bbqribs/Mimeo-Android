@@ -131,6 +131,7 @@ import com.mimeo.android.AppViewModel
 import com.mimeo.android.ArchiveActionSource
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
+import com.mimeo.android.engineCommittedToPlayback
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.ItemTextResponse
 import com.mimeo.android.model.LocusContentMode
@@ -378,6 +379,36 @@ internal fun shouldShowReaderLoadingPlaceholder(
         hasStalePayloadForCurrentItem ||
         isLoading ||
         !transitionSettled
+}
+
+internal data class ReaderPlaybackAnchor(
+    val itemId: Int,
+    val engineOwnsLivePlayback: Boolean,
+)
+
+internal fun resolveReaderPlaybackAnchor(
+    engineState: PlaybackEngineState,
+    sessionCurrentItemId: Int?,
+    initialItemId: Int,
+): ReaderPlaybackAnchor {
+    val engineOwnsLivePlayback =
+        engineState.currentItemId > 0 &&
+            engineCommittedToPlayback(
+                autoPlayAfterLoad = engineState.autoPlayAfterLoad,
+                isSpeaking = engineState.isSpeaking,
+                isAutoPlaying = engineState.isAutoPlaying,
+                hasStartedPlaybackForCurrentItem = engineState.hasStartedPlaybackForCurrentItem,
+            )
+    val itemId = when {
+        engineOwnsLivePlayback -> engineState.currentItemId
+        sessionCurrentItemId != null && sessionCurrentItemId > 0 -> sessionCurrentItemId
+        engineState.currentItemId > 0 -> engineState.currentItemId
+        else -> initialItemId
+    }
+    return ReaderPlaybackAnchor(
+        itemId = itemId,
+        engineOwnsLivePlayback = engineOwnsLivePlayback,
+    )
 }
 
 internal fun resolveSeededPlaybackPosition(
@@ -946,22 +977,17 @@ fun PlayerScreen(
     //  - engine truly empty (fresh boot / no opens yet)
     //  - engine holds a stale id from a previously-opened-but-never-played item
     //    after a Smart Queue re-seed installed a new session current
-    // The engine wins only when it has actually started playback (or is auto-
-    // continuing) — i.e., it is the live source of truth, possibly ahead of
-    // the session during auto-continue handoff.
-    val engineOwnsLivePlayback =
-        engineState.currentItemId > 0 &&
-            (
-                engineState.hasStartedPlaybackForCurrentItem ||
-                    engineState.isSpeaking ||
-                    engineState.isAutoPlaying
-                )
-    val currentItemId = when {
-        engineOwnsLivePlayback -> engineState.currentItemId
-        sessionCurrentItemId != null && sessionCurrentItemId > 0 -> sessionCurrentItemId
-        engineState.currentItemId > 0 -> engineState.currentItemId
-        else -> initialItemId
-    }
+    // The engine wins from the synchronous play commitment onward, including the
+    // open-with-autoplay load window before sound starts. This is the same boundary used
+    // by session-pointer reconciliation, so the Reader cannot temporarily fall back to a
+    // stale session item while that reconciliation is still asynchronous.
+    val playbackAnchor = resolveReaderPlaybackAnchor(
+        engineState = engineState,
+        sessionCurrentItemId = sessionCurrentItemId,
+        initialItemId = initialItemId,
+    )
+    val engineOwnsLivePlayback = playbackAnchor.engineOwnsLivePlayback
+    val currentItemId = playbackAnchor.itemId
     val sharedContentState = vm.playerSurfaceContentState
     var resolvedInitial by rememberSaveable(initialItemId) { mutableStateOf(false) }
     val reloadNonce = engineState.reloadNonce
@@ -1012,13 +1038,7 @@ fun PlayerScreen(
     val playlists by vm.playlists.collectAsState()
     val queueItemsById = remember(queueItems) { queueItems.associateBy { it.itemId } }
     val archivedItemIdSet = remember(archivedItems) { archivedItems.mapTo(hashSetOf()) { it.itemId } }
-    val hasLockedPlaybackOwner =
-        currentItemId > 0 &&
-            (
-                engineState.hasStartedPlaybackForCurrentItem ||
-                    isSpeaking ||
-                    isAutoPlaying
-                )
+    val hasLockedPlaybackOwner = engineOwnsLivePlayback
     // Route item IDs can temporarily lag behind session ownership during auto-continue.
     // Preview mode should only be driven by an explicit viewer override, not raw route mismatch.
     val playbackOwnerItemId = resolveLocusPlaybackOwnerItemId(

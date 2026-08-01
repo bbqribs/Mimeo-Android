@@ -114,6 +114,103 @@ class PlaybackObservabilityTest {
     }
 
     @Test
+    fun pausedHistoryPlayIntentOwnsReaderBeforeSessionPointerReconciles() {
+        val historyItemId = 41
+        val staleSessionCurrentItemId = 44
+        val openedForPlayback = PlaybackEngineState(
+            currentItemId = historyItemId,
+            openIntent = PlaybackOpenIntent.ManualOpen,
+            autoPlayAfterLoad = true,
+            hasStartedPlaybackForCurrentItem = false,
+            isSpeaking = false,
+            isAutoPlaying = false,
+        )
+
+        val beforePointerReconciliation = resolveReaderPlaybackAnchor(
+            engineState = openedForPlayback,
+            sessionCurrentItemId = staleSessionCurrentItemId,
+            initialItemId = staleSessionCurrentItemId,
+        )
+
+        assertTrue(beforePointerReconciliation.engineOwnsLivePlayback)
+        assertEquals(historyItemId, beforePointerReconciliation.itemId)
+        assertEquals(
+            RequestedItemTransitionMode.AlreadyCurrent,
+            resolveRequestedItemTransitionMode(
+                targetItemId = historyItemId,
+                currentItemId = beforePointerReconciliation.itemId,
+                playbackActive = true,
+                hasLockedPlaybackOwner = beforePointerReconciliation.engineOwnsLivePlayback,
+            ),
+        )
+
+        val afterPointerReconciliation = resolveReaderPlaybackAnchor(
+            engineState = openedForPlayback,
+            sessionCurrentItemId = historyItemId,
+            initialItemId = staleSessionCurrentItemId,
+        )
+        assertEquals(historyItemId, afterPointerReconciliation.itemId)
+        assertFalse(
+            shouldShowReaderLoadingPlaceholder(
+                waitingForRequestedItem = false,
+                hasStalePayloadForCurrentItem = false,
+                isLoading = false,
+                transitionSettled = true,
+            ),
+        )
+    }
+
+    @Test
+    fun pausedCommittedItemRemainsTheReaderAnchorWhenInvokedAgain() {
+        val itemId = 41
+        val pausedAfterPlayback = PlaybackEngineState(
+            currentItemId = itemId,
+            openIntent = PlaybackOpenIntent.ManualOpen,
+            autoPlayAfterLoad = false,
+            hasStartedPlaybackForCurrentItem = true,
+            isSpeaking = false,
+            isAutoPlaying = false,
+        )
+
+        val anchor = resolveReaderPlaybackAnchor(
+            engineState = pausedAfterPlayback,
+            sessionCurrentItemId = itemId,
+            initialItemId = itemId,
+        )
+
+        assertTrue(anchor.engineOwnsLivePlayback)
+        assertEquals(itemId, anchor.itemId)
+        assertEquals(
+            RequestedItemTransitionMode.AlreadyCurrent,
+            resolveRequestedItemTransitionMode(
+                targetItemId = itemId,
+                currentItemId = anchor.itemId,
+                playbackActive = false,
+                hasLockedPlaybackOwner = anchor.engineOwnsLivePlayback,
+            ),
+        )
+    }
+
+    @Test
+    fun upcomingItemPlayIntentAlsoOwnsReaderBeforePointerAdvances() {
+        val upcomingItemId = 45
+        val openedForPlayback = PlaybackEngineState(
+            currentItemId = upcomingItemId,
+            openIntent = PlaybackOpenIntent.ManualOpen,
+            autoPlayAfterLoad = true,
+        )
+
+        val anchor = resolveReaderPlaybackAnchor(
+            engineState = openedForPlayback,
+            sessionCurrentItemId = 44,
+            initialItemId = 44,
+        )
+
+        assertTrue(anchor.engineOwnsLivePlayback)
+        assertEquals(upcomingItemId, anchor.itemId)
+    }
+
+    @Test
     fun skipInitialReopenWhenSameItemAlreadyActive() {
         val shouldSkip = shouldSkipInitialReopen(
             resolvedItemId = 42,
