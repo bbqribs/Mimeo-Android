@@ -15,6 +15,7 @@ Mini-player control spec (v1 shipped; time-based skip deferred): `docs/ANDROID_M
 Up Next layout spec for history / active / upcoming / snap-to-active: `docs/ANDROID_UP_NEXT_LAYOUT_SPEC.md`.
 Playback Actions v2 (row [Play] [⋮], tap-row-play, Play All, Play from Here, overflow ordering; Smart Queue as a playlist-like source): `docs/ANDROID_PLAYBACK_ACTIONS_V2_SPEC.md`.
 Up Next History / Earlier in queue spec: `docs/ANDROID_UP_NEXT_HISTORY_EARLIER_QUEUE_SPEC.md`.
+Progress / pointer observability contract (settled semantics, ownership, privacy classification, and the bounded follow-up implementation ticket): `docs/ANDROID_PROGRESS_POINTER_OBSERVABILITY_CONTRACT.md`.
 Server-authoritative Up Next continuity: `docs/ANDROID_UP_NEXT_CONTINUITY.md`.
 Post-redesign product model planning (canonical in Mimeo): `C:\Users\brend\Documents\Coding\Mimeo\docs\planning\PRODUCT_MODEL_POST_REDESIGN.md` (Android pointer: `docs/planning/PRODUCT_MODEL_POST_REDESIGN.md`).
 Workflow + transition guidance: `docs/planning/AGENT_WORKFLOW.md` and `docs/planning/PROJECT_HANDOFF.md`.
@@ -119,6 +120,19 @@ archive/History semantics audit is also independently executable if it does not
 invent server truth. Cross-device History, reorder, offline-conflict, and
 two-device scenarios remain blocked on merged backend contracts and Android
 server-parity adoption.
+
+The local **progress/pointer observability** slice entered through this same
+allowance and its decision work is done:
+`docs/ANDROID_PROGRESS_POINTER_OBSERVABILITY_CONTRACT.md`
+(`T-AND-PROGRESS-POINTER-OBSERVABILITY-CONTRACT-1`, 2026-08-01) settles the
+six progress/pointer representations, their writers/readers/authority, the
+read-only presentation shape, privacy classification and acceptance
+requirements. It authorizes exactly one bounded follow-up,
+`T-AND-PROGRESS-POINTER-OBSERVABILITY-1` (debug-build-only and
+developer-setting-gated diagnostic screen, no behaviour change, no telemetry,
+no backend dependency). It invents no server truth and reports the client view
+only. Cross-device progress reconciliation diagnostics stay blocked with the
+rest of the parity slice.
 
 ### Lane 3 — Migration
 
@@ -232,6 +246,18 @@ gated on the final QA matrix in
    explicit opt-in exception.
 8. [ ] **Progress / playback duration model.** Pointer/progress audit plus
    listening-time estimates at 1.0x and current-speed-adjusted playback.
+   **Split (2026-08-01).** The two halves are now tracked separately and only
+   one is live:
+   - *Pointer/progress audit half* — decision work is complete and re-entered
+     through Lane 2's local-audit allowance, not through this snapshot. See
+     `docs/ANDROID_PROGRESS_POINTER_OBSERVABILITY_CONTRACT.md`. The one
+     authorized follow-up is `T-AND-PROGRESS-POINTER-OBSERVABILITY-1`.
+   - *Listening-time-estimate half* — **still blocked, pending separate
+     definition.** The observability contract explicitly does not define,
+     authorize, estimate, display or persist listening duration, does not
+     redefine the shipped 30-second History classifier
+     (`priorActiveShouldGoToHistory`), and does not infer listening time from
+     progress. Do not open a duration ticket off this line.
 9. [x] **Android maintenance foundations.** Compose BOM/deprecation audit,
    scrollbar coverage where appropriate, and limited refactor survey.
    **The refactor-survey half is done:** `docs/planning/ANDROID_ARCH_PERF_PLAN_2026_07.md`
