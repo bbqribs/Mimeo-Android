@@ -135,6 +135,8 @@ class SettingsStore(private val context: Context) {
         booleanPreferencesKey("force_sentence_highlight_fallback")
     private val showPlaybackDiagnosticsKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("show_playback_diagnostics")
+    private val showProgressPointerDiagnosticsKey: Preferences.Key<Boolean> =
+        booleanPreferencesKey("show_progress_pointer_diagnostics")
     private val showAutoDownloadDiagnosticsKey: Preferences.Key<Boolean> =
         booleanPreferencesKey("show_autodownload_diagnostics")
     private val showQueueCaptureMetadataKey: Preferences.Key<Boolean> =
@@ -258,6 +260,7 @@ class SettingsStore(private val context: Context) {
             continuousNowPlayingMarquee = prefs[continuousNowPlayingMarqueeKey] ?: true,
             forceSentenceHighlightFallback = prefs[forceSentenceHighlightFallbackKey] ?: false,
             showPlaybackDiagnostics = prefs[showPlaybackDiagnosticsKey] ?: false,
+            showProgressPointerDiagnostics = prefs[showProgressPointerDiagnosticsKey] ?: false,
             showAutoDownloadDiagnostics = prefs[showAutoDownloadDiagnosticsKey] ?: false,
             showQueueCaptureMetadata = prefs[showQueueCaptureMetadataKey] ?: false,
             showPendingOutcomeSimulator = prefs[showPendingOutcomeSimulatorKey] ?: false,
@@ -350,6 +353,7 @@ class SettingsStore(private val context: Context) {
         continuousNowPlayingMarquee: Boolean,
         forceSentenceHighlightFallback: Boolean,
         showPlaybackDiagnostics: Boolean,
+        showProgressPointerDiagnostics: Boolean,
         showAutoDownloadDiagnostics: Boolean,
         showQueueCaptureMetadata: Boolean,
         showPendingOutcomeSimulator: Boolean,
@@ -423,6 +427,7 @@ class SettingsStore(private val context: Context) {
             prefs[continuousNowPlayingMarqueeKey] = continuousNowPlayingMarquee
             prefs[forceSentenceHighlightFallbackKey] = forceSentenceHighlightFallback
             prefs[showPlaybackDiagnosticsKey] = showPlaybackDiagnostics
+            prefs[showProgressPointerDiagnosticsKey] = showProgressPointerDiagnostics
             prefs[showAutoDownloadDiagnosticsKey] = showAutoDownloadDiagnostics
             prefs[showQueueCaptureMetadataKey] = showQueueCaptureMetadata
             prefs[showPendingOutcomeSimulatorKey] = showPendingOutcomeSimulator
@@ -549,6 +554,12 @@ class SettingsStore(private val context: Context) {
     suspend fun saveShowPlaybackDiagnostics(showPlaybackDiagnostics: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[showPlaybackDiagnosticsKey] = showPlaybackDiagnostics
+        }
+    }
+
+    suspend fun saveShowProgressPointerDiagnostics(showProgressPointerDiagnostics: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[showProgressPointerDiagnosticsKey] = showProgressPointerDiagnostics
         }
     }
 

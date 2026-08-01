@@ -81,6 +81,7 @@ class SettingsStoreAuthSessionTest {
             continuousNowPlayingMarquee = true,
             forceSentenceHighlightFallback = false,
             showPlaybackDiagnostics = false,
+            showProgressPointerDiagnostics = false,
             showAutoDownloadDiagnostics = false,
             showQueueCaptureMetadata = false,
             showPendingOutcomeSimulator = false,

@@ -722,6 +722,7 @@ data class AppSettings(
     val continuousNowPlayingMarquee: Boolean = true,
     val forceSentenceHighlightFallback: Boolean = false,
     val showPlaybackDiagnostics: Boolean = false,
+    val showProgressPointerDiagnostics: Boolean = false,
     val showAutoDownloadDiagnostics: Boolean = false,
     val showQueueCaptureMetadata: Boolean = false,
     val showPendingOutcomeSimulator: Boolean = false,

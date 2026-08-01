@@ -85,6 +85,7 @@ import com.mimeo.android.ui.queue.QueueScreen
 import com.mimeo.android.ui.queue.SmartQueueScreen
 import com.mimeo.android.ui.bluesky.BlueskyBrowseScreen
 import com.mimeo.android.ui.settings.ConnectivityDiagnosticsScreen
+import com.mimeo.android.ui.settings.ProgressPointerDiagnosticsScreen
 import com.mimeo.android.ui.settings.DevicesAndSessionsScreen
 import com.mimeo.android.ui.settings.SettingsScreen
 import com.mimeo.android.data.ServerIdentityGuardState
@@ -807,6 +808,7 @@ internal fun MainActivityShell(
                                 SettingsScreen(
                                     vm = vm,
                                     onOpenDiagnostics = { nav.navigate(ROUTE_SETTINGS_DIAGNOSTICS) },
+                                    onOpenProgressPointerDiagnostics = { nav.navigate(ROUTE_SETTINGS_PROGRESS_POINTER_DIAGNOSTICS) },
                                     onOpenDevicesAndSessions = { nav.navigate(ROUTE_SETTINGS_DEVICES) },
                                     onCreateBlueskySmartPlaylist = {
                                         newSmartPlaylistInitialState = SmartPlaylistFormState(
@@ -832,6 +834,11 @@ internal fun MainActivityShell(
                             }
                             composable(ROUTE_SETTINGS_DIAGNOSTICS) {
                                 ConnectivityDiagnosticsScreen(vm = vm)
+                            }
+                            if (BuildConfig.DEBUG) {
+                                composable(ROUTE_SETTINGS_PROGRESS_POINTER_DIAGNOSTICS) {
+                                    ProgressPointerDiagnosticsScreen(vm = vm)
+                                }
                             }
                             composable(ROUTE_SETTINGS_DEVICES) {
                                 DevicesAndSessionsScreen(

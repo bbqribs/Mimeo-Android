@@ -17,6 +17,9 @@ interface PendingProgressDao {
     @Query("SELECT COUNT(*) FROM pending_progress")
     suspend fun countPending(): Int
 
+    @Query("SELECT * FROM pending_progress WHERE itemId = :itemId LIMIT 1")
+    suspend fun findByItemId(itemId: Int): PendingProgressEntity?
+
     @Query(
         "UPDATE pending_progress SET attemptCount = :attemptCount, lastAttemptAt = :lastAttemptAt, lastError = :lastError WHERE id = :id",
     )
