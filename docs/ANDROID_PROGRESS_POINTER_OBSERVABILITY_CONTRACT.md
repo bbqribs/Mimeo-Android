@@ -158,7 +158,7 @@ surface exists to make visible.
   fires per TTS range with small deltas, the `>= 120` branch effectively never
   trips mid-chunk; the persisted offset stays pinned at its last write until
   the chunk index changes. **The real lag is bounded by chunk length, not by
-  120 characters.** No numeric lag ceiling may be stated to the user (§6.4).
+  120 characters.** No numeric lag ceiling may be stated to the user (§6.5).
 - Not monotonic. Seeking backward moves it backward.
 
 ### 2.4 Reader scroll position (`readerScrollOffset`)
@@ -233,9 +233,9 @@ lag; *Local-only* = never leaves the device in this form.
 | R5 | Session-cached progress `NowPlayingSessionItem.lastReadPercent` | `setNowPlayingItemProgress` (monotonic max, `:1356`); `setNowPlayingItemCanonicalProgress` (direct assign, `:1381`); `reconcileSessionWithQueue` (direct assign of raw `last_read_percent`, `:1435`); `mergeAuthoritative` on server Up Next apply (`:1961`, via `:1064`) | Playlist continuation, `shouldPlacePriorActiveInHistory`, session restore | Room `NowPlayingEntity` JSON | **Cache**; nullable | Local progress apply; done/reset; queue reconcile; authoritative Up Next apply | Holds a *different quantity* to R1 after queue reconcile (raw `last_read_percent` vs R1's capped fallback chain); monotonic local merge can hold a value above the server's after a server-side reset; may be `null` where R1 floors at `0` | **Yes** — value (or `unavailable` when null), and a divergence marker only under the narrowed §6.4 condition. **No "which writer last applied" attribution** — like R8, no such state exists and recording it would mean writing into a settled path |
 | R6 | Session-cached cursor / scroll (`chunkIndex`, `offsetInChunkChars`, `readerScrollOffset` on the session item) | `setPlaybackPosition` → session write; `setCurrentReaderScrollOffset` | `applySessionSnapshot` seeds `_playbackPositionByItem`; `getReaderScrollOffset` fallback | Room `NowPlayingEntity` JSON | **Cache** | Same as R3/R7 | Restored on process start *before* the engine attaches, so it briefly *is* the effective value | **Yes** — values plus "from session cache" marker |
 | R7 | Reader scroll offset (durable) | Reader `LaunchedEffect` → `setReaderScrollOffset` | `resolveReaderInitialOffset`, `postProgress` payload | DataStore `reader_scroll_offset_by_item_json` + session item | **Authoritative for viewport only** | Scroll settle; persisted only on `>= 24` px delta | Lags the live viewport; **the live value lives in `PlayerScreen`'s `rememberSaveable` state (`PlayerScreen.kt:1039`) and is not observable outside Locus** | **Yes** — the durable value from `getReaderScrollOffset` and whether it came from DataStore or the session item. The live tier renders `unavailable` with a "reader-local" note; it must **not** be obtained by hoisting `PlayerScreen` state. |
-| R8 | Committed Now Playing pointer (`session.currentIndex`) | `reconcileSessionPointerToLivePlayback` (engine-commit); `repository.playNowInSession` (explicit adoption); `applyAuthoritativeUpNext` (server) | Up Next ordering, earlier/upcoming split, Locus title, `PlayerScreen.currentItemId` fallback | Room `NowPlayingEntity` | **Authoritative for "what is Now Playing"** | Engine commitment to play (§4); explicit Play Now; server Up Next sync | Server projection can disagree with the engine; `applyAuthoritativeUpNext` resolves by **clearing the engine** (`AppViewModel.kt:7285-7287`) | **Yes** — pointer item id and index, plus the *current* verdicts of the pure classifiers `resolveReaderPlaySessionOwner` and `classifyLivePlaybackSessionSync`. **No "last writer" attribution** — no such state exists and creating it would mean writing into the settled pointer paths (§6.3 A). |
-| R9 | Engine current item + commitment | `PlaybackEngine` state machine | `engineCommittedToPlayback`, `livePlaybackReconcileKey`, `engineOwnsLivePlayback` | In-memory only | **Authoritative for "what is audible"** | `openItem`, `play`, `maybeAutoPlayAfterLoad`, `stop` | None; it is the ground truth the others chase | **Yes** — engine item id and the four commitment flags |
-| R10 | Pending progress queue | `enqueuePendingProgress` on retryable post failure | `flushPendingProgress`, `pendingProgressCount`, sync badge | Room `pending_progress` (unique index on `itemId`) | **Pending** — not yet server truth | Retryable IO failure on `postProgress`; flush on reconnect | **Stores `itemId` + `percent` only. Chunk/offset/reader-scroll pointers are dropped and never resent** (`PendingProgressEntity.kt`, `PlaybackRepository.kt:850-856`). `PendingProgressDao` exposes **no `Flow`**, so any per-item read is a one-shot suspend snapshot | **Yes** — queued percent and attempt count for the active item, with a mandatory snapshot-time marker (§6.4), plus a fixed "pointer fields not queued" note. **`lastError` is excluded** (§7.2) |
+| R8 | Committed Now Playing pointer (`session.currentIndex`) | `reconcileSessionPointerToLivePlayback` (engine-commit); `repository.playNowInSession` (explicit adoption); `applyAuthoritativeUpNext` (server) | Up Next ordering, earlier/upcoming split, Locus title, `PlayerScreen.currentItemId` fallback | Room `NowPlayingEntity` | **Authoritative for "what is Now Playing"** | Engine commitment to play (§4); explicit Play Now; server Up Next sync | Server projection can disagree with the engine; `applyAuthoritativeUpNext` resolves by **clearing the engine** (`AppViewModel.kt:7285-7287`) | **Relational only.** Agreement with R9 (`agree` / `differ`), the pointer's ordinal position in the session (`n of m` — a position, not an identity), and the *current* verdicts of the pure classifiers `resolveReaderPlaySessionOwner` and `classifyLivePlaybackSessionSync`. **The pointer's item id is never rendered** (§7.2.1). **No "last writer" attribution** — no such state exists and creating it would mean writing into the settled pointer paths (§6.3 A). |
+| R9 | Engine current item + commitment | `PlaybackEngine` state machine | `engineCommittedToPlayback`, `livePlaybackReconcileKey`, `engineOwnsLivePlayback` | In-memory only | **Authoritative for "what is audible"** | `openItem`, `play`, `maybeAutoPlayAfterLoad`, `stop` | None; it is the ground truth the others chase | **Relational only.** The four commitment flags (booleans), whether an engine item is present at all (`currentItemId > 0`), and the engine item's **membership relative to the session** (`in session` / `in history` / `outside session`, from `classifyReaderPromoteRoute`). **The engine's item id is never rendered** (§7.2.1). |
+| R10 | Pending progress queue | `enqueuePendingProgress` on retryable post failure | `flushPendingProgress`, `pendingProgressCount`, sync badge | Room `pending_progress` (unique index on `itemId`) | **Pending** — not yet server truth | Retryable IO failure on `postProgress`; flush on reconnect | **Stores `itemId` + `percent` only. Chunk/offset/reader-scroll pointers are dropped and never resent** (`PendingProgressEntity.kt`, `PlaybackRepository.kt:850-856`). `PendingProgressDao` exposes **no `Flow`**, so any per-item read is a one-shot suspend snapshot | **Yes, without the id.** Whether a queued row **exists for the active item** (boolean), its queued percent and attempt count, with a mandatory snapshot-time marker (§6.5), plus a fixed "pointer fields not queued" note. The row is selected *by* `itemId` internally; the id is never rendered. **`lastError` is excluded** (§7.2) |
 | R11 | Open diagnostics snapshot (`lastOpenDiagnostics`) | `PlaybackEngine.applyLoadedItem` | Existing debug strip | In-memory only | **Derived** record of the last open decision | Every `applyLoadedItem` | Describes the last *open*, not the current position | **Out of scope for this surface.** Already fully exposed by the shipped Locus strip (§5.1) and deliberately not duplicated in §6.3 |
 | R12 | Active-playback elapsed ms (`ActivePlaybackTimer`) | `updateActivePlaybackClock` off engine state | `shouldPlacePriorActiveInHistory` only | **Never persisted**, process-local | Internal input to one boolean | Engine play/pause/item change | Resets on active-item change by design | **No — excluded.** See §8. |
 
@@ -290,18 +290,25 @@ It answers *how the last open was seeded*. It does **not** answer *which
 representation is currently authoritative and whether any of them disagree*.
 That gap is this contract's subject.
 
+**Its first line renders raw item ids.** The new surface does **not** copy that
+pattern — §7.2.1 excludes ids outright and §6.3.1 specifies relational labels
+instead. The shipped strip is left exactly as it is: changing it is a behaviour
+change outside this scope. The exposure is recorded as observation O1 (§10.6).
+
 ### 5.2 The questions the new surface must answer
 
 For the **active item only**:
 
-- **Q1 — Values.** What are R1–R9 right now, each labelled by representation?
+- **Q1 — Values.** What are R1–R9 right now, each labelled by representation
+  and — when the pointer and engine differ — by role (§6.3.1)? Values only; no
+  identities.
 - **Q2 — Provenance.** For each derived value, which source field won?
   (R1/R2: `progress_percent` vs `resume_read_percent` vs `last_read_percent`
   vs default. R3: live vs persisted-segment vs session vs default. R7: live vs
   persisted vs session.)
 - **Q3 — Authority.** Which value is currently authoritative for
   (a) "what is audible", (b) "what Now Playing claims", (c) "resume position",
-  (d) "done or not"?
+  (d) "done or not"? Answered by representation and role, not by naming an item.
 - **Q4 — Divergence.** Do R1 and R5 disagree? Does R8 disagree with R9? Does
   R3 disagree with R4? Each divergence is reported as a divergence, never
   resolved (§6).
@@ -338,9 +345,10 @@ Bounded, read-only, single-screen.
 ### 6.1 Scope
 
 - **Active item only.** One item — the Now Playing pointer's item, or the
-  engine's item when they disagree (in which case **both** are shown as a
-  divergence, §6.4). No list, no history, no per-item browser. This bound is
-  what keeps the surface from becoming a reading log.
+  engine's item when they disagree (in which case **both** are shown, under
+  role labels and never by identity: §6.3.1, §6.4). No list, no history, no
+  per-item browser. This bound, together with the no-identity rule, is what
+  keeps the surface from becoming a reading log.
 - **Fixed field set.** Exactly the fields in §6.3. Adding a field requires
   amending this document (§12).
 
@@ -357,13 +365,16 @@ The existing Locus strip is **unchanged**. This is a second, separate surface.
 
 Four sections, in this order:
 
-**A. Identity & ownership**
-- Engine item id (R9), engine commitment flags (4 booleans)
-- Session pointer item id + index (R8)
-- `resolveReaderPlaySessionOwner` verdict for the active item
-- `classifyLivePlaybackSessionSync` verdict for the active item
+**A. Relationship & ownership** *(no identities — see §6.3.1)*
+- `pointer/engine`: `agree` / `differ` / `no engine item`
+- Engine commitment flags (4 booleans)
+- Engine item's membership relative to the session: `in session` / `in history` /
+  `outside session` (from `classifyReaderPromoteRoute`)
+- Session pointer position: `n of m`
+- `resolveReaderPlaySessionOwner` verdict
+- `classifyLivePlaybackSessionSync` verdict
 
-*(No "last pointer writer" row — see Q8.)*
+*(No item ids — see §6.3.1. No "last pointer writer" row — see Q8.)*
 
 **B. Progress**
 - R1 canonical percent + winning source field + whether the R2 cap applied
@@ -383,13 +394,49 @@ Four sections, in this order:
 - Seconds since last queue load; seconds since last session write
 - Last successful progress post: `unavailable` (see Q5)
 - `queueOffline`, `ProgressSyncBadgeState`
-- Pending-progress row for this item: present? percent, attempt count —
-  rendered with a snapshot-time marker (§6.4)
+- Pending-progress row present for the active item? percent, attempt count —
+  rendered with a snapshot-time marker (§6.5)
 - Fixed note: "Queued progress carries percent only; chunk, offset and reader
   scroll are not queued and are not resent."
 
 Plus two pinned bands when non-empty (§6.4): **Divergences**, then
 **Expected lag**.
+
+### 6.3.1 No identities — relational labels only
+
+**No item id may reach a display string.** Ids are used internally to select
+rows and to compare state; they are never rendered, copied, logged or exported
+(§7.2.1).
+
+**Role labels, not aliases.** When the pointer and the engine disagree there
+are two items in play, so sections B–D must say which one a value belongs to.
+They do this with **fixed role labels** — `pointer item` and `engine item` —
+not with identifiers:
+
+```
+pointer/engine: differ
+  engine item is: in history
+
+B. Progress            pointer item    engine item
+  canonical percent           41              17
+  furthest percent            41              63
+  ...
+```
+
+When `pointer/engine: agree`, one column is rendered and labelled
+`active item`.
+
+**Ephemeral A/B aliases are deliberately not used.** §6.1 bounds the surface to
+the active item, so at most two items are ever in play and their roles are
+exactly what the diagnostic is about. Role labels carry strictly more meaning
+than `A`/`B` and cannot drift into a pseudo-identifier. If a future change ever
+needs a third slot, an alias must be assigned **by render-time position only** —
+never derived from an id by hash, truncation, modulo or any stable mapping, and
+never persisted or reused across recompositions (§7.2 exclusion table).
+
+**Positions are not identities.** `n of m` describes where the pointer sits in
+the current session. It is view-local, changes with any reorder, and reveals
+nothing about *what* is being read. It is permitted.
 
 ### 6.4 Representing divergence
 
@@ -401,8 +448,19 @@ Each detected divergence renders as one row:
 
 ```
 DIVERGENCE  <name>
-  <label A> = <value A>   (<provenance A>)
-  <label B> = <value B>   (<provenance B>)
+  <role or representation label> = <value>   (<provenance>)
+  <role or representation label> = <value>   (<provenance>)
+```
+
+Labels are representation names (`canonical percent`, `furthest percent`) or
+role labels (`pointer item`, `engine item`) per §6.3.1 — **never item ids**.
+For `pointer-vs-engine`, where the two "values" would otherwise be ids, the row
+renders the relational result and the engine item's session membership instead:
+
+```
+DIVERGENCE  pointer-vs-engine
+  pointer item = session position 4 of 11
+  engine item  = in history   (tolerated: classifier says RestoreFromHistory)
 ```
 
 **Two bands, not one.** A documented throttle is *lag*, not disagreement.
@@ -414,7 +472,7 @@ buries the one detector that matters. So:
 
 | Name | Condition |
 |---|---|
-| `pointer-vs-engine` | R8 item id `!=` R9 item id, and R9 item id `> 0` |
+| `pointer-vs-engine` | R8 item id `!=` R9 item id, and R9 item id `> 0`. **The ids are the comparison input only** — the rendered output is the relational result `differ` plus the engine item's session membership, never either id (§6.3.1). |
 | `canonical-vs-session` | R5 is non-null **and** R5 `>` R2 (the session cache claims more progress than the high-water mark). Deliberately *not* `R1 != R5`: after `reconcileSessionWithQueue` those two hold different quantities (§2.5), so plain inequality fires constantly on healthy state. |
 | `canonical-vs-furthest` | Recompute the pre-cap value `raw = (apiProgressPercent ?: resumeReadPercent ?: lastReadPercent ?: 0).coerceAtLeast(0)` and fire when `raw > furthestPercent` — i.e. the cap at `Models.kt:401` actually fired. Testing `R1 > R2` is impossible: `minOf` makes R1 `<=` R2 by construction. |
 
@@ -481,6 +539,7 @@ following are excluded outright:
 
 | Excluded | Why |
 |---|---|
+| **Numeric item ids** — `itemId`, `currentItemId`, `requestedItemId`, engine item id, session pointer item id, pending-row `itemId`, or any value derived from one (hash, truncation, modulo, stable alias) | Durable, cross-process, cross-device identifier that resolves to a specific article with server access. See §7.2.1. Internal use for lookup and comparison is permitted; rendering is not. |
 | Item **title** | Telemetry plan §2: title identity |
 | Item **URL**, `host`, `sourceUrl`, `canonicalUrl` | URL leak |
 | Article **text**, chunk text, paragraph text, highlighted sentence | Content |
@@ -491,23 +550,41 @@ following are excluded outright:
 | **Active-playback elapsed ms** (R12) | §8 |
 | `PendingProgressEntity.lastError` | Free text truncated from `Throwable.message` (`PlaybackRepository.kt:1867-1871`); telemetry plan §4.4 — may carry URL or response text. Attempt **count** is permitted; the error string is not. |
 
-**Numeric item ids are permitted on-screen.** They are already exposed by the
-shipped strip (`item current=<id> requested=<id>`,
-`PlayerScreen.kt:363`), they carry no content without server access, and
-without them the divergence detectors are unreadable. The telemetry plan
-forbids item ids *in telemetry events* — a category this surface is excluded
-from by §7.1. This is the single deliberate boundary decision in this
-contract; §12 governs changing it.
+### 7.2.1 Numeric item ids are excluded (no exception)
 
-**Two residual, accepted exposures**, recorded rather than left unremarked:
+**Item ids must never be rendered, copied, logged, exported, or otherwise
+exposed by this surface.** They may be used *internally* — to select the right
+row, to look up a value, and to compare two states — but an id must never
+reach a display string.
 
-1. Rendering canonical percent alongside chunk index and character offset lets
-   a viewer derive an approximate article **character length**. That is a weak
-   length fingerprint, not content. It is inherent to any surface that answers
-   Q1, and it is accepted.
-2. A **screenshot** of this surface carries the permitted item id. §7.3's
-   screenshot row is therefore scoped to "safe apart from the permitted item
-   id", not "safe".
+An item id is a **durable identifier**. It is stable across processes,
+reinstalls and devices, it indexes directly into the user's library, and
+combined with server access it resolves to a specific article. A surface that
+renders one is a content-identifying diagnostic, which the governing scope
+forbids. That an id carries no content *on its own* is not the test; durability
+plus resolvability is.
+
+Diagnostic power is preserved by rendering **relational results** instead of
+identities (§6.3.1). "Pointer and engine agree" answers the operative question
+without naming either item. This is not a weakening of the surface: every
+question in §5.2 remains answerable.
+
+**Precedent note, deliberately not followed.** The shipped Locus strip does
+render raw ids (`item current=<id> requested=<id>`, `PlayerScreen.kt:363`).
+That is a pre-existing exposure in shipped code. This contract **does not
+follow it** and **does not authorize changing it** — altering the shipped strip
+is a behaviour change outside this scope. It is recorded as observation O1
+(§10.6) so it is not mistaken for an endorsement.
+
+### 7.2.2 One residual, accepted exposure
+
+Rendering canonical percent alongside chunk index and character offset lets a
+viewer derive an approximate article **character length**. That is a weak
+length fingerprint, not content, and it resolves to no identity. It is inherent
+to any surface that answers Q1, and it is accepted.
+
+With ids excluded, a **screenshot** of this surface contains no durable
+identifier and nothing that resolves to a specific article.
 
 ### 7.3 Persistence, logging, transmission, retention
 
@@ -515,9 +592,9 @@ contract; §12 governs changing it.
 |---|---|
 | **Persistence** | The surface persists **nothing**. It holds no state of its own beyond Compose recomposition state. The one permitted persisted item is the existing-pattern boolean toggle (§9), which stores no progress data. |
 | **Logging** | No `Log.*` call may take any value rendered by this surface. |
-| **Transmission** | No network call. No share/export/copy action — deliberately unlike `ConnectivityDiagnosticsExport`, because a copyable payload is an exfiltration path for item ids and a step toward problem-report attachment. |
+| **Transmission** | No network call. No share/export/copy action — deliberately unlike `ConnectivityDiagnosticsExport`. A copyable payload is a step toward problem-report attachment, and copy is also the path by which an internal id most easily escapes into a display or clipboard string. |
 | **Retention** | Zero. State is derived on recomposition from live flows and dies with the composition. Sign-out and account/owner change already clear the underlying stores; the surface inherits that with no additional work. |
-| **Screenshots** | Out of scope to prevent. The §7.2 exclusions make a screenshot safe **apart from the permitted numeric item id**, which it will contain by design. |
+| **Screenshots** | Out of scope to prevent, and no longer a concern. With item ids excluded (§7.2.1), a screenshot carries no durable identifier and nothing that resolves to a specific article — only relational labels, percentages, cursor offsets and enum names. |
 
 ---
 
@@ -706,6 +783,21 @@ if (BuildConfig.DEBUG && settings.showProgressPointerDiagnostics) { ... }
   what the existing `/playback/queue` and `/up-next/session` responses already
   carry. This surface reports the client's view only and must label it as such.
 
+### 10.6 Observations recorded without authorizing action
+
+- **O1 — the shipped Locus diagnostics strip renders raw item ids.**
+  `playbackObservabilityLines` emits `item current=<id> requested=<id|none>`
+  (`PlayerScreen.kt:363`), rendered at `PlayerScreen.kt:2563-2568` behind
+  `BuildConfig.DEBUG && settings.showPlaybackDiagnostics`. It is debug-only,
+  screen-only, and not logged or uploaded, but it does put a durable identifier
+  on screen — the exposure this contract's §7.2.1 excludes for the new surface.
+  **Recorded, not fixed, and not authorized for change.** Altering the shipped
+  strip is a runtime behaviour change and this is a docs-only ticket. If the
+  operator wants the exposure closed there too, that is its own bounded ticket;
+  it is a one-line change to `playbackObservabilityLines` plus its test in
+  `PlaybackObservabilityTest.kt:74-82`. This contract deliberately does not
+  cite that strip as precedent for anything.
+
 ---
 
 ## 11. Implementation boundary for the follow-up ticket
@@ -724,8 +816,11 @@ if (BuildConfig.DEBUG && settings.showProgressPointerDiagnostics) { ... }
    dependency):
    - a snapshot builder mapping existing flows → a
      `ProgressPointerDiagnosticsUiState` data class;
-   - a renderer producing labelled display rows (mirroring the shape of
-     `playbackObservabilityLines`);
+   - a renderer producing labelled display rows. It may mirror the *shape* of
+     `playbackObservabilityLines` but **not its first line**: no item id may
+     enter a display string (§6.3.1, §7.2.1). The cleanest enforcement is for
+     the renderer to take a state type that carries no id field at all, so an
+     id cannot be rendered even by mistake;
    - the three divergence detectors and two lag detectors from §6.4.
 5. Three **read-only** accessors, each additive and each with no caller other
    than the new screen:
@@ -807,26 +902,55 @@ proceeding.
    title, URL, host, source label, source app package and article text — and
    whose pending row carries a `lastError` string — assert the rendered row
    list contains none of those strings. This is the privacy regression lock.
-6. **No-logging assertion:** a source-level test (or lint rule) asserting the
+6. **No-identifier test (mandatory, §7.2.1).** Build a fixture whose session
+   pointer and engine items use deliberately distinctive ids that cannot occur
+   as a percent, chunk index, offset, position or attempt count — e.g.
+   `907_211` and `907_212` — with `pointer/engine: differ`. Assert that **no
+   rendered row contains either id in any form**: as a decimal substring, and
+   also not as any derived alias (assert the render is byte-identical when the
+   fixture is rebuilt with a different pair of distinctive ids and all other
+   inputs held constant). That second assertion is what catches a hash- or
+   modulo-derived pseudo-identifier, which a plain substring check would miss.
+7. **Relational-label test.** With `pointer/engine: differ`, assert section A
+   renders the relational result, the engine item's session membership, and the
+   pointer's `n of m` position; and that sections B–D carry `pointer item` /
+   `engine item` role labels. With `agree`, assert a single `active item`
+   column.
+8. **No-logging assertion:** a source-level test (or lint rule) asserting the
    new file contains no `Log.`, `println`, `debugLog` or `continuationLog`
    token.
-7. Default-off: a fresh `SettingsStore` returns `false` for the new key.
-8. Toggle independence: setting `showPlaybackDiagnostics` does not change
-   `showProgressPointerDiagnostics`, and vice versa.
-9. Read-only: the screen's composable takes no lambda that can mutate session,
-   pointer or progress state (enforced by signature review + a test that the
-   state builder is a pure function of its inputs).
+9. Default-off: a fresh `SettingsStore` returns `false` for the new key.
+10. Toggle independence: setting `showPlaybackDiagnostics` does not change
+    `showProgressPointerDiagnostics`, and vice versa.
+11. Read-only: the screen's composable takes no lambda that can mutate session,
+    pointer or progress state (enforced by signature review + a test that the
+    state builder is a pure function of its inputs).
 
 **Manual (device) verification for the follow-up ticket:**
 
-Classified as **required but low-risk, debug-build only**. Three checks:
-(a) enable the toggle in a debug build, play an item, confirm the four sections
-populate and no title/URL appears; (b) confirm the release build registers **no
-route** to the screen — inspect the guarded `composable(...)` site, since a
-release build offering no UI entry point is not evidence of route absence; (c)
-confirm the shipped Locus playback-diagnostics strip is unaffected with the new
-toggle both on and off. No backend call, no physical-device matrix, no
-re-acceptance of pointer behaviour.
+Classified as **required but low-risk, debug-build only**. Four checks:
+
+(a) Enable the toggle in a debug build, play an item, and confirm the four
+sections populate with no title, URL or source label anywhere.
+
+(b) **Identifier check (§7.2.1).** Read every rendered row and confirm **no
+numeric item id appears**. Then reproduce the pointer/engine divergence — start
+an item, skip forward two or three, reopen the original from "Earlier in queue"
+while paused, and long-press Play — and confirm the surface reports it as
+`pointer/engine: differ` with the engine item's session membership, still with
+no id on screen. A screenshot of the surface in that state must be safe to
+attach to a report; if it is not, the implementation has failed this check.
+
+(c) Confirm the release build registers **no route** to the screen — inspect
+the guarded `composable(...)` site, since a release build offering no UI entry
+point is not evidence of route absence.
+
+(d) Confirm the shipped Locus playback-diagnostics strip is unaffected with the
+new toggle both on and off. It continues to render ids (observation O1); that
+is expected and out of scope here.
+
+No backend call, no physical-device matrix, no re-acceptance of pointer
+behaviour.
 
 ### 11.5 Sizing
 
@@ -846,9 +970,11 @@ Changing any of the following requires amending this document in its own PR,
 with the same fresh-context privacy review:
 
 - the §3 matrix (adding, removing or re-classifying a representation);
-- the §6.3 field set, the §6.4 detector lists (either band), or the §6.5
-  staleness rules;
-- the §7.2 exclusion list — **especially** the item-id boundary decision;
+- the §6.3 field set, the §6.3.1 no-identity rule, the §6.4 detector lists
+  (either band), or the §6.5 staleness rules;
+- the §7.2 exclusion list — **especially** §7.2.1. Any proposal to render an
+  item id, or any value derived from one, reopens the content-identification
+  question and must be argued from scratch, not carried in as a field addition;
 - the §8 listening-duration exclusion;
 - the §9 gating (in particular, any proposal to make the surface non-debug, or
   to drop any of the three build guards);
