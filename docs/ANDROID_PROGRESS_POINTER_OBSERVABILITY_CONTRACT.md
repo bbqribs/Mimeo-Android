@@ -151,19 +151,33 @@ surface exists to make visible.
   `host.setPlaybackPosition(...)`.
 - Persisted to DataStore under `playback_segment_index_by_item_json`, but
   **throttled**: a write only lands when the chunk changes, the offset goes to
-  0, or the offset moves `>= 120` chars (`AppViewModel.kt:6952-6959`). The
-  persisted value therefore lags the live value by design.
+  0, or the offset moves `>= 120` chars from the *previous live position*
+  (`AppViewModel.kt:6949-6959` — note the baseline is
+  `playbackPositionByItem`, i.e. the previous live value, **not** the last
+  persisted one). Because `handleChunkProgressEvent` (`PlaybackEngine.kt:282-295`)
+  fires per TTS range with small deltas, the `>= 120` branch effectively never
+  trips mid-chunk; the persisted offset stays pinned at its last write until
+  the chunk index changes. **The real lag is bounded by chunk length, not by
+  120 characters.** No numeric lag ceiling may be stated to the user (§6.4).
 - Not monotonic. Seeking backward moves it backward.
 
 ### 2.4 Reader scroll position (`readerScrollOffset`)
 
 "Where the user is looking."
 
-- Three tiers, resolved by `resolveReaderInitialOffset(inMemory, persisted, session)`
-  (`PlayerScreen.kt`), preferring live in-memory state.
-- Persisted per item to DataStore (`reader_scroll_offset_by_item_json`) and
-  mirrored into the session item, but only when the offset moves `>= 24` px
-  from the last persisted value (`PlayerScreen.kt:1602-1612`).
+- The live value is `readerScrollOffsets`, a `rememberSaveable` map **local to
+  the `PlayerScreen` composition** (`PlayerScreen.kt:1039`). It is not hoisted
+  into the ViewModel and is therefore **not observable from outside Locus**.
+- The durable value is `AppViewModel.getReaderScrollOffset(itemId)`
+  (`AppViewModel.kt:6999-7006`), which resolves persisted DataStore state
+  (`reader_scroll_offset_by_item_json`) and falls back to the session item's
+  `readerScrollOffset`. This already-collapsed value is what
+  `PlayerScreen.kt:1046-1052` passes as the *persisted* argument to
+  `resolveReaderInitialOffset(inMemory, persisted, session)`, so the three-way
+  resolution in that function is not fully recoverable after the fact.
+- The durable value is written only when the offset moves `>= 24` px from the
+  last persisted value (`PlayerScreen.kt:1602-1612`), so it lags the live
+  viewport.
 - **Does not drive canonical percent** — see §3, divergence D1.
 
 ### 2.5 Session-local progress (`NowPlayingSessionItem.lastReadPercent`)
@@ -172,13 +186,29 @@ The Up Next session's own cached copy of progress for its members.
 
 - Stored in Room as JSON (`StoredNowPlayingItem`), alongside per-item
   `chunkIndex`, `offsetInChunkChars`, `readerScrollOffset`.
-- Merged **monotonically** on local progress:
-  `maxOf(existing, clamped)` (`PlaybackRepository.kt:1356`).
-- Overwritten **non-monotonically** on explicit completion/reset:
-  `setNowPlayingItemCanonicalProgress` assigns directly
-  (`PlaybackRepository.kt:1381`).
-- Reconciled from queue refresh via `reconcileSessionWithQueue`, which prefers
-  `item.furthestPercent` (`PlaybackRepository.kt:1961`).
+It has **three** writers with **three different merge rules** — this is the
+single most confusable part of the model:
+
+| Path | Rule | Code |
+|---|---|---|
+| Local progress apply (`setNowPlayingItemProgress`) | **Monotonic**: `maxOf(existing, clamped)` | `PlaybackRepository.kt:1356` |
+| Explicit completion/reset (`setNowPlayingItemCanonicalProgress`) | **Direct assign**, non-monotonic | `PlaybackRepository.kt:1381` |
+| Queue refresh (`reconcileSessionWithQueue`) | **Direct assign of the raw nullable `last_read_percent`**: `lastReadPercent = refreshed.lastReadPercent` | `PlaybackRepository.kt:1435` |
+
+The queue-refresh path is *not* the `furthestPercent`-preferring merge. That
+rule (`item.furthestPercent ?: item.lastReadPercent ?: lastReadPercent`,
+`PlaybackRepository.kt:1961`) lives in `mergeAuthoritative`, whose only caller
+is the **authoritative Up Next server apply** at `PlaybackRepository.kt:1064` —
+a different path with a different input type (`UpNextSessionItem`).
+
+Consequences that matter for the diagnostic surface:
+
+- After a queue refresh, R5 holds the server's raw `last_read_percent`, which
+  is **not** the same quantity as R1 (`apiProgressPercent ?: resumeReadPercent
+  ?: lastReadPercent`, capped at R2). Comparing them naively produces routine
+  false divergences — see §6.4.
+- R5 can be `null` after reconcile, where R1 floors at `0`.
+
 - **This is a cache, never authoritative.** It can legitimately disagree with
   `queueItems` between a queue refresh and the next session write.
 
@@ -199,14 +229,14 @@ lag; *Local-only* = never leaves the device in this form.
 | R1 | Canonical percent `progressPercent` | Server (`queueItems` load); `applyLocalProgress`; `applyLocalCompletionState` | Queue/library rows, `knownProgressForItem`, seek slider, sort-by-progress | None directly (derived from persisted queue fields) | **Derived** from server fields, capped by R2 | Queue load/refresh; successful or optimistic `postProgress`; done/reset | Optimistic local value survives a failed post; capped silently by R2 so a lower displayed value may not be the raw server value | **Yes** — value, plus which source field won (`progress_percent` / `resume_read_percent` / `last_read_percent` / default), plus whether the R2 cap applied |
 | R2 | Furthest percent `furthestPercent` | Same as R1 | `knownFurthestForItem`; `shouldReplayCompletedItem`; done-suffix labels | None directly (derived) | **Derived**; monotonic ceiling | Same as R1 | Stale queue makes an item look not-done and re-open as `ManualOpen` rather than `Replay` | **Yes** — value, source field, and the resulting `>= 98` done verdict |
 | R3 | Playback cursor `chunkIndex` / `offsetInChunkChars` (live) | `PlaybackEngine` via `host.setPlaybackPosition` | `PlaybackEngine.play/seek`, seeding, highlight overlay, `postProgress` payload | In-memory `_playbackPositionByItem` | **Authoritative for playback position** while the engine owns the item | Chunk advance, seek, seed on `applyLoadedItem` | None while engine is live; falls back to R4/R5 when the engine has no entry | **Yes** — chunk index and char offset (both are positions, not content) |
-| R4 | Playback cursor (persisted segment) | `SettingsStore.savePlaybackSegmentIndex` via `setPlaybackPosition` | `playbackPositionFromPersistedSegment` fallback in `getPlaybackPosition` | DataStore `playback_segment_index_by_item_json` | **Cache** | Throttled: chunk change, offset→0, or `>= 120` char move | **Lags the live cursor by up to 119 chars by design** | **Yes** — value plus an explicit "persisted, may lag live" marker |
-| R5 | Session-cached progress `NowPlayingSessionItem.lastReadPercent` | `setNowPlayingItemProgress` (monotonic max); `setNowPlayingItemCanonicalProgress` (direct assign); `reconcileSessionWithQueue` | Playlist continuation, `shouldPlacePriorActiveInHistory`, session restore | Room `NowPlayingEntity` JSON | **Cache** | Local progress apply; done/reset; queue reconcile; authoritative Up Next apply | Diverges from R1 between a queue refresh and the next session write; monotonic merge can hold a value above the server's after a server-side reset | **Yes** — value, and an explicit divergence marker vs R1 |
+| R4 | Playback cursor (persisted segment) | `SettingsStore.savePlaybackSegmentIndex` via `setPlaybackPosition` | `playbackPositionFromPersistedSegment` fallback in `getPlaybackPosition` | DataStore `playback_segment_index_by_item_json` | **Cache** | Throttled against the previous *live* position: chunk change, offset→0, or `>= 120` char move | **Lags the live cursor; the lag is bounded by chunk length, not by 120 chars** (§2.3) | **Yes** — value plus a "persisted; may lag live" marker and the observed live-vs-persisted delta. **No numeric lag ceiling may be stated.** |
+| R5 | Session-cached progress `NowPlayingSessionItem.lastReadPercent` | `setNowPlayingItemProgress` (monotonic max, `:1356`); `setNowPlayingItemCanonicalProgress` (direct assign, `:1381`); `reconcileSessionWithQueue` (direct assign of raw `last_read_percent`, `:1435`); `mergeAuthoritative` on server Up Next apply (`:1961`, via `:1064`) | Playlist continuation, `shouldPlacePriorActiveInHistory`, session restore | Room `NowPlayingEntity` JSON | **Cache**; nullable | Local progress apply; done/reset; queue reconcile; authoritative Up Next apply | Holds a *different quantity* to R1 after queue reconcile (raw `last_read_percent` vs R1's capped fallback chain); monotonic local merge can hold a value above the server's after a server-side reset; may be `null` where R1 floors at `0` | **Yes** — value (or `unavailable` when null), and a divergence marker only under the narrowed §6.4 condition. **No "which writer last applied" attribution** — like R8, no such state exists and recording it would mean writing into a settled path |
 | R6 | Session-cached cursor / scroll (`chunkIndex`, `offsetInChunkChars`, `readerScrollOffset` on the session item) | `setPlaybackPosition` → session write; `setCurrentReaderScrollOffset` | `applySessionSnapshot` seeds `_playbackPositionByItem`; `getReaderScrollOffset` fallback | Room `NowPlayingEntity` JSON | **Cache** | Same as R3/R7 | Restored on process start *before* the engine attaches, so it briefly *is* the effective value | **Yes** — values plus "from session cache" marker |
-| R7 | Reader scroll offset (live + persisted) | Reader `LaunchedEffect` → `setReaderScrollOffset` | `resolveReaderInitialOffset`, `postProgress` payload | DataStore `reader_scroll_offset_by_item_json` + session item | **Authoritative for viewport only** | Scroll settle; persisted only on `>= 24` px delta | Persisted value lags live by up to 23 px | **Yes** — offset value and which tier won (live / persisted / session) |
-| R8 | Committed Now Playing pointer (`session.currentIndex`) | `reconcileSessionPointerToLivePlayback` (engine-commit); `repository.playNowInSession` (explicit adoption); `applyAuthoritativeUpNext` (server) | Up Next ordering, earlier/upcoming split, Locus title, `PlayerScreen.currentItemId` fallback | Room `NowPlayingEntity` | **Authoritative for "what is Now Playing"** | Engine commitment to play (§4); explicit Play Now; server Up Next sync | Server projection can disagree with the engine; `applyAuthoritativeUpNext` resolves by **clearing the engine** (`AppViewModel.kt:7285-7287`) | **Yes** — pointer item id, its index, and which of the three writers last moved it |
+| R7 | Reader scroll offset (durable) | Reader `LaunchedEffect` → `setReaderScrollOffset` | `resolveReaderInitialOffset`, `postProgress` payload | DataStore `reader_scroll_offset_by_item_json` + session item | **Authoritative for viewport only** | Scroll settle; persisted only on `>= 24` px delta | Lags the live viewport; **the live value lives in `PlayerScreen`'s `rememberSaveable` state (`PlayerScreen.kt:1039`) and is not observable outside Locus** | **Yes** — the durable value from `getReaderScrollOffset` and whether it came from DataStore or the session item. The live tier renders `unavailable` with a "reader-local" note; it must **not** be obtained by hoisting `PlayerScreen` state. |
+| R8 | Committed Now Playing pointer (`session.currentIndex`) | `reconcileSessionPointerToLivePlayback` (engine-commit); `repository.playNowInSession` (explicit adoption); `applyAuthoritativeUpNext` (server) | Up Next ordering, earlier/upcoming split, Locus title, `PlayerScreen.currentItemId` fallback | Room `NowPlayingEntity` | **Authoritative for "what is Now Playing"** | Engine commitment to play (§4); explicit Play Now; server Up Next sync | Server projection can disagree with the engine; `applyAuthoritativeUpNext` resolves by **clearing the engine** (`AppViewModel.kt:7285-7287`) | **Yes** — pointer item id and index, plus the *current* verdicts of the pure classifiers `resolveReaderPlaySessionOwner` and `classifyLivePlaybackSessionSync`. **No "last writer" attribution** — no such state exists and creating it would mean writing into the settled pointer paths (§6.3 A). |
 | R9 | Engine current item + commitment | `PlaybackEngine` state machine | `engineCommittedToPlayback`, `livePlaybackReconcileKey`, `engineOwnsLivePlayback` | In-memory only | **Authoritative for "what is audible"** | `openItem`, `play`, `maybeAutoPlayAfterLoad`, `stop` | None; it is the ground truth the others chase | **Yes** — engine item id and the four commitment flags |
-| R10 | Pending progress queue | `enqueuePendingProgress` on retryable post failure | `flushPendingProgress`, `pendingProgressCount`, sync badge | Room `pending_progress` (unique index on `itemId`) | **Pending** — not yet server truth | Retryable IO failure on `postProgress`; flush on reconnect | **Stores `itemId` + `percent` only. Chunk/offset/reader-scroll pointers are dropped and never resent** (`PendingProgressEntity.kt`, `PlaybackRepository.kt:850-856`) | **Yes** — pending count for the active item, its queued percent, attempt count, and an explicit "pointer fields not queued" note |
-| R11 | Open diagnostics snapshot (`lastOpenDiagnostics`) | `PlaybackEngine.applyLoadedItem` | Existing debug strip | In-memory only | **Derived** record of the last open decision | Every `applyLoadedItem` | Describes the last *open*, not the current position | **Yes** — already exposed today (§5.1) |
+| R10 | Pending progress queue | `enqueuePendingProgress` on retryable post failure | `flushPendingProgress`, `pendingProgressCount`, sync badge | Room `pending_progress` (unique index on `itemId`) | **Pending** — not yet server truth | Retryable IO failure on `postProgress`; flush on reconnect | **Stores `itemId` + `percent` only. Chunk/offset/reader-scroll pointers are dropped and never resent** (`PendingProgressEntity.kt`, `PlaybackRepository.kt:850-856`). `PendingProgressDao` exposes **no `Flow`**, so any per-item read is a one-shot suspend snapshot | **Yes** — queued percent and attempt count for the active item, with a mandatory snapshot-time marker (§6.4), plus a fixed "pointer fields not queued" note. **`lastError` is excluded** (§7.2) |
+| R11 | Open diagnostics snapshot (`lastOpenDiagnostics`) | `PlaybackEngine.applyLoadedItem` | Existing debug strip | In-memory only | **Derived** record of the last open decision | Every `applyLoadedItem` | Describes the last *open*, not the current position | **Out of scope for this surface.** Already fully exposed by the shipped Locus strip (§5.1) and deliberately not duplicated in §6.3 |
 | R12 | Active-playback elapsed ms (`ActivePlaybackTimer`) | `updateActivePlaybackClock` off engine state | `shouldPlacePriorActiveInHistory` only | **Never persisted**, process-local | Internal input to one boolean | Engine play/pause/item change | Resets on active-item change by design | **No — excluded.** See §8. |
 
 ---
@@ -275,16 +305,27 @@ For the **active item only**:
 - **Q4 — Divergence.** Do R1 and R5 disagree? Does R8 disagree with R9? Does
   R3 disagree with R4? Each divergence is reported as a divergence, never
   resolved (§6).
-- **Q5 — Freshness.** How long since the last queue load, the last successful
-  `postProgress`, and the last session write?
+- **Q5 — Freshness.** How long since the last queue load and the last session
+  write? *There is no existing per-item "last successful progress post"
+  timestamp; `lastSuccessfulSyncAtMs` (`SettingsStore.kt:880-887`) is an
+  account-scoped sync time and **must not** be relabelled as one. That row
+  renders `unavailable` unless a real timestamp is added, which this contract
+  does not authorize.*
 - **Q6 — Pending / offline.** Is there a `pending_progress` row for this item?
   What percent and attempt count? Is `queueOffline` set? What is
   `ProgressSyncBadgeState`?
 - **Q7 — Completion.** What does `shouldReplayCompletedItem(R2)` return, and
   therefore what `PlaybackOpenIntent` would a manual start produce right now?
-- **Q8 — Pointer ownership.** Which of the three §4 writers last moved R8, and
-  what does `resolveReaderPlaySessionOwner` currently classify the active item
-  as?
+- **Q8 — Pointer ownership.** What do the pure classifiers
+  `resolveReaderPlaySessionOwner` and `classifyLivePlaybackSessionSync` say
+  about the active item *right now*?
+  **Not asked:** "which writer last moved the pointer". No such state exists,
+  and recording it would require writing into
+  `reconcileSessionPointerToLivePlayback`, `repository.playNowInSession` and
+  `applyAuthoritativeUpNext` — the exact paths PRs #475/#476 settled, and the
+  paths §11.2 forbids touching. The current classifier verdicts answer the
+  operationally useful question ("who *would* own a move now") without any
+  write. Historical attribution is deliberately given up.
 - **Q9 — Restoration.** Were R3/R7 seeded from persisted state this process
   (i.e. has the engine attached yet)?
 
@@ -319,29 +360,36 @@ Four sections, in this order:
 **A. Identity & ownership**
 - Engine item id (R9), engine commitment flags (4 booleans)
 - Session pointer item id + index (R8)
-- Last pointer writer: `engine-commit` / `explicit-adoption` / `server-sync` / `none-this-process`
-- `resolveReaderPlaySessionOwner` classification for the active item
+- `resolveReaderPlaySessionOwner` verdict for the active item
+- `classifyLivePlaybackSessionSync` verdict for the active item
+
+*(No "last pointer writer" row — see Q8.)*
 
 **B. Progress**
 - R1 canonical percent + winning source field + whether the R2 cap applied
 - R2 furthest percent + winning source field
-- R5 session-cached percent
+- R5 session-cached percent (or `unavailable` when null)
 - Done verdict: `furthest >= 98` → `true`/`false`, and the resulting manual-start intent
 
 **C. Position**
 - R3 live cursor `chunk` / `offset`
-- R4 persisted-segment cursor `chunk` / `offset`, marked "may lag"
+- R4 persisted-segment cursor `chunk` / `offset`, with lag marker + observed delta
 - R6 session-cached cursor `chunk` / `offset`
-- R7 reader offset: live / persisted / session, with the winning tier marked
+- R7 durable reader offset from `getReaderScrollOffset`, marked DataStore or
+  session; live tier renders `unavailable` ("reader-local, not observable
+  outside Locus")
 
 **D. Freshness & sync**
-- Seconds since last queue load, last successful progress post, last session write
+- Seconds since last queue load; seconds since last session write
+- Last successful progress post: `unavailable` (see Q5)
 - `queueOffline`, `ProgressSyncBadgeState`
-- Pending-progress row for this item: present? percent, attempt count
+- Pending-progress row for this item: present? percent, attempt count —
+  rendered with a snapshot-time marker (§6.4)
 - Fixed note: "Queued progress carries percent only; chunk, offset and reader
   scroll are not queued and are not resent."
 
-Plus a **Divergences** band pinned at the top when non-empty (§6.4).
+Plus two pinned bands when non-empty (§6.4): **Divergences**, then
+**Expected lag**.
 
 ### 6.4 Representing divergence
 
@@ -357,24 +405,44 @@ DIVERGENCE  <name>
   <label B> = <value B>   (<provenance B>)
 ```
 
-Required detectors (exactly these; each a pure function, each unit-tested):
+**Two bands, not one.** A documented throttle is *lag*, not disagreement.
+Rendering ordinary throttle behaviour under a "DIVERGENCE" heading is the same
+error in the other direction — it presents expected staleness as a fault and
+buries the one detector that matters. So:
+
+**Band 1 — Divergences** (genuine disagreement between values that should agree):
 
 | Name | Condition |
 |---|---|
 | `pointer-vs-engine` | R8 item id `!=` R9 item id, and R9 item id `> 0` |
-| `canonical-vs-session` | R1 `!=` R5 for the active item |
-| `live-vs-persisted-cursor` | R3 `!=` R4 |
-| `canonical-vs-furthest` | R1 `>` R2 pre-cap (i.e. the cap in `Models.kt:401` actually fired) |
-| `reader-tier` | live, persisted and session reader offsets are not all equal |
+| `canonical-vs-session` | R5 is non-null **and** R5 `>` R2 (the session cache claims more progress than the high-water mark). Deliberately *not* `R1 != R5`: after `reconcileSessionWithQueue` those two hold different quantities (§2.5), so plain inequality fires constantly on healthy state. |
+| `canonical-vs-furthest` | Recompute the pre-cap value `raw = (apiProgressPercent ?: resumeReadPercent ?: lastReadPercent ?: 0).coerceAtLeast(0)` and fire when `raw > furthestPercent` — i.e. the cap at `Models.kt:401` actually fired. Testing `R1 > R2` is impossible: `minOf` makes R1 `<=` R2 by construction. |
+
+**Band 2 — Expected lag** (documented throttle behaviour, informational):
+
+| Name | Condition |
+|---|---|
+| `live-vs-persisted-cursor` | R3 `!=` R4. **Continuously true during playback** by §2.3; shown with the observed delta, never as a fault. |
+| `reader-lag` | durable R7 `!=` the value it would take at the next persist threshold. Shown only when the `>= 24` px threshold has not yet been crossed. |
 
 `pointer-vs-engine` is the one that reproduces the PR #475 symptom class. Note
 it is a **legitimate transient** during a load→play handoff and a **tolerated
 steady state** for an item outside the session (`LivePlaybackSessionSync.None`);
-the surface labels it, it does not alarm on it.
+the surface labels it — including which of those two cases the classifier says
+it is — and does not alarm on it.
 
-Values that cannot be determined render as `unavailable`, never as `0`.
-Values known to lag render with their lag marker. **A stale value must never
-be presented as current.**
+### 6.5 Staleness rules (mandatory, all representations)
+
+- Values that cannot be determined render as `unavailable`, **never as `0`**.
+  This applies to nullable R5, the non-observable R7 live tier, the absent
+  progress-post timestamp, and any absent pending row.
+- Every value **not** sourced from a live `StateFlow` renders with a
+  `snapshot HH:MM:SS` marker. This covers the pending-progress row, which has
+  no `Flow` on `PendingProgressDao` and is necessarily a one-shot suspend read.
+- Every value with documented lag (R4, R7) renders with its lag marker.
+- **No numeric lag ceiling may be claimed** — §2.3 shows the obvious one is
+  wrong. Show the observed delta instead.
+- **A stale value must never be presented as current.**
 
 ---
 
@@ -399,6 +467,12 @@ not an upload. Accordingly:
 - It **must not** appear in `Log.*` at any level, in any build type. (The
   telemetry plan §2 forbids release-only redaction precisely because it is too
   easy to forget.)
+- It **must not** be passed to the local logging helpers the implementer will
+  be sitting next to: `debugLog` (`PlayerScreen.kt:887`) and `continuationLog`
+  (`PlayerScreen.kt:893`, which is an **ungated** `Log.d`). Copying local idiom
+  is the realistic accidental-telemetry route here, so both are named
+  explicitly. The new file contains **no** logging helper and **no** `Log.*`
+  call.
 
 ### 7.2 Field exclusions (mandatory)
 
@@ -415,7 +489,7 @@ following are excluded outright:
 | `voiceId`, TTS voice name | Not progress state |
 | Any **list** of items, or session/History membership beyond the single active item | A list of what the user has been reading is a reading log |
 | **Active-playback elapsed ms** (R12) | §8 |
-| `Throwable.message` from a pending-progress `lastError` | Telemetry plan §4.4: may carry URL/response text |
+| `PendingProgressEntity.lastError` | Free text truncated from `Throwable.message` (`PlaybackRepository.kt:1867-1871`); telemetry plan §4.4 — may carry URL or response text. Attempt **count** is permitted; the error string is not. |
 
 **Numeric item ids are permitted on-screen.** They are already exposed by the
 shipped strip (`item current=<id> requested=<id>`,
@@ -425,6 +499,16 @@ forbids item ids *in telemetry events* — a category this surface is excluded
 from by §7.1. This is the single deliberate boundary decision in this
 contract; §12 governs changing it.
 
+**Two residual, accepted exposures**, recorded rather than left unremarked:
+
+1. Rendering canonical percent alongside chunk index and character offset lets
+   a viewer derive an approximate article **character length**. That is a weak
+   length fingerprint, not content. It is inherent to any surface that answers
+   Q1, and it is accepted.
+2. A **screenshot** of this surface carries the permitted item id. §7.3's
+   screenshot row is therefore scoped to "safe apart from the permitted item
+   id", not "safe".
+
 ### 7.3 Persistence, logging, transmission, retention
 
 | Concern | Rule |
@@ -433,7 +517,7 @@ contract; §12 governs changing it.
 | **Logging** | No `Log.*` call may take any value rendered by this surface. |
 | **Transmission** | No network call. No share/export/copy action — deliberately unlike `ConnectivityDiagnosticsExport`, because a copyable payload is an exfiltration path for item ids and a step toward problem-report attachment. |
 | **Retention** | Zero. State is derived on recomposition from live flows and dies with the composition. Sign-out and account/owner change already clear the underlying stores; the surface inherits that with no additional work. |
-| **Screenshots** | Out of scope to prevent; the field exclusions in §7.2 are what make a screenshot safe. |
+| **Screenshots** | Out of scope to prevent. The §7.2 exclusions make a screenshot safe **apart from the permitted numeric item id**, which it will contain by design. |
 
 ---
 
@@ -483,18 +567,30 @@ shipped precedent exactly:
 if (BuildConfig.DEBUG && settings.showProgressPointerDiagnostics) { ... }
 ```
 
-- The **Developer** Settings section is already debug-only and carries a
-  defence-in-depth `BuildConfig.DEBUG` guard at its render site
-  (`SettingsScreen.kt:1300-1302`). The new spoke lives inside it and inherits
-  that.
+- The **Developer** Settings section is already debug-only: it is filtered out
+  of the hub (`SettingsScreen.kt:163`) and carries a defence-in-depth
+  `BuildConfig.DEBUG` guard at its render site (`SettingsScreen.kt:1300-1302`).
+  The entry point lives inside it.
+- **The section guard does not transfer to a nav route.** Existing settings
+  spokes are registered unconditionally in the shell — e.g.
+  `composable(ROUTE_SETTINGS_DIAGNOSTICS) { ConnectivityDiagnosticsScreen(vm) }`
+  (`MainActivityShell.kt:833-835`) — so a route registered the same way is
+  reachable in a release build by `navigate` or deep link even though no UI
+  offers it. The implementation ticket **must** therefore guard at **three**
+  places, not one:
+  1. the Developer-section entry row (inherits the existing guard);
+  2. the `composable(...)` registration in `MainActivityShell.kt`, wrapped in
+     `if (BuildConfig.DEBUG)`;
+  3. the screen body's own `BuildConfig.DEBUG && settings.showProgressPointerDiagnostics`
+     early return.
 - The toggle is a new `SettingsStore` boolean, **default `false`**, following
   `showPlaybackDiagnostics` (`SettingsStore.kt:136`, `:260`, `:549`).
   Reusing `showPlaybackDiagnostics` is **not** permitted — the two surfaces
   must be independently switchable so enabling the Locus strip never silently
   enables this screen.
-- Release builds must not contain a reachable route to the screen. The
-  implementation ticket must verify this against `assembleRelease`, not only
-  by inspection.
+- Release builds must not contain a **registered route** to the screen — not
+  merely no UI entry point. The implementation ticket must verify route
+  absence, not just section absence (§11.4).
 
 ---
 
@@ -571,16 +667,22 @@ if (BuildConfig.DEBUG && settings.showProgressPointerDiagnostics) { ... }
   furthest_percent`, the app silently displays the lower value. Whether that
   cap should be visible to the user is undecided; the surface exposes whether
   it fired (§6.3 B).
-- **A2.** Session `lastReadPercent` merges monotonically on ordinary progress
-  but is assigned directly on completion/reset. A server-side reset arriving
-  via queue reconcile takes `item.furthestPercent`
-  (`PlaybackRepository.kt:1961`), so the two paths can leave the session cache
-  above the server's canonical value. No shipped behaviour depends on this
-  today.
-- **A3.** `getReaderScrollOffset` prefers the persisted map over the session
-  item, while `resolveReaderInitialOffset` prefers live in-memory over both.
-  The two resolution orders are consistent in practice but are not stated in
-  one place; §6.3 C makes the winning tier explicit.
+- **A2.** Session `lastReadPercent` has **four** writers with three different
+  merge rules (§2.5): monotonic max on ordinary progress (`:1356`), direct
+  assign on completion/reset (`:1381`), direct assign of the raw nullable
+  server `last_read_percent` on queue reconcile (`:1435`), and the
+  `furthestPercent`-preferring `mergeAuthoritative` on the authoritative Up
+  Next apply (`:1961` via `:1064`). The monotonic path can hold the cache
+  above the server's value after a server-side reset; the reconcile path can
+  push it below canonical or to `null`. No shipped behaviour depends on either
+  today, which is why this is recorded as ambiguity rather than a defect.
+- **A3.** Reader-offset resolution is stated in two places with different
+  shapes: `getReaderScrollOffset` (`AppViewModel.kt:6999-7006`) collapses
+  persisted → session internally, while `resolveReaderInitialOffset` takes
+  three arguments and prefers live in-memory. The call site
+  (`PlayerScreen.kt:1046-1052`) passes the already-collapsed value as the
+  *persisted* argument, so the three-way resolution is not recoverable after
+  the fact. §6.3 C therefore reports two observable tiers, not three.
 
 ### 10.4 Future product choice (not decided here)
 
@@ -624,13 +726,27 @@ if (BuildConfig.DEBUG && settings.showProgressPointerDiagnostics) { ... }
      `ProgressPointerDiagnosticsUiState` data class;
    - a renderer producing labelled display rows (mirroring the shape of
      `playbackObservabilityLines`);
-   - the five divergence detectors from §6.4.
-5. Unit tests per §11.4.
+   - the three divergence detectors and two lag detectors from §6.4.
+5. Three **read-only** accessors, each additive and each with no caller other
+   than the new screen:
+   - a `PendingProgressDao` `@Query` selecting the row for one `itemId`, plus a
+     thin `PlaybackRepository` pass-through (the DAO today exposes only
+     `listPending()` / `countPending()`);
+   - exposure of the existing private `lastQueueLoadCompletedAtMs`
+     (`AppViewModel.kt:469`) as a read-only value for Q5.
+   These are reads. They add no writer to any representation in §3.
+6. Unit tests per §11.4.
 
 ### 11.2 Out of scope (hard boundary)
 
 - Any change to `PlaybackEngine`, `PlaybackRepository` session mutation,
-  `AppViewModel` pointer logic, or the existing Locus strip.
+  `AppViewModel` pointer logic, or the existing Locus strip. In particular:
+  **no instrumentation inside `reconcileSessionPointerToLivePlayback`,
+  `repository.playNowInSession` or `applyAuthoritativeUpNext`** — that is why
+  Q8 gives up historical writer attribution.
+- Hoisting `PlayerScreen`'s `readerScrollOffsets` state
+  (`PlayerScreen.kt:1039`) to make the live reader offset observable. R7's
+  live tier stays `unavailable`.
 - Any new persisted field beyond the one boolean.
 - Any share / copy / export action.
 - Any network call, telemetry event, or `Log.*` line.
@@ -645,48 +761,79 @@ if (BuildConfig.DEBUG && settings.showProgressPointerDiagnostics) { ... }
 | `app/src/main/java/com/mimeo/android/ui/settings/SettingsScreen.kt` | add the Developer-spoke entry + toggle row |
 | `app/src/main/java/com/mimeo/android/data/SettingsStore.kt` | one new boolean key + accessor + combined-save param + clear paths |
 | `app/src/main/java/com/mimeo/android/model/Models.kt` | one new field on the settings model |
-| `app/src/main/java/com/mimeo/android/AppViewModel.kt` | settings plumbing only (`saveShowProgressPointerDiagnostics` + combined-save call sites); **no progress or pointer logic** |
-| `app/src/main/java/com/mimeo/android/MainActivity.kt` | one route registration |
+| `app/src/main/java/com/mimeo/android/AppViewModel.kt` | settings plumbing (`saveShowProgressPointerDiagnostics` + the five known combined-save call sites) **plus** read-only exposure of `lastQueueLoadCompletedAtMs`; **no progress or pointer logic** |
+| `app/src/main/java/com/mimeo/android/MainActivity.kt` | one route **constant** (route constants live here, `MainActivity.kt:230`) |
+| `app/src/main/java/com/mimeo/android/MainActivityShell.kt` | the `composable(...)` **registration**, wrapped in `if (BuildConfig.DEBUG)` per §9 |
+| `app/src/main/java/com/mimeo/android/data/dao/PendingProgressDao.kt` | one additive read-only `@Query` for a single `itemId` |
+| `app/src/main/java/com/mimeo/android/repository/PlaybackRepository.kt` | one read-only pass-through accessor for that query; **no session mutation** |
 | `app/src/test/java/com/mimeo/android/ui/settings/ProgressPointerDiagnosticsTest.kt` | **new** — unit tests |
-| Existing `SettingsStore*Test.kt` | add the new boolean to the combined-save fixtures (two known call sites) |
+| Existing `SettingsStore*Test.kt` | add the new boolean to the combined-save fixtures (`SettingsStoreAuthSessionTest.kt`, `SettingsStoreLocalStateOwnershipTest.kt`) |
 
-Approximately 8 files. If the implementation needs a ninth that is not a test,
-stop and report.
+Approximately **11** files, of which 2 are tests. The settings-boolean half of
+this estimate was verified against the real call sites
+(`SettingsStore.kt:136,260,352,425,549`; `Models.kt:724`;
+`AppViewModel.kt:1248,1286,1338,1397,3549`;
+`SettingsScreen.kt:287,417,1336`).
+
+**Stop-and-report trigger:** if the implementation needs a twelfth file that is
+not a test, or needs *any* edit to `PlaybackEngine.kt`, `PlayerScreen.kt`, or
+the pointer-mutation paths named in §11.2, stop and report rather than
+proceeding.
 
 ### 11.4 Acceptance requirements
 
 **Automated (required, JVM unit tests only — no instrumented test):**
 
-1. Each of the five divergence detectors: fires on divergence, silent on
-   agreement, and correctly silent on the `unavailable` case.
+1. Each of the three divergence detectors and two lag detectors (§6.4): fires
+   on the stated condition, silent on agreement, and correctly silent on the
+   `unavailable` case. Specifically:
+   - `canonical-vs-session` must be **silent** on a post-`reconcileSessionWithQueue`
+     fixture where R5 holds a raw `last_read_percent` differing from R1 but not
+     exceeding R2 — the false-positive case the narrowed condition exists to
+     avoid;
+   - `canonical-vs-furthest` must fire on a fixture with
+     `resume_read_percent > furthest_percent`, proving the recomputed pre-cap
+     path works (the post-cap comparison can never fire).
 2. Provenance resolution: R1/R2 source-field selection over all four fallback
-   orders; R3 over its three-tier fallback; R7 over its three-tier fallback.
-3. `unavailable` rendering: a missing value renders `unavailable`, never `0`.
-4. Lag markers: R4 and R7 persisted values always render with their marker.
+   orders; R3 over its three-tier fallback; R7 over its **two** observable
+   tiers (DataStore, session) with the live tier asserted `unavailable`.
+3. `unavailable` rendering: a missing value renders `unavailable`, never `0` —
+   covering null R5, the R7 live tier, the absent progress-post timestamp, and
+   an absent pending row.
+4. Lag and snapshot markers: R4 and R7 always render their lag marker; the
+   pending row always renders its snapshot-time marker; **no rendered string
+   contains a numeric lag ceiling**.
 5. **Exclusion test:** given a fully-populated fixture whose item carries a
-   title, URL, host, source label and article text, assert the rendered row
+   title, URL, host, source label, source app package and article text — and
+   whose pending row carries a `lastError` string — assert the rendered row
    list contains none of those strings. This is the privacy regression lock.
-6. Default-off: a fresh `SettingsStore` returns `false` for the new key.
-7. Toggle independence: setting `showPlaybackDiagnostics` does not change
+6. **No-logging assertion:** a source-level test (or lint rule) asserting the
+   new file contains no `Log.`, `println`, `debugLog` or `continuationLog`
+   token.
+7. Default-off: a fresh `SettingsStore` returns `false` for the new key.
+8. Toggle independence: setting `showPlaybackDiagnostics` does not change
    `showProgressPointerDiagnostics`, and vice versa.
-8. Read-only: the screen's composable takes no lambda that can mutate session,
+9. Read-only: the screen's composable takes no lambda that can mutate session,
    pointer or progress state (enforced by signature review + a test that the
    state builder is a pure function of its inputs).
 
 **Manual (device) verification for the follow-up ticket:**
 
-Classified as **required but low-risk, debug-build only**. Two checks:
+Classified as **required but low-risk, debug-build only**. Three checks:
 (a) enable the toggle in a debug build, play an item, confirm the four sections
-populate and no title/URL appears; (b) confirm `assembleRelease` produces a
-build with no route to the screen. No backend call, no physical-device matrix,
-no re-acceptance of pointer behaviour.
+populate and no title/URL appears; (b) confirm the release build registers **no
+route** to the screen — inspect the guarded `composable(...)` site, since a
+release build offering no UI entry point is not evidence of route absence; (c)
+confirm the shipped Locus playback-diagnostics strip is unaffected with the new
+toggle both on and off. No backend call, no physical-device matrix, no
+re-acceptance of pointer behaviour.
 
 ### 11.5 Sizing
 
 | Attribute | Value |
 |---|---|
-| **Size** | Small–Medium. One new screen, one new settings boolean, ~8 files, no new dependency, no behaviour change. |
-| **Risk** | Low. Additive, debug-gated, read-only. The only cross-cutting edits are the settings-plumbing call sites, which are mechanical and already covered by existing `SettingsStore` tests. |
+| **Size** | Small–Medium. One new screen, one new settings boolean, two additive read-only accessors, ~11 files (2 of them tests), no new dependency, no behaviour change. |
+| **Risk** | Low. Additive, debug-gated, read-only. The cross-cutting edits are the settings-plumbing call sites (mechanical, already covered by existing `SettingsStore` tests) and the triple build guard in §9, which is the one place a mistake would be user-visible in release — hence the explicit route-absence check in §11.4. |
 | **Model / effort** | Per `AGENTS.md`, model selection follows Mimeo's canonical routing policy, model inventory and the live picker at execution time — **not** this document. This contract records only that the work is a bounded, mechanical, single-surface Android UI ticket with no architectural decisions left open, which is the input that routing needs. |
 | **Dependencies** | None. No backend, no unmerged contract, no other Android ticket. Executable immediately after this contract merges. |
 | **Parallelism** | Safe to run alongside Mimeo-side Lane 1/2/3 work. Conflicts only with another ticket editing `SettingsScreen.kt` or `SettingsStore.kt`. |
@@ -699,10 +846,14 @@ Changing any of the following requires amending this document in its own PR,
 with the same fresh-context privacy review:
 
 - the §3 matrix (adding, removing or re-classifying a representation);
-- the §6.3 field set or the §6.4 divergence detector list;
+- the §6.3 field set, the §6.4 detector lists (either band), or the §6.5
+  staleness rules;
 - the §7.2 exclusion list — **especially** the item-id boundary decision;
 - the §8 listening-duration exclusion;
-- the §9 gating (in particular, any proposal to make the surface non-debug).
+- the §9 gating (in particular, any proposal to make the surface non-debug, or
+  to drop any of the three build guards);
+- the §11.2 out-of-scope boundary — in particular, any proposal to instrument
+  the pointer-mutation paths in order to restore "last writer" attribution.
 
 Changes affecting the cross-component privacy stance must additionally update
 `docs/ANDROID_TELEMETRY_PLAN.md` and, where the cross-component policy is

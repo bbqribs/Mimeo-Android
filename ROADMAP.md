@@ -134,6 +134,12 @@ no backend dependency). It invents no server truth and reports the client view
 only. Cross-device progress reconciliation diagnostics stay blocked with the
 rest of the parity slice.
 
+**Listening-duration analytics remain blocked** and are explicitly outside that
+contract: it does not define, authorize, estimate, display or persist listening
+duration, does not redefine the shipped 30-second History classifier
+(`priorActiveShouldGoToHistory`), and does not infer listening time from
+progress. That work needs its own definition before any ticket opens.
+
 ### Lane 3 — Migration
 
 **Owner:** Mimeo/operator infrastructure. Android participates only after a
@@ -246,18 +252,11 @@ gated on the final QA matrix in
    explicit opt-in exception.
 8. [ ] **Progress / playback duration model.** Pointer/progress audit plus
    listening-time estimates at 1.0x and current-speed-adjusted playback.
-   **Split (2026-08-01).** The two halves are now tracked separately and only
-   one is live:
-   - *Pointer/progress audit half* — decision work is complete and re-entered
-     through Lane 2's local-audit allowance, not through this snapshot. See
-     `docs/ANDROID_PROGRESS_POINTER_OBSERVABILITY_CONTRACT.md`. The one
-     authorized follow-up is `T-AND-PROGRESS-POINTER-OBSERVABILITY-1`.
-   - *Listening-time-estimate half* — **still blocked, pending separate
-     definition.** The observability contract explicitly does not define,
-     authorize, estimate, display or persist listening duration, does not
-     redefine the shipped 30-second History classifier
-     (`priorActiveShouldGoToHistory`), and does not infer listening time from
-     progress. Do not open a duration ticket off this line.
+   **Split (2026-08-01); this snapshot line authorizes nothing.** The
+   pointer/progress audit half re-entered through **Lane 2** above — see that
+   lane for the live status and the authorized follow-up ticket. The
+   listening-time-estimate half is **still blocked, pending separate
+   definition**: do not open a duration ticket off this line.
 9. [x] **Android maintenance foundations.** Compose BOM/deprecation audit,
    scrollbar coverage where appropriate, and limited refactor survey.
    **The refactor-survey half is done:** `docs/planning/ANDROID_ARCH_PERF_PLAN_2026_07.md`

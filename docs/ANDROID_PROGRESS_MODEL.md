@@ -142,6 +142,18 @@ Direction:
 ### Queue refresh and session reconcile
 Queue reload updates queue items and reconciles session metadata (`reconcileSessionWithQueue(...)`) without replacing chunk/offset cursor state.
 
+**Clarified 2026-08-01.** `reconcileSessionWithQueue` (`PlaybackRepository.kt:1413-1445`)
+direct-assigns the raw nullable server `last_read_percent` into the session item
+(`lastReadPercent = refreshed.lastReadPercent`, line 1435). It is *not* the
+`furthestPercent`-preferring merge — that rule
+(`item.furthestPercent ?: item.lastReadPercent ?: lastReadPercent`, line 1961)
+lives in `mergeAuthoritative`, whose only caller is the authoritative Up Next
+server apply at line 1064. The session cache therefore has four writers with
+three different merge rules: monotonic max on local progress (line 1356),
+direct assign on completion/reset (line 1381), raw direct assign on queue
+reconcile (line 1435), and the furthest-preferring merge on authoritative apply
+(line 1961).
+
 Direction:
 - backend -> app
 
