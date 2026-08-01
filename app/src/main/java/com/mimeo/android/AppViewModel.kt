@@ -183,6 +183,7 @@ import com.mimeo.android.repository.NowPlayingSessionItem
 import com.mimeo.android.repository.shouldRetainTransientHistoryAfterAuthoritativeApply
 import com.mimeo.android.repository.OfflineReadyCandidate
 import com.mimeo.android.repository.PlaylistMembershipToggleResult
+import com.mimeo.android.repository.PendingProgressSnapshot
 import com.mimeo.android.repository.PlaybackRepository
 import com.mimeo.android.repository.UpNextCapability
 import com.mimeo.android.repository.UpNextSyncPlan
@@ -1256,6 +1257,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         viewModelScope.launch {
             val current = settings.value
+            val showProgressPointerDiagnostics = current.showProgressPointerDiagnostics
             val authTargetChanged = settingsScreenAuthTargetChanged(
                 previousToken = current.apiToken,
                 nextToken = token,
@@ -1284,6 +1286,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 continuousNowPlayingMarquee = continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = forceSentenceHighlightFallback,
                 showPlaybackDiagnostics = showPlaybackDiagnostics,
+                showProgressPointerDiagnostics = showProgressPointerDiagnostics,
                 showAutoDownloadDiagnostics = showAutoDownloadDiagnostics,
                 showQueueCaptureMetadata = showQueueCaptureMetadata,
                 showPendingOutcomeSimulator = showPendingOutcomeSimulator,
@@ -1336,6 +1339,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 showPlaybackDiagnostics = settings.value.showPlaybackDiagnostics,
+                showProgressPointerDiagnostics = settings.value.showProgressPointerDiagnostics,
                 showAutoDownloadDiagnostics = settings.value.showAutoDownloadDiagnostics,
                 showQueueCaptureMetadata = settings.value.showQueueCaptureMetadata,
                 showPendingOutcomeSimulator = settings.value.showPendingOutcomeSimulator,
@@ -1395,6 +1399,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 continuousNowPlayingMarquee = settings.value.continuousNowPlayingMarquee,
                 forceSentenceHighlightFallback = settings.value.forceSentenceHighlightFallback,
                 showPlaybackDiagnostics = settings.value.showPlaybackDiagnostics,
+                showProgressPointerDiagnostics = settings.value.showProgressPointerDiagnostics,
                 showAutoDownloadDiagnostics = settings.value.showAutoDownloadDiagnostics,
                 showQueueCaptureMetadata = settings.value.showQueueCaptureMetadata,
                 showPendingOutcomeSimulator = settings.value.showPendingOutcomeSimulator,
@@ -3548,6 +3553,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _settings.update { current -> current.copy(showPlaybackDiagnostics = enabled) }
             settingsStore.saveShowPlaybackDiagnostics(enabled)
+        }
+    }
+
+    fun saveShowProgressPointerDiagnostics(enabled: Boolean) {
+        viewModelScope.launch {
+            _settings.update { current -> current.copy(showProgressPointerDiagnostics = enabled) }
+            settingsStore.saveShowProgressPointerDiagnostics(enabled)
         }
     }
 
@@ -6700,6 +6712,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return queueItems.value.firstOrNull { it.itemId == itemId }?.furthestPercent ?: 0
     }
 
+    /** Read-only exposure of the last completed queue load's wall-clock time, for diagnostics freshness (Q5). */
+    fun lastQueueLoadCompletedAtMillis(): Long = lastQueueLoadCompletedAtMs
+
+    /**
+     * Read-only exposure of the persisted-segment playback cursor (R4), independent of the live
+     * in-memory cursor (R3), so a diagnostic surface can render the two as distinct rows rather
+     * than a single collapsed fallback value.
+     */
+    fun persistedPlaybackPosition(itemId: Int): PlaybackPosition? = playbackPositionFromPersistedSegment(itemId)
+
+    /**
+     * Read-only exposure of the DataStore tier of the durable reader-scroll offset (R7), independent
+     * of [getReaderScrollOffset]'s session fallback, so a diagnostic surface can label which tier won.
+     */
+    fun persistedReaderScrollOffset(itemId: Int): Int? = _persistedReaderScrollOffsetByItem.value[itemId]
+
     fun isItemCompletedForPlaybackStart(itemId: Int): Boolean {
         return shouldReplayCompletedItem(knownFurthestForItem(itemId))
     }
@@ -7003,6 +7031,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 ?.items
                 ?.firstOrNull { it.itemId == itemId }
                 ?.readerScrollOffset
+    }
+
+    /** Read-only, bounded pending-progress lookup for one item (Q6). No `Flow` exists on the DAO; this is a one-shot snapshot read. */
+    suspend fun pendingProgressForItem(itemId: Int): PendingProgressSnapshot? {
+        return repository.pendingProgressForItem(itemId)
     }
 
     private suspend fun refreshPendingCount(): Int {

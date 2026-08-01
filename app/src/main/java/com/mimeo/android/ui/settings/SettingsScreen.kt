@@ -200,6 +200,7 @@ internal fun blueskySchedulerDiagnosticsVisible(isDebugBuild: Boolean): Boolean 
 fun SettingsScreen(
     vm: AppViewModel,
     onOpenDiagnostics: () -> Unit,
+    onOpenProgressPointerDiagnostics: () -> Unit,
     onOpenDevicesAndSessions: () -> Unit,
     onCreateBlueskySmartPlaylist: () -> Unit,
     onCreateSourceSmartPlaylist: (name: String, captureKinds: String, sort: String) -> Unit,
@@ -286,6 +287,9 @@ fun SettingsScreen(
     }
     var showPlaybackDiagnostics by remember(settings.showPlaybackDiagnostics) {
         mutableStateOf(settings.showPlaybackDiagnostics)
+    }
+    var showProgressPointerDiagnostics by remember(settings.showProgressPointerDiagnostics) {
+        mutableStateOf(settings.showProgressPointerDiagnostics)
     }
     var showAutoDownloadDiagnostics by remember(settings.showAutoDownloadDiagnostics) {
         mutableStateOf(settings.showAutoDownloadDiagnostics)
@@ -1339,6 +1343,33 @@ fun SettingsScreen(
                                 vm.saveShowPlaybackDiagnostics(it)
                             },
                         )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text("Progress & pointer diagnostics")
+                            Text(
+                                text = "Read-only screen showing which progress/pointer value is authoritative for the active item. Independent of the playback diagnostics strip above.",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = showProgressPointerDiagnostics,
+                            onCheckedChange = {
+                                showProgressPointerDiagnostics = it
+                                vm.saveShowProgressPointerDiagnostics(it)
+                            },
+                        )
+                    }
+                    Button(onClick = onOpenProgressPointerDiagnostics, enabled = showProgressPointerDiagnostics) {
+                        Text("Open progress & pointer diagnostics")
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),

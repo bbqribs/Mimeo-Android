@@ -59,6 +59,12 @@ data class FlushProgressResult(
     val pendingCount: Int,
 )
 
+/** Percent and attempt count only — deliberately excludes item id and [com.mimeo.android.data.entities.PendingProgressEntity.lastError]. */
+data class PendingProgressSnapshot(
+    val percent: Int,
+    val attemptCount: Int,
+)
+
 data class NowPlayingSessionItem(
     val itemId: Int,
     val title: String?,
@@ -889,6 +895,15 @@ class PlaybackRepository(
 
     suspend fun countPendingProgress(): Int {
         return database.pendingProgressDao().countPending()
+    }
+
+    /**
+     * Read-only, bounded lookup for one item's pending-progress row. Excludes [PendingProgressEntity.lastError]
+     * by construction — that field must never reach a diagnostic surface (may carry URL or response text).
+     */
+    suspend fun pendingProgressForItem(itemId: Int): PendingProgressSnapshot? {
+        val entity = database.pendingProgressDao().findByItemId(itemId) ?: return null
+        return PendingProgressSnapshot(percent = entity.percent, attemptCount = entity.attemptCount)
     }
 
     suspend fun getCachedItemIds(itemIds: List<Int>): Set<Int> {
