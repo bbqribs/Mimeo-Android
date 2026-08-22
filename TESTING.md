@@ -2,7 +2,7 @@
 
 ## CI lanes and where verification runs
 
-There are three distinct verification lanes. Know which one gates a PR and which
+There are four distinct verification lanes. Know which one gates a PR and which
 ones run elsewhere:
 
 - **Fast required PR gate** — `.github/workflows/android-ci.yml`
@@ -44,6 +44,34 @@ ones run elsewhere:
     invalid-alias, and wrong-certificate fixtures without logging fixture values.
     The workflow job summary records total/phase timings, lane reason, the
     two-worker cap, safe cache-policy context, and artifact-verification result.
+
+- **Instrumented assurance (emulator)** — `.github/workflows/android-instrumented-ci.yml`
+  - Triggers: every PR to `main`, `main` pushes, and manual `workflow_dispatch`.
+  - Runs a headless AOSP `x86_64` emulator at API 35 (matching `compileSdk`/
+    `targetSdk`) and executes a named, deliberately small set of instrumented
+    classes rather than the whole `androidTest` source set:
+    `StartupLoadingScreenTest`, `NavigationDrawerStateTest`,
+    `StartupActivitySmokeTest`, `UpNextRenderSmokeTest`,
+    `ReaderContextActionsInstrumentedTest`.
+  - These are the critical paths this lane covers: startup, drawer state,
+    Up Next / History render, and reader context actions. A regression in any of
+    them turns this workflow red. Adding a class to `INSTRUMENTED_TEST_CLASSES`
+    in that workflow is what puts new coverage in this gate — writing an
+    `androidTest` class alone does **not**.
+  - **Enforcement caveat.** As of 2026-08-22 `main` reports
+    `"protected": false`, so no status check on this repository is
+    merge-blocking: a red run is visible but does not itself prevent a merge.
+    Making this lane (and the fast PR gate) genuinely required is a branch
+    protection setting on `main` and must be done by the repository owner in
+    GitHub settings; it cannot be committed from a workflow file.
+  - The selection is explicit so the lane stays deterministic and bounded; the
+    remaining `androidTest` classes are local/on-demand only.
+  - Diagnostics: device logcat plus connected-test reports are uploaded as the
+    `instrumented-assurance-api-35` artifact on every run, pass or fail.
+  - Emulator-only. Real headset/Bluetooth transport, audio-focus contention and
+    media-router ownership cannot be verified here — see
+    `docs/ANDROID_HEADSET_VERIFICATION_CHECKLIST.md`, which is a manual
+    procedure and is not run by CI.
 
 - **Signed production release** — operator machine only
   - Requires the untracked root `keystore.properties` and the operator-held
@@ -143,6 +171,13 @@ state, and records model/dimensions with evidence.
 Full usage, credential handling, OnePlus 7T (`HD1905`, `1080x2287`) reference
 geometry, and lifecycle assertions are documented in
 `docs/ANDROID_DEVICE_VERIFICATION_RUNBOOK.md`.
+
+For real headset and Bluetooth transport behaviour — media buttons, stale
+`PLAY`/`PAUSE` codes, media-button ownership, noisy-route disconnect and
+audio-focus interruption — use
+`docs/ANDROID_HEADSET_VERIFICATION_CHECKLIST.md`. It is an explicitly **manual**
+procedure: the emulator lane cannot exercise real transport hardware, and its
+execution record ships unrun.
 
 ## Locus UI invariants
 
