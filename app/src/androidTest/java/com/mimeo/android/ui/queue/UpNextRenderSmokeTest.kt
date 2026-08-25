@@ -7,6 +7,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.mimeo.android.model.UpNextHistoryEntry
+import com.mimeo.android.model.UpNextHistoryProjection
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.NowPlayingSessionItem
 import com.mimeo.android.ui.theme.MimeoTheme
@@ -41,6 +43,7 @@ class UpNextRenderSmokeTest {
                 Box(modifier = Modifier.fillMaxSize()) {
                     NowPlayingSessionPanel(
                         session = session,
+                        historyProjection = null,
                         seededFromLabel = "CI assurance fixture",
                         onOpenItem = {},
                         onJumpToQueueItem = {},
@@ -59,6 +62,34 @@ class UpNextRenderSmokeTest {
         composeTestRule.onNodeWithText("Upcoming assurance article").assertIsDisplayed()
     }
 
+    @Test
+    fun canonicalHistoryRendersWithoutAnActiveSession() {
+        val projection = UpNextHistoryProjection(
+            entries = listOf(
+                historyEntry(7, "First occurrence", "2026-08-24T10:00:00Z", stillInSession = true),
+                historyEntry(7, "Repeated occurrence", "2026-08-24T11:00:00Z", stillInSession = false),
+            ),
+            hasMore = true,
+            recordingSince = "2026-08-24T00:00:00Z",
+        )
+
+        composeTestRule.setContent {
+            MimeoTheme {
+                UpNextHistoryOnlyPanel(
+                    historyProjection = projection,
+                    onOpenItem = {},
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("History · 2").assertIsDisplayed()
+        composeTestRule.onNodeWithText("First occurrence").assertExists()
+        composeTestRule.onNodeWithText("Repeated occurrence").assertExists()
+        composeTestRule.onNodeWithText("Only the 50 most recent History entries are shown.").assertExists()
+        composeTestRule.onNodeWithText("No active session. Open an item to start one.").assertExists()
+    }
+
     private fun sessionItem(itemId: Int, title: String) = NowPlayingSessionItem(
         itemId = itemId,
         title = title,
@@ -75,5 +106,24 @@ class UpNextRenderSmokeTest {
         chunkIndex = 0,
         offsetInChunkChars = 0,
         readerScrollOffset = 0,
+    )
+
+    private fun historyEntry(
+        itemId: Int,
+        title: String,
+        playedAt: String,
+        stillInSession: Boolean,
+    ) = UpNextHistoryEntry(
+        itemId = itemId,
+        playedAt = playedAt,
+        title = title,
+        url = "https://example.invalid/$itemId",
+        host = "example.invalid",
+        status = "ready",
+        hasActiveContent = true,
+        createdAt = "2026-08-24T09:00:00Z",
+        isArchived = false,
+        isMuted = false,
+        stillInSession = stillInSession,
     )
 }

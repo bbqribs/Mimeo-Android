@@ -1,5 +1,6 @@
 package com.mimeo.android.ui.queue
 
+import com.mimeo.android.model.UpNextHistoryEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -55,6 +56,35 @@ class UpNextSessionPresentationTest {
             listOf(7, 8, 9),
             sessionPanelHistoryItems(historyItems = listOf(9, 8, 7)),
         )
+    }
+
+    @Test
+    fun canonicalHistoryKeepsRepeatedItemsAndProjectionOrder() {
+        val rows = listOf(
+            historyEntry(itemId = 7, playedAt = "2026-08-24T10:00:00Z", stillInSession = true),
+            historyEntry(itemId = 7, playedAt = "2026-08-24T11:00:00Z", stillInSession = false),
+        ).map { it.toSessionHistoryPresentationRow() }
+
+        assertEquals(listOf(7, 7), rows.map { it.item.itemId })
+        assertEquals(
+            listOf("2026-08-24T10:00:00Z", "2026-08-24T11:00:00Z"),
+            rows.map { it.playedAt },
+        )
+        assertTrue(rows.first().stillInSession)
+        assertFalse(rows.last().stillInSession)
+    }
+
+    @Test
+    fun historyCopyIsTruthfulAboutRecordingBoundaryAndBoundedPage() {
+        assertEquals(
+            "No History entries yet — recording since 2026-08-24T00:00:00Z.",
+            historyEmptyCopy("2026-08-24T00:00:00Z"),
+        )
+        assertEquals(
+            "Only the 50 most recent History entries are shown.",
+            historyBoundedCopy(hasMore = true),
+        )
+        assertEquals(null, historyBoundedCopy(hasMore = false))
     }
 
     @Test
@@ -189,4 +219,23 @@ class UpNextSessionPresentationTest {
             sessionRowTrailingActionOrder(showJumpPlay = true, showRemove = true),
         )
     }
+
+
+    private fun historyEntry(
+        itemId: Int,
+        playedAt: String,
+        stillInSession: Boolean,
+    ) = UpNextHistoryEntry(
+        itemId = itemId,
+        playedAt = playedAt,
+        title = "Item $itemId",
+        url = "https://example.com/$itemId",
+        host = "example.com",
+        status = "ready",
+        hasActiveContent = true,
+        createdAt = "2026-07-17T10:00:00Z",
+        isArchived = false,
+        isMuted = false,
+        stillInSession = stillInSession,
+    )
 }

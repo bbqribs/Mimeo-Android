@@ -66,6 +66,41 @@ class UpNextPersistenceTest {
     }
 
     @Test
+    fun pendingPointerOccurrencesSurviveRestartAndAcknowledgeInOrder() = runBlocking {
+        repository.prepareUpNextSyncScope("owner-a", "https://reader.example.com")
+        repository.applyAuthoritativeUpNextSession(
+            server(
+                version = 4,
+                pointerVersion = 7,
+                itemIds = listOf(1, 2),
+                currentItemId = 1,
+            ),
+            "owner-a",
+            "https://reader.example.com",
+        )
+
+        val first = repository.enqueueUpNextPointerTransition(fromItemId = 1, toItemId = 2)!!
+        val second = repository.enqueueUpNextPointerTransition(fromItemId = 2, toItemId = 1)!!
+        val restarted = PlaybackRepository(ApiClient(), database, context)
+
+        assertEquals(listOf(1, 2), restarted.pendingUpNextPointerTransitions().map { it.fromItemId })
+        assertEquals(listOf(7L, 8L), restarted.pendingUpNextPointerTransitions().map { it.expectedPointerVersion })
+        assertTrue(
+            restarted.acknowledgeUpNextPointerTransition(
+                first,
+                server(
+                    version = 4,
+                    pointerVersion = 8,
+                    itemIds = listOf(1, 2),
+                    currentItemId = 2,
+                ),
+            ),
+        )
+        assertEquals(listOf(second), restarted.pendingUpNextPointerTransitions())
+        assertEquals(8L, restarted.readUpNextSyncMetadata()!!.serverPointerVersion)
+    }
+
+    @Test
     fun accountSwitchEndpointSwitchAndSignOutClearContinuityState() = runBlocking {
         repository.prepareUpNextSyncScope("owner-a", "https://one.example.com")
         repository.startSession(listOf(queueItem(1)), 1, null)
@@ -74,6 +109,7 @@ class UpNextPersistenceTest {
         repository.prepareUpNextSyncScope("owner-b", "https://one.example.com")
         assertNull(repository.getSession())
         assertFalse(repository.readUpNextSyncMetadata()!!.dirty)
+        assertTrue(repository.pendingUpNextPointerTransitions().isEmpty())
         assertEquals("owner-b", repository.readUpNextSyncMetadata()!!.ownerKey)
 
         repository.startSession(listOf(queueItem(2)), 2, null)
@@ -243,11 +279,14 @@ class UpNextPersistenceTest {
 
     private fun server(
         version: Long,
+        pointerVersion: Long = version,
         itemIds: List<Int> = listOf(1),
         currentItemId: Int? = itemIds.firstOrNull(),
         archivedIds: Set<Int> = emptySet(),
     ) = UpNextSession(
         version = version,
+        sessionId = 19,
+        pointerVersion = pointerVersion,
         items = itemIds.distinct().mapIndexed { index, id ->
             UpNextSessionItem(
                 itemId = id,

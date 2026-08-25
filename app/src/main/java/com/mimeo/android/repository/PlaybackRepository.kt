@@ -161,9 +161,9 @@ internal fun <T> computeNowPlayingSessionSections(
 }
 
 /**
- * History is process-local, so a server acknowledgement of the exact active/upcoming
- * projection must not erase it. A different projection is a replacement and must start
- * without the prior session's transient History.
+ * The pre-projection/offline fallback is process-local, so an acknowledgement of the exact
+ * active/upcoming projection need not erase it before canonical History refreshes. A different
+ * projection is a replacement and drops that non-authoritative fallback.
  */
 internal fun shouldRetainTransientHistoryAfterAuthoritativeApply(
     localItemIds: List<Int>,
@@ -971,6 +971,80 @@ class PlaybackRepository(
 
     suspend fun readUpNextSyncMetadata(): UpNextSyncEntity? = database.upNextSyncDao().get()
 
+    internal suspend fun pendingUpNextPointerTransitions(): List<PendingUpNextPointerTransition> {
+        val encoded = database.upNextSyncDao().get()?.pendingPointerTransitionsJson ?: return emptyList()
+        return decodePendingUpNextPointerTransitions(encoded)
+    }
+
+    internal suspend fun rememberUpNextServerPointerContext(session: UpNextSession) {
+        val sessionId = session.sessionId ?: return
+        val pointerVersion = session.pointerVersion ?: return
+        val dao = database.upNextSyncDao()
+        val existing = dao.get() ?: return
+        dao.upsert(
+            existing.copy(
+                capability = UpNextCapability.SUPPORTED.name,
+                serverVersion = session.version,
+                serverSessionId = sessionId,
+                serverPointerVersion = pointerVersion,
+            ),
+        )
+    }
+
+    internal suspend fun enqueueUpNextPointerTransition(
+        fromItemId: Int,
+        toItemId: Int?,
+    ): PendingUpNextPointerTransition? = database.withTransaction {
+        if (fromItemId <= 0 || toItemId == fromItemId) return@withTransaction null
+        val dao = database.upNextSyncDao()
+        val existing = dao.get() ?: return@withTransaction null
+        val pending = decodePendingUpNextPointerTransitions(existing.pendingPointerTransitionsJson)
+        val last = pending.lastOrNull()
+        val sessionId = last?.sessionId ?: existing.serverSessionId ?: return@withTransaction null
+        val expectedVersion = last?.let { it.expectedPointerVersion + 1 }
+            ?: existing.serverPointerVersion
+            ?: return@withTransaction null
+        if (last != null && last.toItemId != fromItemId) return@withTransaction null
+        val transition = PendingUpNextPointerTransition(
+            sessionId = sessionId,
+            expectedPointerVersion = expectedVersion,
+            fromItemId = fromItemId,
+            toItemId = toItemId,
+        )
+        dao.upsert(
+            existing.copy(
+                pendingPointerTransitionsJson = encodePendingUpNextPointerTransitions(pending + transition),
+            ),
+        )
+        transition
+    }
+
+    internal suspend fun acknowledgeUpNextPointerTransition(
+        transition: PendingUpNextPointerTransition,
+        session: UpNextSession,
+    ): Boolean = database.withTransaction {
+        val dao = database.upNextSyncDao()
+        val existing = dao.get() ?: return@withTransaction false
+        val pending = decodePendingUpNextPointerTransitions(existing.pendingPointerTransitionsJson)
+        if (pending.firstOrNull() != transition) return@withTransaction false
+        dao.upsert(
+            existing.copy(
+                capability = UpNextCapability.SUPPORTED.name,
+                serverVersion = session.version,
+                serverSessionId = session.sessionId,
+                serverPointerVersion = session.pointerVersion,
+                pendingPointerTransitionsJson = encodePendingUpNextPointerTransitions(pending.drop(1)),
+            ),
+        )
+        true
+    }
+
+    internal suspend fun discardPendingUpNextPointerTransitions() {
+        val dao = database.upNextSyncDao()
+        val existing = dao.get() ?: return
+        dao.upsert(existing.copy(pendingPointerTransitionsJson = "[]"))
+    }
+
     suspend fun prepareUpNextSyncScope(
         ownerKey: String,
         serverIdentity: String,
@@ -1028,6 +1102,9 @@ class PlaybackRepository(
                 serverIdentity = serverIdentity,
                 capability = UpNextCapability.SUPPORTED.name,
                 serverVersion = null,
+                serverSessionId = null,
+                serverPointerVersion = null,
+                pendingPointerTransitionsJson = "[]",
                 dirty = false,
             ),
         )
@@ -1066,6 +1143,9 @@ class PlaybackRepository(
                     serverIdentity = serverIdentity,
                     capability = UpNextCapability.SUPPORTED.name,
                     serverVersion = session?.version,
+                    serverSessionId = session?.sessionId,
+                    serverPointerVersion = session?.pointerVersion,
+                    pendingPointerTransitionsJson = "[]",
                     dirty = false,
                 ),
             )
@@ -1104,6 +1184,9 @@ class PlaybackRepository(
                 serverIdentity = serverIdentity,
                 capability = UpNextCapability.SUPPORTED.name,
                 serverVersion = session.version,
+                serverSessionId = session.sessionId,
+                serverPointerVersion = session.pointerVersion,
+                pendingPointerTransitionsJson = "[]",
                 dirty = false,
             ),
         )
@@ -1895,9 +1978,25 @@ class PlaybackRepository(
         }.getOrElse { emptyList() }
     }
 
+    private fun decodePendingUpNextPointerTransitions(
+        encoded: String,
+    ): List<PendingUpNextPointerTransition> = runCatching {
+        json.decodeFromString(
+            ListSerializer(PendingUpNextPointerTransition.serializer()),
+            encoded,
+        )
+    }.getOrDefault(emptyList())
+
+    private fun encodePendingUpNextPointerTransitions(
+        transitions: List<PendingUpNextPointerTransition>,
+    ): String = json.encodeToString(
+        ListSerializer(PendingUpNextPointerTransition.serializer()),
+        transitions,
+    )
+
     private fun parseStoredNowPlayingHistory(queueJson: String): List<StoredNowPlayingItem> {
-        // Legacy builds wrote History inside Room's session JSON. History is now deliberately
-        // process-local, so persisted entries are ignored and dropped on the next session write.
+        // Legacy builds wrote item-based History inside Room's session JSON. Canonical History
+        // is an occurrence projection from the server, so legacy entries are ignored and dropped.
         return emptyList()
     }
 

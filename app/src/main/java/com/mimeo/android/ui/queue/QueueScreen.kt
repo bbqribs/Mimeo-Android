@@ -281,6 +281,7 @@ fun QueueScreen(
     val pendingManualSaves by vm.pendingManualSaves.collectAsState()
     val pendingManualRetryInProgress by vm.pendingManualRetryInProgress.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
+    val upNextHistory by vm.upNextHistory.collectAsState()
     val archivedSessionHistoryIds by vm.archivedSessionHistoryIds.collectAsState()
     val actionScope = rememberCoroutineScope()
 
@@ -704,6 +705,7 @@ fun QueueScreen(
             NowPlayingSessionPanel(
                 modifier = Modifier.weight(1f),
                 session = session,
+                historyProjection = upNextHistory,
                 seededFromLabel = sessionSeedPresentation?.seededFromLabel ?: selectedPlaylistName,
                 onOpenItem = { itemId -> onOpenPlayer(itemId) },
                 onJumpToQueueItem = { itemId -> vm.jumpToUpcomingSessionItem(itemId) },
@@ -724,26 +726,13 @@ fun QueueScreen(
                 onSnapPillVisibilityChange = onSnapPillVisibilityChange,
             )
         } else {
-            ElevatedCard(
+            UpNextHistoryOnlyPanel(
+                historyProjection = upNextHistory,
+                onOpenItem = { itemId -> onOpenPlayer(itemId) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "No active session. Open an item to start one.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            )
         }
     }
 

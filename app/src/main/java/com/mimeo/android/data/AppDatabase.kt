@@ -22,7 +22,7 @@ import com.mimeo.android.data.entities.UpNextSyncEntity
         NowPlayingEntity::class,
         UpNextSyncEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -130,6 +130,17 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE up_next_sync_metadata ADD COLUMN serverSessionId INTEGER")
+                db.execSQL("ALTER TABLE up_next_sync_metadata ADD COLUMN serverPointerVersion INTEGER")
+                db.execSQL(
+                    "ALTER TABLE up_next_sync_metadata " +
+                        "ADD COLUMN pendingPointerTransitionsJson TEXT NOT NULL DEFAULT '[]'",
+                )
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -146,6 +157,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_4_5,
                     MIGRATION_5_6,
                     MIGRATION_6_7,
+                    MIGRATION_7_8,
                 ).build().also { INSTANCE = it }
             }
         }

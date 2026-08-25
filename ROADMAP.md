@@ -117,9 +117,10 @@ assurance. Android can execute the local/CI slice of
 `T-AND-INSTRUMENTED-ASSURANCE-2` now: add a required emulator lane and narrow
 local Up Next/History UI coverage while keeping real-headset checks manual. The
 archive/History semantics audit is also independently executable if it does not
-invent server truth. Cross-device History, reorder, offline-conflict, and
-two-device scenarios remain blocked on merged backend contracts and Android
-server-parity adoption.
+invent server truth. The backend History/pointer and semantic-move contracts
+are now merged; Android durable-History/pointer adoption is active in PR #492.
+Semantic reorder adoption and the cross-device assurance matrix remain after
+that slice.
 
 The local **progress/pointer observability** slice entered through this same
 allowance and its decision work is done:
@@ -178,8 +179,8 @@ path remains the supported distribution route.
 - Android local emulator-CI/Up Next assurance and the local archive/History
   audit may run in parallel with Mimeo audit conversion, queue-policy work,
   migration target/tooling work, and the maintenance baseline.
-- Android server History/reorder/conflict adoption cannot start against an
-  unmerged backend contract. Cross-device assurance follows that adoption.
+- Android durable-History/pointer adoption is active against the merged backend
+  contract. Semantic reorder adoption and cross-device assurance follow it.
 - Android's migration check follows Linux rehearsal evidence and is serialized
   inside each dress rehearsal; it is not a substitute for either rehearsal.
 - Lane decisions remain with the operator: `B1`/movement rules for queue work,
@@ -226,10 +227,10 @@ gated on the final QA matrix in
    implemented (T-AND-UPNEXT-HISTORY-1, PR #468), and its pointer semantics were
    then corrected and cleaned up by PRs #475/#476 — the session pointer now
    follows the engine's commitment to play, with one owner per route. Android
-   History remains **bounded session-local state**; cross-device History depends
-   on the backend projection `T-UPNEXT-HISTORY-CONTRACT-1` in the Mimeo repo and
-   must not be assumed before it merges. Smart Queue-as-playlist-source is the
-   part of this cluster still open.
+   The server projection `T-UPNEXT-HISTORY-CONTRACT-1` is now merged and the
+   Android durable-History/pointer adoption is active in PR #492; until that PR
+   merges, the shipped app still uses bounded session-local History. Smart
+   Queue-as-playlist-source is the part of this cluster still open.
    Smart Queue reorder decision: Smart Queue should become a persisted,
    reorderable inbox view, distinct from chronological Inbox and local Up
    Next. New items default to the top; user-adjusted relative order persists

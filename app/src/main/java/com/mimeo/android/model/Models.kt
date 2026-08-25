@@ -247,6 +247,43 @@ data class UpNextSessionEnvelope(
 )
 
 @Serializable
+data class UpNextHistoryEnvelope(
+    val history: UpNextHistoryProjection,
+)
+
+@Serializable
+data class UpNextHistoryProjection(
+    val entries: List<UpNextHistoryEntry> = emptyList(),
+    @SerialName("has_more") val hasMore: Boolean = false,
+    @SerialName("recording_since") val recordingSince: String,
+)
+
+@Serializable
+data class UpNextHistoryEntry(
+    @SerialName("item_id") val itemId: Int,
+    @SerialName("played_at") val playedAt: String,
+    val title: String? = null,
+    val url: String,
+    val host: String,
+    val status: String? = null,
+    @SerialName("active_content_version_id") val activeContentVersionId: Int? = null,
+    @SerialName("strategy_used") val strategyUsed: String? = null,
+    @SerialName("word_count") val wordCount: Int? = null,
+    @SerialName("estimated_listen_minutes") val estimatedListenMinutes: Int? = null,
+    @SerialName("has_active_content") val hasActiveContent: Boolean,
+    @SerialName("resume_read_percent") val resumeReadPercent: Int? = null,
+    @SerialName("last_read_percent") val lastReadPercent: Int? = null,
+    @SerialName("progress_percent") val progressPercent: Int? = null,
+    @SerialName("furthest_percent") val furthestPercent: Int? = null,
+    @SerialName("last_opened_at") val lastOpenedAt: String? = null,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("archived_at") val archivedAt: String? = null,
+    @SerialName("is_archived") val isArchived: Boolean,
+    @SerialName("is_muted") val isMuted: Boolean,
+    @SerialName("still_in_session") val stillInSession: Boolean,
+)
+
+@Serializable
 data class UpNextSession(
     val version: Long,
     @SerialName("session_id") val sessionId: Long? = null,

@@ -44,6 +44,8 @@ import com.mimeo.android.model.SmartPlaylistPinReorderItem
 import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.model.SmartPlaylistWriteRequest
 import com.mimeo.android.model.UpNextConflictResponse
+import com.mimeo.android.model.UpNextHistoryEnvelope
+import com.mimeo.android.model.UpNextHistoryProjection
 import com.mimeo.android.model.UpNextSession
 import com.mimeo.android.model.UpNextSessionClearRequest
 import com.mimeo.android.model.UpNextPointerAdvanceRequest
@@ -300,6 +302,21 @@ class ApiClient(
             .build()
         executeUpNextJson(request) { responseBody ->
             checkNotNull(json.decodeFromString<UpNextSessionEnvelope>(responseBody).session)
+        }
+    }
+
+    suspend fun getUpNextHistory(
+        baseUrl: String,
+        token: String,
+        limit: Int = 50,
+    ): UpNextHistoryProjection = withContext(Dispatchers.IO) {
+        require(limit in 1..100)
+        val request = authorizedRequest(baseUrl, "/up-next/history?limit=$limit", token)
+            .acceptJson()
+            .get()
+            .build()
+        executeUpNextJson(request) { responseBody ->
+            json.decodeFromString<UpNextHistoryEnvelope>(responseBody).history
         }
     }
 

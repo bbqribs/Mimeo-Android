@@ -8,6 +8,18 @@ Keep this fingerprint matched to `apksigner verify --print-certs` before any
 household APK is distributed. Do not record keystore paths, passwords, or key
 material here.
 
+## Unreleased
+
+- Up Next History now comes from the account-scoped server projection, remains
+  visible after the active session is cleared, and retains repeated plays and
+  entries that are still members of the queue.
+- Playback pointer transitions publish through the server's atomic advance
+  operation, including conditionally replayed offline transitions, so Android
+  and web History share the same durable occurrence log.
+
+Backend: requires Mimeo PR #923 (atomic pointer and History projection)
+deployed on the selected server; Mimeo PR #928 is the matching web renderer.
+
 ## 0.4.5 (versionCode 11) - 2026-07-20
 
 Artifact: `mimeo-android-v0.4.5-vc11-release.apk`

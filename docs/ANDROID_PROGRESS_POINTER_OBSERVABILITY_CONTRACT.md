@@ -692,9 +692,11 @@ if (BuildConfig.DEBUG && settings.showProgressPointerDiagnostics) { ... }
   `LivePlaybackSessionSyncTest`.
 - **S2.** Completion/replay keys on `furthestPercent >= 98`, not canonical
   percent (`CompletedReplayPolicyTest`).
-- **S3.** History is process-local. `parseStoredNowPlayingHistory` returns
-  `emptyList()` unconditionally and `encodeStoredNowPlaying` deliberately never
-  serialises History (`PlaybackRepository.kt:1883-1897`).
+- **S3 (audit-time state).** History was process-local at `de96b1d`.
+  `parseStoredNowPlayingHistory` still returns `emptyList()` and
+  `encodeStoredNowPlaying` still never serialises History, but PR #492 replaces
+  display authority with the server occurrence projection; Room remains a
+  session cache rather than a History store.
 - **S4.** `postProgress` sends `chunk_index`, `offset_in_chunk_chars` and
   `reader_scroll_offset` when available, with a legacy percent-only retry on
   400/422 (`ApiClient.kt:853-880`).

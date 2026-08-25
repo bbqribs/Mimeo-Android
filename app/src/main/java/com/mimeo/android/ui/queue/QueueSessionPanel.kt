@@ -21,6 +21,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,6 +59,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.NowPlayingSessionItem
+import com.mimeo.android.model.UpNextHistoryEntry
+import com.mimeo.android.model.UpNextHistoryProjection
 import com.mimeo.android.ui.common.DragHandleIcon
 import com.mimeo.android.ui.common.ItemActionMenuEntry
 import com.mimeo.android.ui.common.ItemRow
@@ -115,6 +119,43 @@ internal fun <T> sessionPanelEarlierItems(
 
 internal fun <T> sessionPanelHistoryItems(historyItems: List<T>): List<T> =
     historyItems.asReversed()
+
+internal data class SessionHistoryPresentationRow(
+    val item: NowPlayingSessionItem,
+    val playedAt: String? = null,
+    val stillInSession: Boolean = false,
+)
+
+internal fun UpNextHistoryEntry.toSessionHistoryPresentationRow() =
+    SessionHistoryPresentationRow(
+        item = NowPlayingSessionItem(
+            itemId = itemId,
+            title = title,
+            url = url,
+            host = host,
+            sourceType = null,
+            sourceLabel = null,
+            sourceUrl = null,
+            captureKind = null,
+            sourceAppPackage = null,
+            status = status,
+            activeContentVersionId = activeContentVersionId,
+            lastReadPercent = lastReadPercent,
+            chunkIndex = 0,
+            offsetInChunkChars = 0,
+            readerScrollOffset = 0,
+            isArchived = isArchived,
+        ),
+        playedAt = playedAt,
+        stillInSession = stillInSession,
+    )
+
+internal fun historyEmptyCopy(recordingSince: String?): String = recordingSince
+    ?.let { "No History entries yet — recording since $it." }
+    ?: "History will appear after this account connects to the server."
+
+internal fun historyBoundedCopy(hasMore: Boolean): String? =
+    if (hasMore) "Only the 50 most recent History entries are shown." else null
 
 internal fun <T, K> sessionPanelPresentationItems(
     localItems: List<T>,
@@ -215,18 +256,24 @@ private fun SessionSectionHeader(
 private fun SessionStaticItemRow(
     item: NowPlayingSessionItem,
     onOpenItem: (Int) -> Unit,
-    onJumpToItem: (Int) -> Unit,
+    onJumpToItem: ((Int) -> Unit)?,
     onArchiveItem: ((Int) -> Unit)? = null,
     onUnarchiveItem: ((Int) -> Unit)? = null,
     onBinItem: ((Int) -> Unit)? = null,
     showArchivedIndicator: Boolean = false,
+    stillInSession: Boolean = false,
+    muted: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val title = item.title?.ifBlank { null } ?: item.url
     val source = item.host
         ?: item.sourceLabel?.takeIf { it.isNotBlank() }
         ?: item.sourceType?.takeIf { it.isNotBlank() }
-    val metadata = buildItemMetadata(source, showArchived = showArchivedIndicator)
+    val baseMetadata = buildItemMetadata(source, showArchived = showArchivedIndicator)
+    val metadata = listOfNotNull(
+        baseMetadata,
+        "Still in session".takeIf { stillInSession },
+    ).joinToString(" · ").ifBlank { null }
     val menuEntries = sessionLifecycleActionOrder(
         isArchived = showArchivedIndicator,
         canArchive = onArchiveItem != null,
@@ -247,15 +294,74 @@ private fun SessionStaticItemRow(
         metadata = metadata,
         status = null,
         modifier = modifier,
+        titleColor = if (muted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
         onOpen = { onOpenItem(item.itemId) },
-        onPlayNow = { onJumpToItem(item.itemId) },
+        onPlayNow = onJumpToItem?.let { jump -> { jump(item.itemId) } },
         menuEntries = menuEntries,
     )
 }
 
 @Composable
+internal fun UpNextHistoryOnlyPanel(
+    historyProjection: UpNextHistoryProjection?,
+    onOpenItem: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val rows = historyProjection?.entries?.map { it.toSessionHistoryPresentationRow() }.orEmpty()
+    ElevatedCard(
+        modifier = modifier,
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+        ) {
+            SessionSectionHeader(title = "History", count = rows.size)
+            if (rows.isEmpty()) {
+                Text(
+                    text = historyEmptyCopy(historyProjection?.recordingSince),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                )
+            } else {
+                rows.forEachIndexed { index, row ->
+                    SessionStaticItemRow(
+                        item = row.item,
+                        onOpenItem = onOpenItem,
+                        onJumpToItem = null,
+                        showArchivedIndicator = row.item.isArchived,
+                        stillInSession = row.stillInSession,
+                        muted = true,
+                    )
+                    if (index < rows.lastIndex) RowDivider()
+                }
+            }
+            historyBoundedCopy(historyProjection?.hasMore == true)?.let { copy ->
+                Text(
+                    text = copy,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+            HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+            Text(
+                text = "No active session. Open an item to start one.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp),
+            )
+        }
+    }
+}
+
+@Composable
 internal fun NowPlayingSessionPanel(
     session: NowPlayingSession,
+    historyProjection: UpNextHistoryProjection?,
     seededFromLabel: String,
     onOpenItem: (Int) -> Unit,
     onJumpToQueueItem: (Int) -> Unit,
@@ -438,16 +544,18 @@ internal fun NowPlayingSessionPanel(
         itemKey = { it.itemId },
     )
     val activeItem = presentationItems.getOrNull(currentIndex)
-    // History is stored most-recent-first so Previous can restore the latest item first,
-    // but the section is chronological: oldest entry at the top, newest at the bottom.
-    val historyItems = sessionPanelHistoryItems(session.historyItems)
+    // Canonical History is already oldest-entrant-first. The transient fallback is retained
+    // only until the first server projection arrives (including while initially offline).
+    val historyRows = historyProjection?.entries?.map { it.toSessionHistoryPresentationRow() }
+        ?: sessionPanelHistoryItems(session.historyItems).map { SessionHistoryPresentationRow(it) }
+    val canonicalHistoryVisible = historyProjection != null
     // Earlier-in-queue items already sit in play order (oldest at the top,
     // most recently passed nearest Now Playing), so they need no reordering.
     // Authoritative lifecycle reconciliation can remove the active item while the
     // remembered presentation list is catching up. Treat that transient state as
     // no active item: nothing is earlier and every surviving row remains upcoming.
     val earlierItems = sessionPanelEarlierItems(presentationItems, currentIndex)
-    val hasRowsBeforeActive = historyItems.isNotEmpty() || earlierItems.isNotEmpty()
+    val hasRowsBeforeActive = historyRows.isNotEmpty() || earlierItems.isNotEmpty()
     val upcomingItems = sessionPanelUpcomingItems(
         localItems = presentationItems,
         currentIndex = currentIndex,
@@ -475,8 +583,8 @@ internal fun NowPlayingSessionPanel(
     var initialActiveAnchorReady by remember(currentItemId) {
         mutableStateOf(currentItemId == null)
     }
-    LaunchedEffect(historyItems.isEmpty()) {
-        if (historyItems.isEmpty()) {
+    LaunchedEffect(historyRows.isEmpty()) {
+        if (historyRows.isEmpty()) {
             historyStickyBounds = null
             historyHeaderHeightPx = 0f
         }
@@ -578,42 +686,60 @@ internal fun NowPlayingSessionPanel(
                     .graphicsLayer { alpha = if (initialActiveAnchorReady) 1f else 0f }
                     .verticalScroll(listScrollState),
             ) {
-                if (historyItems.isNotEmpty()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .onGloballyPositioned { coords ->
-                                val top = coords.positionInParent().y
-                                historyStickyBounds = SessionStickyHeaderBounds(
-                                    title = "History",
-                                    count = historyItems.size,
-                                    topPx = top,
-                                    headerHeightPx = historyHeaderHeightPx,
-                                    bottomPx = top + coords.size.height,
-                                )
-                            },
-                    ) {
-                        SessionSectionHeader(
-                            title = "History",
-                            count = historyItems.size,
-                            modifier = Modifier.onSizeChanged { size ->
-                                historyHeaderHeightPx = size.height.toFloat()
-                            },
-                        )
-                        historyItems.forEachIndexed { index, item ->
-                            SessionStaticItemRow(
-                                item = item,
-                                onOpenItem = onOpenItem,
-                                onJumpToItem = onJumpToHistoryItem,
-                                onArchiveItem = onArchiveSessionItem,
-                                onUnarchiveItem = onUnarchiveSessionHistoryItem,
-                                onBinItem = onBinSessionHistoryItem,
-                                showArchivedIndicator = item.itemId in archivedHistoryItemIds,
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onGloballyPositioned { coords ->
+                            val top = coords.positionInParent().y
+                            historyStickyBounds = SessionStickyHeaderBounds(
+                                title = "History",
+                                count = historyRows.size,
+                                topPx = top,
+                                headerHeightPx = historyHeaderHeightPx,
+                                bottomPx = top + coords.size.height,
                             )
-                            if (index < historyItems.lastIndex) {
+                        },
+                ) {
+                    SessionSectionHeader(
+                        title = "History",
+                        count = historyRows.size,
+                        modifier = Modifier.onSizeChanged { size ->
+                            historyHeaderHeightPx = size.height.toFloat()
+                        },
+                    )
+                    if (historyRows.isEmpty()) {
+                        Text(
+                            text = historyEmptyCopy(historyProjection?.recordingSince),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        )
+                    } else {
+                        historyRows.forEachIndexed { index, row ->
+                            SessionStaticItemRow(
+                                item = row.item,
+                                onOpenItem = onOpenItem,
+                                onJumpToItem = if (canonicalHistoryVisible) null else onJumpToHistoryItem,
+                                onArchiveItem = if (canonicalHistoryVisible) null else onArchiveSessionItem,
+                                onUnarchiveItem = if (canonicalHistoryVisible) null else onUnarchiveSessionHistoryItem,
+                                onBinItem = if (canonicalHistoryVisible) null else onBinSessionHistoryItem,
+                                showArchivedIndicator = row.item.isArchived ||
+                                    row.item.itemId in archivedHistoryItemIds,
+                                stillInSession = row.stillInSession,
+                                muted = canonicalHistoryVisible,
+                            )
+                            if (index < historyRows.lastIndex) {
                                 RowDivider()
                             }
                         }
+                    }
+                    historyBoundedCopy(historyProjection?.hasMore == true)?.let { copy ->
+                        Text(
+                            text = copy,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
                     }
                 }
                 if (earlierItems.isNotEmpty()) {
