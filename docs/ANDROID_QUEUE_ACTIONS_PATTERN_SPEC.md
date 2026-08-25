@@ -20,12 +20,12 @@ that baseline using the grammar from product model §3.
 This spec now records the shipped queue-action behavior as well as the
 forward model that remaining Lane 5 tickets will build toward.
 
-**One supersession note:** Item-actions spec v1.0 §6 defines long-press →
-open overflow menu on Up Next rows. Product model §3.2 rule 3 supersedes
-this: long-press enters multi-select mode on all library and playlist-like
-surfaces, including Up Next upcoming rows. The v1.0 note about long-press
-was a deferral placeholder. The override is intentional and aligns with
-Phase 4 batch-select infrastructure already shipped. See §4 below.
+**Supersession notes:** Item-actions spec v1.0 §6 defines long-press → open
+overflow menu on Up Next rows. Product model §3.2 rule 3 supersedes this:
+long-press enters multi-select mode on library and playlist-like surfaces.
+Durable Up Next History and Earlier in queue now use the same interaction for
+article-level Archive/Unarchive actions. The v1.0 note about long-press was a
+deferral placeholder. See §4 below.
 
 ---
 
@@ -134,7 +134,7 @@ on Up Next rows.
 | Manual / smart playlist detail rows | Enter multi-select; row is pre-selected |
 | Bluesky harvester rows | Enter multi-select (if multi-select supported on the surface in v1) |
 | Up Next upcoming rows | Enter multi-select; row is pre-selected |
-| Up Next history rows | No multi-select. Long-press has no effect in v1 (history actions are limited to single-row overflow). |
+| Up Next History and Earlier-in-queue rows | Enter article-based multi-select; every visible occurrence of the article is selected together. |
 | Locus top bar | No change (no list rows here) |
 
 Long-press must never be the **sole** entry point to any action. Every
@@ -151,6 +151,16 @@ When multi-select is active, the batch action bar appears and exposes:
 | Archive | Library surfaces (Inbox, Favorites, Bin) |
 | Favourite / Unfavourite | Library + playlist surfaces |
 | Move to Bin | Library + playlist surfaces (not Bin itself) |
+| Archive / Unarchive | Up Next History + Earlier in queue |
+
+Up Next History selection is article-based because the durable projection can
+contain repeated occurrences but does not expose an occurrence identifier, and
+Archive/Unarchive changes article lifecycle state. The selected count is a count
+of articles, not rendered occurrence rows. If a selected article appears more
+than once in History or also appears in Earlier, all of those rows display as
+selected. Batch Move to Bin and replay/requeue remain unavailable on durable
+History until their destructive and occurrence-versus-article semantics are
+separately ratified.
 
 **"Add to Up Next"** is the canonical batch-bar label (product model
 §3.1 note: `Add Selected to Up Next` is the canonical name; the batch

@@ -6689,7 +6689,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _nowPlayingSession.value = null
         _playbackPositionByItem.value = emptyMap()
         _sessionIssueMessage.value = null
-        _statusMessage.value = "Now Playing session cleared."
+        _statusMessage.value = "Queue cleared."
         markAndScheduleUpNextMutation()
     }
 

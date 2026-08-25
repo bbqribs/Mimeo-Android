@@ -95,6 +95,30 @@ class UpNextSessionPresentationTest {
     }
 
     @Test
+    fun historyBatchActionsUseArticleIdentityAndCurrentArchiveState() {
+        val selectedIds = setOf(7, 8)
+        val archivedByItemId = mapOf(7 to false, 8 to true)
+
+        assertEquals(
+            setOf(7),
+            selectedSessionArchiveActionIds(selectedIds, archivedByItemId, archive = true),
+        )
+        assertEquals(
+            setOf(8),
+            selectedSessionArchiveActionIds(selectedIds, archivedByItemId, archive = false),
+        )
+    }
+
+    @Test
+    fun clearQueueCopyNamesItsScopeAndRetainedHistory() {
+        assertEquals("Clear queue", CLEAR_QUEUE_LABEL)
+        assertEquals(
+            "This clears Earlier in queue, Now Playing, and Up Next. History is kept.",
+            CLEAR_QUEUE_CONFIRMATION_COPY,
+        )
+    }
+
+    @Test
     fun historyCopyIsTruthfulAboutRecordingBoundaryAndBoundedPage() {
         assertEquals(
             "No History entries yet — recording since 2026-08-24T00:00:00Z.",

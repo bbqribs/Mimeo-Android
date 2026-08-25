@@ -16,6 +16,11 @@ material here.
 - Canonical History rows retain Archive/Unarchive lifecycle actions, with every
   occurrence reflecting the article's current archive state; replay and Bin
   actions remain deferred until their durable semantics are settled.
+- Long-press on History or Earlier in queue enters article-based multi-select
+  with Archive/Unarchive actions; repeated History occurrences select together,
+  while Earlier keeps its single-row overflow actions.
+- The session-wide clear action is now labelled "Clear queue" and explicitly
+  retains durable History.
 - Playback pointer transitions publish through the server's atomic advance
   operation, including conditionally replayed offline transitions, so Android
   and web History share the same durable occurrence log.

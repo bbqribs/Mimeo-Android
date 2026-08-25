@@ -1,5 +1,6 @@
 package com.mimeo.android.ui.queue
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,10 +20,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -69,6 +75,7 @@ import com.mimeo.android.ui.common.JumpPill
 import com.mimeo.android.ui.common.RowDivider
 import com.mimeo.android.ui.common.SectionLabelChip
 import com.mimeo.android.ui.common.SectionLabelHeader
+import com.mimeo.android.ui.common.SelectionState
 import com.mimeo.android.ui.common.buildItemMetadata
 import com.mimeo.android.ui.common.dragContainerColorFor
 import com.mimeo.android.ui.common.jumpPillBottomPadding
@@ -240,6 +247,55 @@ internal fun sessionLifecycleActionOrder(
     if (canMoveToBin) add(SessionLifecycleAction.MoveToBin)
 }
 
+internal fun selectedSessionArchiveActionIds(
+    selectedIds: Set<Int>,
+    archivedByItemId: Map<Int, Boolean>,
+    archive: Boolean,
+): Set<Int> = selectedIds.filterTo(linkedSetOf()) { itemId ->
+    archivedByItemId[itemId] == !archive
+}
+
+@Composable
+private fun SessionSelectionBar(
+    selectedCount: Int,
+    canArchive: Boolean,
+    canUnarchive: Boolean,
+    onClearSelection: () -> Unit,
+    onArchive: () -> Unit,
+    onUnarchive: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onClearSelection) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Exit selection mode",
+            )
+        }
+        Text(
+            text = "$selectedCount selected",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(onClick = onArchive, enabled = canArchive) {
+            Icon(
+                imageVector = Icons.Default.Archive,
+                contentDescription = "Archive selected",
+            )
+        }
+        IconButton(onClick = onUnarchive, enabled = canUnarchive) {
+            Icon(
+                imageVector = Icons.Default.Unarchive,
+                contentDescription = "Unarchive selected",
+            )
+        }
+    }
+}
+
 @Composable
 private fun SessionSectionHeader(
     title: String,
@@ -263,6 +319,7 @@ private fun SessionStaticItemRow(
     showArchivedIndicator: Boolean = false,
     stillInSession: Boolean = false,
     muted: Boolean = false,
+    selection: SelectionState = SelectionState.None,
     modifier: Modifier = Modifier,
 ) {
     val title = item.title?.ifBlank { null } ?: item.url
@@ -293,6 +350,7 @@ private fun SessionStaticItemRow(
         title = title,
         metadata = metadata,
         status = null,
+        selection = selection,
         modifier = modifier,
         titleColor = if (muted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
         onOpen = { onOpenItem(item.itemId) },
@@ -307,57 +365,115 @@ internal fun UpNextHistoryOnlyPanel(
     onOpenItem: (Int) -> Unit,
     onArchiveItem: (Int) -> Unit,
     onUnarchiveItem: (Int) -> Unit,
+    onBatchArchiveItems: (Set<Int>) -> Unit = {},
+    onBatchUnarchiveItems: (Set<Int>) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val rows = historyProjection?.entries?.map { it.toSessionHistoryPresentationRow() }.orEmpty()
+    val selectableIds = rows.mapTo(linkedSetOf()) { it.item.itemId }
+    val archivedByItemId = rows.associate { it.item.itemId to it.item.isArchived }
+    var selectionActive by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf(emptySet<Int>()) }
+
+    fun clearSelection() {
+        selectionActive = false
+        selectedIds = emptySet()
+    }
+
+    fun enterSelection(itemId: Int) {
+        selectionActive = true
+        selectedIds = setOf(itemId)
+    }
+
+    fun toggleSelection(itemId: Int) {
+        val next = if (itemId in selectedIds) selectedIds - itemId else selectedIds + itemId
+        selectedIds = next
+        if (next.isEmpty()) selectionActive = false
+    }
+
+    LaunchedEffect(selectableIds) {
+        selectedIds = selectedIds.intersect(selectableIds)
+        if (selectedIds.isEmpty()) selectionActive = false
+    }
+    BackHandler(enabled = selectionActive) { clearSelection() }
+
+    val archiveIds = selectedSessionArchiveActionIds(selectedIds, archivedByItemId, archive = true)
+    val unarchiveIds = selectedSessionArchiveActionIds(selectedIds, archivedByItemId, archive = false)
     ElevatedCard(
         modifier = modifier,
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            SessionSectionHeader(title = "History", count = rows.size)
-            if (rows.isEmpty()) {
-                Text(
-                    text = historyEmptyCopy(historyProjection?.recordingSince),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            if (selectionActive) {
+                SessionSelectionBar(
+                    selectedCount = selectedIds.size,
+                    canArchive = archiveIds.isNotEmpty(),
+                    canUnarchive = unarchiveIds.isNotEmpty(),
+                    onClearSelection = ::clearSelection,
+                    onArchive = {
+                        onBatchArchiveItems(archiveIds)
+                        clearSelection()
+                    },
+                    onUnarchive = {
+                        onBatchUnarchiveItems(unarchiveIds)
+                        clearSelection()
+                    },
                 )
-            } else {
-                rows.forEachIndexed { index, row ->
-                    SessionStaticItemRow(
-                        item = row.item,
-                        onOpenItem = onOpenItem,
-                        onJumpToItem = null,
-                        onArchiveItem = onArchiveItem,
-                        onUnarchiveItem = onUnarchiveItem,
-                        showArchivedIndicator = row.item.isArchived,
-                        stillInSession = row.stillInSession,
-                        muted = true,
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                SessionSectionHeader(title = "History", count = rows.size)
+                if (rows.isEmpty()) {
+                    Text(
+                        text = historyEmptyCopy(historyProjection?.recordingSince),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     )
-                    if (index < rows.lastIndex) RowDivider()
+                } else {
+                    rows.forEachIndexed { index, row ->
+                        SessionStaticItemRow(
+                            item = row.item,
+                            onOpenItem = onOpenItem,
+                            onJumpToItem = null,
+                            onArchiveItem = onArchiveItem,
+                            onUnarchiveItem = onUnarchiveItem,
+                            showArchivedIndicator = row.item.isArchived,
+                            stillInSession = row.stillInSession,
+                            muted = true,
+                            selection = SelectionState.Available(
+                                isActive = selectionActive,
+                                isSelected = row.item.itemId in selectedIds,
+                                onToggle = { toggleSelection(row.item.itemId) },
+                                onEnter = { enterSelection(row.item.itemId) },
+                            ),
+                        )
+                        if (index < rows.lastIndex) RowDivider()
+                    }
                 }
-            }
-            historyBoundedCopy(historyProjection?.hasMore == true)?.let { copy ->
+                historyBoundedCopy(historyProjection?.hasMore == true)?.let { copy ->
+                    Text(
+                        text = copy,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+                HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
                 Text(
-                    text = copy,
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "No active session. Open an item to start one.",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(16.dp),
                 )
             }
-            HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
-            Text(
-                text = "No active session. Open an item to start one.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(16.dp),
-            )
         }
     }
 }
@@ -383,6 +499,8 @@ internal fun NowPlayingSessionPanel(
     onUnarchiveSessionHistoryItem: (Int) -> Unit = {},
     onBinSessionHistoryItem: (Int) -> Unit = {},
     onBinSessionEarlierItem: (Int) -> Unit = {},
+    onBatchArchiveItems: (Set<Int>) -> Unit = {},
+    onBatchUnarchiveItems: (Set<Int>) -> Unit = {},
     archivedHistoryItemIds: Set<Int> = emptySet(),
 ) {
     val densityTokens = LocalMimeoDensityTokens.current
@@ -559,6 +677,42 @@ internal fun NowPlayingSessionPanel(
     // remembered presentation list is catching up. Treat that transient state as
     // no active item: nothing is earlier and every surviving row remains upcoming.
     val earlierItems = sessionPanelEarlierItems(presentationItems, currentIndex)
+    val selectableIds = (historyRows.map { it.item.itemId } + earlierItems.map { it.itemId }).toSet()
+    val archivedByItemId = buildMap {
+        historyRows.forEach { row ->
+            put(row.item.itemId, row.item.isArchived || row.item.itemId in archivedHistoryItemIds)
+        }
+        earlierItems.forEach { item ->
+            put(item.itemId, item.isArchived || item.itemId in archivedHistoryItemIds)
+        }
+    }
+    var selectionActive by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf(emptySet<Int>()) }
+
+    fun clearSelection() {
+        selectionActive = false
+        selectedIds = emptySet()
+    }
+
+    fun enterSelection(itemId: Int) {
+        selectionActive = true
+        selectedIds = setOf(itemId)
+    }
+
+    fun toggleSelection(itemId: Int) {
+        val next = if (itemId in selectedIds) selectedIds - itemId else selectedIds + itemId
+        selectedIds = next
+        if (next.isEmpty()) selectionActive = false
+    }
+
+    LaunchedEffect(selectableIds) {
+        selectedIds = selectedIds.intersect(selectableIds)
+        if (selectedIds.isEmpty()) selectionActive = false
+    }
+    BackHandler(enabled = selectionActive) { clearSelection() }
+
+    val archiveIds = selectedSessionArchiveActionIds(selectedIds, archivedByItemId, archive = true)
+    val unarchiveIds = selectedSessionArchiveActionIds(selectedIds, archivedByItemId, archive = false)
     val hasRowsBeforeActive = historyRows.isNotEmpty() || earlierItems.isNotEmpty()
     val upcomingItems = sessionPanelUpcomingItems(
         localItems = presentationItems,
@@ -625,22 +779,39 @@ internal fun NowPlayingSessionPanel(
         prevEarlierIds.addAll(curIds)
     }
     Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = seededFromLabel,
-                style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
-                color = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+        if (selectionActive) {
+            SessionSelectionBar(
+                selectedCount = selectedIds.size,
+                canArchive = archiveIds.isNotEmpty(),
+                canUnarchive = unarchiveIds.isNotEmpty(),
+                onClearSelection = ::clearSelection,
+                onArchive = {
+                    onBatchArchiveItems(archiveIds)
+                    clearSelection()
+                },
+                onUnarchive = {
+                    onBatchUnarchiveItems(unarchiveIds)
+                    clearSelection()
+                },
             )
-            trailingActions?.invoke(this)
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = seededFromLabel,
+                    style = if (isV1) mTypography.section else MaterialTheme.typography.labelMedium,
+                    color = if (isV1) mColors.fg2 else MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                trailingActions?.invoke(this)
+            }
         }
         LaunchedEffect(
             currentItemId,
@@ -731,6 +902,12 @@ internal fun NowPlayingSessionPanel(
                                     row.item.itemId in archivedHistoryItemIds,
                                 stillInSession = row.stillInSession,
                                 muted = canonicalHistoryVisible,
+                                selection = SelectionState.Available(
+                                    isActive = selectionActive,
+                                    isSelected = row.item.itemId in selectedIds,
+                                    onToggle = { toggleSelection(row.item.itemId) },
+                                    onEnter = { enterSelection(row.item.itemId) },
+                                ),
                             )
                             if (index < historyRows.lastIndex) {
                                 RowDivider()
@@ -776,7 +953,13 @@ internal fun NowPlayingSessionPanel(
                                 onArchiveItem = onArchiveSessionItem,
                                 onUnarchiveItem = onUnarchiveSessionHistoryItem,
                                 onBinItem = onBinSessionEarlierItem,
-                                showArchivedIndicator = item.itemId in archivedHistoryItemIds,
+                                showArchivedIndicator = item.isArchived || item.itemId in archivedHistoryItemIds,
+                                selection = SelectionState.Available(
+                                    isActive = selectionActive,
+                                    isSelected = item.itemId in selectedIds,
+                                    onToggle = { toggleSelection(item.itemId) },
+                                    onEnter = { enterSelection(item.itemId) },
+                                ),
                                 modifier = Modifier.onSizeChanged { size ->
                                     earlierItemHeights[item.itemId] = size.height.toFloat()
                                 },
