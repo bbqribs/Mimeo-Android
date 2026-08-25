@@ -6805,7 +6805,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val targetIndex = session.items.indexOfFirst { it.itemId == itemId }
         if (targetIndex < 0) return
         if (targetIndex == session.currentIndex) return
-        if (advanceDurablePointerIfPossible(session, itemId)) return
+        if (advanceDurablePointerIfPossible(itemId)) return
         // A session whose pointer never resolved (currentIndex out of range) has no active
         // item to displace; computeSessionIndexMovePlan installs the target directly.
         val priorActiveForHistory = session.currentItem
@@ -6831,10 +6831,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Local-only/offline playback keeps its existing transient behavior; it never
      * manufactures a durable History event or retries a semantic conflict.
      */
-    private suspend fun advanceDurablePointerIfPossible(
-        localSession: NowPlayingSession,
-        toItemId: Int,
-    ): Boolean {
+    private suspend fun advanceDurablePointerIfPossible(toItemId: Int): Boolean {
         val current = settings.value
         if (current.apiToken.isBlank() || current.baseUrl.isBlank()) return false
         val requestContext = accountScopedRequestContext(current)
@@ -6842,10 +6839,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val serverIdentity = normalizeServerIdentity(current.baseUrl)
         return try {
             val server = apiClient.getUpNextSession(current.baseUrl, current.apiToken) ?: return false
-            val fromItemId = localSession.currentItem?.itemId ?: return false
+            val fromItemId = server.currentItemId ?: return false
             val sessionId = server.sessionId ?: return false
             val pointerVersion = server.pointerVersion ?: return false
-            if (server.currentItemId != fromItemId || server.items.none { it.itemId == toItemId }) return false
+            if (server.items.none { it.itemId == toItemId }) return false
+            if (fromItemId == toItemId) {
+                if (accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    applyAuthoritativeUpNext(server, requestContext, serverIdentity)
+                    return true
+                }
+                return false
+            }
             val acknowledged = apiClient.advanceUpNextPointer(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
@@ -6915,7 +6919,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             currentId = currentId,
         ) ?: return null
         val nextItemId = session.items[nextIndex].itemId
-        if (advanceDurablePointerIfPossible(session, nextItemId)) return nextItemId
+        if (advanceDurablePointerIfPossible(nextItemId)) return nextItemId
         val priorActiveGoesToHistory = shouldPlacePriorActiveInHistory(currentId)
         val updated = repository.moveCurrentIndex(
             targetIndex = nextIndex,
@@ -6951,7 +6955,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return null
         }
         val nextItemId = session.items[nextIndex].itemId
-        if (advanceDurablePointerIfPossible(session, nextItemId)) return nextItemId
+        if (advanceDurablePointerIfPossible(nextItemId)) return nextItemId
         val priorActiveGoesToHistory = shouldPlacePriorActiveInHistory(currentId)
         val updated = repository.moveCurrentIndex(
             targetIndex = nextIndex,

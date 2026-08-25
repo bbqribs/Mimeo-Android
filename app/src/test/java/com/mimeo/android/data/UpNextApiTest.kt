@@ -18,7 +18,7 @@ class UpNextApiTest {
 
     private val populatedSession = """
         {
-          "version": 4,
+          "version": 4, "session_id": 19, "pointer_version": 7,
           "items": [{
             "item_id": 22, "position": 0, "title": "Article", "url": "https://example.com/a",
             "host": "example.com", "status": "ready", "active_content_version_id": 9,
@@ -45,6 +45,8 @@ class UpNextApiTest {
             assertNull(client().getUpNextSession(server.url("/").toString(), "token"))
             val session = client().getUpNextSession(server.url("/").toString(), "token")!!
             assertEquals(4L, session.version)
+            assertEquals(19L, session.sessionId)
+            assertEquals(7L, session.pointerVersion)
             assertEquals(listOf(22), session.items.map { it.itemId })
             assertEquals(22, session.currentItemId)
             assertEquals("Reading list", session.seedSourceLabel)
