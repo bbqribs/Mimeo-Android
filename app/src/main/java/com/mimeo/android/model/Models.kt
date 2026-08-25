@@ -249,6 +249,8 @@ data class UpNextSessionEnvelope(
 @Serializable
 data class UpNextSession(
     val version: Long,
+    @SerialName("session_id") val sessionId: Long? = null,
+    @SerialName("pointer_version") val pointerVersion: Long? = null,
     val items: List<UpNextSessionItem>,
     @SerialName("current_item_id") val currentItemId: Int? = null,
     @SerialName("seed_source_kind") val seedSourceKind: String,
@@ -294,6 +296,14 @@ data class UpNextSessionWriteRequest(
 @Serializable
 data class UpNextSessionClearRequest(
     @SerialName("expected_version") val expectedVersion: Long,
+)
+
+@Serializable
+data class UpNextPointerAdvanceRequest(
+    @SerialName("expected_pointer_version") val expectedPointerVersion: Long,
+    @SerialName("session_id") val sessionId: Long,
+    @SerialName("from_item_id") val fromItemId: Int,
+    @SerialName("to_item_id") val toItemId: Int?,
 )
 
 @Serializable

@@ -1,6 +1,7 @@
 package com.mimeo.android.data
 
 import com.mimeo.android.model.UpNextSessionWriteRequest
+import com.mimeo.android.model.UpNextPointerAdvanceRequest
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -107,11 +108,35 @@ class UpNextApiTest {
     }
 
     @Test
+    fun pointerAdvanceUsesTheAtomicHistoryEndpoint() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"session":$populatedSession}"""))
+        server.start()
+        try {
+            client().advanceUpNextPointer(
+                server.url("/").toString(),
+                "token",
+                UpNextPointerAdvanceRequest(7, 19, 22, 23),
+            )
+            val request = server.takeRequest()
+            assertEquals("POST", request.method)
+            assertEquals("/up-next/session/advance", request.path)
+            assertEquals("Bearer token", request.getHeader("Authorization"))
+            assertEquals(
+                "{\"expected_pointer_version\":7,\"session_id\":19,\"from_item_id\":22,\"to_item_id\":23}",
+                request.body.readUtf8(),
+            )
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun conflictDecodesAuthoritativeCurrentSessionWithoutBecomingApiFailure() = runBlocking {
         val server = MockWebServer()
         server.enqueue(
             MockResponse().setResponseCode(409).setBody(
-                """{"error":{"code":"up_next_version_conflict","message":"refresh"},"current_session":$populatedSession}""",
+                """{"error":{"code":"up_next_pointer_version_conflict","message":"refresh"},"current_session":$populatedSession}""",
             ),
         )
         server.start()
