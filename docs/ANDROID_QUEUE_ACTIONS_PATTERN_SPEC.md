@@ -58,7 +58,7 @@ surface (rationale in the notes column).
 | Smart playlist detail rows | Yes (overflow) | Yes (overflow) | Yes (overflow) | Yes (batch) | No |
 | Bluesky harvester rows | No (v1) | Yes (overflow) | Yes (overflow) | Yes (batch, if surface supports multi-select in v1) | No |
 | Up Next upcoming rows | No (already in queue; tap plays) | No (already in queue) | Move to end (reorder, not add) | No | Yes (overflow + toolbar) |
-| Up Next history rows | No | Yes (overflow) | Yes (overflow) | No (history is not selectable in multi-select) | No |
+| Up Next History rows | No | No | No | No | No |
 | Locus overflow (active item) | No (is active) | Yes (existing — carries forward) | Yes (existing — carries forward) | No | Yes (session active) |
 
 **Notes:**
@@ -77,6 +77,12 @@ surface (rationale in the notes column).
   move-up/move-down (already shipped). "Move to end" is a distinct
   reorder action, not "Play Last" (the latter implies adding from outside
   the queue).
+- **Up Next History rows / queue mutation:** Durable History records repeated
+  occurrences and an article can still be in the current queue. Play Next,
+  Play Last, and replay/requeue remain unavailable until the product contract
+  settles whether an action targets the occurrence, the article, or an existing
+  queue membership. Default tap continues to open the article without mutating
+  the queue.
 - **Save current queue as playlist:** Intentionally single-sourced at Up
   Next and Locus. Offering it elsewhere creates ambiguity about whose
   contents are being saved (product model §3.1 note).
