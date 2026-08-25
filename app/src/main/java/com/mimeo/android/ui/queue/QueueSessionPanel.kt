@@ -305,6 +305,8 @@ private fun SessionStaticItemRow(
 internal fun UpNextHistoryOnlyPanel(
     historyProjection: UpNextHistoryProjection?,
     onOpenItem: (Int) -> Unit,
+    onArchiveItem: (Int) -> Unit,
+    onUnarchiveItem: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val rows = historyProjection?.entries?.map { it.toSessionHistoryPresentationRow() }.orEmpty()
@@ -332,6 +334,8 @@ internal fun UpNextHistoryOnlyPanel(
                         item = row.item,
                         onOpenItem = onOpenItem,
                         onJumpToItem = null,
+                        onArchiveItem = onArchiveItem,
+                        onUnarchiveItem = onUnarchiveItem,
                         showArchivedIndicator = row.item.isArchived,
                         stillInSession = row.stillInSession,
                         muted = true,
@@ -720,8 +724,8 @@ internal fun NowPlayingSessionPanel(
                                 item = row.item,
                                 onOpenItem = onOpenItem,
                                 onJumpToItem = if (canonicalHistoryVisible) null else onJumpToHistoryItem,
-                                onArchiveItem = if (canonicalHistoryVisible) null else onArchiveSessionItem,
-                                onUnarchiveItem = if (canonicalHistoryVisible) null else onUnarchiveSessionHistoryItem,
+                                onArchiveItem = onArchiveSessionItem,
+                                onUnarchiveItem = onUnarchiveSessionHistoryItem,
                                 onBinItem = if (canonicalHistoryVisible) null else onBinSessionHistoryItem,
                                 showArchivedIndicator = row.item.isArchived ||
                                     row.item.itemId in archivedHistoryItemIds,

@@ -300,6 +300,16 @@ internal fun mergeTransientHistoryItems(
 ): List<NowPlayingSessionItem> =
     (listOf(item) + existing.filterNot { it.itemId == item.itemId }).take(limit.coerceAtLeast(0))
 
+internal fun projectHistoryArchiveState(
+    projection: UpNextHistoryProjection,
+    itemId: Int,
+    archived: Boolean,
+): UpNextHistoryProjection = projection.copy(
+    entries = projection.entries.map { entry ->
+        if (entry.itemId == itemId) entry.copy(isArchived = archived) else entry
+    },
+)
+
 internal fun archivedSessionItemIds(session: NowPlayingSession): Set<Int> =
     (session.items + session.historyItems)
         .asSequence()
@@ -5939,6 +5949,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ?.isArchived == true || itemId in _archivedSessionHistoryIds.value
 
     private suspend fun applyLocalSessionArchiveState(itemId: Int, archived: Boolean) {
+        _upNextHistory.update { projection ->
+            projection?.let { projectHistoryArchiveState(it, itemId, archived) }
+        }
         val visibleInSession = _nowPlayingSession.value?.let { session ->
             session.items.any { it.itemId == itemId } ||
                 session.historyItems.any { it.itemId == itemId }
@@ -6509,6 +6522,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 null
             }
             lastArchiveUndoSnapshot = finalSnapshot
+            if (result.isSuccess) {
+                _upNextHistory.update { projection ->
+                    projection?.let { projectHistoryArchiveState(it, itemId, archived = true) }
+                }
+            }
             if (result.isSuccess && !_queueOffline.value) {
                 if (lastArchiveUndoSnapshot != null) {
                     showSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)

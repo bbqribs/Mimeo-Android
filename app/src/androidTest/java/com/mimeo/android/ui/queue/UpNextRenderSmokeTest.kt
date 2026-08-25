@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.mimeo.android.model.UpNextHistoryEntry
 import com.mimeo.android.model.UpNextHistoryProjection
@@ -78,6 +80,8 @@ class UpNextRenderSmokeTest {
                 UpNextHistoryOnlyPanel(
                     historyProjection = projection,
                     onOpenItem = {},
+                    onArchiveItem = {},
+                    onUnarchiveItem = {},
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -88,6 +92,10 @@ class UpNextRenderSmokeTest {
         composeTestRule.onNodeWithText("Repeated occurrence").assertExists()
         composeTestRule.onNodeWithText("Only the 50 most recent History entries are shown.").assertExists()
         composeTestRule.onNodeWithText("No active session. Open an item to start one.").assertExists()
+
+        composeTestRule.onNodeWithContentDescription("More actions for First occurrence").performClick()
+        composeTestRule.onNodeWithText("Archive").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Move to Bin").assertDoesNotExist()
     }
 
     private fun sessionItem(itemId: Int, title: String) = NowPlayingSessionItem(

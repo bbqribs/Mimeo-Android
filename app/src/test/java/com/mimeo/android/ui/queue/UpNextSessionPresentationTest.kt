@@ -1,6 +1,8 @@
 package com.mimeo.android.ui.queue
 
+import com.mimeo.android.projectHistoryArchiveState
 import com.mimeo.android.model.UpNextHistoryEntry
+import com.mimeo.android.model.UpNextHistoryProjection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -72,6 +74,24 @@ class UpNextSessionPresentationTest {
         )
         assertTrue(rows.first().stillInSession)
         assertFalse(rows.last().stillInSession)
+    }
+
+    @Test
+    fun canonicalHistoryArchiveStateUpdatesEveryOccurrenceOnlyForThatItem() {
+        val projection = UpNextHistoryProjection(
+            entries = listOf(
+                historyEntry(itemId = 7, playedAt = "2026-08-24T10:00:00Z", stillInSession = true),
+                historyEntry(itemId = 8, playedAt = "2026-08-24T10:30:00Z", stillInSession = false),
+                historyEntry(itemId = 7, playedAt = "2026-08-24T11:00:00Z", stillInSession = false),
+            ),
+            hasMore = false,
+            recordingSince = "2026-08-24T00:00:00Z",
+        )
+
+        val archived = projectHistoryArchiveState(projection, itemId = 7, archived = true)
+
+        assertEquals(listOf(true, false, true), archived.entries.map { it.isArchived })
+        assertEquals(projection.entries.map { it.playedAt }, archived.entries.map { it.playedAt })
     }
 
     @Test

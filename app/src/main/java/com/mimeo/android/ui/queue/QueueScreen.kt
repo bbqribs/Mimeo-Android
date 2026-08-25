@@ -729,6 +729,8 @@ fun QueueScreen(
             UpNextHistoryOnlyPanel(
                 historyProjection = upNextHistory,
                 onOpenItem = { itemId -> onOpenPlayer(itemId) },
+                onArchiveItem = { itemId -> vm.archiveSessionItem(itemId) },
+                onUnarchiveItem = { itemId -> vm.unarchiveSessionHistoryItem(itemId) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),

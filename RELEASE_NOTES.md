@@ -13,6 +13,9 @@ material here.
 - Up Next History now comes from the account-scoped server projection, remains
   visible after the active session is cleared, and retains repeated plays and
   entries that are still members of the queue.
+- Canonical History rows retain Archive/Unarchive lifecycle actions, with every
+  occurrence reflecting the article's current archive state; replay and Bin
+  actions remain deferred until their durable semantics are settled.
 - Playback pointer transitions publish through the server's atomic advance
   operation, including conditionally replayed offline transitions, so Android
   and web History share the same durable occurrence log.
