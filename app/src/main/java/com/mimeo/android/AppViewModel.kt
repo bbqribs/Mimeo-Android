@@ -6280,6 +6280,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val targetIndex = session.items.indexOfFirst { it.itemId == itemId }
         if (targetIndex <= session.currentIndex) return
         viewModelScope.launch {
+            if (advanceDurablePointerIfPossible(itemId)) {
+                playbackOpenItem(
+                    itemId = itemId,
+                    intent = playbackOpenIntentForManualStart(itemId),
+                    autoPlayAfterLoad = true,
+                )
+                return@launch
+            }
             val priorActiveGoesToHistory = shouldPlacePriorActiveInHistory(current.itemId)
             val updated = repository.moveCurrentItemToItem(
                 itemId = itemId,
