@@ -92,6 +92,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.mimeo.android.AppViewModel
+import com.mimeo.android.ACTION_KEY_UNDO_BATCH
 import com.mimeo.android.BuildConfig
 import com.mimeo.android.R
 import com.mimeo.android.isTerminalPendingProcessingStatus
@@ -137,6 +138,9 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
+internal const val CLEAR_QUEUE_LABEL = "Clear queue"
+internal const val CLEAR_QUEUE_CONFIRMATION_COPY =
+    "This clears Earlier in queue, Now Playing, and Up Next. History is kept."
 
 internal fun autoDownloadWorkerStateLabel(state: AutoDownloadWorkerState): String {
     return when (state) {
@@ -281,6 +285,7 @@ fun QueueScreen(
     val pendingManualSaves by vm.pendingManualSaves.collectAsState()
     val pendingManualRetryInProgress by vm.pendingManualRetryInProgress.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
+    val upNextHistory by vm.upNextHistory.collectAsState()
     val archivedSessionHistoryIds by vm.archivedSessionHistoryIds.collectAsState()
     val actionScope = rememberCoroutineScope()
 
@@ -533,7 +538,7 @@ fun QueueScreen(
                                         },
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("Clear all session") },
+                                        text = { Text(CLEAR_QUEUE_LABEL) },
                                         enabled = nowPlayingSession != null,
                                         onClick = {
                                             topActionsMenuExpanded = false
@@ -704,6 +709,7 @@ fun QueueScreen(
             NowPlayingSessionPanel(
                 modifier = Modifier.weight(1f),
                 session = session,
+                historyProjection = upNextHistory,
                 seededFromLabel = sessionSeedPresentation?.seededFromLabel ?: selectedPlaylistName,
                 onOpenItem = { itemId -> onOpenPlayer(itemId) },
                 onJumpToQueueItem = { itemId -> vm.jumpToUpcomingSessionItem(itemId) },
@@ -717,6 +723,16 @@ fun QueueScreen(
                 onUnarchiveSessionHistoryItem = { itemId -> vm.unarchiveSessionHistoryItem(itemId) },
                 onBinSessionHistoryItem = { itemId -> vm.binSessionHistoryItem(itemId) },
                 onBinSessionEarlierItem = { itemId -> vm.binSessionEarlierItem(itemId) },
+                onBatchArchiveItems = { itemIds ->
+                    actionScope.launch {
+                        vm.batchLibraryItems("archive", itemIds.toList(), ACTION_KEY_UNDO_BATCH)
+                    }
+                },
+                onBatchUnarchiveItems = { itemIds ->
+                    actionScope.launch {
+                        vm.batchLibraryItems("unarchive", itemIds.toList(), ACTION_KEY_UNDO_BATCH)
+                    }
+                },
                 archivedHistoryItemIds = archivedSessionHistoryIds,
                 snapBottomClearance = snapBottomClearance,
                 snapToActiveSignal = snapToActiveSignal,
@@ -724,26 +740,25 @@ fun QueueScreen(
                 onSnapPillVisibilityChange = onSnapPillVisibilityChange,
             )
         } else {
-            ElevatedCard(
+            UpNextHistoryOnlyPanel(
+                historyProjection = upNextHistory,
+                onOpenItem = { itemId -> onOpenPlayer(itemId) },
+                onArchiveItem = { itemId -> vm.archiveSessionItem(itemId) },
+                onUnarchiveItem = { itemId -> vm.unarchiveSessionHistoryItem(itemId) },
+                onBatchArchiveItems = { itemIds ->
+                    actionScope.launch {
+                        vm.batchLibraryItems("archive", itemIds.toList(), ACTION_KEY_UNDO_BATCH)
+                    }
+                },
+                onBatchUnarchiveItems = { itemIds ->
+                    actionScope.launch {
+                        vm.batchLibraryItems("unarchive", itemIds.toList(), ACTION_KEY_UNDO_BATCH)
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "No active session. Open an item to start one.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            )
         }
     }
 
@@ -810,9 +825,9 @@ fun QueueScreen(
     if (showClearAllSessionConfirmation) {
         AlertDialog(
             onDismissRequest = { showClearAllSessionConfirmation = false },
-            title = { Text("Clear all session?") },
+            title = { Text("$CLEAR_QUEUE_LABEL?") },
             text = {
-                Text("This clears the whole local Now Playing session, including the active item and all upcoming items.")
+                Text(CLEAR_QUEUE_CONFIRMATION_COPY)
             },
             confirmButton = {
                 TextButton(
@@ -821,7 +836,7 @@ fun QueueScreen(
                         vm.clearNowPlayingSession()
                     },
                 ) {
-                    Text("Clear all session")
+                    Text(CLEAR_QUEUE_LABEL)
                 }
             },
             dismissButton = {

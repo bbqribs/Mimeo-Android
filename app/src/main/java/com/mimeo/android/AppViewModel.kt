@@ -144,7 +144,9 @@ import com.mimeo.android.model.PlaybackQueueResponse
 import com.mimeo.android.model.SmartPlaylistDetail
 import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.model.SmartPlaylistWriteRequest
+import com.mimeo.android.model.UpNextHistoryProjection
 import com.mimeo.android.model.UpNextSessionWriteRequest
+import com.mimeo.android.model.UpNextPointerAdvanceRequest
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PendingItemAction
@@ -297,6 +299,16 @@ internal fun mergeTransientHistoryItems(
     limit: Int = 50,
 ): List<NowPlayingSessionItem> =
     (listOf(item) + existing.filterNot { it.itemId == item.itemId }).take(limit.coerceAtLeast(0))
+
+internal fun projectHistoryArchiveState(
+    projection: UpNextHistoryProjection,
+    itemId: Int,
+    archived: Boolean,
+): UpNextHistoryProjection = projection.copy(
+    entries = projection.entries.map { entry ->
+        if (entry.itemId == itemId) entry.copy(isArchived = archived) else entry
+    },
+)
 
 internal fun archivedSessionItemIds(session: NowPlayingSession): Set<Int> =
     (session.items + session.historyItems)
@@ -677,8 +689,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var lastAutoContinueLoadKey: Pair<Int, Int>? = null
     private val activePlaybackTimer = ActivePlaybackTimer()
     private val progressAtActivationByItemId = mutableMapOf<Int, Int>()
-    // History is deliberately ViewModel-only. Room retains only the server-authoritative
-    // session projection (Earlier/current/Upcoming), so history disappears after process death.
+    // Short-lived fallback used before the first canonical History read and while offline.
+    // It is never persisted or treated as server History authority.
     private val transientHistoryItems = mutableListOf<NowPlayingSessionItem>()
     private val playbackServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: android.os.IBinder?) {
@@ -701,6 +713,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _nowPlayingSession = MutableStateFlow<NowPlayingSession?>(null)
     val nowPlayingSession: StateFlow<NowPlayingSession?> = _nowPlayingSession.asStateFlow()
+    private val _upNextHistory = MutableStateFlow<UpNextHistoryProjection?>(null)
+    val upNextHistory: StateFlow<UpNextHistoryProjection?> = _upNextHistory.asStateFlow()
     private val _sessionIssueMessage = MutableStateFlow<String?>(null)
     val sessionIssueMessage: StateFlow<String?> = _sessionIssueMessage.asStateFlow()
     private val _pendingNavigationRoute = MutableStateFlow<String?>(null)
@@ -1704,6 +1718,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _currentSmartPlaylistItems.value = emptyList()
         clearTransientSessionHistory()
         _nowPlayingSession.value = null
+        _upNextHistory.value = null
         playerSurfaceContentState.reset()
         blueskyCoordinator.resetOnSignOut()
         accountSecurityCoordinator.resetOnSignOut()
@@ -4723,6 +4738,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun onPlaybackArticleEnded(itemId: Int, autoArchiveAtArticleEnd: Boolean) {
+        val sessionAtEnd = _nowPlayingSession.value
+        if (sessionAtEnd?.currentItem?.itemId == itemId) {
+            val pointerCleared = repository.setCurrentIndex(-1)
+            if (pointerCleared != null) {
+                applySessionSnapshot(
+                    pointerCleared,
+                    preserveExistingPositions = true,
+                    markStructureDirty = false,
+                )
+                recordDurablePointerTransition(itemId, null, scheduleSync = false)
+            }
+        }
         recordCompletedSessionItem(itemId)
         if (!autoArchiveAtArticleEnd || itemId <= 0) return
         val current = settings.value
@@ -5922,6 +5949,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ?.isArchived == true || itemId in _archivedSessionHistoryIds.value
 
     private suspend fun applyLocalSessionArchiveState(itemId: Int, archived: Boolean) {
+        _upNextHistory.update { projection ->
+            projection?.let { projectHistoryArchiveState(it, itemId, archived) }
+        }
         val visibleInSession = _nowPlayingSession.value?.let { session ->
             session.items.any { it.itemId == itemId } ||
                 session.historyItems.any { it.itemId == itemId }
@@ -6285,12 +6315,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 priorActiveToHistory = priorActiveGoesToHistory,
             ) ?: return@launch
             if (priorActiveGoesToHistory) recordTransientHistoryItem(current)
-            applySessionSnapshot(updated, preserveExistingPositions = true)
+            applySessionSnapshot(
+                updated,
+                preserveExistingPositions = true,
+                markStructureDirty = false,
+            )
             playbackOpenItem(
                 itemId = itemId,
                 intent = playbackOpenIntentForManualStart(itemId),
                 autoPlayAfterLoad = true,
             )
+            recordDurablePointerTransition(current.itemId, itemId)
         }
     }
 
@@ -6487,6 +6522,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 null
             }
             lastArchiveUndoSnapshot = finalSnapshot
+            if (result.isSuccess) {
+                _upNextHistory.update { projection ->
+                    projection?.let { projectHistoryArchiveState(it, itemId, archived = true) }
+                }
+            }
             if (result.isSuccess && !_queueOffline.value) {
                 if (lastArchiveUndoSnapshot != null) {
                     showSnackbar("Archived", "Undo", ACTION_KEY_UNDO_ARCHIVE)
@@ -6649,7 +6689,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _nowPlayingSession.value = null
         _playbackPositionByItem.value = emptyMap()
         _sessionIssueMessage.value = null
-        _statusMessage.value = "Now Playing session cleared."
+        _statusMessage.value = "Queue cleared."
         markAndScheduleUpNextMutation()
     }
 
@@ -6813,7 +6853,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             priorActiveToHistory = priorActiveForHistory != null,
         ) ?: return
         priorActiveForHistory?.let(::recordTransientHistoryItem)
-        applySessionSnapshot(updated, preserveExistingPositions = true)
+        applySessionSnapshot(
+            updated,
+            preserveExistingPositions = true,
+            markStructureDirty = session.currentItem == null,
+        )
+        session.currentItem?.itemId?.let { fromItemId ->
+            recordDurablePointerTransition(fromItemId, itemId)
+        }
     }
 
     /** Re-points the session at a transient-History item, pulling it back into the queue. */
@@ -6822,6 +6869,42 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val updated = repository.insertTransientHistoryItemAsCurrent(item) ?: return
         transientHistoryItems.removeAll { it.itemId == itemId }
         applySessionSnapshot(updated, preserveExistingPositions = true)
+    }
+
+    /** Persists a semantic pointer intent, then lets the normal sync owner publish it. */
+    private suspend fun recordDurablePointerTransition(
+        fromItemId: Int,
+        toItemId: Int?,
+        scheduleSync: Boolean = true,
+    ) {
+        val current = settings.value
+        if (current.apiToken.isBlank() || current.baseUrl.isBlank()) return
+        val requestContext = accountScopedRequestContext(current)
+        if (requestContext.localStateOwner.isBlank()) return
+        val serverIdentity = normalizeServerIdentity(current.baseUrl)
+        var queued = repository.enqueueUpNextPointerTransition(fromItemId, toItemId)
+        if (queued == null) try {
+            val server = apiClient.getUpNextSession(current.baseUrl, current.apiToken)
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) return
+            if (server == null || server.currentItemId != fromItemId) {
+                applyAuthoritativeUpNext(server, requestContext, serverIdentity)
+                refreshUpNextHistory(current, requestContext)
+                showSnackbar("Up Next changed on another device. The newer session was kept.")
+                return
+            }
+            repository.rememberUpNextServerPointerContext(server)
+            queued = repository.enqueueUpNextPointerTransition(fromItemId, toItemId)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: ApiException) {
+            if (handleAuthFailureIfNeeded(error)) return
+            if (isNetworkError(error)) _queueOffline.value = true
+        } catch (error: Exception) {
+            if (isNetworkError(error)) _queueOffline.value = true
+        }
+        if (queued != null && scheduleSync) {
+            scheduleUpNextSynchronization()
+        }
     }
 
     /**
@@ -6867,6 +6950,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             session = session,
             currentId = currentId,
         ) ?: return null
+        val nextItemId = session.items[nextIndex].itemId
         val priorActiveGoesToHistory = shouldPlacePriorActiveInHistory(currentId)
         val updated = repository.moveCurrentIndex(
             targetIndex = nextIndex,
@@ -6875,7 +6959,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (priorActiveGoesToHistory) {
             session.items.firstOrNull { it.itemId == currentId }?.let(::recordTransientHistoryItem)
         }
-        applySessionSnapshot(updated, preserveExistingPositions = true)
+        applySessionSnapshot(
+            updated,
+            preserveExistingPositions = true,
+            markStructureDirty = false,
+        )
+        recordDurablePointerTransition(currentId, nextItemId)
         return updated.currentItem?.itemId
     }
 
@@ -6901,6 +6990,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
             return null
         }
+        val nextItemId = session.items[nextIndex].itemId
         val priorActiveGoesToHistory = shouldPlacePriorActiveInHistory(currentId)
         val updated = repository.moveCurrentIndex(
             targetIndex = nextIndex,
@@ -6909,7 +6999,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (priorActiveGoesToHistory) {
             session.items.firstOrNull { it.itemId == currentId }?.let(::recordTransientHistoryItem)
         }
-        applySessionSnapshot(updated, preserveExistingPositions = true)
+        applySessionSnapshot(
+            updated,
+            preserveExistingPositions = true,
+            markStructureDirty = false,
+        )
+        recordDurablePointerTransition(currentId, nextItemId)
         Log.d(
             LOCUS_CONTINUATION_DEBUG_TAG,
             "vm.nextPlaylistScopedSessionItemId currentId=$currentId nextIndex=$nextIndex nextId=${updated.currentItem?.itemId} sourcePlaylistId=${updated.sourcePlaylistId}",
@@ -6929,7 +7024,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 transientHistoryItems.removeAll { item -> item.itemId == historyItem.itemId }
             } ?: return null
         }
-        applySessionSnapshot(updated, preserveExistingPositions = true)
+        applySessionSnapshot(
+            updated,
+            preserveExistingPositions = true,
+            markStructureDirty = idx <= 0,
+        )
+        if (idx > 0) {
+            updated.currentItem?.itemId?.let { previousItemId ->
+                recordDurablePointerTransition(currentId, previousItemId)
+            }
+        }
         return updated.currentItem?.itemId
     }
 
@@ -7087,6 +7191,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         session: NowPlayingSession,
         preserveExistingPositions: Boolean = false,
         clearTransientHistory: Boolean = false,
+        markStructureDirty: Boolean = true,
     ) {
         val newCurrentItemId = session.currentItem?.itemId
         val prevCurrentItemId = _nowPlayingSession.value?.currentItem?.itemId
@@ -7114,8 +7219,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             sessionPositions
         }
         _sessionIssueMessage.value = null
-        repository.markUpNextDirty()
-        scheduleUpNextSynchronization()
+        if (markStructureDirty) {
+            repository.markUpNextDirty()
+            scheduleUpNextSynchronization()
+        }
     }
 
     private suspend fun recordCompletedSessionItem(itemId: Int) {
@@ -7210,6 +7317,94 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         scheduleUpNextSynchronization()
     }
 
+    private enum class PendingPointerFlushResult {
+        NONE,
+        APPLIED,
+        BLOCKED,
+        CONFLICT,
+    }
+
+    private suspend fun refreshUpNextHistory(
+        current: AppSettings,
+        requestContext: AccountScopedRequestContext,
+    ) {
+        try {
+            val projection = apiClient.getUpNextHistory(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                limit = 50,
+            )
+            if (accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                _upNextHistory.value = projection
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: ApiException) {
+            if (handleAuthFailureIfNeeded(error)) return
+            if (isNetworkError(error)) _queueOffline.value = true
+        } catch (error: Exception) {
+            if (isNetworkError(error)) _queueOffline.value = true
+        }
+    }
+
+    private suspend fun flushPendingUpNextPointerTransitionsLocked(
+        current: AppSettings,
+        requestContext: AccountScopedRequestContext,
+        serverIdentity: String,
+    ): PendingPointerFlushResult {
+        if (repository.pendingUpNextPointerTransitions().isEmpty()) {
+            return PendingPointerFlushResult.NONE
+        }
+        var finalAcknowledgement: com.mimeo.android.model.UpNextSession? = null
+        while (true) {
+            val transition = repository.pendingUpNextPointerTransitions().firstOrNull() ?: break
+            val acknowledged = try {
+                apiClient.advanceUpNextPointer(
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
+                    payload = UpNextPointerAdvanceRequest(
+                        expectedPointerVersion = transition.expectedPointerVersion,
+                        sessionId = transition.sessionId,
+                        fromItemId = transition.fromItemId,
+                        toItemId = transition.toItemId,
+                    ),
+                )
+            } catch (conflict: UpNextVersionConflictException) {
+                repository.discardPendingUpNextPointerTransitions()
+                if (accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    applyAuthoritativeUpNext(conflict.currentSession, requestContext, serverIdentity)
+                    refreshUpNextHistory(current, requestContext)
+                    showSnackbar("Up Next changed on another device. The newer session was kept.")
+                }
+                return PendingPointerFlushResult.CONFLICT
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: ApiException) {
+                if (handleAuthFailureIfNeeded(error)) return PendingPointerFlushResult.BLOCKED
+                if (isNetworkError(error)) _queueOffline.value = true
+                return PendingPointerFlushResult.BLOCKED
+            } catch (error: Exception) {
+                if (isNetworkError(error)) _queueOffline.value = true
+                return PendingPointerFlushResult.BLOCKED
+            }
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return PendingPointerFlushResult.BLOCKED
+            }
+            if (!repository.acknowledgeUpNextPointerTransition(transition, acknowledged)) {
+                return PendingPointerFlushResult.BLOCKED
+            }
+            finalAcknowledgement = acknowledged
+        }
+        finalAcknowledgement?.let { acknowledged ->
+            if (repository.readUpNextSyncMetadata()?.dirty != true) {
+                applyAuthoritativeUpNext(acknowledged, requestContext, serverIdentity)
+            }
+        }
+        refreshUpNextHistory(current, requestContext)
+        _queueOffline.value = false
+        return PendingPointerFlushResult.APPLIED
+    }
+
     private suspend fun synchronizeUpNextSession() {
         upNextSyncMutex.withLock { synchronizeUpNextSessionLocked() }
     }
@@ -7229,22 +7424,41 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (capability == UpNextCapability.UNSUPPORTED) return
 
         try {
+            when (
+                flushPendingUpNextPointerTransitionsLocked(
+                    current = current,
+                    requestContext = requestContext,
+                    serverIdentity = serverIdentity,
+                )
+            ) {
+                PendingPointerFlushResult.BLOCKED,
+                PendingPointerFlushResult.CONFLICT,
+                -> return
+                PendingPointerFlushResult.APPLIED -> {
+                    if (repository.readUpNextSyncMetadata()?.dirty != true) return
+                }
+                PendingPointerFlushResult.NONE -> Unit
+            }
+            // Local completion/removal can mark structure dirty while the pointer POST is
+            // suspended. Re-read after the flush so an acknowledgement cannot make that
+            // newer structural result look clean and get overwritten by an adoption read.
+            val currentMetadata = repository.readUpNextSyncMetadata() ?: metadata
             val localSnapshot = repository.localUpNextSnapshot()
             val plan: UpNextSyncPlan = when {
                 capability == UpNextCapability.UNKNOWN -> {
                     val server = apiClient.getUpNextSession(current.baseUrl, current.apiToken)
                     planFirstUpNextAdoption(server, localSnapshot)
                 }
-                metadata.dirty -> planUpNextReconnect(
+                currentMetadata.dirty -> planUpNextReconnect(
                     dirty = true,
-                    observedVersion = metadata.serverVersion,
+                    observedVersion = currentMetadata.serverVersion,
                     localSnapshot = localSnapshot,
                 )
                 else -> {
                     val server = apiClient.getUpNextSession(current.baseUrl, current.apiToken)
                     planUpNextReconnect(
                         dirty = false,
-                        observedVersion = metadata.serverVersion,
+                        observedVersion = currentMetadata.serverVersion,
                         localSnapshot = localSnapshot,
                         refreshedServerSession = server,
                     )
@@ -7283,9 +7497,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             }
+            refreshUpNextHistory(current, requestContext)
         } catch (conflict: UpNextVersionConflictException) {
             if (accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
                 applyAuthoritativeUpNext(conflict.currentSession, requestContext, serverIdentity)
+                refreshUpNextHistory(current, requestContext)
                 showSnackbar("Up Next changed on another device. The newer session was kept.")
             }
         } catch (error: CancellationException) {

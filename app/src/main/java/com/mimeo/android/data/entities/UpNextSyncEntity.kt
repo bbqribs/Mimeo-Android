@@ -1,5 +1,6 @@
 package com.mimeo.android.data.entities
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -10,5 +11,8 @@ data class UpNextSyncEntity(
     val serverIdentity: String,
     val capability: String,
     val serverVersion: Long? = null,
+    val serverSessionId: Long? = null,
+    val serverPointerVersion: Long? = null,
+    @ColumnInfo(defaultValue = "'[]'") val pendingPointerTransitionsJson: String = "[]",
     val dirty: Boolean = false,
 )

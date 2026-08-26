@@ -44,8 +44,11 @@ import com.mimeo.android.model.SmartPlaylistPinReorderItem
 import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.model.SmartPlaylistWriteRequest
 import com.mimeo.android.model.UpNextConflictResponse
+import com.mimeo.android.model.UpNextHistoryEnvelope
+import com.mimeo.android.model.UpNextHistoryProjection
 import com.mimeo.android.model.UpNextSession
 import com.mimeo.android.model.UpNextSessionClearRequest
+import com.mimeo.android.model.UpNextPointerAdvanceRequest
 import com.mimeo.android.model.UpNextSessionEnvelope
 import com.mimeo.android.model.UpNextSessionWriteRequest
 import com.mimeo.android.model.ProgressPayload
@@ -285,6 +288,35 @@ class ApiClient(
             .build()
         executeUpNextJson(request) { responseBody ->
             checkNotNull(json.decodeFromString<UpNextSessionEnvelope>(responseBody).session)
+        }
+    }
+
+    suspend fun advanceUpNextPointer(
+        baseUrl: String,
+        token: String,
+        payload: UpNextPointerAdvanceRequest,
+    ): UpNextSession = withContext(Dispatchers.IO) {
+        val request = authorizedRequest(baseUrl, "/up-next/session/advance", token)
+            .acceptJson()
+            .post(jsonBody(payload))
+            .build()
+        executeUpNextJson(request) { responseBody ->
+            checkNotNull(json.decodeFromString<UpNextSessionEnvelope>(responseBody).session)
+        }
+    }
+
+    suspend fun getUpNextHistory(
+        baseUrl: String,
+        token: String,
+        limit: Int = 50,
+    ): UpNextHistoryProjection = withContext(Dispatchers.IO) {
+        require(limit in 1..100)
+        val request = authorizedRequest(baseUrl, "/up-next/history?limit=$limit", token)
+            .acceptJson()
+            .get()
+            .build()
+        executeUpNextJson(request) { responseBody ->
+            json.decodeFromString<UpNextHistoryEnvelope>(responseBody).history
         }
     }
 
@@ -1253,7 +1285,7 @@ class ApiClient(
                 val conflict = runCatching {
                     json.decodeFromString<UpNextConflictResponse>(body)
                 }.getOrNull()
-                if (conflict?.error?.code == "up_next_version_conflict") {
+                if (conflict?.error?.code?.endsWith("_version_conflict") == true) {
                     throw UpNextVersionConflictException(conflict.currentSession)
                 }
             }

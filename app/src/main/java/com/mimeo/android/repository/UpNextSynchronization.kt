@@ -1,12 +1,21 @@
 package com.mimeo.android.repository
 
 import com.mimeo.android.model.UpNextSession
+import kotlinx.serialization.Serializable
 
 internal enum class UpNextCapability {
     UNKNOWN,
     SUPPORTED,
     UNSUPPORTED,
 }
+
+@Serializable
+internal data class PendingUpNextPointerTransition(
+    val sessionId: Long,
+    val expectedPointerVersion: Long,
+    val fromItemId: Int,
+    val toItemId: Int?,
+)
 
 internal data class LocalUpNextSnapshot(
     val itemIds: List<Int>,

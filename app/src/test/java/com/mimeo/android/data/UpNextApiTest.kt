@@ -1,6 +1,7 @@
 package com.mimeo.android.data
 
 import com.mimeo.android.model.UpNextSessionWriteRequest
+import com.mimeo.android.model.UpNextPointerAdvanceRequest
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -17,7 +18,7 @@ class UpNextApiTest {
 
     private val populatedSession = """
         {
-          "version": 4,
+          "version": 4, "session_id": 19, "pointer_version": 7,
           "items": [{
             "item_id": 22, "position": 0, "title": "Article", "url": "https://example.com/a",
             "host": "example.com", "status": "ready", "active_content_version_id": 9,
@@ -44,6 +45,8 @@ class UpNextApiTest {
             assertNull(client().getUpNextSession(server.url("/").toString(), "token"))
             val session = client().getUpNextSession(server.url("/").toString(), "token")!!
             assertEquals(4L, session.version)
+            assertEquals(19L, session.sessionId)
+            assertEquals(7L, session.pointerVersion)
             assertEquals(listOf(22), session.items.map { it.itemId })
             assertEquals(22, session.currentItemId)
             assertEquals("Reading list", session.seedSourceLabel)
@@ -107,11 +110,96 @@ class UpNextApiTest {
     }
 
     @Test
+    fun pointerAdvanceUsesTheAtomicHistoryEndpoint() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"session":$populatedSession}"""))
+        server.start()
+        try {
+            client().advanceUpNextPointer(
+                server.url("/").toString(),
+                "token",
+                UpNextPointerAdvanceRequest(7, 19, 22, 23),
+            )
+            val request = server.takeRequest()
+            assertEquals("POST", request.method)
+            assertEquals("/up-next/session/advance", request.path)
+            assertEquals("Bearer token", request.getHeader("Authorization"))
+            assertEquals(
+                "{\"expected_pointer_version\":7,\"session_id\":19,\"from_item_id\":22,\"to_item_id\":23}",
+                request.body.readUtf8(),
+            )
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun historyReadUsesBoundedProjectionAndRetainsOccurrenceOrder() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """{
+                  "history": {
+                    "entries": [
+                      {
+                        "item_id": 22, "played_at": "2026-08-24T10:00:00Z",
+                        "title": "First play", "url": "https://example.com/a", "host": "example.com",
+                        "status": "ready", "active_content_version_id": 9,
+                        "strategy_used": "readability_http", "word_count": 321,
+                        "estimated_listen_minutes": 3, "has_active_content": true,
+                        "resume_read_percent": 12, "last_read_percent": 40,
+                        "progress_percent": 12, "furthest_percent": 40,
+                        "last_opened_at": null, "created_at": "2026-07-17T10:00:00Z",
+                        "archived_at": null, "is_archived": false, "is_muted": false,
+                        "still_in_session": true
+                      },
+                      {
+                        "item_id": 22, "played_at": "2026-08-24T11:00:00Z",
+                        "title": "Second play", "url": "https://example.com/a", "host": "example.com",
+                        "status": "ready", "active_content_version_id": 9,
+                        "strategy_used": "readability_http", "word_count": 321,
+                        "estimated_listen_minutes": 3, "has_active_content": true,
+                        "resume_read_percent": 12, "last_read_percent": 40,
+                        "progress_percent": 12, "furthest_percent": 40,
+                        "last_opened_at": null, "created_at": "2026-07-17T10:00:00Z",
+                        "archived_at": null, "is_archived": false, "is_muted": false,
+                        "still_in_session": false
+                      }
+                    ],
+                    "has_more": true,
+                    "recording_since": "2026-08-24T00:00:00Z"
+                  }
+                }""".trimIndent(),
+            ),
+        )
+        server.start()
+        try {
+            val history = client().getUpNextHistory(server.url("/").toString(), "token", limit = 50)
+
+            assertEquals(listOf(22, 22), history.entries.map { it.itemId })
+            assertEquals(
+                listOf("2026-08-24T10:00:00Z", "2026-08-24T11:00:00Z"),
+                history.entries.map { it.playedAt },
+            )
+            assertTrue(history.entries.first().stillInSession)
+            assertFalse(history.entries.last().stillInSession)
+            assertTrue(history.hasMore)
+            assertEquals("2026-08-24T00:00:00Z", history.recordingSince)
+            val request = server.takeRequest()
+            assertEquals("GET", request.method)
+            assertEquals("/up-next/history?limit=50", request.path)
+            assertEquals("Bearer token", request.getHeader("Authorization"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun conflictDecodesAuthoritativeCurrentSessionWithoutBecomingApiFailure() = runBlocking {
         val server = MockWebServer()
         server.enqueue(
             MockResponse().setResponseCode(409).setBody(
-                """{"error":{"code":"up_next_version_conflict","message":"refresh"},"current_session":$populatedSession}""",
+                """{"error":{"code":"up_next_pointer_version_conflict","message":"refresh"},"current_session":$populatedSession}""",
             ),
         )
         server.start()

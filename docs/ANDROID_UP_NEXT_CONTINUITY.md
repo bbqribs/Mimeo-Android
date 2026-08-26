@@ -36,12 +36,15 @@ continuity metadata before another owner can use them.
 
 Server session items provide membership/order/lifecycle projection. Android
 continues using its existing item/session cache and item endpoints for display,
-text, TTS cursors and progress. History is never serialized to the continuity
-API or Room's `now_playing` payload: it is a bounded, ViewModel-local record
-for the signed-in account and canonical endpoint, and therefore disappears on
-process recreation. Authoritative adoption/refresh/conflict recovery clears it
-before publishing the server projection. `/playback/queue` remains Smart Queue
-and `/playback/state` remains the playback-cursor contract.
+text, TTS cursors and progress. History is never serialized to Room's
+`now_playing` payload or supplied by the client: Android reads the bounded,
+account-scoped `/up-next/history?limit=50` projection and displays the returned
+occurrences in server order, independently of whether a session exists.
+Accepted pointer transitions are published through `/up-next/session/advance`;
+offline transitions retain their original session/from-item/pointer
+preconditions and are discarded on semantic conflict rather than replayed with
+fresh server truth. `/playback/queue` remains Smart Queue and
+`/playback/state` remains the playback-cursor contract.
 
 ## Lifecycle reconciliation
 
