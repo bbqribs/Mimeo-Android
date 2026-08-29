@@ -10,23 +10,25 @@ material here.
 
 ## Unreleased
 
-- Up Next History now comes from the account-scoped server projection, remains
-  visible after the active session is cleared, and retains repeated plays and
-  entries that are still members of the queue.
-- Canonical History rows retain Archive/Unarchive lifecycle actions, with every
-  occurrence reflecting the article's current archive state; replay and Bin
-  actions remain deferred until their durable semantics are settled.
-- Long-press on History or Earlier in queue enters article-based multi-select
-  with Archive/Unarchive actions; repeated History occurrences select together,
-  while Earlier keeps its single-row overflow actions.
-- The session-wide clear action is now labelled "Clear queue" and explicitly
-  retains durable History.
+- Up Next History now comes from the account-scoped unique server projection,
+  includes visibly labelled binned rows, preserves canonical order, and remains
+  visible after the active session is cleared.
+- History rows can be moved to Bin, restored, removed individually or in
+  section-scoped batches, or cleared through the canonical fenced operations.
+  Restore does not requeue or start playback.
+- Clear History leaves the queue unchanged; Clear queue preserves History; and
+  Clear queue and History uses the backend's single atomic operation.
+- Settings → Appearance now saves the server-owned "History items shown"
+  preference from 1 to 50 and adopts changes made by other clients on refresh.
+- Canonical History management is online-only and protected by account-scoped
+  response guards; ambiguous destructive outcomes wait for authoritative
+  refresh rather than replaying or optimistically hiding rows.
 - Playback pointer transitions publish through the server's atomic advance
   operation, including conditionally replayed offline transitions, so Android
   and web History share the same durable occurrence log.
 
-Backend: requires Mimeo PR #923 (atomic pointer and History projection)
-deployed on the selected server; Mimeo PR #928 is the matching web renderer.
+Backend: requires merged Mimeo PRs #933 and #937; Mimeo PR #940 is the matching
+web History-management adoption.
 
 ## 0.4.5 (versionCode 11) - 2026-07-20
 

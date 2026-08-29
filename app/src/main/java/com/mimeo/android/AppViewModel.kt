@@ -145,6 +145,8 @@ import com.mimeo.android.model.SmartPlaylistDetail
 import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.model.SmartPlaylistWriteRequest
 import com.mimeo.android.model.UpNextHistoryProjection
+import com.mimeo.android.model.UpNextHistoryRemovalTarget
+import com.mimeo.android.model.UpNextPreferences
 import com.mimeo.android.model.UpNextSessionWriteRequest
 import com.mimeo.android.model.UpNextPointerAdvanceRequest
 import com.mimeo.android.model.PendingManualSaveItem
@@ -358,6 +360,22 @@ internal suspend fun <T> applyAccountScopedResponseIfStillCurrent(
     if (!accountScopedRequestStillCurrent(requestContext, currentContext())) return false
     apply(response)
     return true
+}
+
+internal fun validateHistoryDisplayLimit(value: Int): Boolean = value in 1..50
+
+internal fun validateHistoryRemovalTargets(
+    targets: List<UpNextHistoryRemovalTarget>,
+): List<UpNextHistoryRemovalTarget> {
+    require(targets.isNotEmpty()) { "At least one History row is required" }
+    require(targets.size <= 50) { "History removal supports at most 50 rows" }
+    require(targets.all { it.itemId > 0 && it.throughEntryId > 0 }) {
+        "History removal targets require positive identifiers"
+    }
+    require(targets.map { it.itemId }.distinct().size == targets.size) {
+        "History removal targets must use unique article identifiers"
+    }
+    return targets
 }
 
 /**
@@ -715,6 +733,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val nowPlayingSession: StateFlow<NowPlayingSession?> = _nowPlayingSession.asStateFlow()
     private val _upNextHistory = MutableStateFlow<UpNextHistoryProjection?>(null)
     val upNextHistory: StateFlow<UpNextHistoryProjection?> = _upNextHistory.asStateFlow()
+    private val _upNextPreferences = MutableStateFlow<UpNextPreferences?>(null)
+    val upNextPreferences: StateFlow<UpNextPreferences?> = _upNextPreferences.asStateFlow()
+    private val _upNextPreferencesLoading = MutableStateFlow(false)
+    val upNextPreferencesLoading: StateFlow<Boolean> = _upNextPreferencesLoading.asStateFlow()
+    private val _upNextPreferencesSaving = MutableStateFlow(false)
+    val upNextPreferencesSaving: StateFlow<Boolean> = _upNextPreferencesSaving.asStateFlow()
+    private val _historyAwaitingRefresh = MutableStateFlow(false)
+    val historyAwaitingRefresh: StateFlow<Boolean> = _historyAwaitingRefresh.asStateFlow()
     private val _sessionIssueMessage = MutableStateFlow<String?>(null)
     val sessionIssueMessage: StateFlow<String?> = _sessionIssueMessage.asStateFlow()
     private val _pendingNavigationRoute = MutableStateFlow<String?>(null)
@@ -1719,6 +1745,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         clearTransientSessionHistory()
         _nowPlayingSession.value = null
         _upNextHistory.value = null
+        _upNextPreferences.value = null
+        _upNextPreferencesLoading.value = false
+        _upNextPreferencesSaving.value = false
+        _historyAwaitingRefresh.value = false
         playerSurfaceContentState.reset()
         blueskyCoordinator.resetOnSignOut()
         accountSecurityCoordinator.resetOnSignOut()
@@ -6897,9 +6927,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (error: CancellationException) {
             throw error
         } catch (error: ApiException) {
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) return
             if (handleAuthFailureIfNeeded(error)) return
             if (isNetworkError(error)) _queueOffline.value = true
         } catch (error: Exception) {
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) return
             if (isNetworkError(error)) _queueOffline.value = true
         }
         if (queued != null && scheduleSync) {
@@ -7332,18 +7364,334 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val projection = apiClient.getUpNextHistory(
                 baseUrl = current.baseUrl,
                 token = current.apiToken,
-                limit = 50,
             )
             if (accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
                 _upNextHistory.value = projection
+                _historyAwaitingRefresh.value = false
+            }
+            val preferences = apiClient.getUpNextPreferences(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+            )
+            if (accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                _upNextPreferences.value = preferences
             }
         } catch (error: CancellationException) {
             throw error
         } catch (error: ApiException) {
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) return
             if (handleAuthFailureIfNeeded(error)) return
             if (isNetworkError(error)) _queueOffline.value = true
         } catch (error: Exception) {
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) return
             if (isNetworkError(error)) _queueOffline.value = true
+        }
+    }
+
+    fun refreshUpNextPreferences() {
+        viewModelScope.launch {
+            val current = settings.value
+            if (current.apiToken.isBlank() || current.baseUrl.isBlank()) return@launch
+            val requestContext = accountScopedRequestContext(current)
+            if (requestContext.localStateOwner.isBlank()) return@launch
+            _upNextPreferencesLoading.value = true
+            try {
+                val preferences = apiClient.getUpNextPreferences(current.baseUrl, current.apiToken)
+                applyAccountScopedResponseIfStillCurrent(
+                    requestContext = requestContext,
+                    currentContext = ::accountScopedRequestContext,
+                    response = preferences,
+                ) { _upNextPreferences.value = it }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return@launch
+                }
+                if (!handleAuthFailureIfNeeded(error) && isNetworkError(error)) {
+                    _queueOffline.value = true
+                }
+            } finally {
+                if (accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    _upNextPreferencesLoading.value = false
+                }
+            }
+        }
+    }
+
+    suspend fun saveHistoryDisplayLimit(value: Int): Result<Unit> {
+        if (!validateHistoryDisplayLimit(value)) {
+            return Result.failure(IllegalArgumentException("History items shown must be from 1 to 50"))
+        }
+        if (_queueOffline.value) {
+            showSnackbar("History settings are unavailable offline. Reconnect and try again.")
+            return Result.failure(IOException("offline"))
+        }
+        val current = settings.value
+        if (current.apiToken.isBlank() || current.baseUrl.isBlank()) {
+            return Result.failure(IllegalStateException("Sign in required"))
+        }
+        val requestContext = accountScopedRequestContext(current)
+        if (requestContext.localStateOwner.isBlank()) {
+            return Result.failure(IllegalStateException("Account context unavailable"))
+        }
+        _upNextPreferencesSaving.value = true
+        return try {
+            val preferences = apiClient.patchUpNextPreferences(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                historyDisplayLimit = value,
+            )
+            if (!applyAccountScopedResponseIfStillCurrent(
+                    requestContext = requestContext,
+                    currentContext = ::accountScopedRequestContext,
+                    response = preferences,
+                ) { _upNextPreferences.value = it }
+            ) {
+                return Result.failure(IllegalStateException("Account changed"))
+            }
+            refreshUpNextHistory(current, requestContext)
+            showSnackbar("History items shown updated")
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return Result.failure(IllegalStateException("Account changed"))
+            }
+            if (!handleAuthFailureIfNeeded(error)) {
+                if (isNetworkError(error)) {
+                    _queueOffline.value = true
+                    showSnackbar("History setting wasn't saved. Reconnect and try again.")
+                } else {
+                    showSnackbar("History setting couldn't be saved")
+                }
+            }
+            Result.failure(error)
+        } finally {
+            if (accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                _upNextPreferencesSaving.value = false
+            }
+        }
+    }
+
+    fun removeHistoryEntries(targets: List<UpNextHistoryRemovalTarget>) {
+        val validated = runCatching { validateHistoryRemovalTargets(targets) }.getOrElse {
+            showSnackbar("Select between 1 and 50 unique History articles.")
+            return
+        }
+        viewModelScope.launch {
+            if (_queueOffline.value) {
+                showSnackbar("History removal is unavailable offline. Reconnect and try again.")
+                return@launch
+            }
+            val current = settings.value
+            val requestContext = accountScopedRequestContext(current)
+            if (requestContext.localStateOwner.isBlank()) return@launch
+            try {
+                val response = apiClient.removeUpNextHistory(
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
+                    entries = validated,
+                )
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return@launch
+                }
+                refreshUpNextHistory(current, requestContext)
+                showSnackbar(
+                    if (response.result.changedCount == 1) {
+                        "Removed from History"
+                    } else {
+                        "Removed ${response.result.changedCount} articles from History"
+                    },
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return@launch
+                }
+                if (!handleAuthFailureIfNeeded(error)) {
+                    if (isNetworkError(error)) {
+                        _queueOffline.value = true
+                        _historyAwaitingRefresh.value = true
+                        showSnackbar("History removal outcome is unknown. Reconnect and refresh before retrying.")
+                    } else {
+                        showSnackbar("Couldn't remove from History")
+                    }
+                }
+            }
+        }
+    }
+
+    fun clearCanonicalHistory(snapshotThroughEntryId: Long) {
+        viewModelScope.launch {
+            if (_queueOffline.value) {
+                showSnackbar("Clear History is unavailable offline. Reconnect and try again.")
+                return@launch
+            }
+            val current = settings.value
+            val requestContext = accountScopedRequestContext(current)
+            if (requestContext.localStateOwner.isBlank()) return@launch
+            try {
+                apiClient.clearUpNextHistory(
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
+                    snapshotThroughEntryId = snapshotThroughEntryId,
+                )
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return@launch
+                }
+                refreshUpNextHistory(current, requestContext)
+                showSnackbar("History cleared. Queue unchanged.")
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return@launch
+                }
+                if (!handleAuthFailureIfNeeded(error)) {
+                    if (isNetworkError(error)) {
+                        _queueOffline.value = true
+                        _historyAwaitingRefresh.value = true
+                        showSnackbar("Clear History outcome is unknown. Reconnect and refresh before retrying.")
+                    } else {
+                        showSnackbar("Couldn't clear History")
+                    }
+                }
+            }
+        }
+    }
+
+    fun mutateCanonicalHistoryLifecycle(action: String, itemIds: Set<Int>) {
+        require(action == "bin" || action == "restore")
+        val targets = itemIds.filter { it > 0 }.distinct()
+        if (targets.isEmpty()) return
+        if (targets.size > 50) {
+            showSnackbar("Select no more than 50 History articles.")
+            return
+        }
+        viewModelScope.launch {
+            if (_queueOffline.value) {
+                showSnackbar(
+                    if (action == "bin") {
+                        "Move to Bin is unavailable offline. Reconnect and try again."
+                    } else {
+                        "Restore is unavailable offline. Reconnect and try again."
+                    },
+                )
+                return@launch
+            }
+            val current = settings.value
+            val requestContext = accountScopedRequestContext(current)
+            if (requestContext.localStateOwner.isBlank()) return@launch
+            val serverIdentity = normalizeServerIdentity(current.baseUrl)
+            try {
+                val response = repository.batchItemAction(
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
+                    action = action,
+                    itemIds = targets,
+                )
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return@launch
+                }
+                val successfulIds = response.results.filter { it.ok }.map { it.itemId }
+                if (action == "bin" && successfulIds.isNotEmpty()) {
+                    repository.evictCachedItems(successfulIds)
+                }
+                val authoritativeSession = apiClient.getUpNextSession(current.baseUrl, current.apiToken)
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return@launch
+                }
+                applyAuthoritativeUpNext(authoritativeSession, requestContext, serverIdentity)
+                refreshUpNextHistory(current, requestContext)
+                runCatching { loadQueueOnce(autoRetryPendingSaves = false) }
+                runCatching { loadBinItems() }
+                val verb = if (action == "bin") "Moved to Bin" else "Restored from Bin"
+                showSnackbar(
+                    when {
+                        response.failureCount == 0 -> verb
+                        response.successCount == 0 -> "$verb failed"
+                        else -> "$verb for ${response.successCount}; ${response.failureCount} failed"
+                    },
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return@launch
+                }
+                if (!handleAuthFailureIfNeeded(error)) {
+                    if (isNetworkError(error)) {
+                        _queueOffline.value = true
+                        _historyAwaitingRefresh.value = true
+                        showSnackbar("The ${if (action == "bin") "Bin" else "Restore"} outcome is unknown. Reconnect and refresh before retrying.")
+                    } else {
+                        showSnackbar(if (action == "bin") "Move to Bin failed" else "Restore failed")
+                    }
+                }
+            }
+        }
+    }
+
+    fun clearQueueAndCanonicalHistory(snapshotThroughEntryId: Long) {
+        viewModelScope.launch {
+            if (_queueOffline.value) {
+                showSnackbar("Combined clear is unavailable offline. Reconnect and try again.")
+                return@launch
+            }
+            val current = settings.value
+            val requestContext = accountScopedRequestContext(current)
+            if (requestContext.localStateOwner.isBlank()) return@launch
+            val serverIdentity = normalizeServerIdentity(current.baseUrl)
+            try {
+                val expectedVersion = repository.readUpNextSyncMetadata()?.serverVersion
+                if (expectedVersion == null) {
+                    val authoritativeSession = apiClient.getUpNextSession(current.baseUrl, current.apiToken)
+                    if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                        return@launch
+                    }
+                    applyAuthoritativeUpNext(authoritativeSession, requestContext, serverIdentity)
+                    refreshUpNextHistory(current, requestContext)
+                    showSnackbar("Up Next was refreshed. Nothing was cleared; try again if needed.")
+                    return@launch
+                }
+                val acknowledged = apiClient.clearUpNextSession(
+                    baseUrl = current.baseUrl,
+                    token = current.apiToken,
+                    expectedVersion = expectedVersion,
+                    clearHistory = true,
+                    historyThroughEntryId = snapshotThroughEntryId,
+                )
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return@launch
+                }
+                applyAuthoritativeUpNext(acknowledged, requestContext, serverIdentity)
+                refreshUpNextHistory(current, requestContext)
+                showSnackbar("Queue and History cleared")
+            } catch (conflict: UpNextVersionConflictException) {
+                if (accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    applyAuthoritativeUpNext(conflict.currentSession, requestContext, serverIdentity)
+                    refreshUpNextHistory(current, requestContext)
+                    showSnackbar("Up Next changed on another device. Nothing was cleared by this attempt.")
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return@launch
+                }
+                if (!handleAuthFailureIfNeeded(error)) {
+                    if (isNetworkError(error)) {
+                        _queueOffline.value = true
+                        _historyAwaitingRefresh.value = true
+                        showSnackbar("Combined clear outcome is unknown. Reconnect and refresh before retrying.")
+                    } else {
+                        showSnackbar("Couldn't clear queue and History")
+                    }
+                }
+            }
         }
     }
 

@@ -104,6 +104,7 @@ import com.mimeo.android.model.PendingSaveSource
 import com.mimeo.android.model.PlaybackQueueItem
 import com.mimeo.android.model.PlaylistSummary
 import com.mimeo.android.model.SmartPlaylistSummary
+import com.mimeo.android.model.UpNextHistoryRemovalTarget
 import com.mimeo.android.repository.NowPlayingSession
 import com.mimeo.android.repository.NowPlayingSessionItem
 import com.mimeo.android.share.ShareSaveResult
@@ -137,10 +138,22 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
 
+internal fun canonicalHistoryManagementEnabled(
+    offline: Boolean,
+    projectionLoaded: Boolean,
+    awaitingRefresh: Boolean,
+): Boolean = !offline && projectionLoaded && !awaitingRefresh
+
 private const val ACTION_KEY_OPEN_SETTINGS = "open_settings"
 internal const val CLEAR_QUEUE_LABEL = "Clear queue"
 internal const val CLEAR_QUEUE_CONFIRMATION_COPY =
     "This clears Earlier in queue, Now Playing, and Up Next. History is kept."
+internal const val REMOVE_HISTORY_CONFIRMATION_COPY =
+    "This removes the selected article from History only. The article itself and any queue membership are unchanged."
+internal const val CLEAR_HISTORY_CONFIRMATION_COPY =
+    "This clears History through the snapshot you are viewing, including qualifying rows beyond the display limit. The queue is unchanged."
+internal const val CLEAR_QUEUE_AND_HISTORY_CONFIRMATION_COPY =
+    "This atomically clears Earlier in queue, Now Playing, Up Next, and History through the snapshot you are viewing."
 
 internal fun autoDownloadWorkerStateLabel(state: AutoDownloadWorkerState): String {
     return when (state) {
@@ -286,6 +299,7 @@ fun QueueScreen(
     val pendingManualRetryInProgress by vm.pendingManualRetryInProgress.collectAsState()
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val upNextHistory by vm.upNextHistory.collectAsState()
+    val historyAwaitingRefresh by vm.historyAwaitingRefresh.collectAsState()
     val archivedSessionHistoryIds by vm.archivedSessionHistoryIds.collectAsState()
     val actionScope = rememberCoroutineScope()
 
@@ -293,6 +307,11 @@ fun QueueScreen(
     var showReseedConfirmation by remember { mutableStateOf(false) }
     var showClearUpcomingConfirmation by remember { mutableStateOf(false) }
     var showClearAllSessionConfirmation by remember { mutableStateOf(false) }
+    var showClearHistoryConfirmation by remember { mutableStateOf(false) }
+    var showClearQueueAndHistoryConfirmation by remember { mutableStateOf(false) }
+    var pendingHistoryRemovalTargets by remember {
+        mutableStateOf<List<UpNextHistoryRemovalTarget>>(emptyList())
+    }
     var showSaveQueueAsPlaylistDialog by remember { mutableStateOf(false) }
     var saveQueuePlaylistNameInput by rememberSaveable { mutableStateOf("") }
     var saveQueueNameError by remember { mutableStateOf<String?>(null) }
@@ -328,6 +347,11 @@ fun QueueScreen(
     } ?: "Smart queue"
     val canReseedFromCurrentSource = !loading
     val hasQueueContent = nowPlayingSession?.items?.isNotEmpty() == true
+    val historyManagementEnabled = canonicalHistoryManagementEnabled(
+        offline = offline,
+        projectionLoaded = upNextHistory != null,
+        awaitingRefresh = historyAwaitingRefresh,
+    )
     val sessionSeedPresentation = nowPlayingSession?.let { session ->
         resolveSessionSeedSourcePresentation(
             sessionSourcePlaylistId = session.sourcePlaylistId,
@@ -546,6 +570,22 @@ fun QueueScreen(
                                         },
                                     )
                                     DropdownMenuItem(
+                                        text = { Text("Clear History") },
+                                        enabled = historyManagementEnabled,
+                                        onClick = {
+                                            topActionsMenuExpanded = false
+                                            showClearHistoryConfirmation = true
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Clear queue and History") },
+                                        enabled = nowPlayingSession != null && historyManagementEnabled,
+                                        onClick = {
+                                            topActionsMenuExpanded = false
+                                            showClearQueueAndHistoryConfirmation = true
+                                        },
+                                    )
+                                    DropdownMenuItem(
                                         text = { Text("Save queue as playlist…") },
                                         enabled = hasQueueContent && !saveQueueInProgress,
                                         onClick = {
@@ -723,6 +763,15 @@ fun QueueScreen(
                 onUnarchiveSessionHistoryItem = { itemId -> vm.unarchiveSessionHistoryItem(itemId) },
                 onBinSessionHistoryItem = { itemId -> vm.binSessionHistoryItem(itemId) },
                 onBinSessionEarlierItem = { itemId -> vm.binSessionEarlierItem(itemId) },
+                historyManagementEnabled = historyManagementEnabled,
+                historyAwaitingRefresh = historyAwaitingRefresh,
+                onMoveHistoryToBin = { itemIds ->
+                    vm.mutateCanonicalHistoryLifecycle("bin", itemIds)
+                },
+                onRestoreHistory = { itemIds ->
+                    vm.mutateCanonicalHistoryLifecycle("restore", itemIds)
+                },
+                onRemoveHistory = { targets -> pendingHistoryRemovalTargets = targets },
                 onBatchArchiveItems = { itemIds ->
                     actionScope.launch {
                         vm.batchLibraryItems("archive", itemIds.toList(), ACTION_KEY_UNDO_BATCH)
@@ -745,6 +794,11 @@ fun QueueScreen(
                 onOpenItem = { itemId -> onOpenPlayer(itemId) },
                 onArchiveItem = { itemId -> vm.archiveSessionItem(itemId) },
                 onUnarchiveItem = { itemId -> vm.unarchiveSessionHistoryItem(itemId) },
+                historyManagementEnabled = historyManagementEnabled,
+                historyAwaitingRefresh = historyAwaitingRefresh,
+                onMoveToBin = { itemIds -> vm.mutateCanonicalHistoryLifecycle("bin", itemIds) },
+                onRestore = { itemIds -> vm.mutateCanonicalHistoryLifecycle("restore", itemIds) },
+                onRemoveHistory = { targets -> pendingHistoryRemovalTargets = targets },
                 onBatchArchiveItems = { itemIds ->
                     actionScope.launch {
                         vm.batchLibraryItems("archive", itemIds.toList(), ACTION_KEY_UNDO_BATCH)
@@ -841,6 +895,87 @@ fun QueueScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearAllSessionConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (pendingHistoryRemovalTargets.isNotEmpty()) {
+        val count = pendingHistoryRemovalTargets.size
+        AlertDialog(
+            onDismissRequest = { pendingHistoryRemovalTargets = emptyList() },
+            title = { Text("Remove from History?") },
+            text = {
+                Text(
+                    if (count == 1) REMOVE_HISTORY_CONFIRMATION_COPY else
+                        "This removes $count selected articles from History only. The articles themselves and any queue membership are unchanged.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = historyManagementEnabled,
+                    onClick = {
+                        val targets = pendingHistoryRemovalTargets
+                        pendingHistoryRemovalTargets = emptyList()
+                        vm.removeHistoryEntries(targets)
+                    },
+                ) {
+                    Text("Remove from History")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingHistoryRemovalTargets = emptyList() }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (showClearHistoryConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showClearHistoryConfirmation = false },
+            title = { Text("Clear History?") },
+            text = { Text(CLEAR_HISTORY_CONFIRMATION_COPY) },
+            confirmButton = {
+                TextButton(
+                    enabled = historyManagementEnabled,
+                    onClick = {
+                        val snapshot = upNextHistory?.snapshotThroughEntryId ?: return@TextButton
+                        showClearHistoryConfirmation = false
+                        vm.clearCanonicalHistory(snapshot)
+                    },
+                ) {
+                    Text("Clear History")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearHistoryConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (showClearQueueAndHistoryConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showClearQueueAndHistoryConfirmation = false },
+            title = { Text("Clear queue and History?") },
+            text = { Text(CLEAR_QUEUE_AND_HISTORY_CONFIRMATION_COPY) },
+            confirmButton = {
+                TextButton(
+                    enabled = nowPlayingSession != null && historyManagementEnabled,
+                    onClick = {
+                        val snapshot = upNextHistory?.snapshotThroughEntryId ?: return@TextButton
+                        showClearQueueAndHistoryConfirmation = false
+                        vm.clearQueueAndCanonicalHistory(snapshot)
+                    },
+                ) {
+                    Text("Clear queue and History")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearQueueAndHistoryConfirmation = false }) {
                     Text("Cancel")
                 }
             },

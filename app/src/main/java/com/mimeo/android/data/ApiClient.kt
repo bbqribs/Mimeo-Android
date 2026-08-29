@@ -45,7 +45,14 @@ import com.mimeo.android.model.SmartPlaylistSummary
 import com.mimeo.android.model.SmartPlaylistWriteRequest
 import com.mimeo.android.model.UpNextConflictResponse
 import com.mimeo.android.model.UpNextHistoryEnvelope
+import com.mimeo.android.model.UpNextHistoryClearRequest
+import com.mimeo.android.model.UpNextHistoryMutationEnvelope
+import com.mimeo.android.model.UpNextHistoryRemovalTarget
+import com.mimeo.android.model.UpNextHistoryRemoveRequest
 import com.mimeo.android.model.UpNextHistoryProjection
+import com.mimeo.android.model.UpNextPreferences
+import com.mimeo.android.model.UpNextPreferencesEnvelope
+import com.mimeo.android.model.UpNextPreferencesPatch
 import com.mimeo.android.model.UpNextSession
 import com.mimeo.android.model.UpNextSessionClearRequest
 import com.mimeo.android.model.UpNextPointerAdvanceRequest
@@ -281,10 +288,20 @@ class ApiClient(
         baseUrl: String,
         token: String,
         expectedVersion: Long,
+        clearHistory: Boolean = false,
+        historyThroughEntryId: Long? = null,
     ): UpNextSession = withContext(Dispatchers.IO) {
         val request = authorizedRequest(baseUrl, "/up-next/session", token)
             .acceptJson()
-            .delete(jsonBody(UpNextSessionClearRequest(expectedVersion)))
+            .delete(
+                jsonBody(
+                    UpNextSessionClearRequest(
+                        expectedVersion = expectedVersion,
+                        clearHistory = clearHistory,
+                        historyThroughEntryId = historyThroughEntryId,
+                    ),
+                ),
+            )
             .build()
         executeUpNextJson(request) { responseBody ->
             checkNotNull(json.decodeFromString<UpNextSessionEnvelope>(responseBody).session)
@@ -308,15 +325,73 @@ class ApiClient(
     suspend fun getUpNextHistory(
         baseUrl: String,
         token: String,
-        limit: Int = 50,
     ): UpNextHistoryProjection = withContext(Dispatchers.IO) {
-        require(limit in 1..100)
-        val request = authorizedRequest(baseUrl, "/up-next/history?limit=$limit", token)
+        val request = authorizedRequest(baseUrl, "/up-next/history?include_trashed=true", token)
             .acceptJson()
             .get()
             .build()
         executeUpNextJson(request) { responseBody ->
             json.decodeFromString<UpNextHistoryEnvelope>(responseBody).history
+        }
+    }
+
+    suspend fun removeUpNextHistory(
+        baseUrl: String,
+        token: String,
+        entries: List<UpNextHistoryRemovalTarget>,
+    ): UpNextHistoryMutationEnvelope = withContext(Dispatchers.IO) {
+        require(entries.isNotEmpty())
+        require(entries.size <= 50)
+        require(entries.map { it.itemId }.distinct().size == entries.size)
+        val request = authorizedRequest(baseUrl, "/up-next/history/remove", token)
+            .acceptJson()
+            .post(jsonBody(UpNextHistoryRemoveRequest(entries)))
+            .build()
+        executeUpNextJson(request) { responseBody ->
+            json.decodeFromString(responseBody)
+        }
+    }
+
+    suspend fun clearUpNextHistory(
+        baseUrl: String,
+        token: String,
+        snapshotThroughEntryId: Long,
+    ): UpNextHistoryMutationEnvelope = withContext(Dispatchers.IO) {
+        require(snapshotThroughEntryId >= 0)
+        val request = authorizedRequest(baseUrl, "/up-next/history/clear", token)
+            .acceptJson()
+            .post(jsonBody(UpNextHistoryClearRequest(snapshotThroughEntryId)))
+            .build()
+        executeUpNextJson(request) { responseBody ->
+            json.decodeFromString(responseBody)
+        }
+    }
+
+    suspend fun getUpNextPreferences(
+        baseUrl: String,
+        token: String,
+    ): UpNextPreferences = withContext(Dispatchers.IO) {
+        val request = authorizedRequest(baseUrl, "/up-next/preferences", token)
+            .acceptJson()
+            .get()
+            .build()
+        executeUpNextJson(request) { responseBody ->
+            json.decodeFromString<UpNextPreferencesEnvelope>(responseBody).preferences
+        }
+    }
+
+    suspend fun patchUpNextPreferences(
+        baseUrl: String,
+        token: String,
+        historyDisplayLimit: Int,
+    ): UpNextPreferences = withContext(Dispatchers.IO) {
+        require(historyDisplayLimit in 1..50)
+        val request = authorizedRequest(baseUrl, "/up-next/preferences", token)
+            .acceptJson()
+            .patch(jsonBody(UpNextPreferencesPatch(historyDisplayLimit)))
+            .build()
+        executeUpNextJson(request) { responseBody ->
+            json.decodeFromString<UpNextPreferencesEnvelope>(responseBody).preferences
         }
     }
 
