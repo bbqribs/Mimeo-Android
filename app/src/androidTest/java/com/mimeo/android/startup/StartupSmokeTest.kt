@@ -2,6 +2,7 @@ package com.mimeo.android.startup
 
 import android.Manifest
 import android.content.Context
+import android.os.Build
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.ui.test.assertIsDisplayed
@@ -89,10 +90,12 @@ class StartupActivitySmokeTest {
 
     @Before
     fun resetSettingsBeforeTest() {
-        InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(
-            context.packageName,
-            Manifest.permission.POST_NOTIFICATIONS,
-        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(
+                context.packageName,
+                Manifest.permission.POST_NOTIFICATIONS,
+            )
+        }
         runBlocking {
             SettingsStore(context).clearAllSettingsForTesting()
         }

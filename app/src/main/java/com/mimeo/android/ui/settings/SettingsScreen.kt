@@ -218,6 +218,10 @@ fun SettingsScreen(
     val autoDownloadDiagnostics by vm.autoDownloadDiagnostics.collectAsState()
     val passwordChangeState by vm.passwordChangeState.collectAsState()
     val playlists by vm.playlists.collectAsState()
+    val upNextPreferences by vm.upNextPreferences.collectAsState()
+    val upNextPreferencesLoading by vm.upNextPreferencesLoading.collectAsState()
+    val upNextPreferencesSaving by vm.upNextPreferencesSaving.collectAsState()
+    val queueOffline by vm.queueOffline.collectAsState()
     val scrollState = rememberScrollState()
     val actionScope = rememberCoroutineScope()
     // Support the reader Aa panel's "All reading settings" shortcut: open the Reading
@@ -313,6 +317,8 @@ fun SettingsScreen(
         mutableStateOf(settings.accentSchemePreference)
     }
     var showVisualThemeMenu by remember { mutableStateOf(false) }
+    var historyDisplayLimitInput by remember { mutableStateOf("") }
+    var historyDisplayLimitError by remember { mutableStateOf<String?>(null) }
     var showVisualDensityMenu by remember { mutableStateOf(false) }
     var showAccentSchemeMenu by remember { mutableStateOf(false) }
     var ttsVoiceName by remember(settings.ttsVoiceName) {
@@ -573,6 +579,16 @@ fun SettingsScreen(
     // Each time the section changes, present it from the top.
     LaunchedEffect(selectedSection) {
         scrollState.scrollTo(0)
+        if (selectedSection == SettingsSection.APPEARANCE) {
+            vm.refreshUpNextPreferences()
+        }
+    }
+
+    LaunchedEffect(upNextPreferences?.historyDisplayLimit) {
+        upNextPreferences?.historyDisplayLimit?.let { serverValue ->
+            historyDisplayLimitInput = serverValue.toString()
+            historyDisplayLimitError = null
+        }
     }
 
     LaunchedEffect(scrollState) {
@@ -1092,6 +1108,65 @@ fun SettingsScreen(
                                     },
                                 )
                             }
+                        }
+                    }
+                }
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text("History items shown")
+                    Text(
+                        text = "Controls how many unique History articles this account shows (1–50). It does not change backend retention.",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedTextField(
+                            value = historyDisplayLimitInput,
+                            onValueChange = { entered ->
+                                historyDisplayLimitInput = entered.filter(Char::isDigit).take(2)
+                                historyDisplayLimitError = null
+                            },
+                            modifier = Modifier.weight(1f),
+                            enabled = !upNextPreferencesLoading && !upNextPreferencesSaving,
+                            singleLine = true,
+                            label = { Text("Items") },
+                            isError = historyDisplayLimitError != null,
+                            supportingText = {
+                                Text(
+                                    historyDisplayLimitError ?: when {
+                                        queueOffline -> "Reconnect to change this account setting."
+                                        upNextPreferencesLoading -> "Loading server value…"
+                                        else -> "Current server value"
+                                    },
+                                )
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        )
+                        Button(
+                            enabled = !queueOffline && !upNextPreferencesLoading &&
+                                !upNextPreferencesSaving && historyDisplayLimitInput.isNotBlank(),
+                            onClick = {
+                                val value = historyDisplayLimitInput.toIntOrNull()
+                                if (value == null || value !in 1..50) {
+                                    historyDisplayLimitError = "Enter a whole number from 1 to 50."
+                                } else {
+                                    actionScope.launch {
+                                        vm.saveHistoryDisplayLimit(value).onFailure {
+                                            if (!queueOffline) {
+                                                historyDisplayLimitError = "Couldn't save. Try again."
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                        ) {
+                            Text(if (upNextPreferencesSaving) "Saving…" else "Save")
                         }
                     }
                 }

@@ -1,5 +1,6 @@
 package com.mimeo.android
 
+import com.mimeo.android.model.UpNextHistoryRemovalTarget
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
@@ -11,6 +12,24 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AccountScopedRequestContextTest {
+
+    @Test
+    fun historyDisplayLimitAcceptsOnlyCanonicalRange() {
+        assertTrue(validateHistoryDisplayLimit(1))
+        assertTrue(validateHistoryDisplayLimit(50))
+        assertFalse(validateHistoryDisplayLimit(0))
+        assertFalse(validateHistoryDisplayLimit(51))
+    }
+
+    @Test
+    fun historyRemovalValidationPreservesEveryOccurrenceFence() {
+        val targets = listOf(
+            UpNextHistoryRemovalTarget(itemId = 7, throughEntryId = 91),
+            UpNextHistoryRemovalTarget(itemId = 8, throughEntryId = 104),
+        )
+
+        assertEquals(targets, validateHistoryRemovalTargets(targets))
+    }
 
     @Test
     fun sameBaseTokenAndOwner_isCurrent() {

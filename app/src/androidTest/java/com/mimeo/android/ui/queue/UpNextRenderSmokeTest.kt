@@ -77,10 +77,13 @@ class UpNextRenderSmokeTest {
         val projection = UpNextHistoryProjection(
             entries = listOf(
                 historyEntry(7, "First occurrence", "2026-08-24T10:00:00Z", stillInSession = true),
-                historyEntry(7, "Repeated occurrence", "2026-08-24T11:00:00Z", stillInSession = false),
+                historyEntry(8, "Second occurrence", "2026-08-24T11:00:00Z", stillInSession = false),
             ),
             hasMore = true,
             recordingSince = "2026-08-24T00:00:00Z",
+            snapshotThroughEntryId = 8,
+            configuredLimit = 10,
+            effectiveLimit = 10,
         )
 
         composeTestRule.setContent {
@@ -97,25 +100,29 @@ class UpNextRenderSmokeTest {
 
         composeTestRule.onNodeWithText("History · 2").assertIsDisplayed()
         composeTestRule.onNodeWithText("First occurrence").assertExists()
-        composeTestRule.onNodeWithText("Repeated occurrence").assertExists()
-        composeTestRule.onNodeWithText("Only the 50 most recent History entries are shown.").assertExists()
+        composeTestRule.onNodeWithText("Second occurrence").assertExists()
+        composeTestRule.onNodeWithText("Only the 10 most recent unique History articles are shown.").assertExists()
         composeTestRule.onNodeWithText("No active session. Open an item to start one.").assertExists()
 
         composeTestRule.onNodeWithContentDescription("More actions for First occurrence").performClick()
         composeTestRule.onNodeWithText("Archive").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Move to Bin").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Move to Bin").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Remove from History").assertIsDisplayed()
     }
 
     @Test
-    fun historyLongPressSelectsRepeatedArticleOccurrencesForBatchArchive() {
+    fun historyLongPressUsesRowIdentityForBatchArchive() {
         var archivedIds = emptySet<Int>()
         val projection = UpNextHistoryProjection(
             entries = listOf(
                 historyEntry(7, "First selected occurrence", "2026-08-24T10:00:00Z", stillInSession = true),
-                historyEntry(7, "Repeated selected occurrence", "2026-08-24T11:00:00Z", stillInSession = false),
+                historyEntry(8, "Second selected occurrence", "2026-08-24T11:00:00Z", stillInSession = false),
             ),
             hasMore = false,
             recordingSince = "2026-08-24T00:00:00Z",
+            snapshotThroughEntryId = 8,
+            configuredLimit = 10,
+            effectiveLimit = 10,
         )
 
         composeTestRule.setContent {
@@ -134,7 +141,7 @@ class UpNextRenderSmokeTest {
         composeTestRule.onNodeWithText("First selected occurrence")
             .performTouchInput { longClick() }
         composeTestRule.onNodeWithText("1 selected").assertIsDisplayed()
-        composeTestRule.onAllNodesWithContentDescription("Selected").assertCountEquals(2)
+        composeTestRule.onAllNodesWithContentDescription("Selected").assertCountEquals(1)
         composeTestRule.onNodeWithContentDescription("Archive selected").assertIsEnabled().performClick()
         composeTestRule.runOnIdle { assertEquals(setOf(7), archivedIds) }
     }
@@ -160,6 +167,9 @@ class UpNextRenderSmokeTest {
                         entries = emptyList(),
                         hasMore = false,
                         recordingSince = "2026-08-24T00:00:00Z",
+                        snapshotThroughEntryId = 0,
+                        configuredLimit = 10,
+                        effectiveLimit = 10,
                     ),
                     seededFromLabel = "CI assurance fixture",
                     onOpenItem = {},
@@ -185,6 +195,49 @@ class UpNextRenderSmokeTest {
         composeTestRule.onNodeWithContentDescription("Unarchive selected").assertIsNotEnabled()
     }
 
+    @Test
+    fun binnedHistoryRowIsLabelledDoesNotOpenAndOffersRestore() {
+        var openCount = 0
+        val projection = UpNextHistoryProjection(
+            entries = listOf(
+                historyEntry(
+                    itemId = 9,
+                    title = "Binned assurance article",
+                    playedAt = "2026-08-24T12:00:00Z",
+                    stillInSession = false,
+                    isTrashed = true,
+                ),
+            ),
+            hasMore = false,
+            recordingSince = "2026-08-24T00:00:00Z",
+            snapshotThroughEntryId = 9,
+            configuredLimit = 10,
+            effectiveLimit = 10,
+        )
+
+        composeTestRule.setContent {
+            MimeoTheme {
+                UpNextHistoryOnlyPanel(
+                    historyProjection = projection,
+                    onOpenItem = { openCount += 1 },
+                    onArchiveItem = {},
+                    onUnarchiveItem = {},
+                    onRestore = {},
+                    onRemoveHistory = {},
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Binned", substring = true).assertExists()
+        composeTestRule.onNodeWithText("Binned assurance article").performClick()
+        composeTestRule.runOnIdle { assertEquals(0, openCount) }
+        composeTestRule.onNodeWithContentDescription("More actions for Binned assurance article").performClick()
+        composeTestRule.onNodeWithText("Restore").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Remove from History").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Archive").assertDoesNotExist()
+    }
+
     private fun sessionItem(itemId: Int, title: String) = NowPlayingSessionItem(
         itemId = itemId,
         title = title,
@@ -208,7 +261,9 @@ class UpNextRenderSmokeTest {
         title: String,
         playedAt: String,
         stillInSession: Boolean,
+        isTrashed: Boolean = false,
     ) = UpNextHistoryEntry(
+        entryId = itemId.toLong(),
         itemId = itemId,
         playedAt = playedAt,
         title = title,
@@ -220,5 +275,6 @@ class UpNextRenderSmokeTest {
         isArchived = false,
         isMuted = false,
         stillInSession = stillInSession,
+        isTrashed = isTrashed,
     )
 }

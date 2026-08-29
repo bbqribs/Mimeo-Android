@@ -64,6 +64,7 @@ fun ItemRow(
     metadata: String?,
     status: String?,
     onOpen: () -> Unit,
+    openClickLabel: String? = null,
     selection: SelectionState = SelectionState.None,
     modifier: Modifier = Modifier,
     containerColor: Color? = null,
@@ -85,7 +86,8 @@ fun ItemRow(
         containerColor = containerColor,
         titleColor = titleColor,
         titleMaxLines = titleMaxLines,
-        onClick = if (isActive && available != null) available.onToggle else onOpen,
+        onClick = if (isActive) checkNotNull(available).onToggle else onOpen,
+        onClickLabel = if (isActive) "Toggle selection" else openClickLabel,
         onLongClick = if (available != null && !isActive) available.onEnter else null,
         leadingContent = if (isActive) {
             { SelectionAffordance(isSelected = isSelected) }

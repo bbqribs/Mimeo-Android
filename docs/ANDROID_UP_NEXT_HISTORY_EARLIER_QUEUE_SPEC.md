@@ -1,7 +1,9 @@
 # Android Up Next History and Earlier Queue Spec
 
-**Status:** Spec checkpoint. No implementation in this ticket.
-**Date:** 2026-05-06
+**Status:** Initial layout shipped; canonical History/pointer adoption shipped
+in PR #492; History management implemented by
+`T-AND-UPNEXT-HISTORY-MANAGEMENT-1`.
+**Date:** 2026-08-29
 **Scope:** Android Up Next display and navigation after jump/play actions.
 Extends `docs/ANDROID_PLAYBACK_ACTIONS_V2_SPEC.md` and
 `docs/ANDROID_UP_NEXT_LAYOUT_SPEC.md`. No Kotlin changes, backend/API
@@ -32,13 +34,15 @@ Up Next is visually divided into four ordered sections:
 
 | Section | Meaning | Default visibility |
 |---|---|---|
-| History | Items that were active and have exited the active queue path. | May be collapsed by default if implementation/product review recommends it. |
+| History | The server's unique account History projection, including ordinary and binned rows. | Visible whenever loaded, including without a session. |
 | Earlier in queue | Items still in the current queue snapshot before the active item. | Visible by default; must not be collapsed by default. |
 | Now playing / Active | The current `NowPlayingSession.currentIndex` item. | Always visible when a session exists. |
 | Up Next | Items still in the current queue snapshot after the active item. | Visible by default. |
 
-History and Earlier in queue are mutually exclusive for any item. A row
-must never appear in both sections at the same time.
+History and Earlier in queue use separate row identities. The same article may
+appear once in canonical History and once in Earlier because History is a
+record while Earlier remains current-session membership. Selection and
+History removal must affect only the chosen section's row.
 
 ---
 
@@ -49,7 +53,7 @@ path:
 
 | Section | Assignment rule |
 |---|---|
-| History | Items that were active and have exited the active queue path. |
+| History | The server's unique canonical projection, including ordinary and binned rows, in returned order. |
 | Earlier in queue | Items still in the current queue snapshot before the active item. |
 | Active | The single current active item. |
 | Up Next | Items still in the current queue snapshot after the active item. |
@@ -58,9 +62,9 @@ Earlier in queue is not "history." It contains items the user skipped
 past inside the still-current queue snapshot and can still walk backward
 to with Previous.
 
-History is not "earlier in this snapshot." It contains prior active
-items that left the active queue path because playback progressed or the
-user jumped away after meaningful playback.
+History is not "earlier in this snapshot." It is the account-scoped server
+projection of retained playback occurrences. Android neither deduplicates nor
+reorders it, and it remains visible when no current session exists.
 
 ---
 
@@ -124,14 +128,11 @@ Up Next: D E F G
 When moving from D back to C, D becomes the first item in Up Next. The
 same rule repeats while Earlier in queue has rows.
 
-After Earlier in queue is exhausted, Previous continues into History,
-most recent first. History traversal preserves progress and does not
-archive, bin, remove from playlist, or delete any item.
-
-If History is collapsed visually, Previous can still traverse it. The UI
-must make this discoverable, for example by announcing that collapsed
-History remains reachable through Previous and by updating the collapsed
-History count/state when playback enters that section.
+After Earlier in queue is exhausted, Previous does not manufacture a replay or
+requeue from canonical History. History remains a separately managed record;
+ordinary rows can open available article content, while binned rows cannot open
+unavailable content and must first be restored. Restore does not requeue or
+start playback.
 
 ---
 
@@ -202,7 +203,7 @@ option, not a silent change to the current default.
 | Section labels | Each visible section must have a TalkBack-reachable header or equivalent semantic grouping. |
 | History collapsed state | If History is collapsed by default, the collapsed control must announce the section label, item count, and expanded/collapsed state. |
 | Earlier in queue | Must be expanded and visible by default when it contains rows. It may have a manual collapse affordance only if the default remains expanded. |
-| Mutual exclusivity | Screen reader traversal must not expose the same row under both History and Earlier in queue. |
+| Section identity | If the same article appears in History and Earlier, TalkBack and selection semantics must expose them as distinct section-scoped rows. |
 | Up Next row Play | Visible Play icon is a distinct focusable control with a label such as "Jump to [item title]". |
 | Previous behavior | TalkBack-visible player controls should make clear that Previous walks Earlier in queue first, then History most-recent-first. |
 
@@ -219,18 +220,21 @@ session `items` before `currentIndex`; Active as `currentIndex`; and Up
 Next as items after `currentIndex`. This spec does not require a backend
 or API change.
 
-Visible History may require implementation decisions already deferred by
-`docs/ANDROID_UP_NEXT_LAYOUT_SPEC.md`, but the assignment model here does
-not require changing backend contracts.
+Visible History comes only from `GET /up-next/history?include_trashed=true` and
+is not persisted as a second durable Android store. Management uses the
+settled preferences, occurrence-fenced removal, snapshot-fenced clear, existing
+Bin/Restore lifecycle, and atomic session-clear contracts without an Android
+contract change.
 
 ---
 
 ## 12. Out of Scope
 
-- Kotlin implementation.
 - Backend/API changes.
-- Cross-device Up Next sync.
-- Persisted history retention/privacy policy.
+- Android semantic-reorder cutover.
+- Cross-device assurance programme.
+- Changing raw retained-occurrence or retention policy.
+- Replay, requeue, Play Next, Play Last, or Play from Here from History.
 - Making Up Next a playlist-like source surface.
 - Changing the default Save queue as playlist scope.
 - User-configurable briefly-played threshold in v1.
@@ -239,7 +243,7 @@ not require changing backend contracts.
 
 ## 13. Manual Verification for This Spec
 
-Docs-only verification is sufficient:
+For the specification reconciliation itself, inspect:
 
 ```powershell
 Get-Content -Raw docs\ANDROID_UP_NEXT_HISTORY_EARLIER_QUEUE_SPEC.md
@@ -250,12 +254,13 @@ Confirm in plain English:
 
 - The spec extends Playback Actions v2 and Up Next Layout without
   assuming backend/API changes.
-- History and Earlier in queue are mutually exclusive.
+- History and Earlier use section-scoped row identity and may contain the same
+  article without selection or mutation crossing sections.
 - Earlier in queue is visible by default; History may be collapsed.
 - Up Next upcoming row Play is a no-confirm jump within the existing
   queue.
-- Previous walks backward through Earlier in queue, then continues into
-  History most-recent-first.
+- Previous walks backward through Earlier in queue but does not replay or
+  requeue canonical History.
 - Play from Here replaces Up Next after confirmation, while Up Next row
   Play jumps without confirmation.
 - Save queue as playlist still defaults to Active + Up Next only.

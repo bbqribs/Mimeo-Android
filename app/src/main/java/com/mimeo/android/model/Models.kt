@@ -256,10 +256,15 @@ data class UpNextHistoryProjection(
     val entries: List<UpNextHistoryEntry> = emptyList(),
     @SerialName("has_more") val hasMore: Boolean = false,
     @SerialName("recording_since") val recordingSince: String,
+    @SerialName("last_removal_at") val lastRemovalAt: String? = null,
+    @SerialName("snapshot_through_entry_id") val snapshotThroughEntryId: Long,
+    @SerialName("configured_limit") val configuredLimit: Int,
+    @SerialName("effective_limit") val effectiveLimit: Int,
 )
 
 @Serializable
 data class UpNextHistoryEntry(
+    @SerialName("entry_id") val entryId: Long,
     @SerialName("item_id") val itemId: Int,
     @SerialName("played_at") val playedAt: String,
     val title: String? = null,
@@ -281,6 +286,54 @@ data class UpNextHistoryEntry(
     @SerialName("is_archived") val isArchived: Boolean,
     @SerialName("is_muted") val isMuted: Boolean,
     @SerialName("still_in_session") val stillInSession: Boolean,
+    @SerialName("is_trashed") val isTrashed: Boolean,
+)
+
+@Serializable
+data class UpNextHistoryRemovalTarget(
+    @SerialName("item_id") val itemId: Int,
+    @SerialName("through_entry_id") val throughEntryId: Long,
+)
+
+@Serializable
+data class UpNextHistoryRemoveRequest(
+    val entries: List<UpNextHistoryRemovalTarget>,
+)
+
+@Serializable
+data class UpNextHistoryClearRequest(
+    @SerialName("snapshot_through_entry_id") val snapshotThroughEntryId: Long,
+)
+
+@Serializable
+data class UpNextHistoryMutationResult(
+    val operation: String,
+    @SerialName("requested_count") val requestedCount: Int,
+    @SerialName("changed_count") val changedCount: Int,
+    @SerialName("removed_occurrence_count") val removedOccurrenceCount: Int,
+)
+
+@Serializable
+data class UpNextHistoryMutationEnvelope(
+    val result: UpNextHistoryMutationResult,
+    val history: UpNextHistoryProjection,
+)
+
+@Serializable
+data class UpNextPreferences(
+    @SerialName("history_display_limit") val historyDisplayLimit: Int,
+    @SerialName("history_recording_since") val historyRecordingSince: String,
+    @SerialName("history_last_removal_at") val historyLastRemovalAt: String? = null,
+)
+
+@Serializable
+data class UpNextPreferencesEnvelope(
+    val preferences: UpNextPreferences,
+)
+
+@Serializable
+data class UpNextPreferencesPatch(
+    @SerialName("history_display_limit") val historyDisplayLimit: Int,
 )
 
 @Serializable
@@ -333,6 +386,8 @@ data class UpNextSessionWriteRequest(
 @Serializable
 data class UpNextSessionClearRequest(
     @SerialName("expected_version") val expectedVersion: Long,
+    @SerialName("clear_history") val clearHistory: Boolean,
+    @SerialName("history_through_entry_id") val historyThroughEntryId: Long? = null,
 )
 
 @Serializable

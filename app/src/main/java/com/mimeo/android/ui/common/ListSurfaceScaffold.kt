@@ -77,6 +77,7 @@ fun LibraryItemRow(
     titleColor: Color = MaterialTheme.colorScheme.onSurface,
     titleMaxLines: Int? = null,
     onClick: () -> Unit,
+    onClickLabel: String? = null,
     onLongClick: (() -> Unit)? = null,
     leadingContent: (@Composable RowScope.() -> Unit)? = null,
     progressStateLine: (@Composable () -> Unit)? = null,
@@ -86,7 +87,7 @@ fun LibraryItemRow(
     val mColors = LocalMimeoColorTokens.current
     val mTypography = LocalMimeoTypographyTokens.current
     val densityTokens = LocalMimeoDensityTokens.current
-    val readerClickLabel = "Opens $title in reader"
+    val readerClickLabel = onClickLabel ?: "Opens $title in reader"
     val baseStartPadding = if (isV1) 12.dp else 8.dp
     val startPadding = if (leadingContent != null) {
         (baseStartPadding - 4.dp).coerceAtLeast(4.dp)

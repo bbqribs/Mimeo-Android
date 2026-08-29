@@ -1,7 +1,8 @@
 # Android Up Next continuity
 
-Status: implemented by `T-AND-UPNEXT-CONTINUITY-1` against backend contract
-`c39b3ad1b04abdc770781919a84dddea28576667` / migration `c5e7a9b1d3f6`.
+Status: continuity implemented by `T-AND-UPNEXT-CONTINUITY-1`; canonical
+History read/pointer adoption shipped in Android PR #492, and account-scoped
+History management is implemented by `T-AND-UPNEXT-HISTORY-MANAGEMENT-1`.
 
 ## Authority and ownership
 
@@ -37,9 +38,15 @@ continuity metadata before another owner can use them.
 Server session items provide membership/order/lifecycle projection. Android
 continues using its existing item/session cache and item endpoints for display,
 text, TTS cursors and progress. History is never serialized to Room's
-`now_playing` payload or supplied by the client: Android reads the bounded,
-account-scoped `/up-next/history?limit=50` projection and displays the returned
-occurrences in server order, independently of whether a session exists.
+`now_playing` payload or supplied by the client: Android reads
+`GET /up-next/history?include_trashed=true` without a client limit and displays
+the returned unique projection in server order, independently of whether a
+session exists. The server-owned `history_display_limit` preference is read and
+saved through `/up-next/preferences`; Android does not mirror it in DataStore.
+History removal, snapshot-fenced clear, Bin/Restore refresh, and atomic queue
+plus History clear are online-only and never enter the offline mutation queue.
+Late responses are accepted only for the account/token/backend identity that
+started the request.
 Accepted pointer transitions are published through `/up-next/session/advance`;
 offline transitions retain their original session/from-item/pointer
 preconditions and are discarded on semantic conflict rather than replayed with

@@ -1,8 +1,8 @@
 # Android Queue Actions Pattern Spec
 
-**Version:** 1.0
-**Status:** Design/spec checkpoint. Authoritative for remaining Lane 5 implementation.
-**Date:** 2026-04-25
+**Version:** 1.1
+**Status:** Shipped behavior plus authoritative remaining Lane 5 guidance.
+**Date:** 2026-08-29
 **Scope:** Play Now / Play Next / Play Last / Add Selected to Up Next / Save current queue as playlist — across all list and item surfaces.
 **Canonical authority:** `C:\Users\brend\Documents\Coding\Mimeo\docs\planning\PRODUCT_MODEL_POST_REDESIGN.md` §3 (Android pointer: `docs/planning/PRODUCT_MODEL_POST_REDESIGN.md`)
 **Extends:** `docs/ANDROID_ITEM_ACTIONS_SPEC.md` (v1.0)
@@ -23,9 +23,10 @@ forward model that remaining Lane 5 tickets will build toward.
 **Supersession notes:** Item-actions spec v1.0 §6 defines long-press → open
 overflow menu on Up Next rows. Product model §3.2 rule 3 supersedes this:
 long-press enters multi-select mode on library and playlist-like surfaces.
-Durable Up Next History and Earlier in queue now use the same interaction for
-article-level Archive/Unarchive actions. The v1.0 note about long-press was a
-deferral placeholder. See §4 below.
+Durable Up Next History and Earlier in queue both use long-press to enter
+selection, but selection remains section-scoped and each section retains its
+own action model. The v1.0 note about long-press was a deferral placeholder.
+See §4 below.
 
 ---
 
@@ -140,7 +141,8 @@ on Up Next rows.
 | Manual / smart playlist detail rows | Enter multi-select; row is pre-selected |
 | Bluesky harvester rows | Enter multi-select (if multi-select supported on the surface in v1) |
 | Up Next upcoming rows | Enter multi-select; row is pre-selected |
-| Up Next History and Earlier-in-queue rows | Enter article-based multi-select; every visible occurrence of the article is selected together. |
+| Up Next History rows | Enter History-only row-identity multi-select; the pressed projected row is pre-selected. |
+| Earlier-in-queue rows | Enter Earlier-only multi-select; the pressed session row is pre-selected. |
 | Locus top bar | No change (no list rows here) |
 
 Long-press must never be the **sole** entry point to any action. Every
@@ -157,16 +159,19 @@ When multi-select is active, the batch action bar appears and exposes:
 | Archive | Library surfaces (Inbox, Favorites, Bin) |
 | Favourite / Unfavourite | Library + playlist surfaces |
 | Move to Bin | Library + playlist surfaces (not Bin itself) |
-| Archive / Unarchive | Up Next History + Earlier in queue |
+| Remove from History | Every non-empty History selection (maximum 50 unique targets) |
+| Move to Bin | History selections where every selected row is unbinned |
+| Restore | History selections where every selected row is binned |
+| Archive / Unarchive | History selections where the action is meaningful for every selected unbinned row; Earlier retains its existing model |
 
-Up Next History selection is article-based because the durable projection can
-contain repeated occurrences but does not expose an occurrence identifier, and
-Archive/Unarchive changes article lifecycle state. The selected count is a count
-of articles, not rendered occurrence rows. If a selected article appears more
-than once in History or also appears in Earlier, all of those rows display as
-selected. Batch Move to Bin and replay/requeue remain unavailable on durable
-History until their destructive and occurrence-versus-article semantics are
-separately ratified.
+Up Next History selection is keyed by the projected row's `entry_id` within the
+History section. Earlier selection is keyed within the Earlier section. The
+same `item_id` may legitimately appear once in canonical History and once in
+the current session; selecting either row must not select the other. Mixed
+binned/unbinned or mixed archive states disable the inapplicable lifecycle
+action with an accessible explanation and never mutate only an eligible subset.
+Replay, requeue, Play Next, Play Last, and Play from Here remain unavailable for
+History.
 
 **"Add to Up Next"** is the canonical batch-bar label (product model
 §3.1 note: `Add Selected to Up Next` is the canonical name; the batch
@@ -206,6 +211,10 @@ These actions require explicit confirmation before executing.
 | Save queue as playlist | Tap "Save queue as playlist…" | Name entry dialog. Not destructive; no separate confirm beyond the dialog itself. |
 | Clear upcoming | Existing affordance in Up Next | Existing confirm pattern; not redefined here. |
 | Replace queue from playlist | Existing affordance | Existing dirty-Up-Next confirm pattern; not redefined here. |
+| Remove from History | History row overflow or batch bar | Explain that only History changes; the article and queue membership are unchanged. |
+| Clear History | Up Next overflow, including history-only mode | Explain that qualifying History through the current snapshot is cleared and the queue is unchanged. |
+| Clear queue | Up Next overflow | Explain that the queue is cleared and History is preserved. |
+| Clear queue and History | Up Next overflow while a session exists | Explain that both are cleared together by one atomic operation. |
 
 ### 5.3 Bin / state-flag undo
 
@@ -248,6 +257,9 @@ entries.
 | Save queue as playlist (overflow) | "Save queue as playlist…" |
 | Remove from Up Next (overflow) | "Remove from queue" |
 | Move to end (Up Next reorder overflow, if offered) | "Move to end" |
+| Remove canonical History row | "Remove from History" |
+| Clear canonical History | "Clear History" |
+| Atomic clear | "Clear queue and History" |
 
 ---
 
@@ -264,12 +276,12 @@ entries.
    A future destructive "Replace queue" action is deferred and would
    require its own confirm regardless of queue state.
 
-2. **History-row overflow in Up Next:** §3 lists Play Next / Play Last for
-   history rows. The interaction semantics for history rows are an open
-   product question (product model §2.3 Q5: tap-to-restart vs
-   tap-to-read vs tap-to-add). Until §2.3 Q5 is resolved, do not
-   implement queue actions on history rows. Treat this cell as "deferred,
-   not absent."
+2. ~~**History-row overflow in Up Next:** queue actions were deferred pending
+   settled semantics.~~ **Resolved by `T-AND-UPNEXT-HISTORY-MANAGEMENT-1`:**
+   ordinary rows may open the article and expose applicable lifecycle plus
+   Remove from History actions; binned rows are labelled Binned, do not open
+   unavailable content, and expose Restore plus Remove from History. No replay
+   or queue-placement action is introduced.
 
 3. **"Add Selected to Up Next" order guarantee:** ~~Does the batch append
    preserve the visual selection order (order items were tapped) or the
