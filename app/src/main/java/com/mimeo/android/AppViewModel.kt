@@ -149,6 +149,7 @@ import com.mimeo.android.model.UpNextHistoryRemovalTarget
 import com.mimeo.android.model.UpNextPreferences
 import com.mimeo.android.model.UpNextSessionWriteRequest
 import com.mimeo.android.model.UpNextPointerAdvanceRequest
+import com.mimeo.android.model.UpNextMoveRequest
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PendingItemAction
@@ -190,7 +191,14 @@ import com.mimeo.android.repository.PlaylistMembershipToggleResult
 import com.mimeo.android.repository.PendingProgressSnapshot
 import com.mimeo.android.repository.PlaybackRepository
 import com.mimeo.android.repository.UpNextCapability
+import com.mimeo.android.repository.LegacyDirtySnapshotClassification
+import com.mimeo.android.repository.PendingUpNextMovePhase
+import com.mimeo.android.repository.PendingUpNextSemanticMove
+import com.mimeo.android.repository.StageUpNextSemanticMoveResult
+import com.mimeo.android.repository.UpNextMoveDiagnostic
+import com.mimeo.android.repository.UpNextSemanticMoveCapability
 import com.mimeo.android.repository.UpNextSyncPlan
+import com.mimeo.android.repository.classifyLegacyDirtySnapshot
 import com.mimeo.android.repository.planFirstUpNextAdoption
 import com.mimeo.android.repository.planUpNextReconnect
 import com.mimeo.android.repository.resolveOfflineReadyItemIds
@@ -507,6 +515,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _queueOffline = MutableStateFlow(false)
     val queueOffline: StateFlow<Boolean> = _queueOffline.asStateFlow()
+    private val _upNextReorderEnabled = MutableStateFlow(false)
+    val upNextReorderEnabled: StateFlow<Boolean> = _upNextReorderEnabled.asStateFlow()
+    private val _upNextReorderStatus = MutableStateFlow<String?>(null)
+    val upNextReorderStatus: StateFlow<String?> = _upNextReorderStatus.asStateFlow()
     /** Wall-clock time of the last successful account-scoped sync, for the offline indicator. */
     val lastSuccessfulSyncAtMs: Flow<Long?> = settingsStore.lastSuccessfulSyncAtMsFlow
 
@@ -1035,6 +1047,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         }
                         _cachedItemIds.value = resolveOfflineReadyIdsForSession(session.items + session.historyItems)
                     }
+                    refreshUpNextReorderUiState()
                 }
             } finally {
                 initialSessionStateLoaded = true
@@ -1739,6 +1752,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _cachedItemIds.value = emptySet()
         _noActiveContentItemIds.value = emptySet()
         _queueOffline.value = false
+        _upNextReorderEnabled.value = false
+        _upNextReorderStatus.value = null
         _playlists.value = emptyList()
         _smartPlaylists.value = emptyList()
         _currentSmartPlaylistItems.value = emptyList()
@@ -6672,10 +6687,58 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun reorderNowPlayingSessionItem(fromIndex: Int, toIndex: Int) {
+    fun reorderNowPlayingSessionItem(itemId: Int, toPosition: Int) {
         viewModelScope.launch {
-            val session = repository.reorderSessionItem(fromIndex = fromIndex, toIndex = toIndex) ?: return@launch
-            applySessionSnapshot(session)
+            upNextSyncMutex.withLock {
+                val current = settings.value
+                if (current.apiToken.isBlank() || current.baseUrl.isBlank()) return@withLock
+                val requestContext = accountScopedRequestContext(current)
+                if (requestContext.localStateOwner.isBlank()) return@withLock
+                val serverIdentity = normalizeServerIdentity(current.baseUrl)
+                val staged = repository.stageUpNextSemanticMove(
+                    ownerKey = requestContext.localStateOwner,
+                    serverIdentity = serverIdentity,
+                    itemId = itemId,
+                    toPosition = toPosition,
+                )
+                when (staged) {
+                    is StageUpNextSemanticMoveResult.Staged -> {
+                        applySessionSnapshot(
+                            staged.session,
+                            preserveExistingPositions = true,
+                            markStructureDirty = false,
+                        )
+                        refreshUpNextReorderUiState()
+                        if (_queueOffline.value) {
+                            showSnackbar("Move pending. Reconnect to sync this Up Next change.")
+                        } else {
+                            publishPendingUpNextSemanticMoveLocked(
+                                current = current,
+                                requestContext = requestContext,
+                                serverIdentity = serverIdentity,
+                                announceSuccess = true,
+                            )
+                        }
+                    }
+                    StageUpNextSemanticMoveResult.PendingIntentExists ->
+                        showSnackbar("Reconnect before making another Up Next move.")
+                    StageUpNextSemanticMoveResult.MissingServerContext -> {
+                        showSnackbar("Up Next must refresh before it can be reordered.")
+                        scheduleUpNextSynchronization()
+                    }
+                    StageUpNextSemanticMoveResult.Unsupported ->
+                        showSnackbar("This server does not support Up Next reorder.")
+                    StageUpNextSemanticMoveResult.DirtyLegacySnapshot -> {
+                        showSnackbar("Up Next must reconcile an older local change before reorder.")
+                        scheduleUpNextSynchronization()
+                    }
+                    StageUpNextSemanticMoveResult.InvalidTarget -> {
+                        showSnackbar("That Up Next item can no longer be moved. Refresh and try again.")
+                        scheduleUpNextSynchronization()
+                    }
+                }
+                refreshUpNextReorderUiState()
+            }
         }
     }
 
@@ -7356,6 +7419,228 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         CONFLICT,
     }
 
+    private enum class PendingMoveFlushResult {
+        NONE,
+        APPLIED,
+        BLOCKED,
+        CONFLICT,
+    }
+
+    private suspend fun refreshUpNextReorderUiState() {
+        val metadata = repository.readUpNextSyncMetadata()
+        val pending = repository.pendingUpNextSemanticMove()
+        val unsupported = metadata?.semanticMoveCapability == UpNextSemanticMoveCapability.UNSUPPORTED.name
+        _upNextReorderEnabled.value =
+            metadata != null &&
+                !metadata.dirty &&
+                !unsupported &&
+                pending == null &&
+                metadata.serverSessionId != null &&
+                (metadata.serverStructureVersion ?: metadata.serverVersion) != null
+        _upNextReorderStatus.value = when {
+            unsupported -> "Reorder unavailable on this server."
+            pending?.phase == PendingUpNextMovePhase.QUEUED -> "Move pending — reconnect to sync."
+            pending != null -> "Move outcome pending — reconnect to refresh."
+            metadata?.dirty == true -> "Reconciling an older local queue change."
+            else -> null
+        }
+    }
+
+    private fun UpNextVersionConflictException.toMoveDiagnostic(outcome: String) = UpNextMoveDiagnostic(
+        outcome = outcome,
+        code = code,
+        domain = domain,
+        expectedVersion = expectedVersion,
+        actualVersion = actualVersion,
+        correlationId = correlationId,
+    )
+
+    private suspend fun publishPendingUpNextSemanticMoveLocked(
+        current: AppSettings,
+        requestContext: AccountScopedRequestContext,
+        serverIdentity: String,
+        announceSuccess: Boolean,
+    ): PendingMoveFlushResult {
+        val pending = repository.pendingUpNextSemanticMove() ?: return PendingMoveFlushResult.NONE
+        if (pending.phase != PendingUpNextMovePhase.QUEUED) {
+            return reconcileAmbiguousUpNextMoveLocked(
+                current = current,
+                requestContext = requestContext,
+                serverIdentity = serverIdentity,
+                diagnostic = UpNextMoveDiagnostic(outcome = "ambiguous_reconciled"),
+            )
+        }
+        val inFlight = repository.updatePendingUpNextSemanticMovePhase(
+            expected = pending,
+            phase = PendingUpNextMovePhase.IN_FLIGHT,
+        ) ?: return PendingMoveFlushResult.BLOCKED
+        refreshUpNextReorderUiState()
+        return try {
+            val acknowledged = apiClient.moveUpNextSessionItem(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                payload = UpNextMoveRequest(
+                    expectedVersion = inFlight.expectedStructureVersion,
+                    itemId = inFlight.itemId,
+                    toPosition = inFlight.toPosition,
+                ),
+            )
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return PendingMoveFlushResult.BLOCKED
+            }
+            applyAuthoritativeUpNext(
+                session = acknowledged,
+                requestContext = requestContext,
+                serverIdentity = serverIdentity,
+                semanticMoveCompletion = true,
+                moveDiagnostic = UpNextMoveDiagnostic(outcome = "applied"),
+            )
+            _queueOffline.value = false
+            if (announceSuccess) showSnackbar("Up Next order updated.")
+            PendingMoveFlushResult.APPLIED
+        } catch (conflict: UpNextVersionConflictException) {
+            if (accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                applyAuthoritativeUpNext(
+                    session = conflict.currentSession,
+                    requestContext = requestContext,
+                    serverIdentity = serverIdentity,
+                    semanticMoveCompletion = true,
+                    moveDiagnostic = conflict.toMoveDiagnostic("conflict_discarded"),
+                )
+                refreshUpNextHistory(current, requestContext)
+                showSnackbar("Up Next changed on another device. The move was not applied; repeat it if still wanted.")
+            }
+            PendingMoveFlushResult.CONFLICT
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: ApiException) {
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return PendingMoveFlushResult.BLOCKED
+            }
+            if (handleAuthFailureIfNeeded(error)) return PendingMoveFlushResult.BLOCKED
+            when (error.statusCode) {
+                404, 405 -> reconcileRejectedUpNextMoveLocked(
+                    current = current,
+                    requestContext = requestContext,
+                    serverIdentity = serverIdentity,
+                    diagnostic = UpNextMoveDiagnostic(
+                        outcome = "unsupported",
+                        code = "http_${error.statusCode}",
+                    ),
+                    semanticMoveAvailable = false,
+                    message = "This server does not support Up Next reorder. The queue was refreshed.",
+                )
+                400, 403 -> reconcileRejectedUpNextMoveLocked(
+                    current = current,
+                    requestContext = requestContext,
+                    serverIdentity = serverIdentity,
+                    diagnostic = UpNextMoveDiagnostic(
+                        outcome = "rejected",
+                        code = "http_${error.statusCode}",
+                    ),
+                    semanticMoveAvailable = true,
+                    message = "The move was rejected. Up Next was refreshed and not changed by this attempt.",
+                )
+                else -> {
+                    repository.updatePendingUpNextSemanticMovePhase(
+                        expected = inFlight,
+                        phase = PendingUpNextMovePhase.AMBIGUOUS,
+                    )
+                    reconcileAmbiguousUpNextMoveLocked(
+                        current = current,
+                        requestContext = requestContext,
+                        serverIdentity = serverIdentity,
+                        diagnostic = UpNextMoveDiagnostic(
+                            outcome = "ambiguous_reconciled",
+                            code = "http_${error.statusCode}",
+                        ),
+                    )
+                }
+            }
+        } catch (error: Exception) {
+            repository.updatePendingUpNextSemanticMovePhase(
+                expected = inFlight,
+                phase = PendingUpNextMovePhase.AMBIGUOUS,
+            )
+            reconcileAmbiguousUpNextMoveLocked(
+                current = current,
+                requestContext = requestContext,
+                serverIdentity = serverIdentity,
+                diagnostic = UpNextMoveDiagnostic(outcome = "ambiguous_reconciled"),
+            )
+        }.also { refreshUpNextReorderUiState() }
+    }
+
+    private suspend fun reconcileRejectedUpNextMoveLocked(
+        current: AppSettings,
+        requestContext: AccountScopedRequestContext,
+        serverIdentity: String,
+        diagnostic: UpNextMoveDiagnostic,
+        semanticMoveAvailable: Boolean,
+        message: String,
+    ): PendingMoveFlushResult {
+        return try {
+            val server = apiClient.getUpNextSession(current.baseUrl, current.apiToken)
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return PendingMoveFlushResult.BLOCKED
+            }
+            applyAuthoritativeUpNext(
+                session = server,
+                requestContext = requestContext,
+                serverIdentity = serverIdentity,
+                semanticMoveCompletion = true,
+                semanticMoveAvailable = semanticMoveAvailable,
+                moveDiagnostic = diagnostic,
+            )
+            showSnackbar(message)
+            PendingMoveFlushResult.BLOCKED
+        } catch (refreshError: CancellationException) {
+            throw refreshError
+        } catch (refreshError: Exception) {
+            if (handleAuthFailureIfNeeded(refreshError)) return PendingMoveFlushResult.BLOCKED
+            val rolledBack = repository.rollbackPendingUpNextSemanticMove(diagnostic)
+            rolledBack?.let {
+                applySessionSnapshot(it, preserveExistingPositions = true, markStructureDirty = false)
+            }
+            if (!semanticMoveAvailable) repository.markUpNextSemanticMoveUnsupported(diagnostic)
+            showSnackbar(message)
+            PendingMoveFlushResult.BLOCKED
+        }
+    }
+
+    private suspend fun reconcileAmbiguousUpNextMoveLocked(
+        current: AppSettings,
+        requestContext: AccountScopedRequestContext,
+        serverIdentity: String,
+        diagnostic: UpNextMoveDiagnostic,
+    ): PendingMoveFlushResult {
+        return try {
+            // An unknown POST outcome is reconciled by a read before any possible resend.
+            val server = apiClient.getUpNextSession(current.baseUrl, current.apiToken)
+            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                return PendingMoveFlushResult.BLOCKED
+            }
+            applyAuthoritativeUpNext(
+                session = server,
+                requestContext = requestContext,
+                serverIdentity = serverIdentity,
+                semanticMoveCompletion = true,
+                moveDiagnostic = diagnostic,
+            )
+            _queueOffline.value = false
+            showSnackbar("The move outcome was uncertain. Up Next was refreshed; repeat the move only if still needed.")
+            PendingMoveFlushResult.APPLIED
+        } catch (refreshError: CancellationException) {
+            throw refreshError
+        } catch (refreshError: Exception) {
+            if (handleAuthFailureIfNeeded(refreshError)) return PendingMoveFlushResult.BLOCKED
+            if (isNetworkError(refreshError)) _queueOffline.value = true
+            refreshUpNextReorderUiState()
+            showSnackbar("Move outcome pending. Reconnect to refresh Up Next before another move.")
+            PendingMoveFlushResult.BLOCKED
+        }
+    }
+
     private suspend fun refreshUpNextHistory(
         current: AppSettings,
         requestContext: AccountScopedRequestContext,
@@ -7646,7 +7931,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (requestContext.localStateOwner.isBlank()) return@launch
             val serverIdentity = normalizeServerIdentity(current.baseUrl)
             try {
-                val expectedVersion = repository.readUpNextSyncMetadata()?.serverVersion
+                val metadata = repository.readUpNextSyncMetadata()
+                val expectedVersion = metadata?.serverStructureVersion ?: metadata?.serverVersion
                 if (expectedVersion == null) {
                     val authoritativeSession = apiClient.getUpNextSession(current.baseUrl, current.apiToken)
                     if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
@@ -7773,6 +8059,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         try {
             when (
+                publishPendingUpNextSemanticMoveLocked(
+                    current = current,
+                    requestContext = requestContext,
+                    serverIdentity = serverIdentity,
+                    announceSuccess = false,
+                )
+            ) {
+                PendingMoveFlushResult.BLOCKED,
+                PendingMoveFlushResult.CONFLICT,
+                -> return
+                PendingMoveFlushResult.APPLIED,
+                PendingMoveFlushResult.NONE,
+                -> Unit
+            }
+            when (
                 flushPendingUpNextPointerTransitionsLocked(
                     current = current,
                     requestContext = requestContext,
@@ -7792,6 +8093,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // newer structural result look clean and get overwritten by an adoption read.
             val currentMetadata = repository.readUpNextSyncMetadata() ?: metadata
             val localSnapshot = repository.localUpNextSnapshot()
+            var legacyReorderMessage: String? = null
             val plan: UpNextSyncPlan = when {
                 capability == UpNextCapability.UNKNOWN -> {
                     val server = apiClient.getUpNextSession(current.baseUrl, current.apiToken)
@@ -7799,14 +8101,37 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 currentMetadata.dirty -> planUpNextReconnect(
                     dirty = true,
-                    observedVersion = currentMetadata.serverVersion,
+                    observedVersion = currentMetadata.serverStructureVersion ?: currentMetadata.serverVersion,
                     localSnapshot = localSnapshot,
-                )
+                ).let { existingPlan ->
+                    val server = apiClient.getUpNextSession(current.baseUrl, current.apiToken)
+                    val observedStructureVersion =
+                        currentMetadata.serverStructureVersion ?: currentMetadata.serverVersion
+                    val legacyClassification = classifyLegacyDirtySnapshot(localSnapshot, server)
+                    when {
+                        server == null && localSnapshot != null && observedStructureVersion != null -> {
+                            legacyReorderMessage =
+                                "An older local queue change could not be classified safely and was not uploaded. Up Next was refreshed."
+                            UpNextSyncPlan.Adopt(null)
+                        }
+                        legacyClassification == LegacyDirtySnapshotClassification.ORDER_ONLY_REORDER -> {
+                            legacyReorderMessage =
+                                "An older local reorder was discarded. Up Next was refreshed; repeat the move if still wanted."
+                            UpNextSyncPlan.Adopt(server)
+                        }
+                        legacyClassification == LegacyDirtySnapshotClassification.AMBIGUOUS_MIXED_REORDER -> {
+                            legacyReorderMessage =
+                                "An older ambiguous queue change was not uploaded. Up Next was refreshed."
+                            UpNextSyncPlan.Adopt(server)
+                        }
+                        else -> existingPlan
+                    }
+                }
                 else -> {
                     val server = apiClient.getUpNextSession(current.baseUrl, current.apiToken)
                     planUpNextReconnect(
                         dirty = false,
-                        observedVersion = currentMetadata.serverVersion,
+                        observedVersion = currentMetadata.serverStructureVersion ?: currentMetadata.serverVersion,
                         localSnapshot = localSnapshot,
                         refreshedServerSession = server,
                     )
@@ -7845,6 +8170,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             }
+            legacyReorderMessage?.let(::showSnackbar)
             refreshUpNextHistory(current, requestContext)
         } catch (conflict: UpNextVersionConflictException) {
             if (accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
@@ -7870,6 +8196,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         session: com.mimeo.android.model.UpNextSession?,
         requestContext: AccountScopedRequestContext,
         serverIdentity: String,
+        semanticMoveCompletion: Boolean = false,
+        semanticMoveAvailable: Boolean = true,
+        moveDiagnostic: UpNextMoveDiagnostic? = null,
     ) {
         val localSessionBeforeApply = _nowPlayingSession.value
         val priorPlaybackItemId = playbackEngineState.value.currentItemId.takeIf { it > 0 }
@@ -7877,6 +8206,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             session = session,
             ownerKey = requestContext.localStateOwner,
             serverIdentity = serverIdentity,
+            semanticMoveCompletion = semanticMoveCompletion,
+            semanticMoveAvailable = semanticMoveAvailable,
+            moveDiagnostic = moveDiagnostic,
         )
         val authoritativeActiveId = applied?.currentItem?.itemId
         if (priorPlaybackItemId != null && priorPlaybackItemId != authoritativeActiveId) {
@@ -7918,6 +8250,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             applyAuthoritativeSessionSnapshot(applied, retainTransientHistory)
         }
+        refreshUpNextReorderUiState()
     }
 
     private fun applyAuthoritativeSessionSnapshot(

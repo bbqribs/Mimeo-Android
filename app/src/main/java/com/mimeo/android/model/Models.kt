@@ -339,6 +339,7 @@ data class UpNextPreferencesPatch(
 @Serializable
 data class UpNextSession(
     val version: Long,
+    @SerialName("structure_version") val structureVersion: Long = version,
     @SerialName("session_id") val sessionId: Long? = null,
     @SerialName("pointer_version") val pointerVersion: Long? = null,
     val items: List<UpNextSessionItem>,
@@ -384,6 +385,13 @@ data class UpNextSessionWriteRequest(
 )
 
 @Serializable
+data class UpNextMoveRequest(
+    @SerialName("expected_version") val expectedVersion: Long,
+    @SerialName("item_id") val itemId: Int,
+    @SerialName("to_position") val toPosition: Int,
+)
+
+@Serializable
 data class UpNextSessionClearRequest(
     @SerialName("expected_version") val expectedVersion: Long,
     @SerialName("clear_history") val clearHistory: Boolean,
@@ -402,6 +410,10 @@ data class UpNextPointerAdvanceRequest(
 data class UpNextConflictError(
     val code: String,
     val message: String? = null,
+    val domain: String? = null,
+    @SerialName("expected_version") val expectedVersion: Long? = null,
+    @SerialName("actual_version") val actualVersion: Long? = null,
+    @SerialName("correlation_id") val correlationId: String? = null,
 )
 
 @Serializable

@@ -1,6 +1,7 @@
 package com.mimeo.android.repository
 
 import com.mimeo.android.model.UpNextSession
+import com.mimeo.android.model.UpNextSessionItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -23,6 +24,36 @@ class UpNextSynchronizationTest {
         seededAt = "2026-07-17T10:00:00Z",
         updatedAt = "2026-07-17T10:00:00Z",
         dirtySinceSeed = true,
+    )
+
+    private fun serverSnapshot(
+        itemIds: List<Int>,
+        currentItemId: Int? = 1,
+        seedSourceKind: String = "playlist",
+        seedSourceLabel: String = "Reading list",
+    ) = UpNextSession(
+        version = 7,
+        structureVersion = 7,
+        sessionId = 19,
+        pointerVersion = 11,
+        items = itemIds.mapIndexed { index, itemId ->
+            UpNextSessionItem(
+                itemId = itemId,
+                position = index,
+                url = "https://example.com/$itemId",
+                host = "example.com",
+                hasActiveContent = true,
+                createdAt = "2026-07-17T10:00:00Z",
+                isArchived = false,
+                isMuted = false,
+            )
+        },
+        currentItemId = currentItemId,
+        seedSourceKind = seedSourceKind,
+        seedSourceLabel = seedSourceLabel,
+        seededAt = "2026-07-17T10:00:00Z",
+        updatedAt = "2026-07-17T10:00:00Z",
+        dirtySinceSeed = false,
     )
 
     @Test
@@ -79,5 +110,53 @@ class UpNextSynchronizationTest {
         assertNull(sections.active)
         assertEquals(emptyList<Int>(), sections.earlierInQueue)
         assertEquals(listOf(3, 1, 2), sections.upNext)
+    }
+
+    @Test
+    fun legacyOrderOnlyDirtySnapshotIsClassifiedForDiscardInsteadOfPut() {
+        assertEquals(
+            LegacyDirtySnapshotClassification.ORDER_ONLY_REORDER,
+            classifyLegacyDirtySnapshot(local, serverSnapshot(listOf(1, 2, 3))),
+        )
+    }
+
+    @Test
+    fun legacyMixedMembershipAndRelativeOrderFailsClosed() {
+        val mixed = local.copy(itemIds = listOf(3, 1, 4), currentItemId = 1)
+        assertEquals(
+            LegacyDirtySnapshotClassification.AMBIGUOUS_MIXED_REORDER,
+            classifyLegacyDirtySnapshot(mixed, serverSnapshot(listOf(1, 2, 3))),
+        )
+    }
+
+    @Test
+    fun clearlyNonReorderLegacyMembershipMutationKeepsExistingSynchronizationPath() {
+        val membershipOnly = local.copy(itemIds = listOf(1, 2, 3, 4))
+        assertEquals(
+            LegacyDirtySnapshotClassification.NON_REORDER,
+            classifyLegacyDirtySnapshot(membershipOnly, serverSnapshot(listOf(1, 2, 3))),
+        )
+        assertTrue(
+            planUpNextReconnect(true, observedVersion = 7, localSnapshot = membershipOnly) is
+                UpNextSyncPlan.Replace,
+        )
+    }
+
+    @Test
+    fun legacyOrderCombinedWithPointerOrProvenanceChangeFailsClosed() {
+        assertEquals(
+            LegacyDirtySnapshotClassification.AMBIGUOUS_MIXED_REORDER,
+            classifyLegacyDirtySnapshot(
+                local.copy(currentItemId = 2),
+                serverSnapshot(listOf(1, 2, 3)),
+            ),
+        )
+        assertEquals(
+            LegacyDirtySnapshotClassification.AMBIGUOUS_MIXED_REORDER,
+            classifyLegacyDirtySnapshot(
+                local.copy(seedSourceLabel = "Other source"),
+                serverSnapshot(listOf(1, 2, 3)),
+            ),
+        )
     }
 }

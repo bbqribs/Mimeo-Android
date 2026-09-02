@@ -106,6 +106,23 @@ internal enum class SessionLifecycleAction {
     MoveToBin,
 }
 
+internal fun fullSessionPositionForVisibleTarget(
+    fullSessionItemIds: List<Int>,
+    visibleTargetItemId: Int,
+): Int? = fullSessionItemIds.indexOf(visibleTargetItemId).takeIf { it >= 0 }
+
+internal fun availableUpNextMoveActions(
+    visibleIndex: Int,
+    visibleCount: Int,
+    reorderEnabled: Boolean,
+): List<String> {
+    if (!reorderEnabled || visibleIndex !in 0 until visibleCount) return emptyList()
+    return buildList {
+        if (visibleIndex > 0) add("Move up")
+        if (visibleIndex < visibleCount - 1) add("Move down")
+    }
+}
+
 internal fun shouldShowJumpToNowPlayingPill(
     scrollOffsetPx: Int,
     activeTopOffsetPx: Float?,
@@ -704,7 +721,7 @@ internal fun NowPlayingSessionPanel(
     onOpenItem: (Int) -> Unit,
     onJumpToQueueItem: (Int) -> Unit,
     onJumpToHistoryItem: (Int) -> Unit,
-    onReorderItem: (fromIndex: Int, toIndex: Int) -> Unit,
+    onReorderItem: (itemId: Int, toPosition: Int) -> Unit,
     onRemoveItem: (Int) -> Unit,
     onClearUpcoming: () -> Unit,
     modifier: Modifier = Modifier,
@@ -725,6 +742,8 @@ internal fun NowPlayingSessionPanel(
     onBatchArchiveItems: (Set<Int>) -> Unit = {},
     onBatchUnarchiveItems: (Set<Int>) -> Unit = {},
     archivedHistoryItemIds: Set<Int> = emptySet(),
+    reorderEnabled: Boolean = false,
+    reorderStatusLabel: String? = null,
 ) {
     val densityTokens = LocalMimeoDensityTokens.current
     val isV1 = LocalMimeoV1Active.current
@@ -780,7 +799,10 @@ internal fun NowPlayingSessionPanel(
 
     fun absoluteIndexForUpcoming(upcomingIndex: Int): Int {
         val itemId = upcomingItems().getOrNull(upcomingIndex)?.itemId ?: return -1
-        return localItems.indexOfFirst { it.itemId == itemId }
+        return fullSessionPositionForVisibleTarget(
+            fullSessionItemIds = localItems.map { it.itemId },
+            visibleTargetItemId = itemId,
+        ) ?: -1
     }
 
     fun scrollDraggedItemNearEdge(from: Int) {
@@ -860,7 +882,10 @@ internal fun NowPlayingSessionPanel(
         val target = currentTargetIndex
         val absoluteFrom = if (from >= 0) absoluteIndexForUpcoming(from) else -1
         val absoluteTarget = if (target >= 0) absoluteIndexForUpcoming(target) else -1
+        val movedItemId = localItems.getOrNull(absoluteFrom)?.itemId
         val shouldReorder =
+            reorderEnabled &&
+            movedItemId != null &&
             absoluteFrom in localItems.indices &&
             absoluteTarget in localItems.indices &&
             absoluteTarget != absoluteFrom
@@ -874,7 +899,7 @@ internal fun NowPlayingSessionPanel(
         dragStartTopOffsets = emptyMap()
         dragStartHeights = emptyMap()
         if (shouldReorder) {
-            onReorderItem(absoluteFrom, absoluteTarget)
+            onReorderItem(checkNotNull(movedItemId), absoluteTarget)
         }
     }
 
@@ -1386,6 +1411,14 @@ internal fun NowPlayingSessionPanel(
                         )
                     }
                 }
+                reorderStatusLabel?.let { label ->
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 4.dp),
+                    )
+                }
                 if (upcomingItems.isEmpty()) {
                     Text(
                         text = "No upcoming items.",
@@ -1432,12 +1465,17 @@ internal fun NowPlayingSessionPanel(
                                 metadata = rowMetadata,
                                 status = null,
                                 modifier = Modifier.semantics {
+                                    val availableActions = availableUpNextMoveActions(
+                                        visibleIndex = index,
+                                        visibleCount = upcomingItems.size,
+                                        reorderEnabled = reorderEnabled,
+                                    )
                                     customActions = buildList {
-                                        if (index > 0) add(CustomAccessibilityAction("Move up") {
-                                            onReorderItem(absoluteIndex, absoluteIndexForUpcoming(index - 1)); true
+                                        if ("Move up" in availableActions) add(CustomAccessibilityAction("Move up") {
+                                            onReorderItem(item.itemId, absoluteIndexForUpcoming(index - 1)); true
                                         })
-                                        if (index < upcomingItems.lastIndex) add(CustomAccessibilityAction("Move down") {
-                                            onReorderItem(absoluteIndex, absoluteIndexForUpcoming(index + 1)); true
+                                        if ("Move down" in availableActions) add(CustomAccessibilityAction("Move down") {
+                                            onReorderItem(item.itemId, absoluteIndexForUpcoming(index + 1)); true
                                         })
                                     }
                                 },
@@ -1445,15 +1483,21 @@ internal fun NowPlayingSessionPanel(
                                 onOpen = { onOpenItem(item.itemId) },
                                 leadingContent = {
                                     DragHandleIcon(
-                                        contentDescription = "Drag to reorder",
+                                        contentDescription = if (reorderEnabled) {
+                                            "Drag to reorder"
+                                        } else {
+                                            reorderStatusLabel ?: "Reorder unavailable"
+                                        },
                                         modifier = Modifier.pointerInput(item.itemId, index) {
                                             detectDragGestures(
                                                 onDragStart = {
-                                                    dragStartTopOffsets = itemTopOffsets.toMap()
-                                                    dragStartHeights = itemHeights.toMap()
-                                                    draggingIndex = index
-                                                    dragOffsetY = 0f
-                                                    currentTargetIndex = index
+                                                    if (reorderEnabled) {
+                                                        dragStartTopOffsets = itemTopOffsets.toMap()
+                                                        dragStartHeights = itemHeights.toMap()
+                                                        draggingIndex = index
+                                                        dragOffsetY = 0f
+                                                        currentTargetIndex = index
+                                                    }
                                                 },
                                                 onDrag = { _, dragAmount ->
                                                     dragOffsetY += dragAmount.y

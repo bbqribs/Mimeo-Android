@@ -109,6 +109,35 @@ class AccountScopedRequestContextTest {
     }
 
     @Test
+    fun lateSemanticMoveResponseCannotAlterNewAccountOrEndpoint() = runBlocking {
+        val moveOwner = AccountScopedRequestContext(
+            baseUrl = "https://one.example.com",
+            apiToken = "token-a",
+            localStateOwner = "owner-a",
+        )
+        var current = moveOwner
+        var appliedOrder: List<Int>? = null
+        val delayedMove = CompletableDeferred<List<Int>>()
+        val apply = async(start = CoroutineStart.UNDISPATCHED) {
+            applyAccountScopedResponseIfStillCurrent(
+                requestContext = moveOwner,
+                currentContext = { current },
+                response = delayedMove.await(),
+            ) { appliedOrder = it }
+        }
+
+        current = AccountScopedRequestContext(
+            baseUrl = "https://two.example.com",
+            apiToken = "token-b",
+            localStateOwner = "owner-b",
+        )
+        delayedMove.complete(listOf(3, 1, 2))
+
+        assertFalse(apply.await())
+        assertNull(appliedOrder)
+    }
+
+    @Test
     fun delayedResponseForCurrentAccount_appliesLibraryState() = runBlocking {
         val account = AccountScopedRequestContext(
             baseUrl = "https://reader.example.com",
