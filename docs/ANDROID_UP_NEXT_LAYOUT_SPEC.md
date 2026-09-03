@@ -154,17 +154,20 @@ active item.
 
 | Behavior | Rule |
 |---|---|
-| Reorder | Preserve existing drag reorder for upcoming rows. |
+| Reorder | Preserve existing drag reorder for upcoming rows. Publish one canonical semantic move by stable item ID and full-session target position; never publish an ordered snapshot. |
 | Drag handle | Visible only on upcoming rows. |
 | Remove | Preserve remove icon for upcoming rows. |
-| TalkBack | Preserve custom actions: "Move up" and "Move down" for every reorderable upcoming row where movement is possible. |
+| TalkBack | Preserve custom actions: "Move up" and "Move down" for every reorderable upcoming row where movement is possible. The first/last available boundaries remain disabled. |
+| Pending/offline | One offline move may appear locally when a server session/version was observed. Show its pending state, disable another move, and require reconnect for resolution. |
 | Tap | Opens Locus for that item using existing Up Next row semantics. |
 | Clear upcoming | Place near the Upcoming section header, not in row overflow. |
 | Empty upcoming | Show a compact empty state under the Upcoming header, for example "No upcoming items." Keep Re-seed and Up Next overflow available. |
 
-Upcoming rows are the only rows participating in queue reorder. History
-and active rows must not be included in the index range passed to reorder
-logic.
+Upcoming rows are the only rows participating in queue reorder. History,
+Earlier in queue and active rows never gain movement affordances. A visible
+upcoming index must be mapped back to the corresponding item position in the
+full authoritative session before publication; section-relative indices are
+never sent to the backend.
 
 ## 8. Snap-to-Active
 

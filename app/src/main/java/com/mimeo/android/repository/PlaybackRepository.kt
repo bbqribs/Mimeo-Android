@@ -971,6 +971,151 @@ class PlaybackRepository(
 
     suspend fun readUpNextSyncMetadata(): UpNextSyncEntity? = database.upNextSyncDao().get()
 
+    internal suspend fun pendingUpNextSemanticMove(): PendingUpNextSemanticMove? {
+        return decodePendingUpNextSemanticMove(
+            database.upNextSyncDao().get()?.pendingSemanticMoveJson.orEmpty(),
+        )
+    }
+
+    internal suspend fun stageUpNextSemanticMove(
+        ownerKey: String,
+        serverIdentity: String,
+        itemId: Int,
+        toPosition: Int,
+    ): StageUpNextSemanticMoveResult = database.withTransaction {
+        val metadataDao = database.upNextSyncDao()
+        val metadata = metadataDao.get() ?: return@withTransaction StageUpNextSemanticMoveResult.MissingServerContext
+        if (metadata.ownerKey != ownerKey || metadata.serverIdentity != serverIdentity) {
+            return@withTransaction StageUpNextSemanticMoveResult.MissingServerContext
+        }
+        if (decodePendingUpNextSemanticMove(metadata.pendingSemanticMoveJson) != null) {
+            return@withTransaction StageUpNextSemanticMoveResult.PendingIntentExists
+        }
+        if (metadata.semanticMoveCapability == UpNextSemanticMoveCapability.UNSUPPORTED.name) {
+            return@withTransaction StageUpNextSemanticMoveResult.Unsupported
+        }
+        if (metadata.dirty) return@withTransaction StageUpNextSemanticMoveResult.DirtyLegacySnapshot
+        val sessionId = metadata.serverSessionId
+            ?: return@withTransaction StageUpNextSemanticMoveResult.MissingServerContext
+        val structureVersion = metadata.serverStructureVersion ?: metadata.serverVersion
+            ?: return@withTransaction StageUpNextSemanticMoveResult.MissingServerContext
+        val nowPlayingDao = database.nowPlayingDao()
+        val row = nowPlayingDao.getSession()
+            ?: return@withTransaction StageUpNextSemanticMoveResult.InvalidTarget
+        val items = parseStoredNowPlaying(row.queueJson).toMutableList()
+        val fromIndex = items.indexOfFirst { it.itemId == itemId }
+        val activeItemId = row.currentIndex.takeIf { it >= 0 }?.let(items::getOrNull)?.itemId
+        val activeIndex = activeItemId?.let { id -> items.indexOfFirst { it.itemId == id } } ?: -1
+        if (
+            fromIndex !in items.indices ||
+            fromIndex <= activeIndex ||
+            toPosition !in items.indices ||
+            toPosition <= activeIndex ||
+            fromIndex == toPosition
+        ) {
+            return@withTransaction StageUpNextSemanticMoveResult.InvalidTarget
+        }
+        val moved = items.removeAt(fromIndex)
+        items.add(toPosition, moved)
+        val updatedRow = row.copy(
+            queueJson = encodeStoredNowPlaying(items),
+            currentIndex = activeItemId?.let { id -> items.indexOfFirst { it.itemId == id } } ?: -1,
+            updatedAt = System.currentTimeMillis(),
+        )
+        val intent = PendingUpNextSemanticMove(
+            sessionId = sessionId,
+            expectedStructureVersion = structureVersion,
+            itemId = itemId,
+            originalPosition = fromIndex,
+            toPosition = toPosition,
+        )
+        nowPlayingDao.upsert(updatedRow)
+        metadataDao.upsert(
+            metadata.copy(
+                pendingSemanticMoveJson = encodePendingUpNextSemanticMove(intent),
+                lastSemanticMoveDiagnosticJson = "",
+            ),
+        )
+        StageUpNextSemanticMoveResult.Staged(intent, updatedRow.toSession(items))
+    }
+
+    internal suspend fun updatePendingUpNextSemanticMovePhase(
+        expected: PendingUpNextSemanticMove,
+        phase: PendingUpNextMovePhase,
+    ): PendingUpNextSemanticMove? = database.withTransaction {
+        val dao = database.upNextSyncDao()
+        val metadata = dao.get() ?: return@withTransaction null
+        val current = decodePendingUpNextSemanticMove(metadata.pendingSemanticMoveJson)
+            ?: return@withTransaction null
+        if (current != expected) return@withTransaction null
+        val updated = current.copy(phase = phase)
+        dao.upsert(metadata.copy(pendingSemanticMoveJson = encodePendingUpNextSemanticMove(updated)))
+        updated
+    }
+
+    internal suspend fun clearPendingUpNextSemanticMove(
+        diagnostic: UpNextMoveDiagnostic? = null,
+    ) {
+        val dao = database.upNextSyncDao()
+        val existing = dao.get() ?: return
+        dao.upsert(
+            existing.copy(
+                pendingSemanticMoveJson = "",
+                lastSemanticMoveDiagnosticJson = encodeUpNextMoveDiagnostic(diagnostic),
+            ),
+        )
+    }
+
+    internal suspend fun rollbackPendingUpNextSemanticMove(
+        diagnostic: UpNextMoveDiagnostic,
+    ): NowPlayingSession? = database.withTransaction {
+        val metadataDao = database.upNextSyncDao()
+        val metadata = metadataDao.get() ?: return@withTransaction null
+        val pending = decodePendingUpNextSemanticMove(metadata.pendingSemanticMoveJson)
+            ?: return@withTransaction null
+        val nowPlayingDao = database.nowPlayingDao()
+        val row = nowPlayingDao.getSession()
+        val items = row?.let { parseStoredNowPlaying(it.queueJson).toMutableList() }
+        val updatedSession = if (row != null && items != null) {
+            val currentItemId = row.currentIndex.takeIf { it >= 0 }?.let(items::getOrNull)?.itemId
+            val currentPosition = items.indexOfFirst { it.itemId == pending.itemId }
+            if (currentPosition >= 0) {
+                val moved = items.removeAt(currentPosition)
+                items.add(pending.originalPosition.coerceIn(0, items.size), moved)
+            }
+            val updated = row.copy(
+                queueJson = encodeStoredNowPlaying(items),
+                currentIndex = currentItemId?.let { id -> items.indexOfFirst { it.itemId == id } } ?: -1,
+                updatedAt = System.currentTimeMillis(),
+            )
+            nowPlayingDao.upsert(updated)
+            updated.toSession(items)
+        } else {
+            null
+        }
+        metadataDao.upsert(
+            metadata.copy(
+                pendingSemanticMoveJson = "",
+                lastSemanticMoveDiagnosticJson = encodeUpNextMoveDiagnostic(diagnostic),
+            ),
+        )
+        updatedSession
+    }
+
+    internal suspend fun markUpNextSemanticMoveUnsupported(
+        diagnostic: UpNextMoveDiagnostic? = null,
+    ) {
+        val dao = database.upNextSyncDao()
+        val existing = dao.get() ?: return
+        dao.upsert(
+            existing.copy(
+                semanticMoveCapability = UpNextSemanticMoveCapability.UNSUPPORTED.name,
+                pendingSemanticMoveJson = "",
+                lastSemanticMoveDiagnosticJson = encodeUpNextMoveDiagnostic(diagnostic),
+            ),
+        )
+    }
+
     internal suspend fun pendingUpNextPointerTransitions(): List<PendingUpNextPointerTransition> {
         val encoded = database.upNextSyncDao().get()?.pendingPointerTransitionsJson ?: return emptyList()
         return decodePendingUpNextPointerTransitions(encoded)
@@ -985,6 +1130,7 @@ class PlaybackRepository(
             existing.copy(
                 capability = UpNextCapability.SUPPORTED.name,
                 serverVersion = session.version,
+                serverStructureVersion = session.structureVersion,
                 serverSessionId = sessionId,
                 serverPointerVersion = pointerVersion,
             ),
@@ -1031,6 +1177,7 @@ class PlaybackRepository(
             existing.copy(
                 capability = UpNextCapability.SUPPORTED.name,
                 serverVersion = session.version,
+                serverStructureVersion = session.structureVersion,
                 serverSessionId = session.sessionId,
                 serverPointerVersion = session.pointerVersion,
                 pendingPointerTransitionsJson = encodePendingUpNextPointerTransitions(pending.drop(1)),
@@ -1102,6 +1249,7 @@ class PlaybackRepository(
                 serverIdentity = serverIdentity,
                 capability = UpNextCapability.SUPPORTED.name,
                 serverVersion = null,
+                serverStructureVersion = null,
                 serverSessionId = null,
                 serverPointerVersion = null,
                 pendingPointerTransitionsJson = "[]",
@@ -1126,10 +1274,13 @@ class PlaybackRepository(
         )
     }
 
-    suspend fun applyAuthoritativeUpNextSession(
+    internal suspend fun applyAuthoritativeUpNextSession(
         session: UpNextSession?,
         ownerKey: String,
         serverIdentity: String,
+        semanticMoveCompletion: Boolean = false,
+        semanticMoveAvailable: Boolean = true,
+        moveDiagnostic: UpNextMoveDiagnostic? = null,
     ): NowPlayingSession? = database.withTransaction {
         val nowPlayingDao = database.nowPlayingDao()
         val existingRow = nowPlayingDao.getSession()
@@ -1143,9 +1294,20 @@ class PlaybackRepository(
                     serverIdentity = serverIdentity,
                     capability = UpNextCapability.SUPPORTED.name,
                     serverVersion = session?.version,
+                    serverStructureVersion = session?.structureVersion,
                     serverSessionId = session?.sessionId,
                     serverPointerVersion = session?.pointerVersion,
                     pendingPointerTransitionsJson = "[]",
+                    semanticMoveCapability = if (semanticMoveCompletion) {
+                        if (semanticMoveAvailable) {
+                            UpNextSemanticMoveCapability.SUPPORTED.name
+                        } else {
+                            UpNextSemanticMoveCapability.UNSUPPORTED.name
+                        }
+                    } else {
+                        UpNextSemanticMoveCapability.UNKNOWN.name
+                    },
+                    lastSemanticMoveDiagnosticJson = encodeUpNextMoveDiagnostic(moveDiagnostic),
                     dirty = false,
                 ),
             )
@@ -1156,10 +1318,37 @@ class PlaybackRepository(
         val authoritativeItems = session.items
             .sortedBy { it.position }
             .distinctBy { it.itemId }
-            .map { item -> priorById[item.itemId]?.mergeAuthoritative(item) ?: item.toStoredNowPlayingItem() }
+            .map { item ->
+                val prior = priorById[item.itemId]
+                when {
+                    semanticMoveCompletion && prior != null -> prior
+                    prior != null -> prior.mergeAuthoritative(item)
+                    else -> item.toStoredNowPlayingItem()
+                }
+            }
         val authoritativeIds = authoritativeItems.mapTo(hashSetOf()) { it.itemId }
         val retainedHistory = existingHistory.filterNot { it.itemId in authoritativeIds }
-        val currentIndex = session.currentItemId
+        val existingMetadata = database.upNextSyncDao().get()
+        val pendingPointerTransitions = existingMetadata
+            ?.pendingPointerTransitionsJson
+            ?.let(::decodePendingUpNextPointerTransitions)
+            .orEmpty()
+        val preserveNewerPointer = semanticMoveCompletion && (
+            pendingPointerTransitions.isNotEmpty() ||
+                existingMetadata?.serverPointerVersion?.let { known ->
+                    session.pointerVersion?.let { incoming -> incoming < known }
+                } == true
+            )
+        val effectiveCurrentItemId = if (preserveNewerPointer) {
+            existingRow
+                ?.currentIndex
+                ?.takeIf { it >= 0 }
+                ?.let(existingItems::getOrNull)
+                ?.itemId
+        } else {
+            session.currentItemId
+        }
+        val currentIndex = effectiveCurrentItemId
             ?.let { activeId -> authoritativeItems.indexOfFirst { it.itemId == activeId } }
             ?.takeIf { it >= 0 }
             ?: -1
@@ -1173,9 +1362,17 @@ class PlaybackRepository(
             queueJson = encodeStoredNowPlaying(authoritativeItems, retainedHistory),
             currentIndex = currentIndex,
             updatedAt = System.currentTimeMillis(),
-            sourcePlaylistId = preserveSourceId,
-            seedSourceKind = session.seedSourceKind,
-            seedSourceLabel = session.seedSourceLabel,
+            sourcePlaylistId = if (semanticMoveCompletion) existingRow?.sourcePlaylistId else preserveSourceId,
+            seedSourceKind = if (semanticMoveCompletion) {
+                existingRow?.seedSourceKind ?: session.seedSourceKind
+            } else {
+                session.seedSourceKind
+            },
+            seedSourceLabel = if (semanticMoveCompletion) {
+                existingRow?.seedSourceLabel ?: session.seedSourceLabel
+            } else {
+                session.seedSourceLabel
+            },
         )
         nowPlayingDao.upsert(row)
         database.upNextSyncDao().upsert(
@@ -1184,9 +1381,35 @@ class PlaybackRepository(
                 serverIdentity = serverIdentity,
                 capability = UpNextCapability.SUPPORTED.name,
                 serverVersion = session.version,
+                serverStructureVersion = session.structureVersion,
                 serverSessionId = session.sessionId,
-                serverPointerVersion = session.pointerVersion,
-                pendingPointerTransitionsJson = "[]",
+                serverPointerVersion = if (preserveNewerPointer) {
+                    maxOf(existingMetadata?.serverPointerVersion ?: 0L, session.pointerVersion ?: 0L)
+                        .takeIf { it > 0L }
+                } else {
+                    session.pointerVersion
+                },
+                pendingPointerTransitionsJson = if (semanticMoveCompletion) {
+                    existingMetadata?.pendingPointerTransitionsJson ?: "[]"
+                } else {
+                    "[]"
+                },
+                semanticMoveCapability = if (semanticMoveCompletion) {
+                    if (semanticMoveAvailable) {
+                        UpNextSemanticMoveCapability.SUPPORTED.name
+                    } else {
+                        UpNextSemanticMoveCapability.UNSUPPORTED.name
+                    }
+                } else {
+                    existingMetadata?.semanticMoveCapability ?: UpNextSemanticMoveCapability.UNKNOWN.name
+                },
+                pendingSemanticMoveJson = if (semanticMoveCompletion) {
+                    ""
+                } else {
+                    existingMetadata?.pendingSemanticMoveJson.orEmpty()
+                },
+                lastSemanticMoveDiagnosticJson = encodeUpNextMoveDiagnostic(moveDiagnostic)
+                    .ifBlank { existingMetadata?.lastSemanticMoveDiagnosticJson.orEmpty() },
                 dirty = false,
             ),
         )
@@ -1796,32 +2019,6 @@ class PlaybackRepository(
         return updatedRow.toSession(stored)
     }
 
-    suspend fun reorderSessionItem(fromIndex: Int, toIndex: Int): NowPlayingSession? {
-        val dao = database.nowPlayingDao()
-        val row = dao.getSession() ?: return null
-        val stored = parseStoredNowPlaying(row.queueJson).toMutableList()
-        if (stored.isEmpty()) {
-            dao.clear()
-            return null
-        }
-        val reorder = computeSessionReorderPlan(
-            itemCount = stored.size,
-            currentIndex = row.currentIndex,
-            fromIndex = fromIndex,
-            toIndex = toIndex,
-        ) ?: return row.toSession(stored)
-        val moved = stored.removeAt(reorder.fromIndex)
-        stored.add(reorder.toIndex, moved)
-        val updatedAt = System.currentTimeMillis()
-        val updatedRow = row.copy(
-            queueJson = encodeStoredNowPlaying(stored, parseStoredNowPlayingHistory(row.queueJson)),
-            currentIndex = reorder.currentIndex,
-            updatedAt = updatedAt,
-        )
-        dao.upsert(updatedRow)
-        return updatedRow.toSession(stored)
-    }
-
     suspend fun clearUpcomingFromSession(): NowPlayingSession? {
         val dao = database.nowPlayingDao()
         val row = dao.getSession() ?: return null
@@ -1993,6 +2190,19 @@ class PlaybackRepository(
         ListSerializer(PendingUpNextPointerTransition.serializer()),
         transitions,
     )
+
+    private fun decodePendingUpNextSemanticMove(encoded: String): PendingUpNextSemanticMove? {
+        if (encoded.isBlank()) return null
+        return runCatching {
+            json.decodeFromString(PendingUpNextSemanticMove.serializer(), encoded)
+        }.getOrNull()
+    }
+
+    private fun encodePendingUpNextSemanticMove(intent: PendingUpNextSemanticMove): String =
+        json.encodeToString(PendingUpNextSemanticMove.serializer(), intent)
+
+    private fun encodeUpNextMoveDiagnostic(diagnostic: UpNextMoveDiagnostic?): String =
+        diagnostic?.let { json.encodeToString(UpNextMoveDiagnostic.serializer(), it) }.orEmpty()
 
     private fun parseStoredNowPlayingHistory(queueJson: String): List<StoredNowPlayingItem> {
         // Legacy builds wrote item-based History inside Room's session JSON. Canonical History

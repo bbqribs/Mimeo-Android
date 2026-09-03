@@ -300,6 +300,8 @@ fun QueueScreen(
     val nowPlayingSession by vm.nowPlayingSession.collectAsState()
     val upNextHistory by vm.upNextHistory.collectAsState()
     val historyAwaitingRefresh by vm.historyAwaitingRefresh.collectAsState()
+    val upNextReorderEnabled by vm.upNextReorderEnabled.collectAsState()
+    val upNextReorderStatus by vm.upNextReorderStatus.collectAsState()
     val archivedSessionHistoryIds by vm.archivedSessionHistoryIds.collectAsState()
     val actionScope = rememberCoroutineScope()
 
@@ -754,9 +756,11 @@ fun QueueScreen(
                 onOpenItem = { itemId -> onOpenPlayer(itemId) },
                 onJumpToQueueItem = { itemId -> vm.jumpToUpcomingSessionItem(itemId) },
                 onJumpToHistoryItem = { itemId -> vm.jumpToHistorySessionItem(itemId) },
-                onReorderItem = { from, to ->
-                    vm.reorderNowPlayingSessionItem(fromIndex = from, toIndex = to)
+                onReorderItem = { itemId, toPosition ->
+                    vm.reorderNowPlayingSessionItem(itemId = itemId, toPosition = toPosition)
                 },
+                reorderEnabled = upNextReorderEnabled,
+                reorderStatusLabel = upNextReorderStatus,
                 onRemoveItem = { itemId -> vm.removeItemFromSession(itemId) },
                 onClearUpcoming = { showClearUpcomingConfirmation = true },
                 onArchiveSessionItem = { itemId -> vm.archiveSessionItem(itemId) },

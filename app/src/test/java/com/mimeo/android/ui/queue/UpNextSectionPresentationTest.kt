@@ -101,4 +101,23 @@ class UpNextSectionPresentationTest {
         assertEquals(-1, sessionPanelActiveIndex(currentItemId = 9, localItemIds = listOf(7, 8)))
         assertEquals(1, sessionPanelActiveIndex(currentItemId = 8, localItemIds = listOf(7, 8)))
     }
+
+    @Test
+    fun `visible upcoming target maps to full session position by stable identity`() {
+        val fullSession = listOf(10, 20, 30, 40, 50)
+
+        assertEquals(3, fullSessionPositionForVisibleTarget(fullSession, visibleTargetItemId = 40))
+        assertNull(fullSessionPositionForVisibleTarget(fullSession, visibleTargetItemId = 99))
+    }
+
+    @Test
+    fun `accessible move actions keep correct upcoming boundaries and disable while pending`() {
+        assertEquals(listOf("Move down"), availableUpNextMoveActions(0, 3, reorderEnabled = true))
+        assertEquals(
+            listOf("Move up", "Move down"),
+            availableUpNextMoveActions(1, 3, reorderEnabled = true),
+        )
+        assertEquals(listOf("Move up"), availableUpNextMoveActions(2, 3, reorderEnabled = true))
+        assertTrue(availableUpNextMoveActions(1, 3, reorderEnabled = false).isEmpty())
+    }
 }

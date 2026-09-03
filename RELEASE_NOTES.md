@@ -26,9 +26,15 @@ material here.
 - Playback pointer transitions publish through the server's atomic advance
   operation, including conditionally replayed offline transitions, so Android
   and web History share the same durable occurrence log.
+- Up Next drag and TalkBack reorder now use the server's canonical semantic
+  move operation with the structure version and a full-session destination;
+  reorder never uploads a whole ordered session through `PUT`.
+- One offline move can remain visibly pending across restart. Conflicts and
+  uncertain outcomes refresh server truth without replay, while account or
+  endpoint changes quarantine the old owner by clearing its local state.
 
-Backend: requires merged Mimeo PRs #933 and #937; Mimeo PR #940 is the matching
-web History-management adoption.
+Backend: requires merged Mimeo PRs #918, #933 and #937; Mimeo PRs #931 and #940
+are the matching web reorder and History-management adoptions.
 
 ## 0.4.5 (versionCode 11) - 2026-07-20
 

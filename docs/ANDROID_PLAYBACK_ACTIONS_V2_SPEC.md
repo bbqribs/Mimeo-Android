@@ -306,9 +306,12 @@ Notes:
 
 ### 8.3 Up Next upcoming row overflow
 
-Unchanged from v1.0 §3 / Up Next Layout Spec §7: row offers reorder
-helpers (Move to end, drag, TalkBack move-up/move-down) and **Remove
-from queue**. Play Next / Play Last / Play from Here are **not** offered
+The v1.0 surface remains: upcoming rows offer drag and TalkBack
+move-up/move-down plus **Remove from queue**. Reorder now publishes the
+canonical semantic Up Next move using stable item identity, the last
+acknowledged structure version, and a full-session target position. It never
+uses whole-session replacement, and pending/stale moves follow the continuity
+policy in `ANDROID_UP_NEXT_CONTINUITY.md`. Play Next / Play Last / Play from Here are **not** offered
 because the item is already in the session; tap-Play (§5.1) covers the
 "play this now" intent.
 

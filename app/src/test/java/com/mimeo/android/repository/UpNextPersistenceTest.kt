@@ -58,11 +58,182 @@ class UpNextPersistenceTest {
         val snapshot = restarted.localUpNextSnapshot()!!
 
         assertEquals(4L, metadata.serverVersion)
+        assertEquals(4L, metadata.serverStructureVersion)
         assertTrue(metadata.dirty)
         assertEquals(listOf(2, 1), snapshot.itemIds)
         assertEquals(2, snapshot.currentItemId)
         assertEquals("playlist", snapshot.seedSourceKind)
         assertEquals("Reading list", snapshot.seedSourceLabel)
+    }
+
+    @Test
+    fun oneOfflineSemanticMovePersistsOriginalStructureIntentAndBlocksASecondMove() = runBlocking {
+        repository.prepareUpNextSyncScope("owner-a", "https://reader.example.com")
+        repository.applyAuthoritativeUpNextSession(
+            server(version = 4, pointerVersion = 9, itemIds = listOf(1, 2, 3), currentItemId = 1),
+            "owner-a",
+            "https://reader.example.com",
+        )
+
+        val staged = repository.stageUpNextSemanticMove(
+            ownerKey = "owner-a",
+            serverIdentity = "https://reader.example.com",
+            itemId = 3,
+            toPosition = 1,
+        ) as StageUpNextSemanticMoveResult.Staged
+        assertEquals(listOf(1, 3, 2), staged.session.items.map { it.itemId })
+        assertEquals(1, staged.session.currentItem?.itemId)
+        assertFalse(repository.readUpNextSyncMetadata()!!.dirty)
+
+        val restarted = PlaybackRepository(ApiClient(), database, context)
+        val pending = restarted.pendingUpNextSemanticMove()!!
+        assertEquals(19L, pending.sessionId)
+        assertEquals(4L, pending.expectedStructureVersion)
+        assertEquals(3, pending.itemId)
+        assertEquals(2, pending.originalPosition)
+        assertEquals(1, pending.toPosition)
+        assertEquals(PendingUpNextMovePhase.QUEUED, pending.phase)
+        assertTrue(
+            restarted.stageUpNextSemanticMove(
+                ownerKey = "owner-a",
+                serverIdentity = "https://reader.example.com",
+                itemId = 2,
+                toPosition = 1,
+            ) is StageUpNextSemanticMoveResult.PendingIntentExists,
+        )
+
+        val inFlight = restarted.updatePendingUpNextSemanticMovePhase(
+            pending,
+            PendingUpNextMovePhase.IN_FLIGHT,
+        )!!
+        assertEquals(PendingUpNextMovePhase.IN_FLIGHT, inFlight.phase)
+        assertEquals(
+            PendingUpNextMovePhase.IN_FLIGHT,
+            PlaybackRepository(ApiClient(), database, context).pendingUpNextSemanticMove()?.phase,
+        )
+    }
+
+    @Test
+    fun semanticMoveResultAtomicallyAdoptsOrderWithoutRegressingPointerProgressOrProvenance() = runBlocking {
+        repository.prepareUpNextSyncScope("owner-a", "https://reader.example.com")
+        repository.applyAuthoritativeUpNextSession(
+            server(version = 4, pointerVersion = 7, itemIds = listOf(1, 2, 3, 4), currentItemId = 1),
+            "owner-a",
+            "https://reader.example.com",
+        )
+        val pointer = repository.enqueueUpNextPointerTransition(1, 2)!!
+        repository.setCurrentIndex(1)
+        repository.setNowPlayingItemProgress(2, 64)
+        assertTrue(
+            repository.acknowledgeUpNextPointerTransition(
+                pointer,
+                server(version = 4, pointerVersion = 8, itemIds = listOf(1, 2, 3, 4), currentItemId = 2),
+            ),
+        )
+        val stagedMove = repository.stageUpNextSemanticMove(
+            ownerKey = "owner-a",
+            serverIdentity = "https://reader.example.com",
+            itemId = 4,
+            toPosition = 2,
+        ) as StageUpNextSemanticMoveResult.Staged
+        assertEquals(4L, stagedMove.intent.expectedStructureVersion)
+        assertEquals(8L, repository.readUpNextSyncMetadata()!!.serverPointerVersion)
+
+        val applied = repository.applyAuthoritativeUpNextSession(
+            session = server(
+                version = 5,
+                pointerVersion = 7,
+                itemIds = listOf(1, 2, 4, 3),
+                currentItemId = 1,
+            ),
+            ownerKey = "owner-a",
+            serverIdentity = "https://reader.example.com",
+            semanticMoveCompletion = true,
+            moveDiagnostic = UpNextMoveDiagnostic(outcome = "applied"),
+        )!!
+
+        assertEquals(listOf(1, 2, 4, 3), applied.items.map { it.itemId })
+        assertEquals(2, applied.currentItem?.itemId)
+        assertEquals(64, applied.currentItem?.lastReadPercent)
+        assertEquals("Reading list", applied.seedSourceLabel)
+        val metadata = repository.readUpNextSyncMetadata()!!
+        assertEquals(5L, metadata.serverStructureVersion)
+        assertEquals(8L, metadata.serverPointerVersion)
+        assertFalse(metadata.dirty)
+        assertNull(repository.pendingUpNextSemanticMove())
+        assertTrue(repository.pendingUpNextPointerTransitions().isEmpty())
+    }
+
+    @Test
+    fun rejectedSemanticMoveRollsBackDurableOrderAndKeepsSanitizedDiagnosticOnly() = runBlocking {
+        repository.prepareUpNextSyncScope("owner-a", "https://reader.example.com")
+        repository.applyAuthoritativeUpNextSession(
+            server(version = 4, itemIds = listOf(1, 2, 3), currentItemId = 1),
+            "owner-a",
+            "https://reader.example.com",
+        )
+        repository.stageUpNextSemanticMove("owner-a", "https://reader.example.com", 3, 1)
+
+        val rolledBack = repository.rollbackPendingUpNextSemanticMove(
+            UpNextMoveDiagnostic(outcome = "rejected", code = "http_400"),
+        )!!
+
+        assertEquals(listOf(1, 2, 3), rolledBack.items.map { it.itemId })
+        assertNull(repository.pendingUpNextSemanticMove())
+        val diagnostic = repository.readUpNextSyncMetadata()!!.lastSemanticMoveDiagnosticJson
+        assertTrue(diagnostic.contains("rejected"))
+        assertTrue(diagnostic.contains("http_400"))
+        assertFalse(diagnostic.contains("example.com"))
+    }
+
+    @Test
+    fun unsupportedActiveMissingAndForeignMoveTargetsNeverMutateDurableSession() = runBlocking {
+        repository.prepareUpNextSyncScope("owner-a", "https://reader.example.com")
+        repository.applyAuthoritativeUpNextSession(
+            server(version = 4, itemIds = listOf(1, 2, 3), currentItemId = 1),
+            "owner-a",
+            "https://reader.example.com",
+        )
+        val original = repository.getSession()!!.items.map { it.itemId }
+
+        assertTrue(
+            repository.stageUpNextSemanticMove(
+                "owner-a",
+                "https://reader.example.com",
+                itemId = 1,
+                toPosition = 2,
+            ) is StageUpNextSemanticMoveResult.InvalidTarget,
+        )
+        assertTrue(
+            repository.stageUpNextSemanticMove(
+                "owner-a",
+                "https://reader.example.com",
+                itemId = 99,
+                toPosition = 2,
+            ) is StageUpNextSemanticMoveResult.InvalidTarget,
+        )
+        assertTrue(
+            repository.stageUpNextSemanticMove(
+                "owner-b",
+                "https://reader.example.com",
+                itemId = 3,
+                toPosition = 1,
+            ) is StageUpNextSemanticMoveResult.MissingServerContext,
+        )
+        assertEquals(original, repository.getSession()!!.items.map { it.itemId })
+        assertNull(repository.pendingUpNextSemanticMove())
+
+        repository.markUpNextSemanticMoveUnsupported(UpNextMoveDiagnostic(outcome = "unsupported"))
+        assertTrue(
+            repository.stageUpNextSemanticMove(
+                "owner-a",
+                "https://reader.example.com",
+                itemId = 3,
+                toPosition = 1,
+            ) is StageUpNextSemanticMoveResult.Unsupported,
+        )
+        assertEquals(original, repository.getSession()!!.items.map { it.itemId })
+        assertNull(repository.pendingUpNextSemanticMove())
     }
 
     @Test
@@ -103,13 +274,18 @@ class UpNextPersistenceTest {
     @Test
     fun accountSwitchEndpointSwitchAndSignOutClearContinuityState() = runBlocking {
         repository.prepareUpNextSyncScope("owner-a", "https://one.example.com")
-        repository.startSession(listOf(queueItem(1)), 1, null)
-        repository.markUpNextDirty()
+        repository.applyAuthoritativeUpNextSession(
+            server(version = 4, itemIds = listOf(1, 2, 3), currentItemId = 1),
+            "owner-a",
+            "https://one.example.com",
+        )
+        repository.stageUpNextSemanticMove("owner-a", "https://one.example.com", 3, 1)
 
         repository.prepareUpNextSyncScope("owner-b", "https://one.example.com")
         assertNull(repository.getSession())
         assertFalse(repository.readUpNextSyncMetadata()!!.dirty)
         assertTrue(repository.pendingUpNextPointerTransitions().isEmpty())
+        assertNull(repository.pendingUpNextSemanticMove())
         assertEquals("owner-b", repository.readUpNextSyncMetadata()!!.ownerKey)
 
         repository.startSession(listOf(queueItem(2)), 2, null)

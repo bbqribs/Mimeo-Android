@@ -3,6 +3,9 @@ package com.mimeo.android.ui.queue
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -70,6 +73,63 @@ class UpNextRenderSmokeTest {
         composeTestRule.onNodeWithText("Visible history assurance article").assertExists()
         composeTestRule.onNodeWithText("Up Next · 1").assertIsDisplayed()
         composeTestRule.onNodeWithText("Upcoming assurance article").assertIsDisplayed()
+    }
+
+    @Test
+    fun reorderAffordancesAreUpcomingOnlyWithAccessibleBoundaries() {
+        val session = NowPlayingSession(
+            items = listOf(
+                sessionItem(itemId = 10, title = "Earlier assurance article"),
+                sessionItem(itemId = 11, title = "Current assurance article"),
+                sessionItem(itemId = 12, title = "First upcoming article"),
+                sessionItem(itemId = 13, title = "Middle upcoming article"),
+                sessionItem(itemId = 14, title = "Last upcoming article"),
+            ),
+            historyItems = listOf(
+                sessionItem(itemId = 15, title = "History assurance article"),
+            ),
+            currentIndex = 1,
+            updatedAt = 1L,
+            sourcePlaylistId = null,
+        )
+
+        composeTestRule.setContent {
+            MimeoTheme {
+                NowPlayingSessionPanel(
+                    session = session,
+                    historyProjection = null,
+                    seededFromLabel = "CI assurance fixture",
+                    onOpenItem = {},
+                    onJumpToQueueItem = {},
+                    onJumpToHistoryItem = {},
+                    onReorderItem = { _, _ -> },
+                    onRemoveItem = {},
+                    onClearUpcoming = {},
+                    reorderEnabled = true,
+                )
+            }
+        }
+
+        composeTestRule.onAllNodesWithContentDescription("Drag to reorder").assertCountEquals(3)
+        composeTestRule.onNode(
+            hasMoveActions("Move down") and androidx.compose.ui.test.hasText("First upcoming article"),
+        ).assertExists()
+        composeTestRule.onNode(
+            hasMoveActions("Move up", "Move down") and
+                androidx.compose.ui.test.hasText("Middle upcoming article"),
+        ).assertExists()
+        composeTestRule.onNode(
+            hasMoveActions("Move up") and androidx.compose.ui.test.hasText("Last upcoming article"),
+        ).assertExists()
+        composeTestRule.onNode(
+            hasMoveActions() and androidx.compose.ui.test.hasText("Earlier assurance article"),
+        ).assertExists()
+        composeTestRule.onNode(
+            hasMoveActions() and androidx.compose.ui.test.hasText("Current assurance article"),
+        ).assertExists()
+        composeTestRule.onNode(
+            hasMoveActions() and androidx.compose.ui.test.hasText("History assurance article"),
+        ).assertExists()
     }
 
     @Test
@@ -277,4 +337,10 @@ class UpNextRenderSmokeTest {
         stillInSession = stillInSession,
         isTrashed = isTrashed,
     )
+
+    private fun hasMoveActions(vararg expected: String) = SemanticsMatcher(
+        description = "has move actions ${expected.toList()}",
+    ) { node ->
+        node.config.getOrNull(SemanticsActions.CustomActions)?.map { it.label }.orEmpty() == expected.toList()
+    }
 }

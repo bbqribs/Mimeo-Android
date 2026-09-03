@@ -3,6 +3,7 @@ package com.mimeo.android.data
 import com.mimeo.android.model.UpNextSessionWriteRequest
 import com.mimeo.android.model.UpNextPointerAdvanceRequest
 import com.mimeo.android.model.UpNextHistoryRemovalTarget
+import com.mimeo.android.model.UpNextMoveRequest
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -19,7 +20,7 @@ class UpNextApiTest {
 
     private val populatedSession = """
         {
-          "version": 4, "session_id": 19, "pointer_version": 7,
+          "version": 4, "structure_version": 4, "session_id": 19, "pointer_version": 7,
           "items": [{
             "item_id": 22, "position": 0, "title": "Article", "url": "https://example.com/a",
             "host": "example.com", "status": "ready", "active_content_version_id": 9,
@@ -46,6 +47,7 @@ class UpNextApiTest {
             assertNull(client().getUpNextSession(server.url("/").toString(), "token"))
             val session = client().getUpNextSession(server.url("/").toString(), "token")!!
             assertEquals(4L, session.version)
+            assertEquals(4L, session.structureVersion)
             assertEquals(19L, session.sessionId)
             assertEquals(7L, session.pointerVersion)
             assertEquals(listOf(22), session.items.map { it.itemId })
@@ -59,6 +61,119 @@ class UpNextApiTest {
                 assertEquals("/up-next/session", request.path)
                 assertEquals("Bearer token", request.getHeader("Authorization"))
             }
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun semanticMoveUsesExactRoutePayloadAndDecodesAuthoritativeSession() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"session":$populatedSession}"""))
+        server.start()
+        try {
+            val session = client().moveUpNextSessionItem(
+                server.url("/").toString(),
+                "device-token",
+                UpNextMoveRequest(expectedVersion = 4, itemId = 22, toPosition = 9),
+            )
+
+            assertEquals(4L, session.structureVersion)
+            assertEquals(7L, session.pointerVersion)
+            val request = server.takeRequest()
+            assertEquals("POST", request.method)
+            assertEquals("/up-next/session/move", request.path)
+            assertEquals("Bearer device-token", request.getHeader("Authorization"))
+            assertEquals(
+                "{\"expected_version\":4,\"item_id\":22,\"to_position\":9}",
+                request.body.readUtf8(),
+            )
+            assertEquals(1, server.requestCount)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun semanticMoveConflictRetainsOnlySanitizedStructureDiagnosticsAndNeverReplays() = runBlocking {
+        val correlationId = "18d87ab4-b4fa-4c3f-8f74-9a681ae38d52"
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setResponseCode(409).setBody(
+                """{"error":{"code":"up_next_structure_version_conflict","message":"refresh","domain":"structure","expected_version":3,"actual_version":4,"correlation_id":"$correlationId"},"current_session":$populatedSession}""",
+            ),
+        )
+        server.start()
+        try {
+            client().moveUpNextSessionItem(
+                server.url("/").toString(),
+                "token",
+                UpNextMoveRequest(3, 22, 0),
+            )
+            fail("Expected structure conflict")
+        } catch (error: UpNextVersionConflictException) {
+            assertEquals("up_next_structure_version_conflict", error.code)
+            assertEquals("structure", error.domain)
+            assertEquals(3L, error.expectedVersion)
+            assertEquals(4L, error.actualVersion)
+            assertEquals(correlationId, error.correlationId)
+            assertEquals(4L, error.currentSession?.structureVersion)
+            assertEquals(1, server.requestCount)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun semanticMoveHttpFailuresAreBodyFreeAndNeverFallBackToSessionPut() = runBlocking {
+        val server = MockWebServer()
+        listOf(400, 401, 403, 404, 405).forEach { status ->
+            server.enqueue(
+                MockResponse().setResponseCode(status).setBody(
+                    """{"detail":"private title and https://private.example/item"}""",
+                ),
+            )
+        }
+        server.start()
+        try {
+            listOf(400, 401, 403, 404, 405).forEach { status ->
+                try {
+                    client().moveUpNextSessionItem(
+                        server.url("/").toString(),
+                        "token",
+                        UpNextMoveRequest(4, 22, 0),
+                    )
+                    fail("Expected HTTP $status")
+                } catch (error: UpNextMoveHttpException) {
+                    assertEquals(status, error.statusCode)
+                    assertEquals("up_next_move_http_$status", error.message)
+                }
+            }
+            repeat(5) {
+                val request = server.takeRequest()
+                assertEquals("POST", request.method)
+                assertEquals("/up-next/session/move", request.path)
+            }
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun malformedMoveSuccessDoesNotTriggerASecondRequest() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"session":{"broken":true}}"""))
+        server.start()
+        try {
+            runCatching {
+                client().moveUpNextSessionItem(
+                    server.url("/").toString(),
+                    "token",
+                    UpNextMoveRequest(4, 22, 0),
+                )
+            }.onSuccess { fail("Expected malformed response failure") }
+            assertEquals(1, server.requestCount)
+            assertEquals("/up-next/session/move", server.takeRequest().path)
         } finally {
             server.shutdown()
         }

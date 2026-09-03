@@ -3,6 +3,8 @@
 Status: continuity implemented by `T-AND-UPNEXT-CONTINUITY-1`; canonical
 History read/pointer adoption shipped in Android PR #492, and account-scoped
 History management is implemented by `T-AND-UPNEXT-HISTORY-MANAGEMENT-1`.
+Canonical semantic reorder is implemented by
+`T-AND-UPNEXT-SEMANTIC-REORDER-1`.
 
 ## Authority and ownership
 
@@ -10,7 +12,9 @@ History management is implemented by `T-AND-UPNEXT-HISTORY-MANAGEMENT-1`.
 The Room `now_playing` row remains the offline playback/session cache. The
 `up_next_sync_metadata` row stores metadata only: canonical endpoint, hashed
 account owner key, endpoint capability, last acknowledged positive version and
-dirty state. It is not an item database.
+dirty state. Structure and pointer versions are retained as separate domains.
+The row also holds at most one account-and-endpoint-scoped pending semantic
+move plus a bounded sanitized diagnostic; it is not an item database.
 
 The continuity scope is the signed-in account plus normalized server base URL.
 Sign-out, account switch and endpoint switch clear the local session and its
@@ -23,17 +27,41 @@ continuity metadata before another owner can use them.
   `expected_version: null`.
 - Server present wins over either empty or populated pre-adoption local state.
 - Both absent records supported/clean state without creating a session.
-- Offline queue and active-pointer edits remain immediately usable and persist
-  dirty with the last observed version.
-- Reconnect publishes the complete dirty result with that exact version.
-  A local clear uses `DELETE` with the exact observed positive version.
+- Existing non-reorder queue mutations and active-pointer edits remain
+  immediately usable offline. Legitimate legacy whole-session mutations retain
+  their existing dirty-snapshot path; a local clear uses `DELETE` with the exact
+  observed positive structure version.
+- Upcoming-row reorder is never represented by that dirty snapshot. Drag and
+  TalkBack actions identify the row by item ID, convert the visible destination
+  to its zero-based position in the full session, and call
+  `POST /up-next/session/move` with the last acknowledged structure version.
+  The complete queue is never sent to express a move, and the successful server
+  projection supplies the resulting order.
+- One offline semantic move may be staged only after a session identity and
+  structure version have been observed. Its original precondition, item ID and
+  full-session destination survive restart. A second move is disabled until the
+  first is resolved. Reconnect publishes a queued intent once against its
+  original structure version.
+- An in-flight or otherwise ambiguous move is refresh-only after restart or
+  transport uncertainty: Android reads server truth before doing anything else,
+  clears the pending intent after reconciliation, and never blindly resubmits.
 - HTTP 409 `up_next_version_conflict` is decoded separately from auth and
   transport failures. Android atomically applies `current_session`, discards
   the stale structural edit, and tells the user that the newer session won.
 - Versions advance locally only when a successful mutation response or
   authoritative read is atomically applied.
-- A missing endpoint (404/405) is remembered as unsupported for that owner and
-  endpoint; the existing local-only session continues to work.
+- A structure-domain 409 atomically applies `current_session`, discards the
+  move without retry, retains only the sanitized conflict domain/version/
+  correlation summary, and asks the user to repeat the move if still wanted.
+  Pointer advances use their independent version and do not stale a move; a
+  move result cannot regress a newer accepted or pending pointer transition.
+- A missing move endpoint (404/405) is remembered separately as unsupported for
+  that owner and endpoint, semantic reorder is disabled, and Android refreshes.
+  It never falls back to whole-session replacement.
+- Before any pre-cutover dirty snapshot is uploaded, Android compares it with
+  server truth. Order-only legacy reorders are discarded and refreshed;
+  mixed/ambiguous reorder snapshots fail closed. Clearly non-reorder dirty
+  mutations retain the existing whole-session path.
 
 Server session items provide membership/order/lifecycle projection. Android
 continues using its existing item/session cache and item endpoints for display,

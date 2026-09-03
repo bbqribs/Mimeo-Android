@@ -120,8 +120,9 @@ archive/History semantics audit is also independently executable if it does not
 invent server truth. The backend History/pointer and semantic-move contracts
 are now merged, and Android durable-History/pointer adoption shipped in PR
 #492. Account-scoped Android History management is implemented by
-`T-AND-UPNEXT-HISTORY-MANAGEMENT-1`; semantic reorder adoption and the
-cross-device assurance matrix remain separate follow-up slices.
+`T-AND-UPNEXT-HISTORY-MANAGEMENT-1`; canonical semantic reorder adoption is
+implemented by `T-AND-UPNEXT-SEMANTIC-REORDER-1`. The cross-device assurance
+matrix remains a separate follow-up slice.
 
 The local **progress/pointer observability** slice entered through this same
 allowance and its decision work is done:
@@ -182,8 +183,9 @@ path remains the supported distribution route.
   migration target/tooling work, and the maintenance baseline.
 - Android durable-History/pointer adoption shipped in PR #492, and
   account-scoped History management is implemented by
-  `T-AND-UPNEXT-HISTORY-MANAGEMENT-1`. Semantic reorder adoption and
-  cross-device assurance remain separate follow-ups.
+  `T-AND-UPNEXT-HISTORY-MANAGEMENT-1`. Canonical semantic reorder adoption is
+  implemented by `T-AND-UPNEXT-SEMANTIC-REORDER-1`; cross-device assurance
+  remains a separate follow-up.
 - Android's migration check follows Linux rehearsal evidence and is serialized
   inside each dress rehearsal; it is not a substitute for either rehearsal.
 - Lane decisions remain with the operator: `B1`/movement rules for queue work,

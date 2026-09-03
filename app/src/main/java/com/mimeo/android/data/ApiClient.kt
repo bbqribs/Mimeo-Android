@@ -49,6 +49,7 @@ import com.mimeo.android.model.UpNextHistoryClearRequest
 import com.mimeo.android.model.UpNextHistoryMutationEnvelope
 import com.mimeo.android.model.UpNextHistoryRemovalTarget
 import com.mimeo.android.model.UpNextHistoryRemoveRequest
+import com.mimeo.android.model.UpNextMoveRequest
 import com.mimeo.android.model.UpNextHistoryProjection
 import com.mimeo.android.model.UpNextPreferences
 import com.mimeo.android.model.UpNextPreferencesEnvelope
@@ -79,11 +80,19 @@ import java.util.concurrent.TimeUnit
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 
-class ApiException(val statusCode: Int, message: String) : Exception(message)
+open class ApiException(val statusCode: Int, message: String) : Exception(message)
 
 class UpNextVersionConflictException(
     val currentSession: UpNextSession?,
-) : Exception("up_next_version_conflict")
+    val code: String,
+    val domain: String?,
+    val expectedVersion: Long?,
+    val actualVersion: Long?,
+    val correlationId: String?,
+) : Exception(code)
+
+class UpNextMoveHttpException(statusCode: Int) :
+    ApiException(statusCode, "up_next_move_http_$statusCode")
 
 class SmartQueueReorderConflictException(
     val code: String,
@@ -258,6 +267,9 @@ class ApiClient(
         private const val DEBUG_TARGET_ITEM_ID = 409
         private const val QUEUE_FETCH_LIMIT = 100
         const val QUEUE_LOAD_MORE_LIMIT = 50
+        private val UUID_PATTERN = Regex(
+            "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+        )
     }
 
     suspend fun getUpNextSession(baseUrl: String, token: String): UpNextSession? = withContext(Dispatchers.IO) {
@@ -318,6 +330,20 @@ class ApiClient(
             .post(jsonBody(payload))
             .build()
         executeUpNextJson(request) { responseBody ->
+            checkNotNull(json.decodeFromString<UpNextSessionEnvelope>(responseBody).session)
+        }
+    }
+
+    suspend fun moveUpNextSessionItem(
+        baseUrl: String,
+        token: String,
+        payload: UpNextMoveRequest,
+    ): UpNextSession = withContext(Dispatchers.IO) {
+        val request = authorizedRequest(baseUrl, "/up-next/session/move", token)
+            .acceptJson()
+            .post(jsonBody(payload))
+            .build()
+        executeUpNextMoveJson(request) { responseBody ->
             checkNotNull(json.decodeFromString<UpNextSessionEnvelope>(responseBody).session)
         }
     }
@@ -1361,7 +1387,7 @@ class ApiClient(
                     json.decodeFromString<UpNextConflictResponse>(body)
                 }.getOrNull()
                 if (conflict?.error?.code?.endsWith("_version_conflict") == true) {
-                    throw UpNextVersionConflictException(conflict.currentSession)
+                    throw conflict.toVersionConflictException()
                 }
             }
             if (!response.isSuccessful) {
@@ -1369,6 +1395,42 @@ class ApiClient(
             }
             return parser(body)
         }
+    }
+
+    private inline fun <T> executeUpNextMoveJson(
+        request: Request,
+        parser: (String) -> T,
+    ): T {
+        okHttpClient.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (response.code == 409) {
+                val conflict = runCatching {
+                    json.decodeFromString<UpNextConflictResponse>(body)
+                }.getOrNull()
+                if (conflict?.error?.code == "up_next_structure_version_conflict") {
+                    throw conflict.toVersionConflictException()
+                }
+            }
+            if (!response.isSuccessful) {
+                // The move endpoint's raw body may contain request-specific detail. Retain only
+                // the status code; callers never log or display the response body.
+                throw UpNextMoveHttpException(response.code)
+            }
+            return parser(body)
+        }
+    }
+
+    private fun UpNextConflictResponse.toVersionConflictException(): UpNextVersionConflictException {
+        val safeDomain = error.domain?.takeIf { it == "structure" || it == "pointer" }
+        val safeCorrelation = error.correlationId?.takeIf(UUID_PATTERN::matches)
+        return UpNextVersionConflictException(
+            currentSession = currentSession,
+            code = error.code.take(80),
+            domain = safeDomain,
+            expectedVersion = error.expectedVersion,
+            actualVersion = error.actualVersion,
+            correlationId = safeCorrelation,
+        )
     }
 
     private inline fun <T> executeSmartQueueReorderJson(
@@ -1448,4 +1510,5 @@ class ApiClient(
         val digest = MessageDigest.getInstance("SHA-256").digest(body.toByteArray())
         return digest.take(4).joinToString("") { "%02x".format(it) }
     }
+
 }
