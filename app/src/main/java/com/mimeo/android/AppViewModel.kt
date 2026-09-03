@@ -7636,7 +7636,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (handleAuthFailureIfNeeded(refreshError)) return PendingMoveFlushResult.BLOCKED
             if (isNetworkError(refreshError)) _queueOffline.value = true
             refreshUpNextReorderUiState()
-            showSnackbar("Move outcome pending. Reconnect to refresh Up Next before another move.")
             PendingMoveFlushResult.BLOCKED
         }
     }

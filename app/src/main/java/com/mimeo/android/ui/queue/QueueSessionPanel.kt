@@ -1468,7 +1468,9 @@ internal fun NowPlayingSessionPanel(
                             ItemRow(
                                 title = rowTitle,
                                 metadata = rowMetadata,
-                                status = null,
+                                // The section label can scroll out of view while this handle remains visible.
+                                // Keep the same state-derived explanation beside every disabled Up Next control.
+                                status = reorderStatusLabel?.takeIf { !reorderEnabled },
                                 modifier = Modifier.semantics {
                                     val availableActions = availableUpNextMoveActions(
                                         visibleIndex = index,
