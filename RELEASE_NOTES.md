@@ -32,6 +32,9 @@ material here.
 - One offline move can remain visibly pending across restart. Conflicts and
   uncertain outcomes refresh server truth without replay, while account or
   endpoint changes quarantine the old owner by clearing its local state.
+- Up Next now keeps move feedback next to disabled reorder controls: pending,
+  submitting, uncertain, conflict, unsupported, and older-local-change states
+  explain the correct next action without relying only on a snackbar.
 
 Backend: requires merged Mimeo PRs #918, #933 and #937; Mimeo PRs #931 and #940
 are the matching web reorder and History-management adoptions.

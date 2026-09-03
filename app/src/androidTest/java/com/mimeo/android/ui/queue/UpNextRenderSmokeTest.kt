@@ -133,6 +133,46 @@ class UpNextRenderSmokeTest {
     }
 
     @Test
+    fun disabledReorderKeepsAnAccessiblePersistentStatusInCompactLayout() {
+        val status = "Move outcome uncertain — reconnect or refresh Up Next to learn the server order. The move will not be resent."
+        val session = NowPlayingSession(
+            items = listOf(
+                sessionItem(itemId = 1, title = "Current compact article"),
+                sessionItem(itemId = 2, title = "Upcoming compact article"),
+            ),
+            currentIndex = 0,
+            updatedAt = 1L,
+            sourcePlaylistId = null,
+        )
+
+        composeTestRule.setContent {
+            MimeoTheme {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    NowPlayingSessionPanel(
+                        session = session,
+                        historyProjection = null,
+                        seededFromLabel = "CI assurance fixture",
+                        onOpenItem = {},
+                        onJumpToQueueItem = {},
+                        onJumpToHistoryItem = {},
+                        onReorderItem = { _, _ -> },
+                        onRemoveItem = {},
+                        onClearUpcoming = {},
+                        reorderEnabled = false,
+                        reorderStatusLabel = status,
+                    )
+                }
+            }
+        }
+
+        composeTestRule.onNodeWithText(status).assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription(status).assertExists()
+        composeTestRule.onNode(
+            hasMoveActions() and androidx.compose.ui.test.hasText("Upcoming compact article"),
+        ).assertExists()
+    }
+
+    @Test
     fun canonicalHistoryRendersWithoutAnActiveSession() {
         val projection = UpNextHistoryProjection(
             entries = listOf(
