@@ -149,7 +149,6 @@ import com.mimeo.android.model.UpNextHistoryRemovalTarget
 import com.mimeo.android.model.UpNextPreferences
 import com.mimeo.android.model.UpNextSessionWriteRequest
 import com.mimeo.android.model.UpNextPointerAdvanceRequest
-import com.mimeo.android.model.UpNextMoveRequest
 import com.mimeo.android.model.PendingManualSaveItem
 import com.mimeo.android.model.PendingManualSaveType
 import com.mimeo.android.model.PendingItemAction
@@ -193,7 +192,8 @@ import com.mimeo.android.repository.PlaybackRepository
 import com.mimeo.android.repository.UpNextCapability
 import com.mimeo.android.repository.LegacyDirtySnapshotClassification
 import com.mimeo.android.repository.PendingUpNextMovePhase
-import com.mimeo.android.repository.PendingUpNextSemanticMove
+import com.mimeo.android.repository.PendingUpNextMovePublicationResult
+import com.mimeo.android.repository.PendingUpNextMovePublisher
 import com.mimeo.android.repository.StageUpNextSemanticMoveResult
 import com.mimeo.android.repository.UpNextMoveDiagnostic
 import com.mimeo.android.repository.UpNextSemanticMoveCapability
@@ -422,6 +422,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         database = database,
         appContext = application.applicationContext,
     )
+    private val pendingUpNextMovePublisher = PendingUpNextMovePublisher(repository, apiClient)
     private val shareSaveCoordinator = ShareSaveCoordinator(
         context = application.applicationContext,
         apiClient = apiClient,
@@ -7461,113 +7462,120 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         serverIdentity: String,
         announceSuccess: Boolean,
     ): PendingMoveFlushResult {
-        val pending = repository.pendingUpNextSemanticMove() ?: return PendingMoveFlushResult.NONE
-        if (pending.phase != PendingUpNextMovePhase.QUEUED) {
-            return reconcileAmbiguousUpNextMoveLocked(
+        return when (
+            val publication = pendingUpNextMovePublisher.publish(
+                baseUrl = current.baseUrl,
+                token = current.apiToken,
+                requestStillCurrent = {
+                    accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())
+                },
+                onPostStarting = { refreshUpNextReorderUiState() },
+            )
+        ) {
+            PendingUpNextMovePublicationResult.None -> PendingMoveFlushResult.NONE
+            PendingUpNextMovePublicationResult.RequiresReconciliation -> reconcileAmbiguousUpNextMoveLocked(
                 current = current,
                 requestContext = requestContext,
                 serverIdentity = serverIdentity,
                 diagnostic = UpNextMoveDiagnostic(outcome = "ambiguous_reconciled"),
             )
-        }
-        val inFlight = repository.updatePendingUpNextSemanticMovePhase(
-            expected = pending,
-            phase = PendingUpNextMovePhase.IN_FLIGHT,
-        ) ?: return PendingMoveFlushResult.BLOCKED
-        refreshUpNextReorderUiState()
-        return try {
-            val acknowledged = apiClient.moveUpNextSessionItem(
-                baseUrl = current.baseUrl,
-                token = current.apiToken,
-                payload = UpNextMoveRequest(
-                    expectedVersion = inFlight.expectedStructureVersion,
-                    itemId = inFlight.itemId,
-                    toPosition = inFlight.toPosition,
-                ),
-            )
-            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
-                return PendingMoveFlushResult.BLOCKED
+            PendingUpNextMovePublicationResult.Blocked -> PendingMoveFlushResult.BLOCKED
+            is PendingUpNextMovePublicationResult.PreflightFailed -> {
+                val error = publication.error
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return PendingMoveFlushResult.BLOCKED
+                }
+                if (!handleAuthFailureIfNeeded(error) && isNetworkError(error)) {
+                    _queueOffline.value = true
+                }
+                PendingMoveFlushResult.BLOCKED
             }
-            applyAuthoritativeUpNext(
-                session = acknowledged,
-                requestContext = requestContext,
-                serverIdentity = serverIdentity,
-                semanticMoveCompletion = true,
-                moveDiagnostic = UpNextMoveDiagnostic(outcome = "applied"),
-            )
-            _queueOffline.value = false
-            if (announceSuccess) showSnackbar("Up Next order updated.")
-            PendingMoveFlushResult.APPLIED
-        } catch (conflict: UpNextVersionConflictException) {
-            if (accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+            is PendingUpNextMovePublicationResult.Acknowledged -> {
                 applyAuthoritativeUpNext(
-                    session = conflict.currentSession,
+                    session = publication.session,
                     requestContext = requestContext,
                     serverIdentity = serverIdentity,
                     semanticMoveCompletion = true,
-                    moveDiagnostic = conflict.toMoveDiagnostic("conflict_discarded"),
+                    moveDiagnostic = UpNextMoveDiagnostic(outcome = "applied"),
                 )
-                refreshUpNextHistory(current, requestContext)
-                showSnackbar("Up Next changed on another device. The move was not applied; repeat it if still wanted.")
+                _queueOffline.value = false
+                if (announceSuccess) showSnackbar("Up Next order updated.")
+                PendingMoveFlushResult.APPLIED
             }
-            PendingMoveFlushResult.CONFLICT
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: ApiException) {
-            if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
-                return PendingMoveFlushResult.BLOCKED
-            }
-            if (handleAuthFailureIfNeeded(error)) return PendingMoveFlushResult.BLOCKED
-            when (error.statusCode) {
-                404, 405 -> reconcileRejectedUpNextMoveLocked(
-                    current = current,
-                    requestContext = requestContext,
-                    serverIdentity = serverIdentity,
-                    diagnostic = UpNextMoveDiagnostic(
-                        outcome = "unsupported",
-                        code = "http_${error.statusCode}",
-                    ),
-                    semanticMoveAvailable = false,
-                    message = "This server does not support Up Next reorder. The queue was refreshed.",
-                )
-                400, 403 -> reconcileRejectedUpNextMoveLocked(
-                    current = current,
-                    requestContext = requestContext,
-                    serverIdentity = serverIdentity,
-                    diagnostic = UpNextMoveDiagnostic(
-                        outcome = "rejected",
-                        code = "http_${error.statusCode}",
-                    ),
-                    semanticMoveAvailable = true,
-                    message = "The move was rejected. Up Next was refreshed and not changed by this attempt.",
-                )
-                else -> {
-                    repository.updatePendingUpNextSemanticMovePhase(
-                        expected = inFlight,
-                        phase = PendingUpNextMovePhase.AMBIGUOUS,
-                    )
-                    reconcileAmbiguousUpNextMoveLocked(
-                        current = current,
-                        requestContext = requestContext,
-                        serverIdentity = serverIdentity,
-                        diagnostic = UpNextMoveDiagnostic(
-                            outcome = "ambiguous_reconciled",
-                            code = "http_${error.statusCode}",
-                        ),
-                    )
+            is PendingUpNextMovePublicationResult.PostFailed -> {
+                if (!accountScopedRequestStillCurrent(requestContext, accountScopedRequestContext())) {
+                    return PendingMoveFlushResult.BLOCKED
+                }
+                val error = publication.error
+                when (error) {
+                    is UpNextVersionConflictException -> {
+                        applyAuthoritativeUpNext(
+                            session = error.currentSession,
+                            requestContext = requestContext,
+                            serverIdentity = serverIdentity,
+                            semanticMoveCompletion = true,
+                            moveDiagnostic = error.toMoveDiagnostic("conflict_discarded"),
+                        )
+                        refreshUpNextHistory(current, requestContext)
+                        showSnackbar("Up Next changed on another device. The move was not applied; repeat it if still wanted.")
+                        PendingMoveFlushResult.CONFLICT
+                    }
+                    is ApiException -> {
+                        if (handleAuthFailureIfNeeded(error)) return PendingMoveFlushResult.BLOCKED
+                        when (error.statusCode) {
+                            404, 405 -> reconcileRejectedUpNextMoveLocked(
+                                current = current,
+                                requestContext = requestContext,
+                                serverIdentity = serverIdentity,
+                                diagnostic = UpNextMoveDiagnostic(
+                                    outcome = "unsupported",
+                                    code = "http_${error.statusCode}",
+                                ),
+                                semanticMoveAvailable = false,
+                                message = "This server does not support Up Next reorder. The queue was refreshed.",
+                            )
+                            400, 403 -> reconcileRejectedUpNextMoveLocked(
+                                current = current,
+                                requestContext = requestContext,
+                                serverIdentity = serverIdentity,
+                                diagnostic = UpNextMoveDiagnostic(
+                                    outcome = "rejected",
+                                    code = "http_${error.statusCode}",
+                                ),
+                                semanticMoveAvailable = true,
+                                message = "The move was rejected. Up Next was refreshed and not changed by this attempt.",
+                            )
+                            else -> {
+                                repository.updatePendingUpNextSemanticMovePhase(
+                                    expected = publication.inFlight,
+                                    phase = PendingUpNextMovePhase.AMBIGUOUS,
+                                )
+                                reconcileAmbiguousUpNextMoveLocked(
+                                    current = current,
+                                    requestContext = requestContext,
+                                    serverIdentity = serverIdentity,
+                                    diagnostic = UpNextMoveDiagnostic(
+                                        outcome = "ambiguous_reconciled",
+                                        code = "http_${error.statusCode}",
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                    else -> {
+                        repository.updatePendingUpNextSemanticMovePhase(
+                            expected = publication.inFlight,
+                            phase = PendingUpNextMovePhase.AMBIGUOUS,
+                        )
+                        reconcileAmbiguousUpNextMoveLocked(
+                            current = current,
+                            requestContext = requestContext,
+                            serverIdentity = serverIdentity,
+                            diagnostic = UpNextMoveDiagnostic(outcome = "ambiguous_reconciled"),
+                        )
+                    }
                 }
             }
-        } catch (error: Exception) {
-            repository.updatePendingUpNextSemanticMovePhase(
-                expected = inFlight,
-                phase = PendingUpNextMovePhase.AMBIGUOUS,
-            )
-            reconcileAmbiguousUpNextMoveLocked(
-                current = current,
-                requestContext = requestContext,
-                serverIdentity = serverIdentity,
-                diagnostic = UpNextMoveDiagnostic(outcome = "ambiguous_reconciled"),
-            )
         }.also { refreshUpNextReorderUiState() }
     }
 
