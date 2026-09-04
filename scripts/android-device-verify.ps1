@@ -275,6 +275,36 @@ function New-DeleteKeyArguments {
     return $arguments
 }
 
+function Set-EditableFieldFocus {
+    param(
+        [Parameter(Mandatory)][int]$FieldIndex,
+        [Parameter(Mandatory)][string]$Label
+    )
+
+    foreach ($attempt in 1..5) {
+        $fields = @(Get-EditableFields -Document (Get-UiDocument))
+        if ($fields.Count -le $FieldIndex) { throw "$Label field disappeared while requesting focus." }
+
+        $focusedIndex = -1
+        for ($index = 0; $index -lt $fields.Count; $index++) {
+            if ([string]$fields[$index].focused -eq "true") {
+                $focusedIndex = $index
+                break
+            }
+        }
+        if ($focusedIndex -eq $FieldIndex) { return $fields[$FieldIndex] }
+
+        if ($focusedIndex -ge 0 -and $focusedIndex -lt $FieldIndex) {
+            [void](Invoke-Adb -Arguments @("shell", "input", "keyevent", "KEYCODE_TAB"))
+        } else {
+            Invoke-UiTap -Node $fields[$FieldIndex]
+        }
+        Start-Sleep -Milliseconds 500
+        Dismiss-AutofillUiIfPresent
+    }
+    throw "$Label field could not receive focus. Submission was stopped."
+}
+
 function Clear-AndSetField {
     param(
         [Parameter(Mandatory)][int]$FieldIndex,
@@ -286,12 +316,7 @@ function Clear-AndSetField {
     Assert-AdbInputSafe -Value $Value -Label $Label -Password:$Password
     $cleared = $false
     foreach ($attempt in 1..5) {
-        $document = Get-UiDocument
-        $fields = @(Get-EditableFields -Document $document)
-        if ($fields.Count -le $FieldIndex) {
-            throw "$Label field disappeared while preparing input."
-        }
-        $node = $fields[$FieldIndex]
+        $node = Set-EditableFieldFocus -FieldIndex $FieldIndex -Label $Label
         $currentLength = ([string]$node.text).Length
         if ($currentLength -eq 0) {
             # Confirm a second stable empty observation. We send exactly the observed number
@@ -305,9 +330,6 @@ function Clear-AndSetField {
             continue
         }
 
-        Invoke-UiTap -Node $node
-        Start-Sleep -Milliseconds 250
-        Dismiss-AutofillUiIfPresent
         [void](Invoke-Adb -Arguments @("shell", "input", "keyevent", "KEYCODE_MOVE_END"))
         $deleteArguments = New-DeleteKeyArguments -Length $currentLength
         [void](Invoke-Adb -Arguments $deleteArguments)
@@ -317,10 +339,7 @@ function Clear-AndSetField {
         throw "$Label field could not be cleared and stabilized. Submission was stopped."
     }
 
-    $readyFields = @(Get-EditableFields -Document (Get-UiDocument))
-    Invoke-UiTap -Node $readyFields[$FieldIndex]
-    Start-Sleep -Milliseconds 250
-    Dismiss-AutofillUiIfPresent
+    [void](Set-EditableFieldFocus -FieldIndex $FieldIndex -Label $Label)
     [void](Invoke-Adb -Arguments @("shell", "input", "text", $Value) -Sensitive:$Password)
     Start-Sleep -Milliseconds 750
 
