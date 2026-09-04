@@ -146,12 +146,22 @@ function Get-FocusedPackageFromWindowText {
 }
 
 function Assert-MimeoForeground {
-    $window = (Invoke-Adb -Arguments @("shell", "dumpsys", "window")) -join "`n"
-    $focusedPackage = Get-FocusedPackageFromWindowText -WindowText $window
-    if ($focusedPackage -ne $PackageId) {
-        $detail = if ([string]::IsNullOrWhiteSpace($focusedPackage)) { "unknown" } else { $focusedPackage }
-        throw "Mimeo did not remain foreground after launch (focusedPackage=$detail). Check adb logcat for an app crash before attempting UI navigation."
-    }
+    $deadline = [DateTime]::UtcNow.AddSeconds($WaitSeconds)
+    $focusedPackage = ""
+    $permissionNoticeShown = $false
+    do {
+        $window = (Invoke-Adb -Arguments @("shell", "dumpsys", "window")) -join "`n"
+        $focusedPackage = Get-FocusedPackageFromWindowText -WindowText $window
+        if ($focusedPackage -eq $PackageId) { return }
+        if ($focusedPackage -eq "com.google.android.permissioncontroller" -and -not $permissionNoticeShown) {
+            Write-Host "Android is showing a permission dialog. Resolve it on the unlocked device; waiting up to $WaitSeconds seconds for Mimeo to regain focus."
+            $permissionNoticeShown = $true
+        }
+        Start-Sleep -Seconds 1
+    } while ([DateTime]::UtcNow -lt $deadline)
+
+    $detail = if ([string]::IsNullOrWhiteSpace($focusedPackage)) { "unknown" } else { $focusedPackage }
+    throw "Mimeo did not remain foreground after launch (focusedPackage=$detail). Resolve any system dialog, or check the crash-only adb log buffer before attempting UI navigation."
 }
 
 function Prepare-Device {
@@ -340,18 +350,37 @@ function Get-PlainPassword {
 }
 
 function Assert-ServerReachableFromDevice {
+    $curlPath = ((Invoke-Adb -Arguments @("shell", "which", "curl") -AllowFailure) -join "").Trim()
     try {
-        $response = Invoke-Adb -Arguments @(
-            "shell", "curl", "--head", "--silent", "--show-error",
-            "--connect-timeout", "5", "--max-time", "8", $ServerUrl
-        )
-        if (($response -join "`n") -notmatch '^HTTP/') {
-            throw "No HTTP status line returned."
+        if (-not [string]::IsNullOrWhiteSpace($curlPath)) {
+            $response = Invoke-Adb -Arguments @(
+                "shell", "curl", "--head", "--silent", "--show-error",
+                "--connect-timeout", "5", "--max-time", "8", $ServerUrl
+            )
+            if (($response -join "`n") -notmatch '^HTTP/') {
+                throw "No HTTP status line returned."
+            }
+            Write-Host "Device HTTPS preflight passed: $ServerUrl"
+            return
         }
+
+        $uri = [Uri]$ServerUrl
+        if (-not $uri.IsAbsoluteUri -or [string]::IsNullOrWhiteSpace($uri.DnsSafeHost) -or
+            $uri.Scheme -notin @("http", "https")) {
+            throw "Server URL must be an absolute HTTP or HTTPS URL."
+        }
+        $port = if ($uri.IsDefaultPort) {
+            if ($uri.Scheme -eq "https") { 443 } else { 80 }
+        } else {
+            $uri.Port
+        }
+        [void](Invoke-Adb -Arguments @(
+            "shell", "nc", "-z", "-w", "8", $uri.DnsSafeHost, [string]$port
+        ))
+        Write-Host "Device TCP route preflight passed (curl unavailable): $($uri.DnsSafeHost):$port"
     } catch {
         throw "Backend is not reachable from the Android device at $ServerUrl. Verify the canonical runtime and Tailscale/Wi-Fi path before entering credentials. No sign-in submission was attempted."
     }
-    Write-Host "Device HTTPS preflight passed: $ServerUrl"
 }
 
 function Wait-ForUiState {
