@@ -58,9 +58,11 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -1416,7 +1418,10 @@ internal fun NowPlayingSessionPanel(
                         text = label,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 4.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { liveRegion = LiveRegionMode.Polite }
+                            .padding(start = 12.dp, end = 12.dp, bottom = 4.dp),
                     )
                 }
                 if (upcomingItems.isEmpty()) {
@@ -1463,7 +1468,9 @@ internal fun NowPlayingSessionPanel(
                             ItemRow(
                                 title = rowTitle,
                                 metadata = rowMetadata,
-                                status = null,
+                                // The section label can scroll out of view while this handle remains visible.
+                                // Keep the same state-derived explanation beside every disabled Up Next control.
+                                status = reorderStatusLabel?.takeIf { !reorderEnabled },
                                 modifier = Modifier.semantics {
                                     val availableActions = availableUpNextMoveActions(
                                         visibleIndex = index,

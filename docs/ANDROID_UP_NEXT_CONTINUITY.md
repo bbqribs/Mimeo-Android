@@ -62,6 +62,12 @@ continuity metadata before another owner can use them.
 - A missing move endpoint (404/405) is remembered separately as unsupported for
   that owner and endpoint, semantic reorder is disabled, and Android refreshes.
   It never falls back to whole-session replacement.
+- The Up Next section persistently explains a blocking queued, submitting, or
+  uncertain move beside its disabled controls. Queued intent asks for a
+  reconnect; submitting waits for acknowledgement; an ambiguous outcome asks
+  for refresh and is never resent. Sanitized conflict, rejected, unsupported,
+  and legacy-dirty outcomes retain their distinct explanation for that
+  account-and-endpoint scope; a later move clears the terminal explanation.
 - Before any pre-cutover dirty snapshot is uploaded, Android compares it with
   server truth. Order-only legacy reorders are discarded and refreshed;
   mixed/ambiguous reorder snapshots fail closed. Clearly non-reorder dirty

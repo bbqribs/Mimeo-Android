@@ -32,6 +32,9 @@ material here.
 - One offline move can remain visibly pending across restart. Conflicts and
   uncertain outcomes refresh server truth without replay, while account or
   endpoint changes quarantine the old owner by clearing its local state.
+- Up Next now keeps move feedback next to disabled reorder controls: pending,
+  submitting, uncertain, conflict, unsupported, and older-local-change states
+  explain the correct next action without relying only on a snackbar.
 - A reconnect callback no longer starts a queued Up Next move before the
   configured authenticated route is usable. Android first confirms that route
   with a read-only session request, then publishes the original move once with

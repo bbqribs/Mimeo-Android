@@ -202,6 +202,7 @@ import com.mimeo.android.repository.classifyLegacyDirtySnapshot
 import com.mimeo.android.repository.planFirstUpNextAdoption
 import com.mimeo.android.repository.planUpNextReconnect
 import com.mimeo.android.repository.resolveOfflineReadyItemIds
+import com.mimeo.android.repository.upNextReorderFeedback
 import com.mimeo.android.player.PlaybackService
 import com.mimeo.android.player.PlaybackServiceBridge
 import com.mimeo.android.player.PlaybackServiceSnapshot
@@ -7438,13 +7439,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 pending == null &&
                 metadata.serverSessionId != null &&
                 (metadata.serverStructureVersion ?: metadata.serverVersion) != null
-        _upNextReorderStatus.value = when {
-            unsupported -> "Reorder unavailable on this server."
-            pending?.phase == PendingUpNextMovePhase.QUEUED -> "Move pending — reconnect to sync."
-            pending != null -> "Move outcome pending — reconnect to refresh."
-            metadata?.dirty == true -> "Reconciling an older local queue change."
-            else -> null
-        }
+        _upNextReorderStatus.value = upNextReorderFeedback(
+            pending = pending,
+            semanticMoveUnsupported = unsupported,
+            dirtyLegacySnapshot = metadata?.dirty == true,
+            diagnostic = repository.lastUpNextSemanticMoveDiagnostic(),
+        )
     }
 
     private fun UpNextVersionConflictException.toMoveDiagnostic(outcome: String) = UpNextMoveDiagnostic(
@@ -7644,7 +7644,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (handleAuthFailureIfNeeded(refreshError)) return PendingMoveFlushResult.BLOCKED
             if (isNetworkError(refreshError)) _queueOffline.value = true
             refreshUpNextReorderUiState()
-            showSnackbar("Move outcome pending. Reconnect to refresh Up Next before another move.")
             PendingMoveFlushResult.BLOCKED
         }
     }
@@ -8071,7 +8070,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     current = current,
                     requestContext = requestContext,
                     serverIdentity = serverIdentity,
-                    announceSuccess = false,
+                    // A queued move is not successful until this publisher receives its POST acknowledgement.
+                    // Announce that one acknowledgement; no preflight or ambiguous path reaches this branch.
+                    announceSuccess = true,
                 )
             ) {
                 PendingMoveFlushResult.BLOCKED,
@@ -8102,6 +8103,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val currentMetadata = repository.readUpNextSyncMetadata() ?: metadata
             val localSnapshot = repository.localUpNextSnapshot()
             var legacyReorderMessage: String? = null
+            var legacyReorderDiagnostic: UpNextMoveDiagnostic? = null
             val plan: UpNextSyncPlan = when {
                 capability == UpNextCapability.UNKNOWN -> {
                     val server = apiClient.getUpNextSession(current.baseUrl, current.apiToken)
@@ -8118,16 +8120,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val legacyClassification = classifyLegacyDirtySnapshot(localSnapshot, server)
                     when {
                         server == null && localSnapshot != null && observedStructureVersion != null -> {
+                            legacyReorderDiagnostic = UpNextMoveDiagnostic(outcome = "legacy_unclassified_discarded")
                             legacyReorderMessage =
                                 "An older local queue change could not be classified safely and was not uploaded. Up Next was refreshed."
                             UpNextSyncPlan.Adopt(null)
                         }
                         legacyClassification == LegacyDirtySnapshotClassification.ORDER_ONLY_REORDER -> {
+                            legacyReorderDiagnostic = UpNextMoveDiagnostic(outcome = "legacy_order_discarded")
                             legacyReorderMessage =
                                 "An older local reorder was discarded. Up Next was refreshed; repeat the move if still wanted."
                             UpNextSyncPlan.Adopt(server)
                         }
                         legacyClassification == LegacyDirtySnapshotClassification.AMBIGUOUS_MIXED_REORDER -> {
+                            legacyReorderDiagnostic = UpNextMoveDiagnostic(outcome = "legacy_ambiguous_discarded")
                             legacyReorderMessage =
                                 "An older ambiguous queue change was not uploaded. Up Next was refreshed."
                             UpNextSyncPlan.Adopt(server)
@@ -8150,7 +8155,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 UpNextSyncPlan.MarkCleanAbsent -> {
                     repository.markUpNextCleanAbsent(requestContext.localStateOwner, serverIdentity)
                 }
-                is UpNextSyncPlan.Adopt -> applyAuthoritativeUpNext(plan.session, requestContext, serverIdentity)
+                is UpNextSyncPlan.Adopt -> applyAuthoritativeUpNext(
+                    plan.session,
+                    requestContext,
+                    serverIdentity,
+                    moveDiagnostic = legacyReorderDiagnostic,
+                )
                 is UpNextSyncPlan.Replace -> {
                     val acknowledged = apiClient.putUpNextSession(
                         baseUrl = current.baseUrl,

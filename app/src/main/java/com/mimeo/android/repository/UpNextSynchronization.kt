@@ -115,6 +115,41 @@ internal data class UpNextMoveDiagnostic(
     val correlationId: String? = null,
 )
 
+/**
+ * User-facing copy derived only from the durable move intent and its sanitized outcome.
+ * A terminal diagnostic remains scoped with the Up Next metadata until the next move clears it.
+ */
+internal fun upNextReorderFeedback(
+    pending: PendingUpNextSemanticMove?,
+    semanticMoveUnsupported: Boolean,
+    dirtyLegacySnapshot: Boolean,
+    diagnostic: UpNextMoveDiagnostic?,
+): String? = when {
+    pending?.phase == PendingUpNextMovePhase.QUEUED ->
+        "Move pending — reconnect to synchronize this move with its original queue version."
+    pending?.phase == PendingUpNextMovePhase.IN_FLIGHT ->
+        "Move in progress — waiting for the server acknowledgement."
+    pending?.phase == PendingUpNextMovePhase.AMBIGUOUS ->
+        "Move outcome uncertain — reconnect or refresh Up Next to learn the server order. The move will not be resent."
+    semanticMoveUnsupported ->
+        "Reorder is unavailable because this server does not support Up Next moves."
+    dirtyLegacySnapshot ->
+        "Reorder is unavailable while an older local queue change is reconciled."
+    diagnostic?.outcome == "conflict_discarded" ->
+        "Up Next changed on another device. The server order was kept; repeat the move only if still wanted."
+    diagnostic?.outcome == "ambiguous_reconciled" ->
+        "The move outcome was uncertain. Up Next was refreshed from the server; repeat the move only if still needed."
+    diagnostic?.outcome == "legacy_order_discarded" ->
+        "An older local reorder was not uploaded. Up Next was refreshed; repeat the move only if still wanted."
+    diagnostic?.outcome == "legacy_ambiguous_discarded" ->
+        "An older ambiguous queue change was not uploaded. Up Next was refreshed."
+    diagnostic?.outcome == "legacy_unclassified_discarded" ->
+        "An older local queue change could not be classified safely and was not uploaded. Up Next was refreshed."
+    diagnostic?.outcome == "rejected" ->
+        "The move was rejected. Up Next was refreshed and was not changed by this attempt."
+    else -> null
+}
+
 internal sealed interface StageUpNextSemanticMoveResult {
     data class Staged(
         val intent: PendingUpNextSemanticMove,

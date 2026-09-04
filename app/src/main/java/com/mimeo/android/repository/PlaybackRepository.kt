@@ -977,6 +977,14 @@ class PlaybackRepository(
         )
     }
 
+    internal suspend fun lastUpNextSemanticMoveDiagnostic(): UpNextMoveDiagnostic? {
+        val encoded = database.upNextSyncDao().get()?.lastSemanticMoveDiagnosticJson.orEmpty()
+        if (encoded.isBlank()) return null
+        return runCatching {
+            json.decodeFromString(UpNextMoveDiagnostic.serializer(), encoded)
+        }.getOrNull()
+    }
+
     internal suspend fun stageUpNextSemanticMove(
         ownerKey: String,
         serverIdentity: String,

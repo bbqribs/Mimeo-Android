@@ -159,4 +159,55 @@ class UpNextSynchronizationTest {
             ),
         )
     }
+
+    @Test
+    fun reorderFeedbackDistinguishesPendingSubmittingUncertainAndResolvedOutcomes() {
+        fun pending(phase: PendingUpNextMovePhase) = PendingUpNextSemanticMove(
+            sessionId = 19,
+            expectedStructureVersion = 7,
+            itemId = 3,
+            originalPosition = 2,
+            toPosition = 1,
+            phase = phase,
+        )
+
+        assertEquals(
+            "Move pending — reconnect to synchronize this move with its original queue version.",
+            upNextReorderFeedback(pending(PendingUpNextMovePhase.QUEUED), false, false, null),
+        )
+        assertEquals(
+            "Move in progress — waiting for the server acknowledgement.",
+            upNextReorderFeedback(pending(PendingUpNextMovePhase.IN_FLIGHT), false, false, null),
+        )
+        assertEquals(
+            "Move outcome uncertain — reconnect or refresh Up Next to learn the server order. The move will not be resent.",
+            upNextReorderFeedback(pending(PendingUpNextMovePhase.AMBIGUOUS), false, false, null),
+        )
+        assertEquals(
+            "Up Next changed on another device. The server order was kept; repeat the move only if still wanted.",
+            upNextReorderFeedback(null, false, false, UpNextMoveDiagnostic("conflict_discarded")),
+        )
+        assertEquals(
+            "The move outcome was uncertain. Up Next was refreshed from the server; repeat the move only if still needed.",
+            upNextReorderFeedback(null, false, false, UpNextMoveDiagnostic("ambiguous_reconciled")),
+        )
+        assertNull(upNextReorderFeedback(null, false, false, UpNextMoveDiagnostic("applied")))
+    }
+
+    @Test
+    fun reorderFeedbackRetainsUnsupportedAndLegacyExplanationsWithoutCallingThemOffline() {
+        assertEquals(
+            "Reorder is unavailable because this server does not support Up Next moves.",
+            upNextReorderFeedback(null, true, false, null),
+        )
+        assertEquals(
+            "Reorder is unavailable while an older local queue change is reconciled.",
+            upNextReorderFeedback(null, false, true, null),
+        )
+        assertEquals(
+            "An older local reorder was not uploaded. Up Next was refreshed; repeat the move only if still wanted.",
+            upNextReorderFeedback(null, false, false, UpNextMoveDiagnostic("legacy_order_discarded")),
+        )
+        assertNull(upNextReorderFeedback(null, false, false, null))
+    }
 }
