@@ -40,8 +40,12 @@ continuity metadata before another owner can use them.
 - One offline semantic move may be staged only after a session identity and
   structure version have been observed. Its original precondition, item ID and
   full-session destination survive restart. A second move is disabled until the
-  first is resolved. Reconnect publishes a queued intent once against its
-  original structure version.
+  first is resolved. Reconnect keeps the intent queued until an authenticated
+  `GET /up-next/session` succeeds against the same normalized endpoint and
+  account. That preflight is route-usability evidence only: its projection is
+  discarded, local order is not adopted, and the original intent and structure
+  version are unchanged. Only then does Android mark the move in flight and
+  publish it once against its original structure version.
 - An in-flight or otherwise ambiguous move is refresh-only after restart or
   transport uncertainty: Android reads server truth before doing anything else,
   clears the pending intent after reconciliation, and never blindly resubmits.

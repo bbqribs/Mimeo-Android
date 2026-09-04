@@ -32,6 +32,10 @@ material here.
 - One offline move can remain visibly pending across restart. Conflicts and
   uncertain outcomes refresh server truth without replay, while account or
   endpoint changes quarantine the old owner by clearing its local state.
+- A reconnect callback no longer starts a queued Up Next move before the
+  configured authenticated route is usable. Android first confirms that route
+  with a read-only session request, then publishes the original move once with
+  its original structure-version precondition.
 
 Backend: requires merged Mimeo PRs #918, #933 and #937; Mimeo PRs #931 and #940
 are the matching web reorder and History-management adoptions.
