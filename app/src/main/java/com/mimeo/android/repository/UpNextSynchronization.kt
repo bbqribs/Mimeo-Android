@@ -1,6 +1,9 @@
 package com.mimeo.android.repository
 
+import com.mimeo.android.data.ApiClient
 import com.mimeo.android.model.UpNextSession
+import com.mimeo.android.model.UpNextMoveRequest
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 
 internal enum class UpNextCapability {
@@ -30,6 +33,77 @@ internal data class PendingUpNextSemanticMove(
     val toPosition: Int,
     val phase: PendingUpNextMovePhase = PendingUpNextMovePhase.QUEUED,
 )
+
+internal sealed interface PendingUpNextMovePublicationResult {
+    data object None : PendingUpNextMovePublicationResult
+    data object RequiresReconciliation : PendingUpNextMovePublicationResult
+    data object Blocked : PendingUpNextMovePublicationResult
+    data class PreflightFailed(val error: Throwable) : PendingUpNextMovePublicationResult
+    data class Acknowledged(val session: UpNextSession) : PendingUpNextMovePublicationResult
+    data class PostFailed(
+        val inFlight: PendingUpNextSemanticMove,
+        val error: Throwable,
+    ) : PendingUpNextMovePublicationResult
+}
+
+/**
+ * Publishes one queued move only after the exact authenticated Up Next route answers a read.
+ * The preflight projection is deliberately discarded: it proves route usability but cannot
+ * replace local order or alter the move's original structure-version precondition.
+ */
+internal class PendingUpNextMovePublisher(
+    private val repository: PlaybackRepository,
+    private val apiClient: ApiClient,
+) {
+    suspend fun publish(
+        baseUrl: String,
+        token: String,
+        requestStillCurrent: suspend () -> Boolean,
+        onPostStarting: suspend () -> Unit = {},
+    ): PendingUpNextMovePublicationResult {
+        val pending = repository.pendingUpNextSemanticMove()
+            ?: return PendingUpNextMovePublicationResult.None
+        if (pending.phase != PendingUpNextMovePhase.QUEUED) {
+            return PendingUpNextMovePublicationResult.RequiresReconciliation
+        }
+
+        try {
+            apiClient.getUpNextSession(baseUrl, token)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            return PendingUpNextMovePublicationResult.PreflightFailed(error)
+        }
+        if (!requestStillCurrent()) return PendingUpNextMovePublicationResult.Blocked
+
+        val inFlight = repository.updatePendingUpNextSemanticMovePhase(
+            expected = pending,
+            phase = PendingUpNextMovePhase.IN_FLIGHT,
+        ) ?: return PendingUpNextMovePublicationResult.Blocked
+        onPostStarting()
+
+        return try {
+            val acknowledged = apiClient.moveUpNextSessionItem(
+                baseUrl = baseUrl,
+                token = token,
+                payload = UpNextMoveRequest(
+                    expectedVersion = inFlight.expectedStructureVersion,
+                    itemId = inFlight.itemId,
+                    toPosition = inFlight.toPosition,
+                ),
+            )
+            if (requestStillCurrent()) {
+                PendingUpNextMovePublicationResult.Acknowledged(acknowledged)
+            } else {
+                PendingUpNextMovePublicationResult.Blocked
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            PendingUpNextMovePublicationResult.PostFailed(inFlight, error)
+        }
+    }
+}
 
 @Serializable
 internal data class UpNextMoveDiagnostic(

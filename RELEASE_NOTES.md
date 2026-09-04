@@ -35,6 +35,10 @@ material here.
 - Up Next now keeps move feedback next to disabled reorder controls: pending,
   submitting, uncertain, conflict, unsupported, and older-local-change states
   explain the correct next action without relying only on a snackbar.
+- A reconnect callback no longer starts a queued Up Next move before the
+  configured authenticated route is usable. Android first confirms that route
+  with a read-only session request, then publishes the original move once with
+  its original structure-version precondition.
 
 Backend: requires merged Mimeo PRs #918, #933 and #937; Mimeo PRs #931 and #940
 are the matching web reorder and History-management adoptions.
