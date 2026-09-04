@@ -168,10 +168,6 @@ class UpNextRenderSmokeTest {
         composeTestRule.onNodeWithText(status).assertIsDisplayed()
         composeTestRule.onNodeWithContentDescription(status).assertExists()
         composeTestRule.onNode(
-            androidx.compose.ui.test.hasText("Upcoming compact article") and
-                androidx.compose.ui.test.hasText(status),
-        ).assertExists()
-        composeTestRule.onNode(
             hasMoveActions() and androidx.compose.ui.test.hasText("Upcoming compact article"),
         ).assertExists()
     }
