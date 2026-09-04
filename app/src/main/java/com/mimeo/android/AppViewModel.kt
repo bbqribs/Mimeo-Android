@@ -8070,7 +8070,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     current = current,
                     requestContext = requestContext,
                     serverIdentity = serverIdentity,
-                    announceSuccess = false,
+                    // A queued move is not successful until this publisher receives its POST acknowledgement.
+                    // Announce that one acknowledgement; no preflight or ambiguous path reaches this branch.
+                    announceSuccess = true,
                 )
             ) {
                 PendingMoveFlushResult.BLOCKED,
