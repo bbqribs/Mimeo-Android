@@ -33,8 +33,9 @@ The redesign v2 structural work has shipped: drawer-based navigation,
 shared library views (Inbox / Favorites / Archive / Bin), persistent
 mini-player, real Locus route, multi-select + batch actions, manual
 playlists with reorder, and a device-local Up Next session substrate.
-Phases 0–6 of `REDESIGN_V2_PLAN.md` are functionally closed, with
-cross-device Up Next sync explicitly deferred.
+Phases 0–6 of `REDESIGN_V2_PLAN.md` are functionally closed. The original
+redesign plan explicitly deferred cross-device Up Next sync; the
+server-authoritative parity sequence subsequently shipped through Lane 2.
 
 Recent redesign slices have now shipped on top of that scaffolding:
 three-region Up Next scaffolding for active/upcoming, snap-to-active,
@@ -253,8 +254,8 @@ preserve sentence/paragraph labels and must not imply time-based skips.
   B3; only reopen with a new operator decision).
 - Persisted Up Next history backend (depends on product model §2.3
   resolution).
-- Cross-device Up Next sync (already deferred; backend CONTRACT
-  CHANGE).
+- Cross-device Up Next sync (completed subsequently through Lane 2; not a
+  deferred redesign action).
 - Auto-hide for action bars (blocked on the disable-auto-hide setting
   per queue actions spec §6).
 

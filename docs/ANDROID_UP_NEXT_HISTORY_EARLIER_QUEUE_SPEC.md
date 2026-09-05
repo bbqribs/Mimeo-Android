@@ -1,8 +1,7 @@
 # Android Up Next History and Earlier Queue Spec
 
 **Status:** Initial layout shipped; canonical History/pointer adoption shipped
-in PR #492; History management implemented by
-`T-AND-UPNEXT-HISTORY-MANAGEMENT-1`.
+in PR #492; account-scoped History management shipped in PR #493.
 **Date:** 2026-08-29
 **Scope:** Android Up Next display and navigation after jump/play actions.
 Extends `docs/ANDROID_PLAYBACK_ACTIONS_V2_SPEC.md` and
@@ -231,8 +230,9 @@ contract change.
 ## 12. Out of Scope
 
 - Backend/API changes.
-- Android semantic-reorder cutover.
-- Cross-device assurance programme.
+- Android semantic-reorder cutover (shipped in PR #494).
+- Cross-device assurance programme (shipped in PR #497; remaining manual
+  observations are trigger-gated evidence).
 - Changing raw retained-occurrence or retention policy.
 - Replay, requeue, Play Next, Play Last, or Play from Here from History.
 - Making Up Next a playlist-like source surface.

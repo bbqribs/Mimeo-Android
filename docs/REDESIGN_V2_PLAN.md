@@ -41,7 +41,7 @@ The approach is incremental. Hard-won playback, reader, offline, and progress be
 - Bottom nav bar → side drawer navigation
 - Collections tab → eliminated; playlists move to drawer (visible from Phase 2 onward; full management in Phase 5)
 - Up Next remains, but is no longer the implicit home screen for all users
-- Up Next is modeled as a device-local persistent ordered list with a "seed source" (v1); cross-device sync deferred to v2+
+- Up Next was modeled in v1 as a device-local persistent ordered list with a "seed source"; server-authoritative cross-device parity subsequently shipped through Lane 2
 - Inbox becomes a first-class library view matching web semantics
 - Multi-select and batch actions become available across list views
 - Locus/player moves from a nav tab to a persistent mini-player + expandable surface

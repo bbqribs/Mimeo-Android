@@ -33,8 +33,7 @@ is not the current execution queue; the five-lane programme below is.
   identity is persisted with the actual device session, never comes from the
   editable endpoint field, and clears when that token is cleared or replaced.
 
-- [x] **Server-authoritative Up Next continuity implemented** (2026-07-17;
-  pending ticket PR merge): Android
+- [x] **Server-authoritative Up Next continuity implemented** (2026-07-17): Android
   now adopts and synchronizes the per-user `/up-next/session` projection with
   ratified first-adoption, offline/reconnect and stale-conflict semantics.
   The existing Room-backed owner and offline playback remain intact; continuity
@@ -111,18 +110,17 @@ and `AUD2` in the cross-repo authority.
 adoption and assurance. **Entry gate for server parity:** operator decision
 `B1` plus ratified Now Playing/Earlier move rules.
 
-Preserve this order: crowned state/conflict policy → backend pointer/History →
-backend semantic reorder → web parity → Android server parity → cross-device
-assurance. Android can execute the local/CI slice of
-`T-AND-INSTRUMENTED-ASSURANCE-2` now: add a required emulator lane and narrow
-local Up Next/History UI coverage while keeping real-headset checks manual. The
-archive/History semantics audit is also independently executable if it does not
-invent server truth. The backend History/pointer and semantic-move contracts
-are now merged, and Android durable-History/pointer adoption shipped in PR
-#492. Account-scoped Android History management is implemented by
-`T-AND-UPNEXT-HISTORY-MANAGEMENT-1`; canonical semantic reorder adoption is
-implemented by `T-AND-UPNEXT-SEMANTIC-REORDER-1`. The cross-device assurance
-matrix remains a separate follow-up slice.
+The planned Android implementation sequence is complete: canonical
+account-scoped History management shipped in PR #493; semantic reorder shipped
+in PR #494; persistent move feedback and reconnect correctness shipped in PRs
+#495/#496; and emulator plus physical-device assurance shipped in PR #497.
+This closes Lane 2's Android parity implementation sequence.
+
+The remaining TalkBack, large-text/compact-width, headset,
+legacy-upgrade-observation, and separately recorded conflict cases are
+trigger-gated evidence accepted by the operator. They are not unfinished
+implementation, release blockers, or a speculative corrective-ticket queue.
+Future defects may reopen narrowly scoped work only when evidence warrants it.
 
 The local **progress/pointer observability** slice entered through this same
 allowance and its decision work is done:
@@ -178,14 +176,9 @@ path remains the supported distribution route.
 
 ### Parallelism and gates
 
-- Android local emulator-CI/Up Next assurance and the local archive/History
-  audit may run in parallel with Mimeo audit conversion, queue-policy work,
-  migration target/tooling work, and the maintenance baseline.
-- Android durable-History/pointer adoption shipped in PR #492, and
-  account-scoped History management is implemented by
-  `T-AND-UPNEXT-HISTORY-MANAGEMENT-1`. Canonical semantic reorder adoption is
-  implemented by `T-AND-UPNEXT-SEMANTIC-REORDER-1`; cross-device assurance
-  remains a separate follow-up.
+- Lane 2's Android History, semantic-reorder, movement-feedback/reconnect, and
+  assurance sequence is shipped in PRs #493–#497. Its remaining manual and
+  observational cases are trigger-gated evidence, not open implementation.
 - Android's migration check follows Linux rehearsal evidence and is serialized
   inside each dress rehearsal; it is not a substitute for either rehearsal.
 - Lane decisions remain with the operator: `B1`/movement rules for queue work,
@@ -228,14 +221,16 @@ gated on the final QA matrix in
    and Up Next History / Earlier in queue implementation. History is bounded
    session-local state; default Save queue-as-playlist remains Active + Up Next
    only.
-   **Partly shipped (2026-07-26):** Up Next History / Earlier in queue is
+   **Shipped (2026-09-05):** Up Next History / Earlier in queue is
    implemented (T-AND-UPNEXT-HISTORY-1, PR #468), and its pointer semantics were
    then corrected and cleaned up by PRs #475/#476 — the session pointer now
    follows the engine's commitment to play, with one owner per route. Android
    The server projection `T-UPNEXT-HISTORY-CONTRACT-1` is now merged and the
    Android durable-History/pointer adoption shipped in PR #492. Canonical
-   account-scoped History management is implemented by
-   `T-AND-UPNEXT-HISTORY-MANAGEMENT-1`; Smart Queue-as-playlist-source is the
+   account-scoped History management shipped in PR #493; semantic reorder
+   shipped in PR #494; persistent move feedback and reconnect correctness
+   shipped in PRs #495/#496; and assurance shipped in PR #497.
+   Smart Queue-as-playlist-source is the
    part of this cluster still open.
    Smart Queue reorder decision: Smart Queue should become a persisted,
    reorderable inbox view, distinct from chronological Inbox and local Up
@@ -247,12 +242,12 @@ gated on the final QA matrix in
    supported, but every reorder path is disabled while search/filter is active.
    Smart Queue source idiom (accent left rule on header, reorder status,
    per-row source-list rule) shipped in M-V2-03; drag reorder preserved. The
-   remaining cross-device slice is represented only in Lane 2 above.
+   completed cross-device assurance is recorded in Lane 2 above.
 5. [x] **Startup polish cluster.** No sign-in flash for restored sessions,
    neutral loading/splash state, and drawer closed on launch are shipped.
-6. [ ] **Instrumented assurance split.** The local/emulator-CI slice is
-   independently executable through Lane 2; cross-device History/reorder
-   coverage waits on merged backend contracts and Android parity adoption.
+6. [x] **Instrumented assurance split.** Emulator and physical-device Up Next
+   assurance shipped in PR #497. The remaining manual observations are
+   trigger-gated evidence, not release blockers.
 7. [ ] **Privacy-first telemetry cluster.** Default telemetry stays
    anonymised/aggregate-only with no titles, URLs, article text, domains,
    playlist contents, or reading-choice payloads; problem reports remain
@@ -377,16 +372,15 @@ pointers:
 - **Phase 3 (mini-player + Locus restructure)**: shipped.
 - **Phase 4 (multi-select + batch actions)**: shipped.
 - **Phase 5 (playlist management + reorder)**: shipped.
-- **Phase 6 (Up Next finalization)**: shipped for local session behavior,
-  including reorder + TalkBack move actions. Cross-device sync deferred to
-  v2+ (requires backend CONTRACT CHANGE).
+- **Phase 6 (Up Next finalization)**: shipped, including semantic reorder,
+  persistent movement feedback/reconnect correctness, and the completed Lane 2
+  assurance sequence.
 
 Non-goals still in force:
 - No playlist folders (cut in v0.2 of the plan).
 - No auto re-seed on pull-to-refresh (plan §3.2, Risk 10).
-- Cross-device Up Next sync was outside redesign v1, but server-authoritative
-  continuity has since shipped; only the Lane 2 History/reorder parity slices
-  remain open behind their current backend gates.
+- Cross-device Up Next sync was outside redesign v1, but the
+  server-authoritative parity sequence has since shipped through Lane 2.
 
 ---
 

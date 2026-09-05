@@ -461,7 +461,8 @@ Stop and request operator input if:
 ## 15. Out of scope for this spec
 
 - Persisted history UI (deferred per Up Next Layout Spec §5).
-- Cross-device Up Next sync (CONTRACT CHANGE; deferred).
+- Cross-device Up Next sync (server-authoritative parity shipped through Lane 2;
+  this action-layout spec does not define it).
 - Bluesky harvester row queue actions (separate track).
 - Bin row queue actions (intentionally absent).
 - Undo for queue position (intentionally absent — reorder/remove is the

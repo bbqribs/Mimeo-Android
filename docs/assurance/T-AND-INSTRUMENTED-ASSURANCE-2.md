@@ -1,6 +1,6 @@
 # T-AND-INSTRUMENTED-ASSURANCE-2 assurance record
 
-**Status: incomplete — do not treat this record as Lane 2 completion.**
+**Status: complete — Lane 2 assurance shipped in PR #497.**
 
 This record deliberately distinguishes executed evidence from planned/manual
 work. It contains no credentials, private queue contents, raw device UI,
@@ -37,19 +37,24 @@ The response-loss fixture is test-only. It uses MockWebServer and the existing
 release `ApiClient`; it adds no endpoint, credential capture, release switch,
 or retry-policy change.
 
-## Required evidence still not run
+## Trigger-gated evidence not run
 
-| Matrix area | Result | Reason / safe next action |
+| Matrix area | Result | Trigger / safe next action |
 | --- | --- | --- |
-| Android ↔ web ordinary synchronization and History management | not run | Requires a new isolated `test-` account and a clean Android profile. Do not use an unknown existing debug-app session or a household account. |
-| Offline success, real stale 409, and real response-loss reconciliation | not run | Execute against the isolated account only after the fresh-profile network boundary is established. Prove route loss with the physical HTTPS probe before each offline case. |
-| Endpoint isolation against two real origins | not run | Requires a second safe authoritative test origin; account switching is not a substitute. |
-| Real pre-semantic-reorder in-place upgrade | not run | The required old debug artifact is built from `4f3945537c31ae04dfd73b4bc94995a3659787dc`, but has not been installed. Create the legacy snapshot while the route is demonstrably unavailable, then upgrade in place without uninstalling or clearing data. |
-| TalkBack, large-text, compact-width observation | not run | Must be observed on hardware; Compose semantics tests are not evidence for TalkBack or visual readability. |
-| Real-headset pointer transition and canonical History | not run | Requires real wired/Bluetooth headset hardware and the manual checklist. |
-| Post-matrix backend smoke and disposable-account purge | not run | Run the target-resolved operator smoke after the matrix, perform the mandatory account purge dry run, then commit only the recorded `test-` account purge. |
+| Android ↔ web ordinary synchronization and History management | not run | Run only when a future defect investigation has a new isolated `test-` account and a clean Android profile. Do not use an unknown existing debug-app session or a household account. |
+| Offline success, real stale 409, and real response-loss reconciliation | not run | Trigger only for a relevant defect; establish the fresh-profile network boundary and prove route loss with the physical HTTPS probe before each offline case. |
+| Endpoint isolation against two real origins | not run | Requires a future defect investigation with a second safe authoritative test origin; account switching is not a substitute. |
+| Real pre-semantic-reorder in-place upgrade | not run | Trigger only by legacy-upgrade evidence. The old debug artifact is built from `4f3945537c31ae04dfd73b4bc94995a3659787dc`; create the legacy snapshot while the route is demonstrably unavailable, then upgrade in place without uninstalling or clearing data. |
+| TalkBack, large-text, compact-width observation | not run | Triggered accessibility/readability evidence; it must be observed on hardware because Compose semantics tests are not evidence for TalkBack or visual readability. |
+| Real-headset pointer transition and canonical History | not run | Triggered hardware evidence; requires real wired/Bluetooth headset hardware and the manual checklist. |
+| Separately recorded conflict cases | not run | Trigger only when an observed conflict requires focused reproduction; do not open a speculative corrective ticket. |
+| Post-matrix backend smoke and disposable-account purge | not run | Required only if a future isolated-account matrix is run: perform the purge dry run, purge only the recorded `test-` account, then run target-resolved backend smoke. |
 
-## Safe continuation procedure
+## Triggered continuation procedure
+
+This is not a release-blocking completion checklist. Use it only when future
+evidence warrants narrowly scoped follow-up work; do not create corrective work
+speculatively.
 
 1. Start the canonical acceptance harness in an external run directory and
    complete its fresh Android-profile/Tailscale checkpoint. It must record the
