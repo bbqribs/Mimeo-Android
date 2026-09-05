@@ -12,8 +12,10 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
 import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -31,6 +33,7 @@ class PendingUpNextMovePublisherTest {
     private lateinit var repository: PlaybackRepository
     private lateinit var server: MockWebServer
     private lateinit var publisher: PendingUpNextMovePublisher
+    private lateinit var apiClient: ApiClient
 
     @Before
     fun setUp() = runBlocking {
@@ -38,7 +41,7 @@ class PendingUpNextMovePublisherTest {
         database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        val apiClient = ApiClient(
+        apiClient = ApiClient(
             OkHttpClient.Builder()
                 .retryOnConnectionFailure(false)
                 .build(),
@@ -146,9 +149,27 @@ class PendingUpNextMovePublisherTest {
     }
 
     @Test
-    fun unknownTransportOutcomeAfterPostStartsBecomesAmbiguousAndCannotReplay() = runBlocking {
-        server.enqueue(sessionResponse(version = 4, itemIds = listOf(1, 2, 3)))
-        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+    fun committedPostWithLostResponseRefreshesAuthoritativeTruthWithoutReplay() = runBlocking {
+        var committedOrder: List<Int>? = null
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                "/up-next/session" -> sessionResponse(
+                    version = if (committedOrder == null) 4 else 5,
+                    itemIds = committedOrder ?: listOf(1, 2, 3),
+                )
+                "/up-next/session/move" -> {
+                    assertEquals("POST", request.method)
+                    assertEquals(
+                        "{\"expected_version\":4,\"item_id\":3,\"to_position\":1}",
+                        request.body.readUtf8(),
+                    )
+                    // The server has committed the semantic operation before the response is lost.
+                    committedOrder = listOf(1, 3, 2)
+                    MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST)
+                }
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
 
         val failed = publisher.publish(
             server.url("/").toString(),
@@ -163,6 +184,8 @@ class PendingUpNextMovePublisherTest {
         assertEquals(PendingUpNextMovePhase.AMBIGUOUS, repository.pendingUpNextSemanticMove()?.phase)
         assertEquals(listOf(1, 3, 2), repository.localUpNextSnapshot()?.itemIds)
 
+        // A lifecycle/reconnect attempt must refuse to re-POST. It asks its coordinator to
+        // reconcile instead, which consumes the committed server projection with a read only.
         assertTrue(
             publisher.publish(
                 server.url("/").toString(),
@@ -174,6 +197,30 @@ class PendingUpNextMovePublisherTest {
         assertEquals(2, server.requestCount)
         assertEquals("GET", server.takeRequest(1, TimeUnit.SECONDS)!!.method)
         assertEquals("POST", server.takeRequest(1, TimeUnit.SECONDS)!!.method)
+
+        val authoritative = apiClient.getUpNextSession(server.url("/").toString(), TOKEN)
+        repository.applyAuthoritativeUpNextSession(
+            session = authoritative,
+            ownerKey = OWNER,
+            serverIdentity = SERVER_IDENTITY,
+            semanticMoveCompletion = true,
+            moveDiagnostic = UpNextMoveDiagnostic(outcome = "ambiguous_reconciled"),
+        )
+
+        assertEquals(listOf(1, 3, 2), authoritative?.items?.map { it.itemId })
+        assertEquals(listOf(1, 3, 2), repository.localUpNextSnapshot()?.itemIds)
+        assertNull(repository.pendingUpNextSemanticMove())
+        assertEquals("GET", server.takeRequest(1, TimeUnit.SECONDS)!!.method)
+        assertEquals(3, server.requestCount)
+        assertEquals(
+            "The move outcome was uncertain. Up Next was refreshed from the server; repeat the move only if still needed.",
+            upNextReorderFeedback(
+                pending = null,
+                semanticMoveUnsupported = false,
+                dirtyLegacySnapshot = false,
+                diagnostic = repository.lastUpNextSemanticMoveDiagnostic(),
+            ),
+        )
     }
 
     @Test
