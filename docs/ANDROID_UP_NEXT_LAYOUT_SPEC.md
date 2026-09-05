@@ -278,8 +278,9 @@ The first bounded implementation slices have shipped:
 7. Clear all session in overflow/contextual destructive placement.
 8. Save queue as playlist from Up Next overflow/action area.
 
-Persisted history, retention/privacy controls, backend contracts,
-cross-device sync, and history-row queue actions remain deferred.
+Retention/privacy controls and history-row queue actions remain deferred.
+Persisted History, backend contracts, and server-authoritative cross-device
+parity have since shipped through Lane 2.
 
 ## 15. Stop Conditions for Implementation Tickets
 

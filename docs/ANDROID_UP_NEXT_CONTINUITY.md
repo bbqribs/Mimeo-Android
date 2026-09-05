@@ -1,10 +1,9 @@
 # Android Up Next continuity
 
 Status: continuity implemented by `T-AND-UPNEXT-CONTINUITY-1`; canonical
-History read/pointer adoption shipped in Android PR #492, and account-scoped
-History management is implemented by `T-AND-UPNEXT-HISTORY-MANAGEMENT-1`.
-Canonical semantic reorder is implemented by
-`T-AND-UPNEXT-SEMANTIC-REORDER-1`.
+History read/pointer adoption shipped in Android PR #492; account-scoped History
+management shipped in PR #493; semantic reorder shipped in PR #494; and
+persistent movement feedback/reconnect correctness shipped in PRs #495/#496.
 
 ## Authority and ownership
 

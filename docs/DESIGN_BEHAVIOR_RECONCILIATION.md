@@ -359,7 +359,9 @@ Preserved from `DESIGN_WIREFRAME_RECONCILIATION.md` plus newly observed:
 - Do not add auto-re-seed behavior to pull-to-refresh.
 - Do not expose "Save queue as playlist" outside Up Next and Locus.
 - Do not add queue actions to Bin rows.
-- Do not design cross-device Up Next sync UI (deferred; requires backend CONTRACT CHANGE).
+- Do not add a separate cross-device Up Next sync UI: server-authoritative
+  parity has shipped through Lane 2, and this historical redesign scope does
+  not define a new surface for it.
 - Do not introduce a "Player Queue" as a distinct surface before the Locus/player integration design spike resolves whether it is needed.
 - Do not use Dense variants on any surface.
 

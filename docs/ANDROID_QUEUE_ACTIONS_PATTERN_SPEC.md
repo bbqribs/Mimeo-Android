@@ -304,7 +304,8 @@ entries.
 
 ## 9. Out of scope for this spec
 
-- Cross-device Up Next sync (requires backend CONTRACT CHANGE; deferred).
+- Cross-device Up Next sync (server-authoritative parity shipped through Lane 2;
+  outside this queue-actions spec).
 - Smart-playlist backend contracts (Lane 6).
 - Bluesky harvester ingestion model (Lane 7).
 - History row tap semantics (open product question; §2.3 Q5 in product
