@@ -20,6 +20,20 @@ class ScrollIndicatorTest {
     }
 
     @Test
+    fun draggableThumbPaintsInsideItsLocalTrailingEdge() {
+        assertEquals(
+            991f,
+            verticalScrollThumbLeftPx(
+                viewportWidthPx = 1_000f,
+                thumbWidthPx = 3f,
+                endPaddingPx = 6f,
+            ),
+            0.001f,
+        )
+        assertEquals(0f, verticalScrollThumbLeftPx(4f, 3f, 6f), 0.001f)
+    }
+
+    @Test
     fun thumbGeometryTracksScrollEndpointsAndMidpoint() {
         val atStart = geometry(scrollValue = 0)
         val atMiddle = geometry(scrollValue = 500)

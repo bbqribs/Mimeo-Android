@@ -33,6 +33,17 @@ internal data class VerticalScrollThumbGeometry(
     val travelPx: Float,
 )
 
+internal fun verticalScrollThumbLeftPx(
+    viewportWidthPx: Float,
+    thumbWidthPx: Float,
+    endPaddingPx: Float,
+): Float {
+    val safeViewportWidthPx = viewportWidthPx.takeIf { it.isFinite() }?.coerceAtLeast(0f) ?: 0f
+    val safeThumbWidthPx = thumbWidthPx.takeIf { it.isFinite() }?.coerceAtLeast(0f) ?: 0f
+    val safeEndPaddingPx = endPaddingPx.takeIf { it.isFinite() }?.coerceAtLeast(0f) ?: 0f
+    return (safeViewportWidthPx - safeThumbWidthPx - safeEndPaddingPx).coerceAtLeast(0f)
+}
+
 internal fun verticalScrollThumbGeometry(
     viewportHeightPx: Float,
     maxScrollValue: Int,
@@ -136,18 +147,14 @@ fun Modifier.draggableVerticalScrollIndicator(
     endPadding: Dp = 2.dp,
     touchGutterWidth: Dp = 24.dp,
 ): Modifier = composed {
-    val rootView = LocalView.current
     val density = LocalDensity.current
-    val rightInset = remember { FloatRef() }
     val currentOnDragStateChange = rememberUpdatedState(onDragStateChange)
     val minThumbHeightPx = with(density) { minThumbHeight.toPx() }
     val thumbWidthPx = with(density) { thumbWidth.toPx() }
     val endPaddingPx = with(density) { endPadding.toPx() }
     val touchGutterWidthPx = with(density) { touchGutterWidth.toPx() }
 
-    onGloballyPositioned { coords ->
-        rightInset.value = rootView.width - coords.boundsInRoot().right
-    }.pointerInput(
+    pointerInput(
         scrollState,
         enabled,
         minThumbHeightPx,
@@ -225,7 +232,7 @@ fun Modifier.draggableVerticalScrollIndicator(
         drawRoundRect(
             color = color,
             topLeft = Offset(
-                x = (size.width + rightInset.value - thumbWidthPx - endPaddingPx).coerceAtLeast(0f),
+                x = verticalScrollThumbLeftPx(size.width, thumbWidthPx, endPaddingPx),
                 y = geometry.topPx,
             ),
             size = Size(width = thumbWidthPx, height = geometry.heightPx),
