@@ -57,6 +57,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -85,8 +86,8 @@ import com.mimeo.android.ui.common.SectionLabelHeader
 import com.mimeo.android.ui.common.SelectionState
 import com.mimeo.android.ui.common.buildItemMetadata
 import com.mimeo.android.ui.common.dragContainerColorFor
+import com.mimeo.android.ui.common.draggableVerticalScrollIndicator
 import com.mimeo.android.ui.common.jumpPillBottomPadding
-import com.mimeo.android.ui.common.passiveVerticalScrollIndicator
 import com.mimeo.android.ui.theme.LocalMimeoColorTokens
 import com.mimeo.android.ui.theme.LocalMimeoDensityTokens
 import com.mimeo.android.ui.theme.LocalMimeoShapeTokens
@@ -96,6 +97,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 internal const val NOW_PLAYING_SECTION_TITLE = "Now Playing"
+internal const val UP_NEXT_SCROLL_SURFACE_TEST_TAG = "up-next-scroll-surface"
 
 internal enum class SessionRowAction {
     JumpPlay,
@@ -774,6 +776,7 @@ internal fun NowPlayingSessionPanel(
     var draggingIndex by remember { mutableIntStateOf(-1) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var currentTargetIndex by remember { mutableIntStateOf(-1) }
+    var scrollbarDragging by remember { mutableStateOf(false) }
     val listScrollState = rememberScrollState()
     val snapScope = rememberCoroutineScope()
     var listViewportHeight by remember { mutableIntStateOf(0) }
@@ -1158,9 +1161,12 @@ internal fun NowPlayingSessionPanel(
                 .weight(1f)
                 .onSizeChanged { listViewportHeight = it.height }
                 .clipToBounds()
-                .passiveVerticalScrollIndicator(
+                .testTag(UP_NEXT_SCROLL_SURFACE_TEST_TAG)
+                .draggableVerticalScrollIndicator(
                     scrollState = listScrollState,
                     color = if (isV1) mColors.fg4 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f),
+                    enabled = draggingIndex < 0,
+                    onDragStateChange = { scrollbarDragging = it },
                 ),
         ) {
             Column(
@@ -1495,10 +1501,10 @@ internal fun NowPlayingSessionPanel(
                                         } else {
                                             reorderStatusLabel ?: "Reorder unavailable"
                                         },
-                                        modifier = Modifier.pointerInput(item.itemId, index) {
+                                        modifier = Modifier.pointerInput(item.itemId, index, scrollbarDragging) {
                                             detectDragGestures(
                                                 onDragStart = {
-                                                    if (reorderEnabled) {
+                                                    if (reorderEnabled && !scrollbarDragging) {
                                                         dragStartTopOffsets = itemTopOffsets.toMap()
                                                         dragStartHeights = itemHeights.toMap()
                                                         draggingIndex = index

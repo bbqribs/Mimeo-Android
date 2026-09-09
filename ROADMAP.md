@@ -322,7 +322,7 @@ gated on the final QA matrix in
 16. [x] **Conflict handling for stale cached versions** during long
     offline sessions.
 17. [x] **Cleartext → HTTPS-friendly transport** for hosted/mobile use.
-18. [ ] **Scrollbars** for Up Next (draggable, long-queue ergonomics) and
+18. [x] **Scrollbars** for Up Next (draggable, long-queue ergonomics) and
     Settings (non-draggable `drawWithContent` indicator).
 19. [x] **Compose BOM foundation.** Shipped as BOM `2026.03.00`; future
     Compose/Material changes are evidence-backed Lane 4 maintenance, not an

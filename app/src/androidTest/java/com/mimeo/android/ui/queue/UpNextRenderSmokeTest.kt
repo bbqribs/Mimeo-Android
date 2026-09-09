@@ -2,7 +2,10 @@ package com.mimeo.android.ui.queue
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -14,10 +17,13 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.mimeo.android.model.UpNextHistoryEntry
 import com.mimeo.android.model.UpNextHistoryProjection
@@ -73,6 +79,59 @@ class UpNextRenderSmokeTest {
         composeTestRule.onNodeWithText("Visible history assurance article").assertExists()
         composeTestRule.onNodeWithText("Up Next · 1").assertIsDisplayed()
         composeTestRule.onNodeWithText("Upcoming assurance article").assertIsDisplayed()
+    }
+
+    @Test
+    fun draggableScrollbarNavigatesLongSessionWithoutReordering() {
+        var reorderCount = 0
+        val lastTitle = "Upcoming scrollbar assurance 32"
+        val session = NowPlayingSession(
+            items = listOf(sessionItem(itemId = 1, title = "Current scrollbar assurance")) +
+                (2..33).map { itemId ->
+                    sessionItem(
+                        itemId = itemId,
+                        title = "Upcoming scrollbar assurance ${itemId - 1}",
+                    )
+                },
+            currentIndex = 0,
+            updatedAt = 1L,
+            sourcePlaylistId = null,
+        )
+
+        composeTestRule.setContent {
+            MimeoTheme {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(400.dp),
+                ) {
+                    NowPlayingSessionPanel(
+                        session = session,
+                        historyProjection = null,
+                        seededFromLabel = "Scrollbar assurance fixture",
+                        onOpenItem = {},
+                        onJumpToQueueItem = {},
+                        onJumpToHistoryItem = {},
+                        onReorderItem = { _, _ -> reorderCount += 1 },
+                        onRemoveItem = {},
+                        onClearUpcoming = {},
+                        reorderEnabled = true,
+                    )
+                }
+            }
+        }
+
+        composeTestRule.onNodeWithTag(UP_NEXT_SCROLL_SURFACE_TEST_TAG)
+            .performTouchInput {
+                swipe(
+                    start = Offset(width - 4f, height * 0.08f),
+                    end = Offset(width - 4f, height - 4f),
+                    durationMillis = 500,
+                )
+            }
+
+        composeTestRule.onNodeWithText(lastTitle).assertIsDisplayed()
+        composeTestRule.runOnIdle { assertEquals(0, reorderCount) }
     }
 
     @Test
