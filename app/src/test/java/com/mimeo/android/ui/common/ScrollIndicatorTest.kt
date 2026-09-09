@@ -46,6 +46,22 @@ class ScrollIndicatorTest {
     }
 
     @Test
+    fun thumbGeometryEnforcesMinimumThumbHeight() {
+        val geometry = checkNotNull(
+            verticalScrollThumbGeometry(
+                viewportHeightPx = 600f,
+                maxScrollValue = 100_000,
+                scrollValue = 50_000,
+                minThumbHeightPx = 40f,
+            ),
+        )
+
+        assertEquals(40f, geometry.heightPx, 0.001f)
+        assertEquals(560f, geometry.travelPx, 0.001f)
+        assertEquals(280f, geometry.topPx, 0.001f)
+    }
+
+    @Test
     fun dragMappingIsProportionalMonotonicAndClamped() {
         val pointerPositions = listOf(-100f, 0f, 100f, 187.5f, 300f, 375f, 900f)
         val values = pointerPositions.map { pointerY ->
@@ -94,6 +110,30 @@ class ScrollIndicatorTest {
                 grabFraction = 1f,
                 viewportHeightPx = 800f,
                 maxScrollValue = 800,
+                minThumbHeightPx = 40f,
+            ),
+        )
+    }
+
+    @Test
+    fun dragMappingIsSafeWhenThumbHasNoTravel() {
+        val geometry = checkNotNull(
+            verticalScrollThumbGeometry(
+                viewportHeightPx = 40f,
+                maxScrollValue = 1_000,
+                scrollValue = 500,
+                minThumbHeightPx = 40f,
+            ),
+        )
+
+        assertEquals(0f, geometry.travelPx, 0.001f)
+        assertEquals(
+            0,
+            scrollValueForThumbDrag(
+                pointerYPx = 20f,
+                grabFraction = 0.5f,
+                viewportHeightPx = 40f,
+                maxScrollValue = 1_000,
                 minThumbHeightPx = 40f,
             ),
         )
