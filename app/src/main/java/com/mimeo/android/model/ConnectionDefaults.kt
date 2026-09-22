@@ -4,16 +4,13 @@ import java.net.URI
 import java.util.Locale
 
 internal const val DEFAULT_LOCAL_HOST = "10.0.2.2:8000"
-// DEFAULT_LAN_HOST, DEFAULT_REMOTE_HTTPS_HOST, DEFAULT_REMOTE_HTTP_FALLBACK_HOST and
-// DEVELOPER_PRESETS_AVAILABLE are build-variant specific (see ConnectionHostDefaults.kt
-// under src/debug and src/release). Debug builds carry developer presets; release builds
-// carry neutral placeholders so no personal backend host identity ships in release defaults.
-internal const val DEFAULT_REMOTE_HOST = DEFAULT_REMOTE_HTTPS_HOST
+// DEFAULT_LAN_HOST, DEFAULT_REMOTE_BASE_URL, REMOTE_DEVELOPER_PRESET_AVAILABLE and
+// DEVELOPER_PRESETS_AVAILABLE are build-variant specific (see ConnectionHostDefaults.kt under
+// src/debug and src/release). Debug builds may carry a build-resolved remote preset; release
+// builds carry only neutral placeholders so no personal backend host identity ships there.
 
 internal const val DEFAULT_LOCAL_BASE_URL = "http://$DEFAULT_LOCAL_HOST"
 internal const val DEFAULT_LAN_BASE_URL = "http://$DEFAULT_LAN_HOST"
-internal const val DEFAULT_REMOTE_BASE_URL = "https://$DEFAULT_REMOTE_HTTPS_HOST"
-internal const val DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL = "http://$DEFAULT_REMOTE_HTTP_FALLBACK_HOST"
 
 internal fun inferConnectionModeForHost(baseUrl: String): ConnectionMode {
     val host = parseConnectionHost(baseUrl)

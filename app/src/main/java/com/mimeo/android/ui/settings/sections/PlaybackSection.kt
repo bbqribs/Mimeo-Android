@@ -29,7 +29,6 @@ import com.mimeo.android.model.DEFAULT_LAN_BASE_URL
 import com.mimeo.android.model.DEFAULT_LOCAL_BASE_URL
 import com.mimeo.android.model.DEFAULT_PLAYBACK_SPEED_PRESETS
 import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
-import com.mimeo.android.model.DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL
 import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.PLAYBACK_SPEED_PRESET_MAX
 import com.mimeo.android.model.PLAYBACK_SPEED_PRESET_MIN
@@ -504,7 +503,7 @@ internal fun PlaybackSection(
                     },
                 ) { Text(if (ttsPreviewing) "Playing..." else "Preview") }
             }
-            Text("Defaults: Local=$DEFAULT_LOCAL_BASE_URL, LAN=$DEFAULT_LAN_BASE_URL, Remote=$DEFAULT_REMOTE_BASE_URL (fallback HTTP: $DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL)")
+            Text("Defaults: Local=$DEFAULT_LOCAL_BASE_URL, LAN=$DEFAULT_LAN_BASE_URL, Remote=$DEFAULT_REMOTE_BASE_URL")
         }
     }
 }

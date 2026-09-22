@@ -23,7 +23,6 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.unit.dp
 import com.mimeo.android.AppViewModel
 import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
-import com.mimeo.android.model.DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL
 import com.mimeo.android.model.ConnectivityDiagnosticOutcome
 import com.mimeo.android.ui.common.LoadStatePane
 
@@ -47,7 +46,7 @@ fun ConnectivityDiagnosticsScreen(vm: AppViewModel) {
         Text("Base URL: ${settings.baseUrl.ifBlank { "(unset)" }}")
         Text("Token: ${if (settings.apiToken.isBlank()) "missing" else "present"}")
         if (isPhysicalDevice) {
-            Text("Physical phone quick check: LAN mode -> http://<PC_LAN_IP>:8000 (or HTTPS if LAN TLS is configured), Remote mode -> HTTPS-first ($DEFAULT_REMOTE_BASE_URL). Fallback HTTP only when TLS is disabled: $DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL. 10.0.2.2 is emulator-only.")
+            Text("Physical phone quick check: LAN mode -> http://<PC_LAN_IP>:8000 (or HTTPS if LAN TLS is configured), Remote mode -> HTTPS-first ($DEFAULT_REMOTE_BASE_URL). Enter fallback HTTP manually only when TLS is disabled. 10.0.2.2 is emulator-only.")
         } else {
             Text("Emulator: use http://10.0.2.2:8000 for host machine backend.")
         }

@@ -2,6 +2,8 @@ package com.mimeo.android.ui.signin
 
 import com.mimeo.android.data.ApiException
 import com.mimeo.android.model.ConnectionMode
+import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
+import com.mimeo.android.model.REMOTE_DEVELOPER_PRESET_AVAILABLE
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -83,13 +85,13 @@ class SignInSupportTest {
     }
 
     @Test
-    fun `defaults blank and local sign in url to remote preset for configured host type`() {
+    fun `defaults blank and local sign in url only when remote preset resolved`() {
         assertEquals(
-            "https://beh-august2015.taildacac5.ts.net",
+            DEFAULT_REMOTE_BASE_URL,
             defaultSignInServerUrl(""),
         )
         assertEquals(
-            "https://beh-august2015.taildacac5.ts.net",
+            DEFAULT_REMOTE_BASE_URL,
             defaultSignInServerUrl("http://10.0.2.2:8000"),
         )
     }
@@ -97,7 +99,7 @@ class SignInSupportTest {
     @Test
     fun `builds preset urls for remote lan and manual entry`() {
         assertEquals(
-            "https://beh-august2015.taildacac5.ts.net",
+            DEFAULT_REMOTE_BASE_URL,
             buildPresetServerUrl(SignInServerPreset.REMOTE, SignInUrlScheme.HTTPS, ""),
         )
         assertEquals(
@@ -114,6 +116,10 @@ class SignInSupportTest {
     fun `available presets always offer manual entry and preserve stored urls`() {
         // Manual entry is always available regardless of build variant.
         assertTrue(availableSignInPresets().contains(SignInServerPreset.MANUAL))
+        assertEquals(
+            REMOTE_DEVELOPER_PRESET_AVAILABLE,
+            availableSignInPresets().contains(SignInServerPreset.REMOTE),
+        )
         // An already-configured server URL is preserved as the sign-in default.
         assertEquals(
             "https://reader.example.com",
@@ -124,11 +130,11 @@ class SignInSupportTest {
     @Test
     fun `maps cleartext and tls sign in failures to scheme guidance`() {
         assertEquals(
-            "Probable URL scheme/security mismatch. Remote is HTTPS-first with .ts.net; fallback HTTP is http://100.84.13.10:8000 when endpoint TLS is disabled.",
+            "Probable URL scheme/security mismatch. Remote is HTTPS-first with .ts.net; enter an HTTP URL manually only when endpoint TLS is disabled.",
             resolveSignInErrorMessage(IOException("CLEARTEXT communication to host not permitted by network security policy")),
         )
         assertEquals(
-            "Probable URL scheme/security mismatch. Remote is HTTPS-first with .ts.net; fallback HTTP is http://100.84.13.10:8000 when endpoint TLS is disabled.",
+            "Probable URL scheme/security mismatch. Remote is HTTPS-first with .ts.net; enter an HTTP URL manually only when endpoint TLS is disabled.",
             resolveSignInErrorMessage(IOException("SSLHandshakeException: handshake failed")),
         )
     }
@@ -136,8 +142,8 @@ class SignInSupportTest {
     @Test
     fun `infers preset and scheme from sign in url`() {
         assertEquals(
-            SignInServerPreset.REMOTE,
-            inferSignInPreset("https://beh-august2015.taildacac5.ts.net"),
+            if (REMOTE_DEVELOPER_PRESET_AVAILABLE) SignInServerPreset.REMOTE else SignInServerPreset.MANUAL,
+            inferSignInPreset(DEFAULT_REMOTE_BASE_URL),
         )
         assertEquals(
             SignInServerPreset.LAN,

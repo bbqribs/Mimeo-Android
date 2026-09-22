@@ -518,7 +518,7 @@ dependencies, and what stays deferred.
   Android for the surface.
 - **Model choice:** high-effort session for the ingestion design and
   Android surface. Expect cross-repo CONTRACT CHANGE. Coordinate per the
-  `CLAUDE.md` cross-repo authorization rule.
+  `AGENTS.md` cross-repo authorization rule.
 - **Dependencies:** Lanes 3, 5, 6. Bluesky auth / API access arrangement
   is a prerequisite outside this sequence.
 - **Deferred:** images, repost/quote resolution, additional automations,
@@ -563,7 +563,7 @@ Operational details and checklists are maintained in
 `docs/planning/AGENT_WORKFLOW.md`.
 
 This applies specifically to this repo's Claude-primary lane. The rule in
-`CLAUDE.md` about single-writer-per-PR and serialized merges across Mimeo +
+`AGENTS.md` about single-writer-per-PR and serialized merges across Mimeo +
 Mimeo-Android continues to apply; nothing in this section changes that.
 
 ---

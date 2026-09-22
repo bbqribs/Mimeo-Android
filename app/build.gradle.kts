@@ -1,4 +1,6 @@
+import groovy.json.JsonSlurper
 import java.io.File
+import java.net.URI
 import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.PrivateKey
@@ -227,12 +229,58 @@ val releaseStoreFileAbsolutePath = releaseKeystoreProperties
     ?.let { rootProject.file(it).absolutePath }
     .orEmpty()
 
+fun resolveDebugRemoteBaseUrl(): String {
+    val explicitConfigPath = providers.gradleProperty("mimeoRuntimeTargetConfig").orNull
+    val siblingRepository = providers.gradleProperty("mimeoRepositoryPath").orNull
+        ?.let(rootProject::file)
+        ?: rootProject.projectDir.parentFile.resolve("Mimeo")
+    val configFile = explicitConfigPath
+        ?.let(rootProject::file)
+        ?: siblingRepository.resolve("ops/runtime-target.json")
+
+    if (!configFile.isFile) {
+        logger.warn(
+            "Mimeo runtime target config is unavailable; the debug build will omit the remote preset. " +
+                "Set -PmimeoRuntimeTargetConfig or -PmimeoRepositoryPath to override discovery.",
+        )
+        return ""
+    }
+
+    return try {
+        val config = JsonSlurper().parse(configFile) as? Map<*, *>
+            ?: error("the root JSON value is not an object")
+        val smoke = config["smoke"] as? Map<*, *>
+            ?: error("the smoke value is not an object")
+        val scheme = (smoke["scheme"] as? String)?.trim()?.lowercase().orEmpty()
+        val host = (smoke["host"] as? String)?.trim().orEmpty()
+        val port = smoke["port"]?.toString()?.toIntOrNull()
+            ?: error("smoke.port is missing or is not an integer")
+
+        require(scheme == "https") { "smoke.scheme must be https for the remote HTTPS preset" }
+        require(host.isNotBlank()) { "smoke.host is missing" }
+        require(port in 1..65535) { "smoke.port is outside the valid TCP port range" }
+
+        URI(scheme, null, host, if (port == 443) -1 else port, null, null, null).toString()
+    } catch (error: Exception) {
+        logger.warn(
+            "Mimeo runtime target config could not supply a safe debug HTTPS preset; " +
+                "the debug build will omit it (${error.message}).",
+        )
+        ""
+    }
+}
+
+fun buildConfigString(value: String): String =
+    "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
 plugins {
     id("com.android.application")
     id("com.google.devtools.ksp")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+val debugRemoteBaseUrl = resolveDebugRemoteBaseUrl()
 
 kotlin {
     jvmToolchain(17)
@@ -267,6 +315,7 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            buildConfigField("String", "DEBUG_REMOTE_BASE_URL", buildConfigString(debugRemoteBaseUrl))
         }
         release {
             isMinifyEnabled = false

@@ -128,6 +128,9 @@ fun SignInScreen(
                                 selected = serverPreset == preset,
                                 onClick = {
                                     serverPreset = preset
+                                    if (serverPreset == SignInServerPreset.REMOTE) {
+                                        scheme = SignInUrlScheme.HTTPS
+                                    }
                                     serverUrl = buildPresetServerUrl(serverPreset, scheme, serverUrl)
                                     if (errorMessage != null) onClearError()
                                 },
@@ -150,7 +153,8 @@ fun SignInScreen(
                                     serverUrl = buildPresetServerUrl(serverPreset, scheme, serverUrl)
                                     if (errorMessage != null) onClearError()
                                 },
-                                enabled = !loading,
+                                enabled = !loading &&
+                                    (serverPreset != SignInServerPreset.REMOTE || nextScheme == SignInUrlScheme.HTTPS),
                                 label = { Text(nextScheme.value.uppercase()) },
                             )
                         }
@@ -314,6 +318,6 @@ fun SignInScreen(
 
 private fun SignInServerPreset.label(): String = when (this) {
     SignInServerPreset.REMOTE -> "Remote"
-    SignInServerPreset.LAN -> "LAN"
+    SignInServerPreset.LAN -> "LAN (local dev)"
     SignInServerPreset.MANUAL -> "Manual"
 }
