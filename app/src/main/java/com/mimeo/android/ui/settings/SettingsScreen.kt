@@ -75,7 +75,6 @@ import com.mimeo.android.model.AccentSchemePreference
 import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.ConnectionTestSuccessSnapshot
 import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
-import com.mimeo.android.model.DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL
 import com.mimeo.android.model.DrawerPanelSide
 import com.mimeo.android.model.StartupDestination
 import com.mimeo.android.model.LocusContentMode
@@ -2311,7 +2310,7 @@ internal fun connectionModeBaseUrlGuidance(mode: ConnectionMode): String = when 
     ConnectionMode.LAN ->
         "Use http://<LAN-IP>:8000 when phone and host are on the same LAN. Use HTTPS only if you explicitly configured LAN TLS."
     ConnectionMode.REMOTE ->
-        "Use HTTPS-first Tailscale remote URL: https://<machine>.<tailnet>.ts.net (canonical $DEFAULT_REMOTE_BASE_URL). Raw Tailscale IP HTTP is fallback-only when TLS is unavailable: $DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL. If using 192.168.x.y or 10.x, use LAN mode instead."
+        "Use HTTPS-first Tailscale remote URL: https://<machine>.<tailnet>.ts.net (canonical $DEFAULT_REMOTE_BASE_URL). Raw Tailscale IP HTTP is fallback-only and must be entered manually when TLS is unavailable. If using 192.168.x.y or 10.x, use LAN mode instead."
 }
 
 internal fun connectionModeTokenAuthHelp(mode: ConnectionMode): String = when (mode) {

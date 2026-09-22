@@ -15,7 +15,8 @@ param(
 
     [string]$Serial = "",
     [string]$PackageId = "com.mimeo.android.debug",
-    [string]$ServerUrl = "https://beh-august2015.taildacac5.ts.net",
+    [string]$ServerUrl = "",
+    [string]$MimeoRepositoryPath = "",
     [string]$Username = $env:MIMEO_DEVICE_TEST_USERNAME,
     [string]$PasswordEnvironmentVariable = "MIMEO_DEVICE_TEST_PASSWORD",
     [string]$ExpectedItemTitle = "",
@@ -26,6 +27,32 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+function Resolve-MimeoServerUrl {
+    param([string]$RepositoryPath = "")
+
+    $androidRepositoryRoot = Split-Path -Parent $PSScriptRoot
+    $resolvedRepositoryPath = if ([string]::IsNullOrWhiteSpace($RepositoryPath)) {
+        Join-Path (Split-Path -Parent $androidRepositoryRoot) "Mimeo"
+    } else {
+        [IO.Path]::GetFullPath($RepositoryPath)
+    }
+    $resolverPath = Join-Path $resolvedRepositoryPath "scripts\lib\Get-MimeoRuntimeTarget.ps1"
+    if (-not (Test-Path -LiteralPath $resolverPath -PathType Leaf)) {
+        throw "Mimeo runtime target resolver was not found in the sibling repository. Pass -ServerUrl explicitly or provide -MimeoRepositoryPath."
+    }
+
+    try {
+        $target = & $resolverPath
+    } catch {
+        throw "Mimeo runtime target resolution failed. Pass -ServerUrl explicitly or repair the sibling repository resolver: $($_.Exception.Message)"
+    }
+    $resolvedUrl = [string]$target.SmokeBaseUrl
+    if ([string]::IsNullOrWhiteSpace($resolvedUrl)) {
+        throw "Mimeo runtime target resolver returned no SmokeBaseUrl. Pass -ServerUrl explicitly or repair the sibling repository target config."
+    }
+    return $resolvedUrl.TrimEnd('/')
+}
 
 $script:AdbPrefix = @()
 if (-not [string]::IsNullOrWhiteSpace($Serial)) {
@@ -612,12 +639,24 @@ function Invoke-SelfTest {
     $focusedPackage = Get-FocusedPackageFromWindowText -WindowText `
         'mCurrentFocus=Window{123 u0 com.mimeo.android.debug/com.mimeo.android.MainActivity}'
     if ($focusedPackage -ne 'com.mimeo.android.debug') { throw "Focused-package parsing self-test failed." }
-    Write-Host "Self-test passed: semantic bounds, OnePlus 7T 1080x2287 fallbacks, and safe adb input rules."
+    $missingResolverRejected = $false
+    try {
+        [void](Resolve-MimeoServerUrl -RepositoryPath (Join-Path ([IO.Path]::GetTempPath()) "mimeo-missing-resolver"))
+    } catch {
+        $missingResolverRejected = $_.Exception.Message -like "Mimeo runtime target resolver was not found*"
+    }
+    if (-not $missingResolverRejected) { throw "Missing runtime-target resolver self-test failed." }
+    Write-Host "Self-test passed: semantic bounds, OnePlus 7T 1080x2287 fallbacks, safe adb input rules, and missing-resolver refusal."
 }
 
 if ($Action -eq "SelfTest") {
     Invoke-SelfTest
     exit 0
+}
+
+if ($Action -in @("SignIn", "SignInAndOpenUpNext") -and [string]::IsNullOrWhiteSpace($ServerUrl)) {
+    $ServerUrl = Resolve-MimeoServerUrl -RepositoryPath $MimeoRepositoryPath
+    Write-Host "Resolved server URL from the sibling Mimeo runtime target."
 }
 
 Assert-AdbTarget

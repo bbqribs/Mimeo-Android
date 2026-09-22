@@ -9,8 +9,8 @@ import com.mimeo.android.model.ConnectionMode
 import com.mimeo.android.model.DEVELOPER_PRESETS_AVAILABLE
 import com.mimeo.android.model.DEFAULT_LAN_HOST
 import com.mimeo.android.model.DEFAULT_LOCAL_BASE_URL
-import com.mimeo.android.model.DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL
-import com.mimeo.android.model.DEFAULT_REMOTE_HOST
+import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
+import com.mimeo.android.model.REMOTE_DEVELOPER_PRESET_AVAILABLE
 import com.mimeo.android.model.inferConnectionModeForHost
 import com.mimeo.android.ui.settings.validateConnectionEndpoint
 import java.io.IOException
@@ -39,7 +39,6 @@ enum class SignInUrlScheme(val value: String) {
     HTTPS("https"),
 }
 
-internal const val DEFAULT_REMOTE_SIGN_IN_HOST = DEFAULT_REMOTE_HOST
 internal const val DEFAULT_LAN_SIGN_IN_HOST = DEFAULT_LAN_HOST
 private const val DEFAULT_LOCAL_SIGN_IN_URL = DEFAULT_LOCAL_BASE_URL
 
@@ -49,7 +48,7 @@ internal fun inferConnectionModeForBaseUrl(baseUrl: String): ConnectionMode {
 
 internal fun resolveSignInErrorMessage(error: Throwable): String {
     if (looksLikeSchemeOrTlsMismatch(error)) {
-        return "Probable URL scheme/security mismatch. Remote is HTTPS-first with .ts.net; fallback HTTP is $DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL when endpoint TLS is disabled."
+        return "Probable URL scheme/security mismatch. Remote is HTTPS-first with .ts.net; enter an HTTP URL manually only when endpoint TLS is disabled."
     }
     return when (error) {
         is ApiException -> {
@@ -121,14 +120,15 @@ internal fun buildAuthDeviceName(manufacturer: String, model: String): String {
 
 /**
  * Server presets offered on the sign-in screen. Release builds expose only manual entry so no
- * personal backend host identity is presented as a default/preset choice; debug builds keep the
- * full developer presets.
+ * personal backend host identity is presented as a default/preset choice. Debug builds keep the
+ * LAN local-development example and add Remote only when build-time target resolution succeeded.
  */
 internal fun availableSignInPresets(): List<SignInServerPreset> {
-    return if (DEVELOPER_PRESETS_AVAILABLE) {
-        SignInServerPreset.entries.toList()
-    } else {
-        listOf(SignInServerPreset.MANUAL)
+    if (!DEVELOPER_PRESETS_AVAILABLE) return listOf(SignInServerPreset.MANUAL)
+    return buildList {
+        if (REMOTE_DEVELOPER_PRESET_AVAILABLE) add(SignInServerPreset.REMOTE)
+        add(SignInServerPreset.LAN)
+        add(SignInServerPreset.MANUAL)
     }
 }
 
@@ -140,11 +140,7 @@ internal fun defaultSignInServerUrl(initialServerUrl: String): String {
         return trimmed
     }
     return if (trimmed.isBlank() || trimmed == DEFAULT_LOCAL_SIGN_IN_URL) {
-        buildPresetServerUrl(
-            SignInServerPreset.REMOTE,
-            SignInUrlScheme.HTTPS,
-            manualUrl = "",
-        )
+        if (REMOTE_DEVELOPER_PRESET_AVAILABLE) DEFAULT_REMOTE_BASE_URL else ""
     } else {
         trimmed
     }
@@ -152,15 +148,13 @@ internal fun defaultSignInServerUrl(initialServerUrl: String): String {
 
 internal fun inferSignInPreset(serverUrl: String): SignInServerPreset {
     val normalized = normalizeServerUrl(serverUrl)
-    return when (normalized) {
-        normalizeServerUrl(buildPresetServerUrl(SignInServerPreset.REMOTE, SignInUrlScheme.HTTP, ""))
-        -> SignInServerPreset.REMOTE
-        normalizeServerUrl(buildPresetServerUrl(SignInServerPreset.REMOTE, SignInUrlScheme.HTTPS, ""))
-        -> SignInServerPreset.REMOTE
+    return when {
+        REMOTE_DEVELOPER_PRESET_AVAILABLE && normalized == normalizeServerUrl(DEFAULT_REMOTE_BASE_URL) ->
+            SignInServerPreset.REMOTE
         normalizeServerUrl(buildPresetServerUrl(SignInServerPreset.LAN, SignInUrlScheme.HTTP, ""))
-        -> SignInServerPreset.LAN
+            == normalized -> SignInServerPreset.LAN
         normalizeServerUrl(buildPresetServerUrl(SignInServerPreset.LAN, SignInUrlScheme.HTTPS, ""))
-        -> SignInServerPreset.LAN
+            == normalized -> SignInServerPreset.LAN
         else -> SignInServerPreset.MANUAL
     }
 }
@@ -180,7 +174,7 @@ internal fun buildPresetServerUrl(
 ): String {
     val normalizedManual = manualUrl.trim()
     return when (preset) {
-        SignInServerPreset.REMOTE -> "${scheme.value}://$DEFAULT_REMOTE_SIGN_IN_HOST"
+        SignInServerPreset.REMOTE -> DEFAULT_REMOTE_BASE_URL
         SignInServerPreset.LAN -> "${scheme.value}://$DEFAULT_LAN_SIGN_IN_HOST"
         SignInServerPreset.MANUAL -> normalizeManualServerUrl(normalizedManual, scheme)
     }

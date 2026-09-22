@@ -1,7 +1,6 @@
 package com.mimeo.android.ui.settings
 
 import com.mimeo.android.model.ConnectionMode
-import com.mimeo.android.model.DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL
 import java.net.URI
 import java.util.Locale
 
@@ -47,7 +46,7 @@ internal fun validateConnectionEndpoint(
     val isIpv4Host = isIpv4(lowerHost)
 
     if (scheme == "https" && isLikelyTailnetIp) {
-        warnings += "HTTPS with a raw Tailscale IP is usually mismatched. Prefer https://<machine>.<tailnet>.ts.net, or use raw IP fallback over HTTP: $DEFAULT_REMOTE_HTTP_FALLBACK_BASE_URL."
+        warnings += "HTTPS with a raw Tailscale IP is usually mismatched. Prefer https://<machine>.<tailnet>.ts.net, or enter a raw-IP HTTP fallback manually when TLS is unavailable."
     }
     if (scheme == "http" && isLikelyTailnetHost) {
         warnings += "HTTP with a .ts.net host is usually mismatched. Try https://$lowerHost instead."

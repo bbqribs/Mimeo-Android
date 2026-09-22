@@ -23,7 +23,8 @@ The decisive reason is not UX — it is the backend contract. The provider
 `require_legacy_api_token`. They accept only the **legacy shared `API_TOKEN`**
 (Bearer header or the browser session cookie holding that same token). A
 **per-device token** — the credential Mimeo Android is supposed to prefer (see
-`CLAUDE.md` → Auth) — is rejected by these endpoints regardless of its scope.
+`AGENTS.md` → Local development connection examples) — is rejected by these
+endpoints regardless of its scope.
 
 That produces a hard fork:
 

@@ -7,7 +7,7 @@
   box against private HTTP backends whose addresses cannot be enumerated as exact hosts
   in the release baseline:
     - arbitrary private LAN servers (e.g. 192.168.x.y:8000, 10.x.y.z:8000, 172.16-31.x.y)
-    - Tailscale CGNAT raw-IP HTTP fallback (100.64.0.0/10, e.g. 100.84.13.10:8000)
+    - Tailscale CGNAT raw-IP HTTP fallback (100.64.0.0/10)
     - emulator / loopback dev hosts (also covered by the release baseline)
 
   The preferred remote path remains HTTPS over Tailscale. Release builds use only the

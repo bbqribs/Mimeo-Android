@@ -1,6 +1,7 @@
 package com.mimeo.android.ui.settings
 
 import com.mimeo.android.model.ConnectionMode
+import com.mimeo.android.model.DEFAULT_REMOTE_BASE_URL
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -13,8 +14,11 @@ class RemoteModeGuidanceCopyTest {
         assertTrue(message.contains(".ts.net", ignoreCase = true))
         assertTrue(message.contains("LAN mode", ignoreCase = true))
         assertTrue(message.contains("HTTPS-first", ignoreCase = true))
-        assertTrue(message.contains("beh-august2015.taildacac5.ts.net", ignoreCase = true))
+        if (DEFAULT_REMOTE_BASE_URL.isNotBlank()) {
+            assertTrue(message.contains(DEFAULT_REMOTE_BASE_URL, ignoreCase = true))
+        }
         assertTrue(message.contains("fallback", ignoreCase = true))
+        assertTrue(message.contains("manually", ignoreCase = true))
     }
 
     @Test

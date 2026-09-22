@@ -41,8 +41,19 @@ environment variable only for the lifetime of the current PowerShell process.
 ```powershell
 $env:MIMEO_DEVICE_TEST_USERNAME = Read-Host "Existing disposable test-account username"
 .\scripts\android-device-verify.ps1 `
+  -Action SignInAndOpenUpNext
+```
+
+For sign-in actions, the helper resolves `SmokeBaseUrl` at execution time through
+the sibling Mimeo repository's `scripts/lib/Get-MimeoRuntimeTarget.ps1`. It fails
+clearly if the sibling repository or resolver is unavailable; it never guesses a
+host. An explicit `-ServerUrl` remains the highest-priority override when testing
+a deliberately selected endpoint:
+
+```powershell
+.\scripts\android-device-verify.ps1 `
   -Action SignInAndOpenUpNext `
-  -ServerUrl "https://beh-august2015.taildacac5.ts.net"
+  -ServerUrl "https://your-selected-server.example"
 ```
 
 The helper securely prompts for the password. For unattended local work,
