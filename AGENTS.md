@@ -1,6 +1,43 @@
 # Mimeo Android - Shared Agent Rules
 
+This file is the shared policy owner for every agent working in this
+repository: Claude, Codex and any other harness. It is written to be
+self-contained, so an agent arriving with no chat history can learn the rules of
+the road, the project boundary, the safety rules that matter and where current
+priorities live, by reading this file plus the pointers it names.
+
+`CLAUDE.md` and `CODEX_PROMPTS.md` add only genuine harness differences. They do
+not restate shared policy, and they may not weaken it.
+
+## Project context and boundary
+
+Mimeo Android is the mobile client for the Mimeo "read later" system.
+
+This repository owns the Android client: its code, tests, docs and roadmap. It
+does not own backend or API behaviour. Backend/API contracts, the server, the
+browser extension and the operational scripts live in the sibling Mimeo
+repository (`C:\Users\brend\Documents\Coding\Mimeo`).
+
+Android work is **local to this repository by default**. Everything an ordinary
+Android ticket needs — build, unit tests, docs — is here.
+
+## Cross-repository authority
+
+- Any agent may **read** the Mimeo repository to verify a contract, confirm an
+  endpoint's behaviour or resolve the runtime target. Reading needs no
+  permission.
+- **Writing** to another repository requires explicit operator authorization for
+  that specific work. This applies to every agent, not only Claude, and covers
+  committing, pushing, opening PRs, editing files and creating branches there.
+- A backend-dependent Android ticket does **not** authorize editing, deploying
+  or synchronising Mimeo. Depending on a backend change is not permission to
+  make one. If the Android work cannot proceed without a backend change, stop
+  and report what is needed.
+- Do not assume an unmerged backend contract. See the contract-change rule
+  below.
+
 ## Multi-agent workflow (Codex + Claude + humans)
+
 - **Model routing**: Use Mimeo's canonical documents — the [routing policy](https://github.com/bbqribs/Mimeo/blob/master/docs/AI_MODEL_ROUTING_POLICY.md) for durable principles, the [model inventory](https://github.com/bbqribs/Mimeo/blob/master/docs/AI_MODEL_INVENTORY.md) for current dated model/plan/effort facts, and the [performance ledger](https://github.com/bbqribs/Mimeo/blob/master/docs/AI_MODEL_PERFORMANCE_LEDGER.md) for evidenced outcomes — plus the live model picker and usage/headroom information. This repository deliberately keeps no model inventory of its own; do not add one here.
   - **Do not assign models primarily by repository.** Choose the model and harness that best fit the task's capability, risk, tool-access, and execution requirements. Treat repository familiarity and historical ownership as secondary considerations, not capability substitutes.
   - **If the sibling Mimeo checkout is unavailable**, use the operator's explicit assignment and the live model picker. Do not infer the current model choice from old ticket text, prose in this repo, or a dated worked example.
@@ -9,24 +46,95 @@
 - **Serialized merges**: Only one merge operation may happen at a time across BOTH repos (Mimeo + Mimeo-Android).
 - **No history rewrites**: No rebases or force-pushes by agents. Additive commits only.
 - **Contract-change flag**: Any PR changing backend/API semantics must be labeled "CONTRACT CHANGE"; dependent Android work must not assume the change until merged.
-- **Local safety**: If agents share a machine, do not share a working directory; avoid stash workflows; tracked local modifications => STOP.
 - **Precedence**: `AGENTS.md` is authoritative for shared lifecycle hygiene and workflow rules for all agents in this repo. `CLAUDE.md` is authoritative for Claude-specific behavior. `CODEX_PROMPTS.md` is authoritative for Codex-specific behavior. Tool-specific docs may add stricter rules but must not weaken `AGENTS.md`.
 
-## Project context (when assigned implementation)
-Mimeo Android is the mobile client for the Mimeo "read later" system.
+## Isolated checkouts and worktrees
 
-## Backend connection (when assigned implementation)
-- **Emulator**: Use `baseUrl=http://10.0.2.2:8000`
-- **Physical device (LAN)**: Use `baseUrl=http://<your-PC-LAN-IP>:8000` or `https://` if TLS is configured.
+Claude, Codex and other agents have the same worktree rights. Concurrent work is
+kept apart by isolation, not by asking one agent to be more careful inside a
+shared directory.
+
+- Each concurrent implementation task uses its assigned isolated checkout or
+  worktree, on its own branch. Two writers never share a working directory and
+  never push to the same PR branch.
+- Use the task-provided worktree when one exists. Do not create nested or
+  redundant implementation worktrees without a concrete reason.
+- The canonical checkout (`C:\Users\brend\Documents\Coding\Mimeo-Android`) is
+  reserved for repository synchronisation, post-merge cleanup, and operations
+  whose documented contract depends on that path.
+- Before removing a worktree, prove that its tracked tree is clean and that
+  every commit is merged or otherwise preserved. Never force-remove an active
+  task's worktree.
+- Avoid stash workflows. The stash stack is shared across worktrees, so a stash
+  can capture or restore another session's work. Prefer a temporary commit on
+  your own branch.
+- Tracked local modifications outside this ticket's expected files => STOP. See
+  `§Preflight`.
+
+## Windows / WSL filesystem boundary
+
+- Canonical Git operations stay on the Windows filesystem and normally run from
+  PowerShell.
+- Do not run I/O-intensive Git operations or a complete Linux test suite from
+  WSL against `/mnt/c`, `/mnt/d` or another mounted Windows drive. That path is
+  slow enough to distort test duration and can turn an environment timeout into
+  an apparent code failure.
+- Small Linux syntax checks against a mounted checkout are acceptable. Prefer
+  hosted Linux CI for a complete Linux suite.
+- When local Linux reproduction is genuinely necessary, a disposable clone in
+  WSL's native filesystem is allowed at the exact commit under test. It is
+  test-only: do not implement, commit, push, deploy, or copy secrets or runtime
+  configuration from it. Remove it after recording the result.
+- Every Linux result states whether it came from hosted CI, a WSL-native
+  disposable clone, or WSL operating over a mounted Windows checkout.
+
+## Local development connection examples (when assigned implementation)
+
+These are **local-development examples only**. They are not the authoritative
+runtime, and they are not defaults for verification against real data:
+
+- **Emulator to a backend on this PC**: `baseUrl=http://10.0.2.2:8000`
+- **Physical device on the same LAN**: `baseUrl=http://<your-PC-LAN-IP>:8000`, or
+  `https://` if TLS is configured locally.
 - **Auth**: Prefer per-device tokens over the legacy shared `API_TOKEN`.
 
-## Conditional remote-backend verification
-- Android tickets remain Android-first by default.
-- Run remote backend checks only when the Android work touched backend behavior/contracts, or explicitly depends on backend changes.
-- In backend-dependent cases, verify against `https://beh-august2015.taildacac5.ts.net/` (not `127.0.0.1`). The raw Tailscale IP (`http://100.84.13.10:8000`) is legacy/fallback only.
-- If backend deployment verification is needed, run Mimeo repo scripts (not Android-local scripts):
-  - quick sync: `powershell -ExecutionPolicy Bypass -File C:\Users\brend\Documents\Coding\Mimeo\scripts\stage2-runtime-sync.ps1 -Action Install`
-  - full sync when quick sync is insufficient: `powershell -ExecutionPolicy Bypass -File C:\Users\brend\Documents\Coding\Mimeo\scripts\stage2-runtime-sync.ps1 -Action InstallFull`
+For anything that must agree with the real backend, resolve the target as
+described in the next section.
+
+## Backend-dependent verification (target resolved at execution time)
+
+- Android tickets are Android-first by default. The normal gates are this
+  repository's Gradle build and unit tests.
+- Run remote backend checks only when the Android work touched backend
+  behaviour or contracts, or explicitly depends on a backend change.
+- Do not contact any live host when the ticket is explicitly local-only,
+  fixture-only, offline, or says not to contact a live host. In that case say so
+  in the report instead of substituting a remote check.
+- **Never hardcode or assume the authoritative host.** Resolve it at execution
+  time from the sibling Mimeo repository, which owns that fact:
+
+  ```powershell
+  $target = & "C:\Users\brend\Documents\Coding\Mimeo\scripts\lib\Get-MimeoRuntimeTarget.ps1"
+  $target | Select-Object Name, SmokeBaseUrl, HealthUrl, SshHost, Shape
+  ```
+
+  The resolver reads `ops/runtime-target.json` in that repository, the single
+  source of truth for which host serves Mimeo right now; explicit parameters and
+  `MIMEO_TARGET_*` environment variables override it, and the resolver header
+  documents the precedence. Use `$target.SmokeBaseUrl` as the Android client's
+  `baseUrl` for a backend-dependent check.
+- A hostname written into a ticket, a chat message, an older document, or this
+  file is **not** authoritative. An instruction naming a fixed production host
+  goes stale silently; the resolver does not. `127.0.0.1` is never the
+  authoritative target.
+- Remote verification from an Android ticket is **read-only**. Deployment,
+  runtime sync, service restart and any other state-changing remote action are
+  separate decisions that require explicit operator authorization and belong to
+  the Mimeo repository and its scripts
+  (`C:\Users\brend\Documents\Coding\Mimeo\scripts\stage2-runtime-sync.ps1`,
+  `-Action Install`, or `-Action InstallFull` when the quick sync is
+  insufficient). Never run them from an Android-local script, and never infer
+  them from merge approval.
 - Reference: `C:\Users\brend\Documents\Coding\Mimeo\docs\REMOTE_RUNTIME_VERIFICATION_PROTOCOL.md`
 
 ## Operator reporting default
@@ -40,6 +148,16 @@ Mimeo Android is the mobile client for the Mimeo "read later" system.
 .\gradlew.bat :app:assembleDebug
 .\gradlew.bat :app:testDebugUnitTest
 ```
+
+## Failing gates
+
+A required test, build or validation failure blocks the PR or the merge. It does
+not by itself end the turn. Diagnose and repair the failure within the ticket's
+scope, then report the repaired result.
+
+Stop and report instead when the repair needs unrelated work, an operator
+decision, external state you cannot reach, or authority the ticket does not
+grant. A blocked gate is reported as blocked; it is never reported as passing.
 
 ## Avoid redundant validation
 - Do not rerun a build, test, lint, smoke, or deployment check when a trustworthy passing result already covers the same relevant source tree and configuration. Reuse and report that result instead.
@@ -64,6 +182,9 @@ Before proposing or starting the next ticket, inspect this repository's current 
 - Older conversations, summaries, and external stable-reference files supply context but do not override fresher repository evidence.
 
 State explicitly which of these a claim rests on when they disagree, and distinguish among shipped, active, planned, newly proposed, and trigger-gated work.
+
+`unknown` is not success and not agreement. Say `unknown` and name the missing
+evidence.
 
 ## Ticket construction
 
@@ -97,9 +218,13 @@ that has to keep working through whatever the other two do to the server, so a
 contract change landing there is this repository's problem before it is
 anyone's bug report.
 
-Keep `status/mimeo-android.md` current when this project's ground truth moves -
-minimum supported backend, which contracts are adopted versus still blocked,
-what is known broken. A status file carrying only good news is worse than none.
+`status/mimeo-android.md` does not exist yet; creating it is tracked as
+follow-up work in the coordination repository. Do not treat its absence as
+permission to skip the channel, and do not create it from an Android ticket —
+writing to that repository needs the cross-repository authorization above. Once
+it exists, keep it current when this project's ground truth moves: minimum
+supported backend, which contracts are adopted versus still blocked, what is
+known broken. A status file carrying only good news is worse than none.
 
 Two rules, both load-bearing:
 
@@ -137,14 +262,17 @@ Stop before work if any condition is true:
 - checkout is not on the requested base branch
 - sensitive-looking untracked files would be touched by this work
 
-Never stash, reset, clean, delete, overwrite, or move files without explicit operator instruction.
+Never stash, reset, clean, delete, overwrite, or move files without explicit operator instruction. Unrelated operator work is left exactly as found.
 
 ### Implementation discipline
 
 Before editing, declare expected files. Keep all changes inside declared scope.
 No broad formatting passes, no dependency upgrades unless explicitly requested.
 No tag-team commits on another agent's branch.
-Never print secrets, tokens, .env values, cookies, browser profiles, or backup contents.
+Never print secrets, tokens, .env values, cookies, browser profiles, or backup contents, and never copy them into a report, a survey, or a prompt.
+
+When the work adds or depends on a safety guard, test it by deliberately
+breaking the condition it guards, not only by observing the happy path.
 
 ### PR / open report
 
@@ -167,11 +295,32 @@ The **one-merge-at-a-time-per-repository** rule is preserved and unchanged: only
 
 Merging when explicitly instructed remains ordinary work, not an escalation. The rule constrains the default, not the operator.
 
+An explicit merge instruction authorizes the merge and the associated repository cleanup. It does **not** authorize changing the authoritative runtime; see `§Deployment is a separate decision`.
+
 This matches `AGENTS.md §Merge authority (canonical)` in the Mimeo repository, so both repositories hold the same merge rule.
 
 ### Merge trigger
 
 When the operator says "merge this", "merged", "I merged it", "I've merged", or any equivalent, immediately run the post-merge closeout for that PR/ticket. Do not wait for a separate closeout ticket or prompt. Do not repeat manual verification steps unless explicitly requested. Report: final canonical branch SHA, PR merge state, clean tracked tree, untracked summary, and test/build results.
+
+### Deployment is a separate decision
+
+Merge approval and deployment approval are distinct. At closeout, assess
+deployment and report exactly one of:
+
+- **recommended** — name what should be deployed, why the merged change warrants
+  it, the expected operational effect, and the verification that would follow;
+- **not recommended** — say why deployment is unnecessary, inappropriate, or
+  premature;
+- **unknown** — name the missing evidence or decision.
+
+For an Android-only change the honest answer is usually **not recommended**:
+nothing in the backend runtime changed. When deployment is recommended but was
+not already in the authorised ticket scope, ask for or await explicit operator
+authorization and report `merged, not deployed` until it is given. A deployment
+command, runtime restart, remote file synchronisation, or state-changing remote
+check is never inferred from merge approval — and deploying Mimeo is Mimeo's
+work, not this repository's.
 
 ### Post-merge closeout
 
@@ -179,6 +328,6 @@ Canonical branch: `main`.
 
 1. Sync `main`.
 2. Confirm: final SHA, `git status -sb`, PR merge state via `gh pr view <PR>`, tracked tree clean, untracked files summarized.
-3. For Android-only PRs: include the existing Gradle gate summary without rerunning passing gates unless the redundant-validation rules require it. Run remote backend checks only if the PR touched backend contracts or runtime.
-4. If runtime deploy/sync was in scope: runtime sync result, smoke result, remote git checkout state if relevant.
+3. For Android-only PRs: include the existing Gradle gate summary without rerunning passing gates unless the redundant-validation rules require it. Run remote backend checks only if the PR touched backend contracts or runtime, and resolve the target as described above.
+4. Give the deployment assessment from `§Deployment is a separate decision`. If runtime deploy/sync was explicitly in scope and authorized, report the runtime sync result, the smoke result, and remote git checkout state if relevant.
 5. Never say "merged" unless `gh pr view` confirms state is `MERGED`.
