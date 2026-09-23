@@ -218,13 +218,12 @@ that has to keep working through whatever the other two do to the server, so a
 contract change landing there is this repository's problem before it is
 anyone's bug report.
 
-`status/mimeo-android.md` does not exist yet; creating it is tracked as
-follow-up work in the coordination repository. Do not treat its absence as
-permission to skip the channel, and do not create it from an Android ticket —
-writing to that repository needs the cross-repository authorization above. Once
-it exists, keep it current when this project's ground truth moves: minimum
-supported backend, which contracts are adopted versus still blocked, what is
-known broken. A status file carrying only good news is worse than none.
+`status/mimeo-android.md` exists in the coordination repository. Read it before
+substantial cross-cutting work and keep it current when this project's ground
+truth moves: minimum supported backend, which contracts are adopted versus
+still blocked, and what is known broken. Writing to that repository still needs
+the cross-repository authorization above. A status file carrying only good news
+is worse than none.
 
 Two rules, both load-bearing:
 

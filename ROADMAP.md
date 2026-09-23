@@ -151,6 +151,16 @@ Readiness remains unclaimed until the separate-target Linux rehearsal, both
 dress rehearsals, and current G1–G9 evidence exist; real migration has a
 separate operator go/no-go.
 
+**Current connection-target boundary (2026-09-23):** PR #503 (`90fe961`)
+removed retired live defaults. Debug Remote defaults now derive from Mimeo's
+runtime-target configuration at build time, absent or invalid configuration
+produces no Remote preset, release artifacts remain host-neutral, and device
+verification resolves the current target at execution time. Existing saved
+server URLs are intentionally preserved. A recovery affordance for a saved
+retired endpoint, if authorized, must be explicit and non-destructive; it must
+not silently rewrite endpoint-scoped account or local state. No Android
+migration retarget/rollback acceptance was performed by #503.
+
 ### Lane 4 — Maintenance
 
 **Owners:** each repository for its surface, with one Android companion record.
